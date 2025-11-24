@@ -257,12 +257,14 @@ function setupIpcHandlers() {
       toolType: config.toolType,
       cwd: config.cwd,
       command: config.command,
-      args: finalArgs
+      args: finalArgs,
+      requiresPty: agent?.requiresPty || false
     });
 
     const result = processManager.spawn({
       ...config,
-      args: finalArgs
+      args: finalArgs,
+      requiresPty: agent?.requiresPty
     });
 
     logger.info(`Process spawned successfully`, 'ProcessManager', {

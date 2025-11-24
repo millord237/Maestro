@@ -19,6 +19,7 @@ export interface AgentConfig {
   args: string[]; // Base args always included
   available: boolean;
   path?: string;
+  requiresPty?: boolean; // Whether this agent needs a pseudo-terminal
   configOptions?: AgentConfigOption[]; // Agent-specific configuration
 }
 
@@ -28,7 +29,7 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path'>[] = [
     name: 'Claude Code',
     binaryName: 'claude',
     command: 'claude',
-    args: [],
+    args: ['--print', '--output-format', 'text'],
     configOptions: [
       {
         key: 'yoloMode',

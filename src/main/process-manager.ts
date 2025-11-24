@@ -8,6 +8,7 @@ interface ProcessConfig {
   cwd: string;
   command: string;
   args: string[];
+  requiresPty?: boolean; // Whether this agent needs a pseudo-terminal
 }
 
 interface ManagedProcess {
@@ -27,16 +28,31 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for a session
    */
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
-    const { sessionId, toolType, cwd, command, args } = config;
+    const { sessionId, toolType, cwd, command, args, requiresPty } = config;
 
-    // Determine if this should be a terminal (pty) or regular process
+    // Determine if this should use a PTY:
+    // - If toolType is 'terminal', always use PTY for full shell emulation
+    // - If requiresPty is true, use PTY for AI agents that need TTY (like Claude Code)
+    const usePty = toolType === 'terminal' || requiresPty === true;
     const isTerminal = toolType === 'terminal';
 
     try {
-      if (isTerminal) {
-        // Use node-pty for terminal mode (full shell emulation)
-        const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-        const ptyProcess = pty.spawn(shell, [], {
+      if (usePty) {
+        // Use node-pty for terminal mode or AI agents that require PTY
+        let ptyCommand: string;
+        let ptyArgs: string[];
+
+        if (isTerminal) {
+          // Full shell emulation for terminal mode
+          ptyCommand = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+          ptyArgs = [];
+        } else {
+          // Spawn the AI agent directly with PTY support
+          ptyCommand = command;
+          ptyArgs = args;
+        }
+
+        const ptyProcess = pty.spawn(ptyCommand, ptyArgs, {
           name: 'xterm-256color',
           cols: 100,
           rows: 30,
@@ -70,9 +86,11 @@ export class ProcessManager extends EventEmitter {
         console.log(`[ProcessManager] PTY process created:`, {
           sessionId,
           toolType,
-          isTerminal: true,
+          isTerminal,
+          requiresPty: requiresPty || false,
           pid: ptyProcess.pid,
-          shell,
+          command: ptyCommand,
+          args: ptyArgs,
           cwd
         });
 
