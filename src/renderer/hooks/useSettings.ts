@@ -41,6 +41,10 @@ export interface UseSettingsReturn {
   setRightPanelWidth: (value: number) => void;
   setMarkdownRawMode: (value: boolean) => void;
 
+  // Logging settings
+  logLevel: string;
+  setLogLevel: (value: string) => void;
+
   // Shortcuts
   shortcuts: Record<string, Shortcut>;
   setShortcuts: (value: Record<string, Shortcut>) => void;
@@ -70,6 +74,9 @@ export function useSettings(): UseSettingsReturn {
   const [leftSidebarWidth, setLeftSidebarWidthState] = useState(256);
   const [rightPanelWidth, setRightPanelWidthState] = useState(384);
   const [markdownRawMode, setMarkdownRawModeState] = useState(false);
+
+  // Logging Config
+  const [logLevel, setLogLevelState] = useState('info');
 
   // Shortcuts
   const [shortcuts, setShortcutsState] = useState<Record<string, Shortcut>>(DEFAULT_SHORTCUTS);
@@ -150,6 +157,11 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('shortcuts', value);
   };
 
+  const setLogLevel = async (value: string) => {
+    setLogLevelState(value);
+    await window.maestro.logger.setLogLevel(value);
+  };
+
   // Load settings from electron-store on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -168,6 +180,7 @@ export function useSettings(): UseSettingsReturn {
       const savedMarkdownRawMode = await window.maestro.settings.get('markdownRawMode');
       const savedShortcuts = await window.maestro.settings.get('shortcuts');
       const savedActiveThemeId = await window.maestro.settings.get('activeThemeId');
+      const savedLogLevel = await window.maestro.logger.getLogLevel();
 
       if (savedEnterToSend !== undefined) setEnterToSendState(savedEnterToSend);
       if (savedLlmProvider !== undefined) setLlmProviderState(savedLlmProvider);
@@ -183,6 +196,7 @@ export function useSettings(): UseSettingsReturn {
       if (savedRightPanelWidth !== undefined) setRightPanelWidthState(savedRightPanelWidth);
       if (savedMarkdownRawMode !== undefined) setMarkdownRawModeState(savedMarkdownRawMode);
       if (savedActiveThemeId !== undefined) setActiveThemeIdState(savedActiveThemeId);
+      if (savedLogLevel !== undefined) setLogLevelState(savedLogLevel);
 
       // Merge saved shortcuts with defaults (in case new shortcuts were added)
       if (savedShortcuts !== undefined) {
@@ -226,6 +240,8 @@ export function useSettings(): UseSettingsReturn {
     setLeftSidebarWidth,
     setRightPanelWidth,
     setMarkdownRawMode,
+    logLevel,
+    setLogLevel,
     shortcuts,
     setShortcuts,
   };

@@ -27,6 +27,8 @@ interface SettingsModalProps {
   setFontFamily: (font: string) => void;
   fontSize: number;
   setFontSize: (size: number) => void;
+  logLevel: string;
+  setLogLevel: (level: string) => void;
   initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network';
 }
 
@@ -595,6 +597,64 @@ export function SettingsModal(props: SettingsModalProps) {
                     X-Large
                   </button>
                 </div>
+              </div>
+
+              {/* Log Level */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2">System Log Level</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => props.setLogLevel('debug')}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.logLevel === 'debug' ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.logLevel === 'debug' ? '#6366f1' : 'transparent',
+                      ringColor: '#6366f1',
+                      color: props.logLevel === 'debug' ? 'white' : theme.colors.textMain
+                    }}
+                  >
+                    Debug
+                  </button>
+                  <button
+                    onClick={() => props.setLogLevel('info')}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.logLevel === 'info' ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.logLevel === 'info' ? '#3b82f6' : 'transparent',
+                      ringColor: '#3b82f6',
+                      color: props.logLevel === 'info' ? 'white' : theme.colors.textMain
+                    }}
+                  >
+                    Info
+                  </button>
+                  <button
+                    onClick={() => props.setLogLevel('warn')}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.logLevel === 'warn' ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.logLevel === 'warn' ? '#f59e0b' : 'transparent',
+                      ringColor: '#f59e0b',
+                      color: props.logLevel === 'warn' ? 'white' : theme.colors.textMain
+                    }}
+                  >
+                    Warn
+                  </button>
+                  <button
+                    onClick={() => props.setLogLevel('error')}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.logLevel === 'error' ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.logLevel === 'error' ? '#ef4444' : 'transparent',
+                      ringColor: '#ef4444',
+                      color: props.logLevel === 'error' ? 'white' : theme.colors.textMain
+                    }}
+                  >
+                    Error
+                  </button>
+                </div>
+                <p className="text-xs opacity-50 mt-2">
+                  Higher levels show fewer logs. Debug shows all logs, Error shows only errors.
+                </p>
               </div>
             </div>
           )}

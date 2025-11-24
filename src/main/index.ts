@@ -5,6 +5,7 @@ import { ProcessManager } from './process-manager';
 import { WebServer } from './web-server';
 import { AgentDetector } from './agent-detector';
 import { execFileNoThrow } from './utils/execFile';
+import { logger } from './utils/logger';
 import Store from 'electron-store';
 
 // Type definitions
@@ -20,6 +21,7 @@ interface MaestroSettings {
   fontSize: number;
   fontFamily: string;
   customFonts: string[];
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
 const store = new Store<MaestroSettings>({
@@ -36,6 +38,7 @@ const store = new Store<MaestroSettings>({
     fontSize: 14,
     fontFamily: 'Roboto Mono, Menlo, "Courier New", monospace',
     customFonts: [],
+    logLevel: 'info',
   },
 });
 
@@ -105,6 +108,10 @@ app.whenReady().then(() => {
   processManager = new ProcessManager();
   webServer = new WebServer(8000);
   agentDetector = new AgentDetector();
+
+  // Load logger settings
+  const logLevel = store.get('logLevel', 'info');
+  logger.setLogLevel(logLevel);
 
   // Set up IPC handlers
   setupIpcHandlers();
@@ -333,6 +340,48 @@ function setupIpcHandlers() {
         mainWindow.webContents.openDevTools();
       }
     }
+  });
+
+  // Logger operations
+  ipcMain.handle('logger:log', async (_event, level: string, message: string, context?: string, data?: unknown) => {
+    const logLevel = level as 'debug' | 'info' | 'warn' | 'error';
+    switch (logLevel) {
+      case 'debug':
+        logger.debug(message, context, data);
+        break;
+      case 'info':
+        logger.info(message, context, data);
+        break;
+      case 'warn':
+        logger.warn(message, context, data);
+        break;
+      case 'error':
+        logger.error(message, context, data);
+        break;
+    }
+  });
+
+  ipcMain.handle('logger:getLogs', async (_event, filter?: { level?: string; context?: string; limit?: number }) => {
+    const typedFilter = filter ? {
+      level: filter.level as 'debug' | 'info' | 'warn' | 'error' | undefined,
+      context: filter.context,
+      limit: filter.limit,
+    } : undefined;
+    return logger.getLogs(typedFilter);
+  });
+
+  ipcMain.handle('logger:clearLogs', async () => {
+    logger.clearLogs();
+  });
+
+  ipcMain.handle('logger:setLogLevel', async (_event, level: string) => {
+    const logLevel = level as 'debug' | 'info' | 'warn' | 'error';
+    logger.setLogLevel(logLevel);
+    store.set('logLevel', logLevel);
+  });
+
+  ipcMain.handle('logger:getLogLevel', async () => {
+    return logger.getLogLevel();
   });
 }
 

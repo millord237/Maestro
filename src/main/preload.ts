@@ -106,6 +106,17 @@ contextBridge.exposeInMainWorld('maestro', {
     close: () => ipcRenderer.invoke('devtools:close'),
     toggle: () => ipcRenderer.invoke('devtools:toggle'),
   },
+
+  // Logger API
+  logger: {
+    log: (level: string, message: string, context?: string, data?: unknown) =>
+      ipcRenderer.invoke('logger:log', level, message, context, data),
+    getLogs: (filter?: { level?: string; context?: string; limit?: number }) =>
+      ipcRenderer.invoke('logger:getLogs', filter),
+    clearLogs: () => ipcRenderer.invoke('logger:clearLogs'),
+    setLogLevel: (level: string) => ipcRenderer.invoke('logger:setLogLevel', level),
+    getLogLevel: () => ipcRenderer.invoke('logger:getLogLevel'),
+  },
 });
 
 // Type definitions for TypeScript
@@ -160,6 +171,19 @@ export interface MaestroAPI {
     open: () => Promise<void>;
     close: () => Promise<void>;
     toggle: () => Promise<void>;
+  };
+  logger: {
+    log: (level: string, message: string, context?: string, data?: unknown) => Promise<void>;
+    getLogs: (filter?: { level?: string; context?: string; limit?: number }) => Promise<Array<{
+      timestamp: number;
+      level: string;
+      message: string;
+      context?: string;
+      data?: unknown;
+    }>>;
+    clearLogs: () => Promise<void>;
+    setLogLevel: (level: string) => Promise<void>;
+    getLogLevel: () => Promise<string>;
   };
 }
 
