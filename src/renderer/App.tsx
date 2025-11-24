@@ -26,12 +26,12 @@ import { getContextColor, getStatusColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
 
 // --- MOCK DATA (for development only) ---
-const MOCK_GROUPS: Group[] = [
+const MOCK_GROUPS: Group[] = process.env.NODE_ENV === 'development' ? [
   { id: 'grp_1', name: 'Backend Services', emoji: '🔧', collapsed: false },
   { id: 'grp_2', name: 'Frontend Ops', emoji: '🎨', collapsed: false }
-];
+] : [];
 
-const MOCK_SESSIONS: Session[] = [
+const MOCK_SESSIONS: Session[] = process.env.NODE_ENV === 'development' ? [
   {
     id: 's1', groupId: 'grp_1', name: 'Auth API', toolType: 'claude', state: 'idle', cwd: '~/dev/api', fullPath: '/dev/api',
     aiLogs: [{id: '1', timestamp: Date.now(), source: 'stdout', text: 'Ready.'}], shellLogs: [], workLog: [{ id: 'w1', title: 'Init', description: 'Started session', timestamp: Date.now() }], scratchPadContent: '# Todo\n- [ ] Fix login', contextUsage: 12, inputMode: 'ai', pid: 4001, port: 3001, tunnelActive: false, changedFiles: [], isGitRepo: true,
@@ -57,7 +57,7 @@ const MOCK_SESSIONS: Session[] = [
     aiLogs: [], shellLogs: [], workLog: [], scratchPadContent: '# Quick Notes', contextUsage: 5, inputMode: 'ai', pid: 6001, port: 0, tunnelActive: false, changedFiles: [], isGitRepo: false,
     fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0
   }
-];
+] : [];
 
 export default function MaestroConsole() {
   // --- STATE ---
