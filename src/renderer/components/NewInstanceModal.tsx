@@ -69,24 +69,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
       if (e.key === 'Escape' && isOpen) {
         onClose();
       }
-      // Command+Enter (Mac) or Ctrl+Enter (Windows/Linux) to create agent
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && isOpen) {
-        e.preventDefault();
-        // Only create if agent is selected and available
-        if (selectedAgent && agents.find(a => a.id === selectedAgent)?.available) {
-          handleCreate();
-        }
-      }
-      // Cmd+O (Mac) or Ctrl+O (Windows/Linux) to open folder picker
-      if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey) && isOpen) {
-        e.preventDefault();
-        handleSelectFolder();
-      }
+      // Note: Cmd+Enter and Cmd+O are now handled in the modal's onKeyDown
+      // to prevent propagation issues
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, selectedAgent, agents, handleCreate, handleSelectFolder]);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -94,7 +83,23 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     <div
       className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
       onKeyDown={(e) => {
-        // Stop propagation of all keyboard events to prevent background components from handling them
+        // Handle Cmd+O for folder picker before stopping propagation
+        if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleSelectFolder();
+          return;
+        }
+        // Handle Cmd+Enter for creating agent
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (selectedAgent && agents.find(a => a.id === selectedAgent)?.available) {
+            handleCreate();
+          }
+          return;
+        }
+        // Stop propagation of all other keyboard events to prevent background components from handling them
         if (e.key !== 'Escape') {
           e.stopPropagation();
         }
