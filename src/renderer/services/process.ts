@@ -48,6 +48,18 @@ export const processService = {
   },
 
   /**
+   * Interrupt a process (send SIGINT/Ctrl+C)
+   */
+  async interrupt(sessionId: string): Promise<void> {
+    try {
+      await window.maestro.process.interrupt(sessionId);
+    } catch (error) {
+      console.error('Process interrupt error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Kill a process
    */
   async kill(sessionId: string): Promise<void> {

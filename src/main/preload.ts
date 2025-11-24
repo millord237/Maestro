@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('maestro', {
   process: {
     spawn: (config: ProcessConfig) => ipcRenderer.invoke('process:spawn', config),
     write: (sessionId: string, data: string) => ipcRenderer.invoke('process:write', sessionId, data),
+    interrupt: (sessionId: string) => ipcRenderer.invoke('process:interrupt', sessionId),
     kill: (sessionId: string) => ipcRenderer.invoke('process:kill', sessionId),
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('process:resize', sessionId, cols, rows),
@@ -154,6 +155,7 @@ export interface MaestroAPI {
   process: {
     spawn: (config: ProcessConfig) => Promise<{ pid: number; success: boolean }>;
     write: (sessionId: string, data: string) => Promise<boolean>;
+    interrupt: (sessionId: string) => Promise<boolean>;
     kill: (sessionId: string) => Promise<boolean>;
     resize: (sessionId: string, cols: number, rows: number) => Promise<boolean>;
     onData: (callback: (sessionId: string, data: string) => void) => () => void;

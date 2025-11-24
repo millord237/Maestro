@@ -1418,6 +1418,77 @@ export default function MaestroConsole() {
     }
   };
 
+  const handleInterrupt = async () => {
+    if (!activeSession) return;
+
+    const currentMode = activeSession.inputMode;
+    const targetSessionId = currentMode === 'ai' ? `${activeSession.id}-ai` : `${activeSession.id}-terminal`;
+    const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
+
+    try {
+      // Attempt to send interrupt signal (Ctrl+C)
+      await window.maestro.process.interrupt(targetSessionId);
+
+      // Add a system log entry
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+        return {
+          ...s,
+          [targetLogKey]: [...s[targetLogKey], {
+            id: generateId(),
+            timestamp: Date.now(),
+            source: 'system',
+            text: '^C'
+          }],
+          state: 'idle'
+        };
+      }));
+    } catch (error) {
+      console.error('Failed to interrupt process:', error);
+
+      // If interrupt fails, offer to kill the process
+      const shouldKill = confirm(
+        'Failed to interrupt the process gracefully. Would you like to force kill it?\n\n' +
+        'Warning: This may cause data loss or leave the process in an inconsistent state.'
+      );
+
+      if (shouldKill) {
+        try {
+          await window.maestro.process.kill(targetSessionId);
+
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              [targetLogKey]: [...s[targetLogKey], {
+                id: generateId(),
+                timestamp: Date.now(),
+                source: 'system',
+                text: 'Process forcefully terminated'
+              }],
+              state: 'idle'
+            };
+          }));
+        } catch (killError) {
+          console.error('Failed to kill process:', killError);
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              [targetLogKey]: [...s[targetLogKey], {
+                id: generateId(),
+                timestamp: Date.now(),
+                source: 'system',
+                text: `Error: Failed to terminate process - ${killError.message}`
+              }],
+              state: 'idle'
+            };
+          }));
+        }
+      }
+    }
+  };
+
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     // Handle command history modal
     if (commandHistoryOpen) {
@@ -1981,6 +2052,7 @@ export default function MaestroConsole() {
         toggleTunnel={toggleTunnel}
         toggleInputMode={toggleInputMode}
         processInput={processInput}
+        handleInterrupt={handleInterrupt}
         handleInputKeyDown={handleInputKeyDown}
         handlePaste={handlePaste}
         handleDrop={handleDrop}

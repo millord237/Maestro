@@ -266,6 +266,37 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Send interrupt signal (SIGINT/Ctrl+C) to a process
+   * This attempts a graceful interrupt first, like pressing Ctrl+C
+   */
+  interrupt(sessionId: string): boolean {
+    const process = this.processes.get(sessionId);
+    if (!process) {
+      console.error(`[ProcessManager] interrupt() - No process found for session: ${sessionId}`);
+      return false;
+    }
+
+    try {
+      if (process.isTerminal && process.ptyProcess) {
+        // For PTY processes, send Ctrl+C character
+        console.log(`[ProcessManager] Sending Ctrl+C to PTY process (PID ${process.pid})`);
+        process.ptyProcess.write('\x03'); // Ctrl+C
+        return true;
+      } else if (process.childProcess) {
+        // For child processes, send SIGINT signal
+        console.log(`[ProcessManager] Sending SIGINT to child process (PID ${process.pid})`);
+        process.childProcess.kill('SIGINT');
+        return true;
+      }
+      console.error(`[ProcessManager] No valid process to interrupt for session: ${sessionId}`);
+      return false;
+    } catch (error) {
+      console.error('Failed to interrupt process:', error);
+      return false;
+    }
+  }
+
+  /**
    * Kill a specific process
    */
   kill(sessionId: string): boolean {

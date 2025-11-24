@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp } from 'lucide-react';
+import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, StopCircle } from 'lucide-react';
 import type { Session, Theme } from '../types';
 
 interface SlashCommand {
@@ -34,6 +34,7 @@ interface InputAreaProps {
   handleDrop: (e: React.DragEvent<HTMLTextAreaElement>) => void;
   toggleInputMode: () => void;
   processInput: () => void;
+  handleInterrupt: () => void;
 }
 
 export function InputArea(props: InputAreaProps) {
@@ -45,7 +46,7 @@ export function InputArea(props: InputAreaProps) {
     slashCommandOpen, setSlashCommandOpen, slashCommands,
     selectedSlashCommandIndex, setSelectedSlashCommandIndex,
     inputRef, handleInputKeyDown, handlePaste, handleDrop,
-    toggleInputMode, processInput
+    toggleInputMode, processInput, handleInterrupt
   } = props;
 
   // Filter slash commands based on input
@@ -281,7 +282,7 @@ export function InputArea(props: InputAreaProps) {
           </div>
         </div>
 
-        {/* Mode Toggle & Send Button - Right Side */}
+        {/* Mode Toggle & Send/Interrupt Button - Right Side */}
         <div className="flex flex-col gap-2">
           <button
             onClick={toggleInputMode}
@@ -295,13 +296,24 @@ export function InputArea(props: InputAreaProps) {
           >
             {session.inputMode === 'terminal' ? <Terminal className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
           </button>
-          <button
-            onClick={processInput}
-            className="p-2 rounded-md text-white hover:opacity-90 shadow-sm transition-all"
-            style={{ backgroundColor: theme.colors.accent }}
-          >
-            <ArrowUp className="w-4 h-4" />
-          </button>
+          {session.state === 'busy' && session.inputMode === 'terminal' ? (
+            <button
+              onClick={handleInterrupt}
+              className="p-2 rounded-md text-white hover:opacity-90 shadow-sm transition-all animate-pulse"
+              style={{ backgroundColor: theme.colors.error }}
+              title="Interrupt (Ctrl+C)"
+            >
+              <StopCircle className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={processInput}
+              className="p-2 rounded-md text-white hover:opacity-90 shadow-sm transition-all"
+              style={{ backgroundColor: theme.colors.accent }}
+            >
+              <ArrowUp className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

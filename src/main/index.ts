@@ -282,6 +282,12 @@ function setupIpcHandlers() {
     return processManager.write(sessionId, data);
   });
 
+  ipcMain.handle('process:interrupt', async (_, sessionId: string) => {
+    if (!processManager) throw new Error('Process manager not initialized');
+    logger.info(`Interrupting process: ${sessionId}`, 'ProcessManager', { sessionId });
+    return processManager.interrupt(sessionId);
+  });
+
   ipcMain.handle('process:kill', async (_, sessionId: string) => {
     if (!processManager) throw new Error('Process manager not initialized');
     logger.info(`Killing process: ${sessionId}`, 'ProcessManager', { sessionId });

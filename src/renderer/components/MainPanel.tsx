@@ -64,6 +64,7 @@ interface MainPanelProps {
   toggleTunnel: (sessionId: string) => void;
   toggleInputMode: () => void;
   processInput: () => void;
+  handleInterrupt: () => void;
   handleInputKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -75,14 +76,14 @@ export function MainPanel(props: MainPanelProps) {
     logViewerOpen, activeSession, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSend, stagedImages, commandHistoryOpen, commandHistoryFilter,
     commandHistorySelectedIndex, slashCommandOpen, slashCommands, selectedSlashCommandIndex,
-    previewFile, markdownRawMode, shortcuts, rightPanelOpen,
+    previewFile, markdownRawMode, shortcuts, rightPanelOpen, maxOutputLines,
     setLogViewerOpen, setActiveFocus, setOutputSearchOpen, setOutputSearchQuery,
     setInputValue, setEnterToSend, setStagedImages, setLightboxImage, setCommandHistoryOpen,
     setCommandHistoryFilter, setCommandHistorySelectedIndex, setSlashCommandOpen,
     setSelectedSlashCommandIndex, setPreviewFile, setMarkdownRawMode,
     setAboutModalOpen, setRightPanelOpen, inputRef, logsEndRef, terminalOutputRef,
-    fileTreeContainerRef, toggleTunnel, toggleInputMode, processInput, handleInputKeyDown,
-    handlePaste, handleDrop, getContextColor
+    fileTreeContainerRef, toggleTunnel, toggleInputMode, processInput, handleInterrupt,
+    handleInputKeyDown, handlePaste, handleDrop, getContextColor
   } = props;
 
   // Show log viewer
@@ -224,6 +225,7 @@ export function MainPanel(props: MainPanelProps) {
             handleDrop={handleDrop}
             toggleInputMode={toggleInputMode}
             processInput={processInput}
+            handleInterrupt={handleInterrupt}
           />
 
           {/* File Preview Overlay */}
