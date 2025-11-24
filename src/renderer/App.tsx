@@ -25,44 +25,10 @@ import { generateId } from './utils/ids';
 import { getContextColor, getStatusColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
 
-// --- MOCK DATA (for development only) ---
-const MOCK_GROUPS: Group[] = process.env.NODE_ENV === 'development' ? [
-  { id: 'grp_1', name: 'Backend Services', emoji: '🔧', collapsed: false },
-  { id: 'grp_2', name: 'Frontend Ops', emoji: '🎨', collapsed: false }
-] : [];
-
-const MOCK_SESSIONS: Session[] = process.env.NODE_ENV === 'development' ? [
-  {
-    id: 's1', groupId: 'grp_1', name: 'Auth API', toolType: 'claude', state: 'idle', cwd: '~/dev/api', fullPath: '/dev/api',
-    aiLogs: [{id: '1', timestamp: Date.now(), source: 'stdout', text: 'Ready.'}], shellLogs: [], workLog: [{ id: 'w1', title: 'Init', description: 'Started session', timestamp: Date.now() }], scratchPadContent: '# Todo\n- [ ] Fix login', contextUsage: 12, inputMode: 'ai', pid: 4001, port: 3001, tunnelActive: false, changedFiles: [], isGitRepo: true,
-    fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0, shellCwd: '~/dev/api', commandHistory: []
-  },
-  {
-    id: 's2', groupId: 'grp_1', name: 'Worker Queue', toolType: 'terminal', state: 'busy', cwd: '~/dev/queue', fullPath: '/dev/queue',
-    aiLogs: [], shellLogs: [{id: '1', timestamp: Date.now(), source: 'stdout', text: 'Processing job 45a...'}], workLog: [], scratchPadContent: '', contextUsage: 0, inputMode: 'terminal', pid: 4002, port: 3002, tunnelActive: false, changedFiles: [], isGitRepo: true,
-    fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0, shellCwd: '~/dev/queue', commandHistory: []
-  },
-  {
-    id: 's3', groupId: 'grp_1', name: 'DB Migration', toolType: 'aider', state: 'waiting_input', cwd: '~/dev/db', fullPath: '/dev/db',
-    aiLogs: [{id: '1', timestamp: Date.now(), source: 'stdout', text: 'Apply migration 004? (y/n)'}], shellLogs: [], workLog: [], scratchPadContent: '', contextUsage: 45, inputMode: 'ai', pid: 4003, port: 3003, tunnelActive: false, changedFiles: [], isGitRepo: true,
-    fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0, shellCwd: '~/dev/db', commandHistory: []
-  },
-  {
-    id: 's5', groupId: 'grp_2', name: 'React App', toolType: 'claude', state: 'busy', cwd: '~/dev/web', fullPath: '/dev/web',
-    aiLogs: [{id: '1', timestamp: Date.now(), source: 'stdout', text: 'Compiling components...'}], shellLogs: [], workLog: [], scratchPadContent: '', contextUsage: 65, inputMode: 'ai', pid: 5001, port: 8080, tunnelActive: true, tunnelUrl: 'https://react-dev.ngrok.io', changedFiles: [], isGitRepo: true,
-    fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0, shellCwd: '~/dev/web', commandHistory: []
-  },
-  {
-    id: 's7', groupId: undefined, name: 'Scratchpad', toolType: 'opencode', state: 'idle', cwd: '~/scratch', fullPath: '/scratch',
-    aiLogs: [], shellLogs: [], workLog: [], scratchPadContent: '# Quick Notes', contextUsage: 5, inputMode: 'ai', pid: 6001, port: 0, tunnelActive: false, changedFiles: [], isGitRepo: false,
-    fileTree: [], fileExplorerExpanded: [], fileExplorerScrollPos: 0, shellCwd: '~/scratch', commandHistory: []
-  }
-] : [];
-
 export default function MaestroConsole() {
   // --- STATE ---
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
-  const [groups, setGroups] = useState<Group[]>(MOCK_GROUPS);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
 
   const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0]?.id || 's1');
   
@@ -269,11 +235,12 @@ export default function MaestroConsole() {
         const savedSessions = await window.maestro.sessions.getAll();
         const savedGroups = await window.maestro.groups.getAll();
 
-        // If electron-store has data, use it
+        // Handle sessions
         if (savedSessions && savedSessions.length > 0) {
+          // electron-store has data, use it
           setSessions(savedSessions);
         } else {
-          // Otherwise, try to migrate from localStorage
+          // Try to migrate from localStorage
           try {
             const localStorageSessions = localStorage.getItem('maestro_sessions');
             if (localStorageSessions) {
@@ -283,16 +250,22 @@ export default function MaestroConsole() {
               await window.maestro.sessions.setAll(parsed);
               // Clean up localStorage
               localStorage.removeItem('maestro_sessions');
+            } else {
+              // No data anywhere - explicitly set empty array
+              setSessions([]);
             }
           } catch (e) {
             console.error('Failed to migrate sessions from localStorage:', e);
+            setSessions([]);
           }
         }
 
+        // Handle groups
         if (savedGroups && savedGroups.length > 0) {
+          // electron-store has data, use it
           setGroups(savedGroups);
         } else {
-          // Otherwise, try to migrate from localStorage
+          // Try to migrate from localStorage
           try {
             const localStorageGroups = localStorage.getItem('maestro_groups');
             if (localStorageGroups) {
@@ -302,13 +275,19 @@ export default function MaestroConsole() {
               await window.maestro.groups.setAll(parsed);
               // Clean up localStorage
               localStorage.removeItem('maestro_groups');
+            } else {
+              // No data anywhere - explicitly set empty array
+              setGroups([]);
             }
           } catch (e) {
             console.error('Failed to migrate groups from localStorage:', e);
+            setGroups([]);
           }
         }
       } catch (e) {
         console.error('Failed to load sessions/groups:', e);
+        setSessions([]);
+        setGroups([]);
       }
     };
     loadSessionsAndGroups();
@@ -332,7 +311,7 @@ export default function MaestroConsole() {
 
   // Keyboard navigation state
   const [selectedSidebarIndex, setSelectedSidebarIndex] = useState(0);
-  const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
+  const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0] || null;
   const theme = THEMES[activeThemeId];
   const anyTunnelActive = sessions.some(s => s.tunnelActive);
 
@@ -626,7 +605,7 @@ export default function MaestroConsole() {
           const currentIndex = tabs.indexOf(activeRightTab);
           const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
           // Skip history tab if in terminal mode
-          if (tabs[prevIndex] === 'history' && activeSession.inputMode === 'terminal') {
+          if (tabs[prevIndex] === 'history' && activeSession && activeSession.inputMode === 'terminal') {
             const prevPrevIndex = prevIndex === 0 ? tabs.length - 1 : prevIndex - 1;
             setActiveRightTab(tabs[prevPrevIndex]);
           } else {
@@ -643,7 +622,7 @@ export default function MaestroConsole() {
           const currentIndex = tabs.indexOf(activeRightTab);
           const nextIndex = (currentIndex + 1) % tabs.length;
           // Skip history tab if in terminal mode
-          if (tabs[nextIndex] === 'history' && activeSession.inputMode === 'terminal') {
+          if (tabs[nextIndex] === 'history' && activeSession && activeSession.inputMode === 'terminal') {
             const nextNextIndex = (nextIndex + 1) % tabs.length;
             setActiveRightTab(tabs[nextNextIndex]);
           } else {
@@ -697,17 +676,17 @@ export default function MaestroConsole() {
 
   // Auto-switch away from history tab when in terminal mode
   useEffect(() => {
-    if (activeRightTab === 'history' && activeSession.inputMode === 'terminal') {
+    if (activeSession && activeRightTab === 'history' && activeSession.inputMode === 'terminal') {
       setActiveRightTab('files');
     }
-  }, [activeSession.inputMode, activeRightTab]);
+  }, [activeSession?.inputMode, activeRightTab]);
 
   // Restore file tree scroll position when switching sessions
   useEffect(() => {
-    if (fileTreeContainerRef.current && activeSession.fileExplorerScrollPos !== undefined) {
+    if (activeSession && fileTreeContainerRef.current && activeSession.fileExplorerScrollPos !== undefined) {
       fileTreeContainerRef.current.scrollTop = activeSession.fileExplorerScrollPos;
     }
-  }, [activeSessionId, activeSession.fileExplorerScrollPos]);
+  }, [activeSessionId, activeSession?.fileExplorerScrollPos]);
 
   // Handle Escape key for About modal
   useEffect(() => {
@@ -931,7 +910,7 @@ export default function MaestroConsole() {
   };
 
   const processInput = () => {
-    if (!inputValue.trim() && stagedImages.length === 0) return;
+    if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) return;
 
     const currentMode = activeSession.inputMode;
     const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
@@ -1048,7 +1027,7 @@ export default function MaestroConsole() {
   // Image Handlers
   const handlePaste = (e: React.ClipboardEvent) => {
     // Only allow image pasting in AI mode
-    if (activeSession.inputMode !== 'ai') return;
+    if (!activeSession || activeSession.inputMode !== 'ai') return;
 
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
@@ -1072,7 +1051,7 @@ export default function MaestroConsole() {
     e.preventDefault();
 
     // Only allow image dropping in AI mode
-    if (activeSession.inputMode !== 'ai') return;
+    if (!activeSession || activeSession.inputMode !== 'ai') return;
 
     const files = e.dataTransfer.files;
     for (let i = 0; i < files.length; i++) {
@@ -1161,12 +1140,12 @@ export default function MaestroConsole() {
     const mainActions = [
       ...sessionActions,
       { id: 'new', label: 'New Agent', shortcut: shortcuts.newInstance, action: addNewSession },
-      { id: 'rename', label: 'Rename Current Agent', action: () => {
+      ...(activeSession ? [{ id: 'rename', label: 'Rename Current Agent', action: () => {
         setRenameInstanceValue(activeSession.name);
         setRenameInstanceModalOpen(true);
         setQuickActionOpen(false);
-      } },
-      ...(activeSession.groupId ? [{
+      } }] : []),
+      ...(activeSession?.groupId ? [{
         id: 'renameGroup',
         label: 'Rename Group',
         action: () => {
@@ -1180,12 +1159,12 @@ export default function MaestroConsole() {
           }
         }
       }] : []),
-      { id: 'moveToGroup', label: 'Move to Group...', action: () => { setMode('move-to-group'); setSelectedIndex(0); } },
+      ...(activeSession ? [{ id: 'moveToGroup', label: 'Move to Group...', action: () => { setMode('move-to-group'); setSelectedIndex(0); } }] : []),
       { id: 'createGroup', label: 'Create New Group', action: handleCreateGroup },
       { id: 'toggleSidebar', label: 'Toggle Sidebar', shortcut: shortcuts.toggleSidebar, action: () => setLeftSidebarOpen(p => !p) },
       { id: 'toggleRight', label: 'Toggle Right Panel', shortcut: shortcuts.toggleRightPanel, action: () => setRightPanelOpen(p => !p) },
-      { id: 'switchMode', label: 'Switch AI/Shell Mode', shortcut: shortcuts.toggleMode, action: toggleInputMode },
-      { id: 'kill', label: 'Kill Current Agent', shortcut: shortcuts.killInstance, action: () => deleteSession(activeSessionId) },
+      ...(activeSession ? [{ id: 'switchMode', label: 'Switch AI/Shell Mode', shortcut: shortcuts.toggleMode, action: toggleInputMode }] : []),
+      ...(activeSession ? [{ id: 'kill', label: 'Kill Current Agent', shortcut: shortcuts.killInstance, action: () => deleteSession(activeSessionId) }] : []),
       { id: 'settings', label: 'Settings', action: () => { setSettingsModalOpen(true); setQuickActionOpen(false); } },
       { id: 'theme', label: 'Change Theme', action: () => { setSettingsModalOpen(true); setSettingsTab('theme'); setQuickActionOpen(false); } },
       { id: 'shortcuts', label: 'View Shortcuts', shortcut: shortcuts.help, action: () => { setShortcutsHelpOpen(true); setQuickActionOpen(false); } },
@@ -1431,7 +1410,7 @@ export default function MaestroConsole() {
   };
 
   // --- RENDER ---
-  const activeLogs = activeSession.inputMode === 'ai' ? activeSession.aiLogs : activeSession.shellLogs;
+  const activeLogs = activeSession ? (activeSession.inputMode === 'ai' ? activeSession.aiLogs : activeSession.shellLogs) : [];
 
   // Recursive File Tree Renderer
   // Check if file should be opened in external app
@@ -1617,18 +1596,18 @@ export default function MaestroConsole() {
 
   // Update flat file list when active session's tree or expanded folders change
   useEffect(() => {
-    if (!activeSession.fileTree || !activeSession.fileExplorerExpanded) {
+    if (!activeSession || !activeSession.fileTree || !activeSession.fileExplorerExpanded) {
       setFlatFileList([]);
       return;
     }
     const expandedSet = new Set(activeSession.fileExplorerExpanded);
     setFlatFileList(flattenTree(activeSession.fileTree, expandedSet));
-  }, [activeSession.fileTree, activeSession.fileExplorerExpanded]);
+  }, [activeSession?.fileTree, activeSession?.fileExplorerExpanded]);
 
   // Filter file tree based on search query
   const filteredFileTree = useMemo(() => {
-    if (!fileTreeFilter || !activeSession.fileTree) {
-      return activeSession.fileTree;
+    if (!activeSession || !fileTreeFilter || !activeSession.fileTree) {
+      return activeSession?.fileTree || [];
     }
 
     const filterTree = (nodes: any[]): any[] => {
@@ -1653,7 +1632,7 @@ export default function MaestroConsole() {
     };
 
     return filterTree(activeSession.fileTree);
-  }, [activeSession.fileTree, fileTreeFilter]);
+  }, [activeSession?.fileTree, fileTreeFilter]);
 
   // Filter sessions based on search query
   const filteredSessions = useMemo(() => {
@@ -1704,13 +1683,13 @@ export default function MaestroConsole() {
 
     window.addEventListener('keydown', handleFileExplorerKeys);
     return () => window.removeEventListener('keydown', handleFileExplorerKeys);
-  }, [activeFocus, activeRightTab, flatFileList, selectedFileIndex, activeSession.fileExplorerExpanded, toggleFolder, handleFileClick]);
+  }, [activeFocus, activeRightTab, flatFileList, selectedFileIndex, activeSession?.fileExplorerExpanded, toggleFolder, handleFileClick]);
 
   const renderTree = (nodes: any[], currentPath = '', depth = 0, globalIndex = { value: 0 }) => {
-    const expandedSet = new Set(activeSession.fileExplorerExpanded || []);
+    const expandedSet = new Set(activeSession?.fileExplorerExpanded || []);
     return nodes.map((node, idx) => {
       const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
-      const change = activeSession.changedFiles.find(f => f.path.includes(node.name));
+      const change = activeSession?.changedFiles.find(f => f.path.includes(node.name));
       const isFolder = node.type === 'folder';
       const isExpanded = expandedSet.has(fullPath);
       const isSelected = previewFile?.path === fullPath;
@@ -2006,6 +1985,9 @@ export default function MaestroConsole() {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         handleCreateGroupConfirm();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setCreateGroupModalOpen(false);
                       }
                     }}
                     placeholder="Enter group name..."
@@ -2173,6 +2155,9 @@ export default function MaestroConsole() {
                       ));
                       setRenameInstanceModalOpen(false);
                     }
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setRenameInstanceModalOpen(false);
                   }
                 }}
                 placeholder="Enter agent name..."
@@ -2262,6 +2247,9 @@ export default function MaestroConsole() {
                           setRenameGroupModalOpen(false);
                           setRenameGroupEmojiPickerOpen(false);
                         }
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setRenameGroupModalOpen(false);
                       }
                     }}
                     placeholder="Enter group name..."
@@ -2434,7 +2422,7 @@ export default function MaestroConsole() {
                 <input
                   autoFocus
                   type="text"
-                  placeholder="Filter sessions..."
+                  placeholder="Filter agents..."
                   value={sessionFilter}
                   onChange={(e) => setSessionFilter(e.target.value)}
                   onKeyDown={(e) => {
@@ -2711,7 +2699,7 @@ export default function MaestroConsole() {
             style={{ backgroundColor: theme.colors.bgMain }}
           >
             <Wand2 className="w-16 h-16 mb-4" style={{ color: theme.colors.textDim }} />
-            <p className="text-sm" style={{ color: theme.colors.textDim }}>No instances. Create one to get started.</p>
+            <p className="text-sm" style={{ color: theme.colors.textDim }}>No agents. Create one to get started.</p>
           </div>
           <div
             className="w-96 border-l opacity-30"

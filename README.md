@@ -195,6 +195,8 @@ All processes are managed through IPC (Inter-Process Communication) with secure 
 
 ## Keyboard Shortcuts
 
+### Global Shortcuts
+
 | Action | macOS | Windows/Linux |
 |--------|-------|---------------|
 | Quick Actions | `⌘K` | `Ctrl+K` |
@@ -205,14 +207,64 @@ All processes are managed through IPC (Inter-Process Communication) with secure 
 | Previous Agent | `⌘⇧{` | `Ctrl+Shift+{` |
 | Next Agent | `⌘⇧}` | `Ctrl+Shift+}` |
 | Switch AI/Shell Mode | `⌘J` | `Ctrl+J` |
-| Show Shortcuts | `⌘/` | `Ctrl+/` |
+| Show Shortcuts Help | `⌘/` | `Ctrl+/` |
 | Open Settings | `⌘,` | `Ctrl+,` |
+| Cycle Focus Areas | `Tab` | `Tab` |
+| Cycle Focus Backwards | `⇧Tab` | `Shift+Tab` |
+
+### Panel Shortcuts
+
+| Action | macOS | Windows/Linux |
+|--------|-------|---------------|
 | Go to Files Tab | `⌘⇧F` | `Ctrl+Shift+F` |
 | Go to History Tab | `⌘⇧H` | `Ctrl+Shift+H` |
 | Go to Scratchpad | `⌘⇧S` | `Ctrl+Shift+S` |
-| Toggle Markdown Edit/Preview | `⌘E` | `Ctrl+E` |
+| Toggle Markdown Raw/Preview | `⌘E` | `Ctrl+E` |
 
-*All shortcuts are customizable in Settings*
+### Input & Output
+
+| Action | Key |
+|--------|-----|
+| Send Message | `Enter` or `⌘Enter` (configurable in Settings) |
+| Multiline Input | `⇧Enter` |
+| Navigate Command History | `↑` while in input |
+| Focus Output | `Esc` while in input |
+| Focus Input | `Esc` while in output |
+| Open Output Search | `/` while in output |
+| Scroll Output Up/Down | `↑` / `↓` while in output |
+| Jump to Top of Output | `⌘↑` / `Ctrl+↑` while in output |
+| Jump to Bottom of Output | `⌘↓` / `Ctrl+↓` while in output |
+
+### Navigation & Search
+
+| Action | Key |
+|--------|-----|
+| Navigate Sessions (Sidebar) | `↑` / `↓` while in sidebar |
+| Select Session | `Enter` while in sidebar |
+| Open Session Filter | `/` while in sidebar |
+| Navigate Files | `↑` / `↓` while in file tree |
+| Open File Tree Filter | `/` while in file tree |
+| Open File Preview | `Enter` on selected file |
+| Close Preview/Filter/Modal | `Esc` |
+
+### File Preview
+
+| Action | macOS | Windows/Linux |
+|--------|-------|---------------|
+| Copy File Path | `⌘P` | `Ctrl+P` |
+| Open Search in Preview | `/` | `/` |
+| Scroll Preview | `↑` / `↓` | `↑` / `↓` |
+| Close Preview | `Esc` | `Esc` |
+
+### Quick Actions Modal
+
+| Action | macOS | Windows/Linux |
+|--------|-------|---------------|
+| Select Action 1-8 | `⌘1-8` | `Ctrl+1-8` |
+| Navigate Actions | `↑` / `↓` | `↑` / `↓` |
+| Execute Action | `Enter` | `Enter` |
+
+*Most shortcuts are customizable in Settings → Shortcuts*
 
 ## Remote Access
 
