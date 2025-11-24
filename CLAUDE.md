@@ -440,7 +440,7 @@ The app is keyboard-first with these patterns:
 
 **Focus Management:**
 - Cmd+. → Jump to input field (from anywhere in main interface)
-- Shift+A → Focus left sidebar (expands if collapsed) - configurable
+- Cmd+Shift+A → Focus left sidebar (expands if collapsed) - configurable
 - Escape in input → Focus output window
 - Escape in output → Focus back to input
 - Escape in file preview → Return to file tree

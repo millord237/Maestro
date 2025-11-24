@@ -18,5 +18,5 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   copyFilePath: { id: 'copyFilePath', label: 'Copy File Path (in Preview)', keys: ['Meta', 'p'] },
   toggleMarkdownMode: { id: 'toggleMarkdownMode', label: 'Toggle Markdown Raw/Preview', keys: ['Meta', 'e'] },
   focusInput: { id: 'focusInput', label: 'Focus Input Field', keys: ['Meta', '.'] },
-  focusSidebar: { id: 'focusSidebar', label: 'Focus Left Sidebar', keys: ['Shift', 'a'] },
+  focusSidebar: { id: 'focusSidebar', label: 'Focus Left Sidebar', keys: ['Meta', 'Shift', 'a'] },
 };
