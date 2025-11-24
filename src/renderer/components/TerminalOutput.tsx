@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState } from 'react';
-import { Activity, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
@@ -32,6 +32,10 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Track which log entries are expanded (by log ID)
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
+  // Track local filters per log entry (log ID -> filter query)
+  const [localFilters, setLocalFilters] = useState<Map<string, string>>(new Map());
+  const [activeLocalFilter, setActiveLocalFilter] = useState<string | null>(null);
+
   const toggleExpanded = (logId: string) => {
     setExpandedLogs(prev => {
       const newSet = new Set(prev);
@@ -41,6 +45,26 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         newSet.add(logId);
       }
       return newSet;
+    });
+  };
+
+  const toggleLocalFilter = (logId: string) => {
+    if (activeLocalFilter === logId) {
+      setActiveLocalFilter(null);
+    } else {
+      setActiveLocalFilter(logId);
+    }
+  };
+
+  const setLocalFilterQuery = (logId: string, query: string) => {
+    setLocalFilters(prev => {
+      const newMap = new Map(prev);
+      if (query) {
+        newMap.set(logId, query);
+      } else {
+        newMap.delete(logId);
+      }
+      return newMap;
     });
   };
 
@@ -121,6 +145,19 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     result += text.substring(lastIndex);
 
     return result;
+  };
+
+  // Helper function to filter text by lines containing the query (local filter)
+  const filterTextByLines = (text: string, query: string): string => {
+    if (!query) return text;
+
+    const lines = text.split('\n');
+    const lowerQuery = query.toLowerCase();
+    const filteredLines = lines.filter(line =>
+      line.toLowerCase().includes(lowerQuery)
+    );
+
+    return filteredLines.join('\n');
   };
 
   // Auto-focus on search input when opened
@@ -279,28 +316,34 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
         const processedText = processLogText(textToProcess, isTerminal && log.source !== 'user');
 
-        // Skip rendering if text is empty after processing
-        if (!processedText.trim() && log.source !== 'user') return null;
+        // Apply local filter if active for this log entry
+        const localFilterQuery = localFilters.get(log.id) || '';
+        const filteredText = localFilterQuery && log.source !== 'user'
+          ? filterTextByLines(processedText, localFilterQuery)
+          : processedText;
+
+        // Skip rendering if text is empty after processing and filtering
+        if (!filteredText.trim() && log.source !== 'user') return null;
 
         // Apply search highlighting before ANSI conversion for terminal output
         const textWithHighlights = isTerminal && log.source !== 'user' && outputSearchQuery
-          ? addHighlightMarkers(processedText, outputSearchQuery)
-          : processedText;
+          ? addHighlightMarkers(filteredText, outputSearchQuery)
+          : filteredText;
 
         // Convert ANSI codes to HTML for terminal output and sanitize
         const htmlContent = isTerminal && log.source !== 'user'
           ? DOMPurify.sanitize(ansiConverter.toHtml(textWithHighlights))
-          : processedText;
+          : filteredText;
 
-        // Count lines in the processed text
-        const lineCount = processedText.split('\n').length;
+        // Count lines in the filtered text
+        const lineCount = filteredText.split('\n').length;
         const shouldCollapse = lineCount > maxOutputLines && maxOutputLines !== Infinity;
         const isExpanded = expandedLogs.has(log.id);
 
         // Truncate text if collapsed
         const displayText = shouldCollapse && !isExpanded
-          ? processedText.split('\n').slice(0, maxOutputLines).join('\n')
-          : processedText;
+          ? filteredText.split('\n').slice(0, maxOutputLines).join('\n')
+          : filteredText;
 
         // Apply highlighting to truncated text as well
         const displayTextWithHighlights = shouldCollapse && !isExpanded && isTerminal && log.source !== 'user' && outputSearchQuery
@@ -316,13 +359,64 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             <div className="w-12 shrink-0 text-[10px] opacity-40 pt-2 font-mono text-center">
               {new Date(log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
             </div>
-            <div className={`flex-1 p-4 rounded-xl border ${log.source === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}
+            <div className={`flex-1 p-4 rounded-xl border ${log.source === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'} relative`}
                  style={{
                    backgroundColor: log.source === 'user'
                      ? `color-mix(in srgb, ${theme.colors.accent} 15%, ${theme.colors.bgActivity})`
                      : 'transparent',
                    borderColor: theme.colors.border
                  }}>
+              {/* Local filter icon for system output only */}
+              {log.source !== 'user' && isTerminal && (
+                <div className="absolute top-2 right-2 flex items-center gap-2">
+                  {activeLocalFilter === log.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={localFilterQuery}
+                        onChange={(e) => setLocalFilterQuery(log.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            e.stopPropagation();
+                            setActiveLocalFilter(null);
+                            setLocalFilterQuery(log.id, '');
+                          }
+                        }}
+                        placeholder="Filter lines..."
+                        className="w-40 px-2 py-1 text-xs rounded border bg-transparent outline-none"
+                        style={{
+                          borderColor: theme.colors.accent,
+                          color: theme.colors.textMain,
+                          backgroundColor: theme.colors.bgMain
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => {
+                          setActiveLocalFilter(null);
+                          setLocalFilterQuery(log.id, '');
+                        }}
+                        className="p-1 rounded hover:opacity-70 transition-opacity"
+                        style={{ color: theme.colors.textDim }}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => toggleLocalFilter(log.id)}
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-opacity-10 transition-opacity"
+                      style={{
+                        color: localFilterQuery ? theme.colors.accent : theme.colors.textDim,
+                        backgroundColor: localFilterQuery ? theme.colors.bgActivity : 'transparent'
+                      }}
+                      title="Filter this output"
+                    >
+                      <Filter className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
               {log.images && log.images.length > 0 && (
                 <div className="flex gap-2 mb-2 overflow-x-auto">
                   {log.images.map((img, idx) => (
@@ -374,10 +468,10 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     ) : log.source === 'user' && isTerminal ? (
                       <div className="font-mono">
                         <span style={{ color: theme.colors.accent }}>$ </span>
-                        {highlightMatches(processedText, outputSearchQuery)}
+                        {highlightMatches(filteredText, outputSearchQuery)}
                       </div>
                     ) : (
-                      <div>{highlightMatches(processedText, outputSearchQuery)}</div>
+                      <div>{highlightMatches(filteredText, outputSearchQuery)}</div>
                     )}
                   </div>
                   <button
@@ -404,11 +498,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                   ) : log.source === 'user' && isTerminal ? (
                     <div className="whitespace-pre-wrap text-sm font-mono" style={{ color: theme.colors.textMain }}>
                       <span style={{ color: theme.colors.accent }}>$ </span>
-                      {highlightMatches(processedText, outputSearchQuery)}
+                      {highlightMatches(filteredText, outputSearchQuery)}
                     </div>
                   ) : (
                     <div className="whitespace-pre-wrap text-sm" style={{ color: theme.colors.textMain }}>
-                      {highlightMatches(processedText, outputSearchQuery)}
+                      {highlightMatches(filteredText, outputSearchQuery)}
                     </div>
                   )}
                 </>
