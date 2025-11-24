@@ -1,2 +1,2 @@
-// Generate a random unique identifier
-export const generateId = () => Math.random().toString(36).substr(2, 9);
+// Generate a random unique identifier using cryptographically secure random values
+export const generateId = () => crypto.randomUUID();
