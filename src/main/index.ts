@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
 import { ProcessManager } from './process-manager';
 import { WebServer } from './web-server';
 import { AgentDetector } from './agent-detector';
@@ -178,7 +179,6 @@ function setupIpcHandlers() {
 
   // File system operations
   ipcMain.handle('fs:readDir', async (_, dirPath: string) => {
-    const fs = require('fs').promises;
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     // Convert Dirent objects to plain objects for IPC serialization
     return entries.map((entry: any) => ({
@@ -189,7 +189,6 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('fs:readFile', async (_, filePath: string) => {
-    const fs = require('fs').promises;
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       return content;
