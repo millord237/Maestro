@@ -431,7 +431,12 @@ export function SettingsModal(props: SettingsModalProps) {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          onClose();
+          // If we're recording a shortcut, cancel recording instead of closing modal
+          if (recordingId) {
+            setRecordingId(null);
+          } else {
+            onClose();
+          }
         }
         // Allow all other keyboard events to propagate to child elements
         // This enables shortcut recording and tab navigation
