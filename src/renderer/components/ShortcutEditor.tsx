@@ -13,12 +13,23 @@ export function ShortcutEditor({ theme, shortcuts, setShortcuts }: ShortcutEdito
   const handleRecord = (e: React.KeyboardEvent, actionId: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // If Escape is pressed, cancel recording without changing the shortcut
+    if (e.key === 'Escape') {
+      setRecordingId(null);
+      return;
+    }
+
     const keys = [];
     if (e.metaKey) keys.push('Meta');
     if (e.ctrlKey) keys.push('Ctrl');
     if (e.altKey) keys.push('Alt');
     if (e.shiftKey) keys.push('Shift');
+
+    // Skip if only modifier keys are pressed
     if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return;
+
+    // Keep arrow keys as-is (ArrowLeft, ArrowRight, etc.)
     keys.push(e.key);
     setShortcuts({
       ...shortcuts,

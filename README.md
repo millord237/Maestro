@@ -1,8 +1,8 @@
 # Maestro
 
-> A unified, highly-responsive developer IDE for managing multiple AI coding assistants simultaneously.
+> A unified, highly-responsive developer IDE for managing multiple Claude Code sessions simultaneously.
 
-Maestro is a desktop application built with Electron that allows you to run and manage multiple AI coding tools (Claude Code, Aider, OpenCode, etc.) in parallel with a Linear/Superhuman-level responsive interface.
+Maestro is a desktop application built with Electron that allows you to run and manage multiple Claude Code instances in parallel with a Linear/Superhuman-level responsive interface. Support for additional agentic coding tools (Aider, OpenCode, etc.) may be added in the future based on user demand.
 
 ## UI Overview
 
@@ -10,7 +10,7 @@ Maestro features a three-panel layout:
 
 - **Left Bar** - Session list with grouping, filtering, and organization
 - **Main Window** - Center workspace with two modes:
-  - **AI Terminal** - Interact with AI coding assistants (Claude Code, Aider, etc.)
+  - **AI Terminal** - Interact with Claude Code AI assistant
   - **Command Terminal** - Execute shell commands and scripts
   - **System Log Viewer** - View system logs and debugging information
 - **Right Bar** - File explorer, command history, and scratchpad
@@ -25,7 +25,7 @@ Each session shows a color-coded status indicator:
 
 ## Features
 
-- 🚀 **Multi-Instance Management** - Run multiple AI assistants and Command Terminal sessions simultaneously
+- 🚀 **Multi-Instance Management** - Run multiple Claude Code instances and Command Terminal sessions simultaneously
 - 🎨 **Beautiful UI** - Obsidian-inspired themes with keyboard-first navigation
 - 🔄 **Dual-Mode Input** - Switch between Command Terminal and AI Terminal seamlessly
 - ⚡ **Slash Commands** - Extensible command system with autocomplete (`/clear` to clear output)
@@ -36,6 +36,8 @@ Each session shows a color-coded status indicator:
 - 🎭 **Multiple Themes** - 8 themes including Dracula, Monokai, Nord, Tokyo Night, GitHub Light, Solarized, One Light, and Gruvbox
 - 📄 **File Explorer** - Browse project files with syntax highlighting and markdown preview
 - ✏️ **Scratchpad** - Built-in markdown editor with live preview
+
+> **Note**: Maestro currently supports Claude Code only. Support for other agentic coding tools may be added in future releases based on community demand.
 
 ## Quick Start
 
@@ -204,7 +206,7 @@ Settings are stored in:
 
 Maestro uses a dual-process architecture where **each session runs two processes simultaneously**:
 
-1. **AI Agent Process** - Runs the selected AI tool (Claude Code, Aider, etc.) as a child process
+1. **AI Agent Process** - Runs Claude Code as a child process
 2. **Terminal Process** - Runs a PTY shell session for command execution
 
 This architecture enables seamless switching between AI and terminal modes without process restarts. All processes are managed through IPC (Inter-Process Communication) with secure context isolation.

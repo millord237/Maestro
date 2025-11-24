@@ -750,21 +750,26 @@ export default function MaestroConsole() {
     const sc = shortcuts[actionId];
     if (!sc) return false;
     const keys = sc.keys.map(k => k.toLowerCase());
-    
+
     const metaPressed = e.metaKey || e.ctrlKey;
     const shiftPressed = e.shiftKey;
+    const altPressed = e.altKey;
     const key = e.key.toLowerCase();
 
     const configMeta = keys.includes('meta') || keys.includes('ctrl') || keys.includes('command');
     const configShift = keys.includes('shift');
-    
+    const configAlt = keys.includes('alt');
+
     if (metaPressed !== configMeta) return false;
     if (shiftPressed !== configShift) return false;
+    if (altPressed !== configAlt) return false;
 
     const mainKey = keys[keys.length - 1];
     if (mainKey === '/' && key === '/') return true;
     if (mainKey === 'arrowleft' && key === 'arrowleft') return true;
     if (mainKey === 'arrowright' && key === 'arrowright') return true;
+    if (mainKey === 'arrowup' && key === 'arrowup') return true;
+    if (mainKey === 'arrowdown' && key === 'arrowdown') return true;
     if (mainKey === 'backspace' && key === 'backspace') return true;
     if (mainKey === '{' && key === '[') return true;
     if (mainKey === '}' && key === ']') return true;
@@ -957,6 +962,15 @@ export default function MaestroConsole() {
         e.preventDefault();
         setActiveFocus('main');
         setTimeout(() => inputRef.current?.focus(), 0);
+      }
+      else if (isShortcut(e, 'focusSidebar')) {
+        e.preventDefault();
+        // Expand sidebar if collapsed
+        if (!leftSidebarOpen) {
+          setLeftSidebarOpen(true);
+        }
+        // Focus the sidebar
+        setActiveFocus('sidebar');
       }
 
       // Forward slash to open file tree filter when file tree has focus
