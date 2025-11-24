@@ -967,6 +967,12 @@ Currently no test suite implemented. When adding tests, use the `test` script in
 
 ## Recent Features Added
 
+- **Terminal Interrupt Functionality** - Gracefully interrupt long-running terminal commands (PED-LONG-RUNNING-CLI)
+  - Visual busy indicator: send button transforms into animated red stop button when terminal is executing
+  - Sends SIGINT (Ctrl+C) to gracefully interrupt processes like ping, top, or other blocking commands
+  - Fallback: if interrupt fails, prompts user to force kill with warning about potential data loss
+  - Prevents CLI interface from becoming unresponsive due to runaway commands
+  - Implementation: `ProcessManager.interrupt()`, IPC handler `process:interrupt`, UI in `InputArea.tsx`
 - **Slash Commands System** - Extensible command framework with autocomplete (type `/` to see commands)
   - `/clear` command to clear output history
   - Keyboard navigation with arrow keys, Tab/Enter to select
