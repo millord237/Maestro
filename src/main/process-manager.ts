@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
+import { stripControlSequences } from './utils/terminalFilter';
 
 interface ProcessConfig {
   sessionId: string;
@@ -96,8 +97,13 @@ export class ProcessManager extends EventEmitter {
 
         // Handle output
         ptyProcess.onData((data) => {
-          console.log(`[ProcessManager] PTY onData for session ${sessionId} (PID ${ptyProcess.pid}):`, data.substring(0, 100));
-          this.emit('data', sessionId, data);
+          // Strip terminal control sequences before emitting
+          const cleanedData = stripControlSequences(data);
+          console.log(`[ProcessManager] PTY onData for session ${sessionId} (PID ${ptyProcess.pid}):`, cleanedData.substring(0, 100));
+          // Only emit if there's actual content after filtering
+          if (cleanedData.trim()) {
+            this.emit('data', sessionId, cleanedData);
+          }
         });
 
         ptyProcess.onExit(({ exitCode }) => {

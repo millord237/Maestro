@@ -44,6 +44,52 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     });
   };
 
+  // Helper function to highlight search matches in text
+  const highlightMatches = (text: string, query: string): React.ReactNode => {
+    if (!query) return text;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    let searchIndex = 0;
+
+    while (searchIndex < lowerText.length) {
+      const index = lowerText.indexOf(lowerQuery, searchIndex);
+      if (index === -1) break;
+
+      // Add text before match
+      if (index > lastIndex) {
+        parts.push(text.substring(lastIndex, index));
+      }
+
+      // Add highlighted match
+      parts.push(
+        <span
+          key={`match-${index}`}
+          style={{
+            backgroundColor: theme.colors.warning,
+            color: theme.mode === 'dark' ? '#000' : '#fff',
+            padding: '1px 2px',
+            borderRadius: '2px'
+          }}
+        >
+          {text.substring(index, index + query.length)}
+        </span>
+      );
+
+      lastIndex = index + query.length;
+      searchIndex = lastIndex;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
+
   // Auto-focus on search input when opened
   useEffect(() => {
     if (outputSearchOpen) {
@@ -280,8 +326,13 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                   >
                     {isTerminal && log.source !== 'user' ? (
                       <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                    ) : log.source === 'user' && isTerminal ? (
+                      <div className="font-mono">
+                        <span style={{ color: theme.colors.accent }}>$ </span>
+                        {highlightMatches(processedText, outputSearchQuery)}
+                      </div>
                     ) : (
-                      processedText
+                      <div>{highlightMatches(processedText, outputSearchQuery)}</div>
                     )}
                   </div>
                   <button
@@ -305,8 +356,15 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                       dangerouslySetInnerHTML={{ __html: htmlContent }}
                       style={{ color: theme.colors.textMain }}
                     />
+                  ) : log.source === 'user' && isTerminal ? (
+                    <div className="whitespace-pre-wrap text-sm font-mono" style={{ color: theme.colors.textMain }}>
+                      <span style={{ color: theme.colors.accent }}>$ </span>
+                      {highlightMatches(processedText, outputSearchQuery)}
+                    </div>
                   ) : (
-                    <div className="whitespace-pre-wrap text-sm">{processedText}</div>
+                    <div className="whitespace-pre-wrap text-sm" style={{ color: theme.colors.textMain }}>
+                      {highlightMatches(processedText, outputSearchQuery)}
+                    </div>
                   )}
                 </>
               )}

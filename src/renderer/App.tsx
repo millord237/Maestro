@@ -30,6 +30,9 @@ import { ProcessMonitor } from './components/ProcessMonitor';
 // Import custom hooks
 import { useSettings, useSessionManager, useFileExplorer } from './hooks';
 
+// Import services
+import { gitService } from './services/git';
+
 // Import types and constants
 import type {
   ToolType, SessionState, FileChangeType, RightPanelTab, ScratchPadMode,
@@ -1317,9 +1320,11 @@ export default function MaestroConsole() {
 
     // Track shell CWD changes when in terminal mode
     let newShellCwd = activeSession.shellCwd;
+    let cwdChanged = false;
     if (currentMode === 'terminal') {
       const cdMatch = inputValue.trim().match(/^cd\s+(.+)$/);
       if (cdMatch) {
+        cwdChanged = true;
         const targetPath = cdMatch[1].trim().replace(/^['"]|['"]$/g, ''); // Remove quotes
         if (targetPath === '~') {
           // Navigate to home directory (simplified, could use actual home)
@@ -1364,6 +1369,16 @@ export default function MaestroConsole() {
         commandHistory: newHistory
       };
     }));
+
+    // If directory changed, check if new directory is a Git repository
+    if (cwdChanged) {
+      (async () => {
+        const isGitRepo = await gitService.isRepo(newShellCwd);
+        setSessions(prev => prev.map(s =>
+          s.id === activeSessionId ? { ...s, isGitRepo } : s
+        ));
+      })();
+    }
 
     // Capture input value before clearing (needed for async batch mode spawn)
     const capturedInputValue = inputValue;

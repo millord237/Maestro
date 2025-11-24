@@ -17,23 +17,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
   const [instanceName, setInstanceName] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadAgents();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
+  // Define handlers first before they're used in effects
   const loadAgents = async () => {
     setLoading(true);
     try {
@@ -63,7 +47,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = React.useCallback(() => {
     const name = instanceName || agents.find(a => a.id === selectedAgent)?.name || 'New Agent';
     onCreate(selectedAgent, workingDir, name);
     onClose();
@@ -71,7 +55,33 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     // Reset
     setInstanceName('');
     setWorkingDir('~');
-  };
+  }, [instanceName, agents, selectedAgent, workingDir, onCreate, onClose]);
+
+  // Effects
+  useEffect(() => {
+    if (isOpen) {
+      loadAgents();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+      // Command+Enter (Mac) or Ctrl+Enter (Windows/Linux) to create agent
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && isOpen) {
+        e.preventDefault();
+        // Only create if agent is selected and available
+        if (selectedAgent && agents.find(a => a.id === selectedAgent)?.available) {
+          handleCreate();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, selectedAgent, agents, handleCreate]);
 
   if (!isOpen) return null;
 
