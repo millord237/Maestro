@@ -317,14 +317,20 @@ export default function MaestroConsole() {
       }
 
       // Spawn BOTH processes for dual-process architecture
-      // 1. Spawn AI agent process (never use 'terminal' as toolType here)
-      const aiSpawnResult = await window.maestro.process.spawn({
-        sessionId: `${correctedSession.id}-ai`,
-        toolType: aiAgentType,  // Use aiAgentType, not correctedSession.toolType
-        cwd: correctedSession.cwd,
-        command: agent.command,
-        args: agent.args || []
-      });
+      // 1. Spawn AI agent process (skip for Claude batch mode - will spawn on first message)
+      const isClaudeBatchMode = aiAgentType === 'claude';
+      let aiSpawnResult = { pid: 0, success: true }; // Default for batch mode
+
+      if (!isClaudeBatchMode) {
+        // Only spawn for non-batch-mode agents
+        aiSpawnResult = await window.maestro.process.spawn({
+          sessionId: `${correctedSession.id}-ai`,
+          toolType: aiAgentType,
+          cwd: correctedSession.cwd,
+          command: agent.command,
+          args: agent.args || []
+        });
+      }
 
       // 2. Spawn terminal process
       const terminalSpawnResult = await window.maestro.process.spawn({
@@ -335,14 +341,18 @@ export default function MaestroConsole() {
         args: terminalAgent.args || []
       });
 
-      if (aiSpawnResult.success && aiSpawnResult.pid > 0 &&
-          terminalSpawnResult.success && terminalSpawnResult.pid > 0) {
+      // For batch mode (Claude), aiPid can be 0 since we don't spawn until first message
+      const aiSuccess = aiSpawnResult.success && (isClaudeBatchMode || aiSpawnResult.pid > 0);
+
+      if (aiSuccess && terminalSpawnResult.success && terminalSpawnResult.pid > 0) {
         // Add restoration messages to both log arrays
         const aiRestorationLog: LogEntry = {
           id: generateId(),
           timestamp: Date.now(),
           source: 'system',
-          text: 'AI agent restored after app restart'
+          text: isClaudeBatchMode
+            ? 'Claude Code ready (batch mode - will spawn on first message)'
+            : 'AI agent restored after app restart'
         };
 
         const terminalRestorationLog: LogEntry = {
@@ -1356,8 +1366,8 @@ export default function MaestroConsole() {
     const targetPid = currentMode === 'ai' ? activeSession.aiPid : activeSession.terminalPid;
     const targetSessionId = currentMode === 'ai' ? `${activeSession.id}-ai` : `${activeSession.id}-terminal`;
 
-    // Check if this is Claude Code in batch mode (AI mode with claude-code tool)
-    const isClaudeBatchMode = currentMode === 'ai' && activeSession.toolType === 'claude-code';
+    // Check if this is Claude Code in batch mode (AI mode with claude tool)
+    const isClaudeBatchMode = currentMode === 'ai' && activeSession.toolType === 'claude';
 
     if (isClaudeBatchMode) {
       // Batch mode: Spawn new Claude process with prompt

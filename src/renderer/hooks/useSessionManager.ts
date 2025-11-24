@@ -170,17 +170,22 @@ export function useSessionManager(): UseSessionManagerReturn {
 
     // Spawn BOTH processes - this is the dual-process architecture
     try {
-      // 1. Spawn AI agent process
-      const aiSpawnResult = await window.maestro.process.spawn({
-        sessionId: `${newId}-ai`,
-        toolType: agentId,
-        cwd: workingDir,
-        command: agent.command,
-        args: agent.args || []
-      });
+      // 1. Spawn AI agent process (skip for Claude batch mode)
+      const isClaudeBatchMode = agentId === 'claude-code';
+      let aiSpawnResult = { pid: 0, success: true }; // Default for batch mode
 
-      if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
-        throw new Error('Failed to spawn AI agent process');
+      if (!isClaudeBatchMode) {
+        aiSpawnResult = await window.maestro.process.spawn({
+          sessionId: `${newId}-ai`,
+          toolType: agentId,
+          cwd: workingDir,
+          command: agent.command,
+          args: agent.args || []
+        });
+
+        if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
+          throw new Error('Failed to spawn AI agent process');
+        }
       }
 
       // 2. Spawn terminal process
@@ -204,7 +209,7 @@ export function useSessionManager(): UseSessionManagerReturn {
         cwd: workingDir,
         fullPath: workingDir,
         isGitRepo: false,
-        aiLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: `${name} ready.` }],
+        aiLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: isClaudeBatchMode ? 'Claude Code ready (batch mode - will spawn on first message)' : `${name} ready.` }],
         shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
         workLog: [],
         scratchPadContent: '',
