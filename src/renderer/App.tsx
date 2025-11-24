@@ -780,7 +780,7 @@ export default function MaestroConsole() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't intercept if modals are open
-      const modalOpen = quickActionOpen || settingsModalOpen || shortcutsHelpOpen || newInstanceModalOpen || aboutModalOpen || processMonitorOpen || createGroupModalOpen || confirmModalOpen || renameInstanceModalOpen || renameGroupModalOpen;
+      const modalOpen = quickActionOpen || settingsModalOpen || shortcutsHelpOpen || newInstanceModalOpen || aboutModalOpen || processMonitorOpen || logViewerOpen || createGroupModalOpen || confirmModalOpen || renameInstanceModalOpen || renameGroupModalOpen;
 
       // If any modal is open, only handle Escape key here and let modals handle everything else
       if (modalOpen) {
@@ -807,6 +807,8 @@ export default function MaestroConsole() {
             setAboutModalOpen(false);
           } else if (processMonitorOpen) {
             setProcessMonitorOpen(false);
+          } else if (logViewerOpen) {
+            setLogViewerOpen(false);
           } else if (settingsModalOpen) {
             setSettingsModalOpen(false);
           } else if (lightboxImage) {
@@ -2082,6 +2084,8 @@ export default function MaestroConsole() {
           setShortcutsHelpOpen={setShortcutsHelpOpen}
           setSettingsModalOpen={setSettingsModalOpen}
           setSettingsTab={setSettingsTab}
+          setAboutModalOpen={setAboutModalOpen}
+          setLogViewerOpen={setLogViewerOpen}
           toggleGroup={toggleGroup}
           handleDragStart={handleDragStart}
           handleDragOver={handleDragOver}

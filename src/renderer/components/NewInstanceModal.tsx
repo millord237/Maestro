@@ -77,12 +77,8 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
           handleCreate();
         }
       }
-      // 'O' key to open folder picker
-      if ((e.key === 'o' || e.key === 'O') && !e.metaKey && !e.ctrlKey && !e.altKey && isOpen) {
-        // Don't trigger if user is typing in an input field
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-          return;
-        }
+      // Cmd+O (Mac) or Ctrl+O (Windows/Linux) to open folder picker
+      if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey) && isOpen) {
         e.preventDefault();
         handleSelectFolder();
       }
@@ -204,7 +200,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                 onClick={handleSelectFolder}
                 className="p-2 rounded border hover:bg-opacity-10"
                 style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                title="Browse folders (O)"
+                title="Browse folders (Cmd+O)"
               >
                 <Folder className="w-5 h-5" />
               </button>

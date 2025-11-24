@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, Activity, X, Keyboard,
-  Globe, Network, PanelLeftClose, PanelLeftOpen, Folder
+  Globe, Network, PanelLeftClose, PanelLeftOpen, Folder, Info, FileText
 } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
 import { getStatusColor, getContextColor } from '../utils/theme';
@@ -31,6 +31,8 @@ interface SessionListProps {
   setShortcutsHelpOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setSettingsTab: (tab: string) => void;
+  setAboutModalOpen: (open: boolean) => void;
+  setLogViewerOpen: (open: boolean) => void;
   toggleGroup: (groupId: string) => void;
   handleDragStart: (sessionId: string) => void;
   handleDragOver: (e: React.DragEvent) => void;
@@ -52,7 +54,7 @@ export function SessionList(props: SessionListProps) {
     leftSidebarWidthState, activeFocus, selectedSidebarIndex, editingGroupId,
     editingSessionId, draggingSessionId, anyTunnelActive, shortcuts,
     setActiveFocus, setActiveSessionId, setLeftSidebarOpen, setLeftSidebarWidthState,
-    setShortcutsHelpOpen, setSettingsModalOpen, setSettingsTab, toggleGroup,
+    setShortcutsHelpOpen, setSettingsModalOpen, setSettingsTab, setAboutModalOpen, setLogViewerOpen, toggleGroup,
     handleDragStart, handleDragOver, handleDropOnGroup, handleDropOnUngrouped,
     finishRenamingGroup, finishRenamingSession, startRenamingGroup,
     startRenamingSession, showConfirmation, setGroups, createNewGroup, addNewSession
@@ -140,6 +142,12 @@ export function SessionList(props: SessionListProps) {
             <div className="flex items-center gap-1">
               <button onClick={() => setShortcutsHelpOpen(true)} className="p-1.5 rounded hover:bg-white/5 text-xs" title={`Shortcuts (${shortcuts.help.keys.join('+').replace('Meta', 'Cmd')})`} style={{ color: theme.colors.textDim }}>
                 <Keyboard className="w-4 h-4" />
+              </button>
+              <button onClick={() => setLogViewerOpen(true)} className="p-1.5 rounded hover:bg-white/5" title="System Logs" style={{ color: theme.colors.textDim }}>
+                <FileText className="w-4 h-4" />
+              </button>
+              <button onClick={() => setAboutModalOpen(true)} className="p-1.5 rounded hover:bg-white/5" title="About Maestro" style={{ color: theme.colors.textDim }}>
+                <Info className="w-4 h-4" />
               </button>
               <button onClick={() => { setSettingsModalOpen(true); setSettingsTab('general'); }} className="p-1.5 rounded hover:bg-white/5" title="Settings" style={{ color: theme.colors.textDim }}>
                 <Settings className="w-4 h-4" />
