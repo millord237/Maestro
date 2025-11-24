@@ -7,6 +7,11 @@ import { FilePreview } from './FilePreview';
 import { ErrorBoundary } from './ErrorBoundary';
 import type { Session, Theme, Shortcut, FocusArea } from '../types';
 
+interface SlashCommand {
+  command: string;
+  description: string;
+}
+
 interface MainPanelProps {
   // State
   logViewerOpen: boolean;
@@ -21,6 +26,9 @@ interface MainPanelProps {
   commandHistoryOpen: boolean;
   commandHistoryFilter: string;
   commandHistorySelectedIndex: number;
+  slashCommandOpen: boolean;
+  slashCommands: SlashCommand[];
+  selectedSlashCommandIndex: number;
   previewFile: { name: string; content: string; path: string } | null;
   markdownRawMode: boolean;
   shortcuts: Record<string, Shortcut>;
@@ -38,6 +46,8 @@ interface MainPanelProps {
   setCommandHistoryOpen: (open: boolean) => void;
   setCommandHistoryFilter: (filter: string) => void;
   setCommandHistorySelectedIndex: (index: number) => void;
+  setSlashCommandOpen: (open: boolean) => void;
+  setSelectedSlashCommandIndex: (index: number) => void;
   setPreviewFile: (file: { name: string; content: string; path: string } | null) => void;
   setMarkdownRawMode: (mode: boolean) => void;
   setAboutModalOpen: (open: boolean) => void;
@@ -62,10 +72,12 @@ export function MainPanel(props: MainPanelProps) {
   const {
     logViewerOpen, activeSession, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSend, stagedImages, commandHistoryOpen, commandHistoryFilter,
-    commandHistorySelectedIndex, previewFile, markdownRawMode, shortcuts, rightPanelOpen,
+    commandHistorySelectedIndex, slashCommandOpen, slashCommands, selectedSlashCommandIndex,
+    previewFile, markdownRawMode, shortcuts, rightPanelOpen,
     setLogViewerOpen, setActiveFocus, setOutputSearchOpen, setOutputSearchQuery,
     setInputValue, setEnterToSend, setStagedImages, setLightboxImage, setCommandHistoryOpen,
-    setCommandHistoryFilter, setCommandHistorySelectedIndex, setPreviewFile, setMarkdownRawMode,
+    setCommandHistoryFilter, setCommandHistorySelectedIndex, setSlashCommandOpen,
+    setSelectedSlashCommandIndex, setPreviewFile, setMarkdownRawMode,
     setAboutModalOpen, setRightPanelOpen, inputRef, logsEndRef, fileTreeContainerRef,
     toggleTunnel, toggleInputMode, processInput, handleInputKeyDown, handlePaste, handleDrop,
     getContextColor
@@ -197,6 +209,11 @@ export function MainPanel(props: MainPanelProps) {
             setCommandHistoryFilter={setCommandHistoryFilter}
             commandHistorySelectedIndex={commandHistorySelectedIndex}
             setCommandHistorySelectedIndex={setCommandHistorySelectedIndex}
+            slashCommandOpen={slashCommandOpen}
+            setSlashCommandOpen={setSlashCommandOpen}
+            slashCommands={slashCommands}
+            selectedSlashCommandIndex={selectedSlashCommandIndex}
+            setSelectedSlashCommandIndex={setSelectedSlashCommandIndex}
             inputRef={inputRef}
             handleInputKeyDown={handleInputKeyDown}
             handlePaste={handlePaste}

@@ -2,6 +2,11 @@ import React from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp } from 'lucide-react';
 import type { Session, Theme } from '../types';
 
+interface SlashCommand {
+  command: string;
+  description: string;
+}
+
 interface InputAreaProps {
   session: Session;
   theme: Theme;
@@ -18,6 +23,11 @@ interface InputAreaProps {
   setCommandHistoryFilter: (filter: string) => void;
   commandHistorySelectedIndex: number;
   setCommandHistorySelectedIndex: (index: number) => void;
+  slashCommandOpen: boolean;
+  setSlashCommandOpen: (open: boolean) => void;
+  slashCommands: SlashCommand[];
+  selectedSlashCommandIndex: number;
+  setSelectedSlashCommandIndex: (index: number) => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   handleInputKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -32,9 +42,16 @@ export function InputArea(props: InputAreaProps) {
     stagedImages, setStagedImages, setLightboxImage, commandHistoryOpen,
     setCommandHistoryOpen, commandHistoryFilter, setCommandHistoryFilter,
     commandHistorySelectedIndex, setCommandHistorySelectedIndex,
+    slashCommandOpen, setSlashCommandOpen, slashCommands,
+    selectedSlashCommandIndex, setSelectedSlashCommandIndex,
     inputRef, handleInputKeyDown, handlePaste, handleDrop,
     toggleInputMode, processInput
   } = props;
+
+  // Filter slash commands based on input
+  const filteredSlashCommands = slashCommands.filter(cmd =>
+    cmd.command.toLowerCase().startsWith(inputValue.toLowerCase())
+  );
 
   return (
     <div className="relative p-4 border-t" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
@@ -62,6 +79,38 @@ export function InputArea(props: InputAreaProps) {
         </div>
       )}
 
+      {/* Slash Command Autocomplete */}
+      {slashCommandOpen && filteredSlashCommands.length > 0 && (
+        <div
+          className="absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-2xl max-h-64 overflow-hidden"
+          style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+        >
+          <div className="overflow-y-auto max-h-64">
+            {filteredSlashCommands.map((cmd, idx) => (
+              <div
+                key={cmd.command}
+                className={`px-4 py-3 cursor-pointer transition-colors ${
+                  idx === selectedSlashCommandIndex ? 'font-semibold' : ''
+                }`}
+                style={{
+                  backgroundColor: idx === selectedSlashCommandIndex ? theme.colors.accent : 'transparent',
+                  color: idx === selectedSlashCommandIndex ? theme.colors.bgMain : theme.colors.textMain
+                }}
+                onClick={() => {
+                  setInputValue(cmd.command);
+                  setSlashCommandOpen(false);
+                  inputRef.current?.focus();
+                }}
+                onMouseEnter={() => setSelectedSlashCommandIndex(idx)}
+              >
+                <div className="font-mono text-sm">{cmd.command}</div>
+                <div className="text-xs opacity-70 mt-0.5">{cmd.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Command History Modal */}
       {commandHistoryOpen && (
         <div
@@ -69,7 +118,9 @@ export function InputArea(props: InputAreaProps) {
           style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
           onKeyDown={(e) => {
             const history = session.commandHistory || [];
-            const filtered = history.filter(cmd =>
+            // Dedupe history before filtering
+            const uniqueHistory = Array.from(new Set(history));
+            const filtered = uniqueHistory.filter(cmd =>
               cmd.toLowerCase().includes(commandHistoryFilter.toLowerCase())
             ).reverse().slice(0, 5);
 
@@ -110,7 +161,7 @@ export function InputArea(props: InputAreaProps) {
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            {(session.commandHistory || [])
+            {Array.from(new Set(session.commandHistory || []))
               .filter(cmd => cmd.toLowerCase().includes(commandHistoryFilter.toLowerCase()))
               .reverse()
               .slice(0, 5)
@@ -152,7 +203,17 @@ export function InputArea(props: InputAreaProps) {
             placeholder={session.inputMode === 'terminal' ? "Run shell command..." : "Ask Claude..."}
             value={inputValue}
             onChange={e => {
-              setInputValue(e.target.value);
+              const value = e.target.value;
+              setInputValue(value);
+
+              // Show slash command autocomplete when typing /
+              if (value.startsWith('/') && !value.includes(' ')) {
+                setSlashCommandOpen(true);
+                setSelectedSlashCommandIndex(0);
+              } else {
+                setSlashCommandOpen(false);
+              }
+
               // Auto-grow logic
               e.target.style.height = 'auto';
               e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;

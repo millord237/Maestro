@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { Activity, X } from 'lucide-react';
+import { Activity, X, Sparkles } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
@@ -55,17 +55,30 @@ export function TerminalOutput(props: TerminalOutputProps) {
     });
   }, [theme]);
 
-  // Filter out bash prompt lines and apply processing
-  const processLogText = (text: string, isTerminal: boolean): string => {
-    if (!isTerminal) return text;
+  // Filter out bash prompt lines and terminal initialization noise
+  const processLogText = (text: string, isTerminal: boolean, isSystemMessage: boolean): string => {
+    if (!isTerminal || isSystemMessage) return text;
 
-    // Remove bash prompt lines (e.g., "bash-3.2$", "zsh%", "$", "#")
+    // Remove terminal initialization messages and noise
     const lines = text.split('\n');
     const filteredLines = lines.filter(line => {
       const trimmed = line.trim();
-      // Skip empty lines and common prompt patterns
+
+      // Skip empty lines
       if (!trimmed) return false;
+
+      // Skip bash prompt lines (e.g., "bash-3.2$", "zsh%", "$", "#")
       if (/^(bash-\d+\.\d+\$|zsh[%#]|\$|#)\s*$/.test(trimmed)) return false;
+
+      // Skip terminal control sequences (any sequence starting with ?)
+      if (/^\?[\d\w]+h?$/.test(trimmed)) return false;
+
+      // Skip "The default interactive shell is now zsh" message
+      if (trimmed.includes('The default interactive shell is now zsh')) return false;
+      if (trimmed.includes('To update your account to use zsh')) return false;
+      if (trimmed.includes('For more details, please visit')) return false;
+      if (trimmed.includes('support.apple.com')) return false;
+
       return true;
     });
 
@@ -116,42 +129,72 @@ export function TerminalOutput(props: TerminalOutputProps) {
         return log.text.toLowerCase().includes(outputSearchQuery.toLowerCase());
       }).map(log => {
         const isTerminal = session.inputMode === 'terminal';
-        const processedText = processLogText(log.text, isTerminal && log.source !== 'user');
+        const isSystemMessage = log.source === 'system';
+        const isUserCommand = log.source === 'user';
+        const processedText = processLogText(log.text, isTerminal && !isUserCommand, isSystemMessage);
 
         // Skip rendering if text is empty after processing
-        if (!processedText.trim() && log.source !== 'user') return null;
+        if (!processedText.trim() && !isUserCommand) return null;
 
         // Convert ANSI codes to HTML for terminal output and sanitize
-        const htmlContent = isTerminal && log.source !== 'user'
+        const htmlContent = isTerminal && !isUserCommand && !isSystemMessage
           ? DOMPurify.sanitize(ansiConverter.toHtml(processedText))
           : processedText;
 
         return (
-          <div key={log.id} className={`flex gap-4 group ${log.source === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className="w-12 shrink-0 text-[10px] opacity-40 pt-2 font-mono text-center">
-              {new Date(log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+          <div key={log.id} className="flex flex-col gap-2">
+            {/* Timestamp at the top */}
+            <div className="text-[10px] opacity-60 font-mono" style={{ color: theme.colors.textDim }}>
+              {new Date(log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false})}
             </div>
-            <div className={`flex-1 p-4 rounded-xl border ${log.source === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}
-                 style={{
-                   backgroundColor: log.source === 'user' ? theme.colors.bgActivity : 'transparent',
-                   borderColor: theme.colors.border
-                 }}>
-              {log.images && log.images.length > 0 && (
-                <div className="flex gap-2 mb-2 overflow-x-auto">
-                  {log.images.map((img, idx) => (
-                    <img key={idx} src={img} className="h-20 rounded border cursor-zoom-in" onClick={() => setLightboxImage(img)} />
-                  ))}
+
+            {/* Message content */}
+            <div className={`flex gap-3 items-start`}>
+              {/* Icon for system messages */}
+              {isSystemMessage && (
+                <div className="shrink-0 mt-1">
+                  <Sparkles className="w-3.5 h-3.5 opacity-40" style={{ color: theme.colors.textDim }} />
                 </div>
               )}
-              {isTerminal && log.source !== 'user' ? (
-                <div
-                  className="whitespace-pre-wrap text-sm font-mono overflow-x-auto"
-                  dangerouslySetInnerHTML={{ __html: htmlContent }}
-                  style={{ color: theme.colors.textMain }}
-                />
-              ) : (
-                <div className="whitespace-pre-wrap text-sm">{processedText}</div>
-              )}
+
+              <div className={`flex-1 p-4 rounded-xl border ${isUserCommand ? 'rounded-tr-none' : 'rounded-tl-none'}`}
+                   style={{
+                     backgroundColor: isUserCommand ? theme.colors.accent : 'transparent',
+                     borderColor: isUserCommand ? theme.colors.accent : theme.colors.border
+                   }}>
+                {log.images && log.images.length > 0 && (
+                  <div className="flex gap-2 mb-2 overflow-x-auto">
+                    {log.images.map((img, idx) => (
+                      <img key={idx} src={img} className="h-20 rounded border cursor-zoom-in" onClick={() => setLightboxImage(img)} />
+                    ))}
+                  </div>
+                )}
+
+                {/* User commands with $ prefix and contrasting color on accent background */}
+                {isUserCommand ? (
+                  <div
+                    className="whitespace-pre-wrap break-all text-sm font-mono font-semibold"
+                    style={{ color: theme.colors.bgMain }}
+                  >
+                    $ {processedText}
+                  </div>
+                ) : isTerminal && !isSystemMessage ? (
+                  /* Terminal output with ANSI colors - responsive text wrapping */
+                  <div
+                    className="whitespace-pre-wrap break-words text-sm font-mono"
+                    dangerouslySetInnerHTML={{ __html: htmlContent }}
+                    style={{ color: theme.colors.textMain }}
+                  />
+                ) : (
+                  /* System messages and AI responses */
+                  <div
+                    className="whitespace-pre-wrap break-words text-sm"
+                    style={{ color: isSystemMessage ? theme.colors.textDim : theme.colors.textMain }}
+                  >
+                    {processedText}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );

@@ -166,6 +166,7 @@ export function RightPanel(props: RightPanelProps) {
             activeRightTab={activeRightTab}
             previewFile={previewFile}
             setActiveFocus={setActiveFocus}
+            fileTreeContainerRef={fileTreeContainerRef}
             toggleFolder={toggleFolder}
             handleFileClick={handleFileClick}
             expandAllFolders={expandAllFolders}

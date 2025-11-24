@@ -9,6 +9,7 @@ Maestro is a desktop application built with Electron that allows you to run and 
 - 🚀 **Multi-Instance Management** - Run multiple AI assistants and terminal sessions simultaneously
 - 🎨 **Beautiful UI** - Obsidian-inspired themes with keyboard-first navigation
 - 🔄 **Dual-Mode Input** - Switch between terminal and AI interaction modes seamlessly
+- ⚡ **Slash Commands** - Extensible command system with autocomplete (`/clear` to clear output)
 - 🌐 **Remote Access** - Built-in web server with optional ngrok/Cloudflare tunneling
 - 🎯 **Git Integration** - Automatic git status, diff tracking, and workspace detection
 - ⚡ **Keyboard Shortcuts** - Full keyboard control with customizable shortcuts
@@ -232,6 +233,7 @@ This architecture enables seamless switching between AI and terminal modes witho
 | Send Message | `Enter` or `⌘Enter` (configurable in Settings) |
 | Multiline Input | `⇧Enter` |
 | Navigate Command History | `↑` while in input |
+| Slash Commands | Type `/` to open autocomplete, `↑`/`↓` to navigate, `Tab`/`Enter` to select |
 | Focus Output | `Esc` while in input |
 | Focus Input | `Esc` while in output |
 | Open Output Search | `/` while in output |
@@ -269,6 +271,25 @@ This architecture enables seamless switching between AI and terminal modes witho
 | Execute Action | `Enter` | `Enter` |
 
 *Most shortcuts are customizable in Settings → Shortcuts*
+
+## Slash Commands
+
+Maestro includes an extensible slash command system with autocomplete. Commands are executed in the input area and affect the current session.
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/clear` | Clear the output history for the current mode (AI or terminal) |
+
+### Using Slash Commands
+
+1. Type `/` in the input area to open the autocomplete menu
+2. Use `↑`/`↓` arrow keys to navigate commands
+3. Press `Tab` or `Enter` to select a command
+4. Press `Esc` to dismiss the autocomplete menu
+
+The slash command system is extensible - new commands can be added in `src/renderer/slashCommands.ts`.
 
 ## Remote Access
 

@@ -23,6 +23,7 @@ interface FileExplorerPanelProps {
   activeRightTab: string;
   previewFile: {name: string; content: string; path: string} | null;
   setActiveFocus: (focus: string) => void;
+  fileTreeContainerRef?: React.RefObject<HTMLDivElement>;
   toggleFolder: (path: string, activeSessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => void;
   handleFileClick: (node: any, path: string, activeSession: Session) => Promise<void>;
   expandAllFolders: (activeSessionId: string, activeSession: Session, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => void;
@@ -35,8 +36,8 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
   const {
     session, theme, fileTreeFilter, setFileTreeFilter, fileTreeFilterOpen, setFileTreeFilterOpen,
     filteredFileTree, selectedFileIndex, setSelectedFileIndex, activeFocus, activeRightTab,
-    previewFile, setActiveFocus, toggleFolder, handleFileClick, expandAllFolders, collapseAllFolders,
-    updateSessionWorkingDirectory, setSessions
+    previewFile, setActiveFocus, fileTreeContainerRef, toggleFolder, handleFileClick, expandAllFolders,
+    collapseAllFolders, updateSessionWorkingDirectory, setSessions
   } = props;
 
   const renderTree = (nodes: FileNode[], currentPath = '', depth = 0, globalIndex = { value: 0 }) => {
@@ -112,6 +113,10 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
               if (e.key === 'Escape') {
                 setFileTreeFilterOpen(false);
                 setFileTreeFilter('');
+              } else if (e.key === 'Tab') {
+                e.preventDefault();
+                // Focus the file tree container to enable keyboard navigation
+                fileTreeContainerRef?.current?.focus();
               }
             }}
             className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"

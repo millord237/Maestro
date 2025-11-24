@@ -157,6 +157,33 @@ Fastify server (`src/main/web-server.ts`) provides:
 
 ## Key Design Patterns
 
+### Slash Commands System
+
+Maestro implements an extensible slash command system in `src/renderer/slashCommands.ts`:
+
+```typescript
+export interface SlashCommand {
+  command: string;        // The command string (e.g., "/clear")
+  description: string;    // Human-readable description
+  execute: (context: SlashCommandContext) => void;  // Command handler
+}
+```
+
+**Architecture:**
+- Commands are defined in a single registry (`slashCommands` array)
+- Autocomplete UI appears when user types `/`
+- Keyboard navigation with arrow keys, Tab/Enter to select
+- Commands receive execution context (activeSessionId, sessions, setSessions, currentMode)
+- Commands can modify session state, trigger actions, or interact with IPC
+
+**Adding new commands:**
+1. Add new entry to `slashCommands` array in `src/renderer/slashCommands.ts`
+2. Implement `execute` function with desired behavior
+3. Command automatically appears in autocomplete
+
+**Current commands:**
+- `/clear` - Clears output history for current mode (AI or terminal)
+
 ### Dual-Mode Input Router
 
 Sessions toggle between two input modes:
@@ -940,9 +967,21 @@ Currently no test suite implemented. When adding tests, use the `test` script in
 
 ## Recent Features Added
 
+- **Slash Commands System** - Extensible command framework with autocomplete (type `/` to see commands)
+  - `/clear` command to clear output history
+  - Keyboard navigation with arrow keys, Tab/Enter to select
+  - Easy to extend by adding to `src/renderer/slashCommands.ts`
+- **Terminal Output Redesign** - Vertical layout with improved visual hierarchy
+  - Timestamps displayed at top
+  - User commands highlighted with `$` prefix and accent background
+  - System messages with sparkle icon
+  - Better text wrapping with `break-words`
+- **Enhanced Filtering** - Improved terminal noise filtering
+  - Removes bash/zsh initialization messages
+  - Filters control sequences and prompts
+  - Command history deduplication
 - **Dual-Process Architecture** - Each session now runs two processes simultaneously (AI agent + terminal) enabling seamless mode switching without process restarts
 - **ANSI Terminal Rendering** - Terminal output now properly renders ANSI escape codes with theme-aware colors using ansi-to-html
-- **Terminal Output Filtering** - Bash prompts automatically filtered from terminal output for cleaner display
 - **Session Restoration Improvements** - Automatic detection and fixing of corrupted sessions with mismatched inputMode/toolType
 - **Agent Config Serialization** - Non-serializable functions stripped from agent configs before IPC transmission
 - **System Log Viewer** - Cmd+K → "View System Logs" for internal logging with color-coded levels, search, and export

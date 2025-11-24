@@ -17,6 +17,7 @@ import { InputArea } from './components/InputArea';
 import { QuickActionsModal } from './components/QuickActionsModal';
 import { LightboxModal } from './components/LightboxModal';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
+import { slashCommands } from './slashCommands';
 import { AboutModal } from './components/AboutModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
 import { RenameSessionModal } from './components/RenameSessionModal';
@@ -54,6 +55,8 @@ export default function MaestroConsole() {
   // Input State
   const [inputValue, setInputValue] = useState('');
   const [enterToSend, setEnterToSendState] = useState(true);
+  const [slashCommandOpen, setSlashCommandOpen] = useState(false);
+  const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
 
   const setEnterToSend = (value: boolean) => {
     setEnterToSendState(value);
@@ -91,8 +94,6 @@ export default function MaestroConsole() {
   const [flatFileList, setFlatFileList] = useState<any[]>([]);
   const [fileTreeFilter, setFileTreeFilter] = useState('');
   const [fileTreeFilterOpen, setFileTreeFilterOpen] = useState(false);
-  const [sessionFilter, setSessionFilter] = useState('');
-  const [sessionFilterOpen, setSessionFilterOpen] = useState(false);
 
   // Renaming State
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -879,25 +880,17 @@ export default function MaestroConsole() {
         setFileTreeFilterOpen(true);
       }
 
-      // Forward slash to open session filter when sidebar has focus
-      if (e.key === '/' && activeFocus === 'sidebar') {
-        e.preventDefault();
-        setSessionFilterOpen(true);
-      }
-
-      // Escape key for non-modal elements (preview, lightbox, file tree filter, session filter)
+      // Escape key for non-modal elements (preview, lightbox, file tree filter)
       if (e.key === 'Escape' && !modalOpen) {
         setLightboxImage(null);
         setPreviewFile(null);
         setFileTreeFilterOpen(false);
         setFileTreeFilter('');
-        setSessionFilterOpen(false);
-        setSessionFilter('');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, sessionFilter, sessionFilterOpen]);
+  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen]);
 
   // Sync selectedSidebarIndex with activeSessionId
   useEffect(() => {
@@ -1207,6 +1200,26 @@ export default function MaestroConsole() {
   const processInput = () => {
     if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) return;
 
+    // Handle slash commands
+    if (inputValue.trim().startsWith('/')) {
+      const commandText = inputValue.trim();
+      const matchingCommand = slashCommands.find(cmd => cmd.command === commandText);
+
+      if (matchingCommand) {
+        matchingCommand.execute({
+          activeSessionId,
+          sessions,
+          setSessions,
+          currentMode: activeSession.inputMode
+        });
+
+        setInputValue('');
+        setSlashCommandOpen(false);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        return;
+      }
+    }
+
     const currentMode = activeSession.inputMode;
     const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
 
@@ -1305,6 +1318,31 @@ export default function MaestroConsole() {
     // Handle command history modal
     if (commandHistoryOpen) {
       return; // Let the modal handle keys
+    }
+
+    // Handle slash command autocomplete
+    if (slashCommandOpen) {
+      const filteredCommands = slashCommands.filter(cmd =>
+        cmd.command.toLowerCase().startsWith(inputValue.toLowerCase())
+      );
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSlashCommandIndex(prev =>
+          Math.min(prev + 1, filteredCommands.length - 1)
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSlashCommandIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Tab' || (e.key === 'Enter' && filteredCommands.length > 0)) {
+        e.preventDefault();
+        setInputValue(filteredCommands[selectedSlashCommandIndex]?.command || inputValue);
+        setSlashCommandOpen(false);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashCommandOpen(false);
+      }
+      return;
     }
 
     if (e.key === 'Enter') {
@@ -1516,13 +1554,6 @@ export default function MaestroConsole() {
     return filterTree(activeSession.fileTree);
   }, [activeSession?.fileTree, fileTreeFilter]);
 
-  // Filter sessions based on search query
-  const filteredSessions = useMemo(() => {
-    if (!sessionFilter) {
-      return sessions;
-    }
-    return sessions.filter(session => fuzzyMatch(session.name, sessionFilter));
-  }, [sessions, sessionFilter]);
 
   // File Explorer keyboard navigation
   useEffect(() => {
@@ -1813,6 +1844,9 @@ export default function MaestroConsole() {
         commandHistoryOpen={commandHistoryOpen}
         commandHistoryFilter={commandHistoryFilter}
         commandHistorySelectedIndex={commandHistorySelectedIndex}
+        slashCommandOpen={slashCommandOpen}
+        slashCommands={slashCommands}
+        selectedSlashCommandIndex={selectedSlashCommandIndex}
         previewFile={previewFile}
         markdownRawMode={markdownRawMode}
         shortcuts={shortcuts}
@@ -1828,6 +1862,8 @@ export default function MaestroConsole() {
         setCommandHistoryOpen={setCommandHistoryOpen}
         setCommandHistoryFilter={setCommandHistoryFilter}
         setCommandHistorySelectedIndex={setCommandHistorySelectedIndex}
+        setSlashCommandOpen={setSlashCommandOpen}
+        setSelectedSlashCommandIndex={setSelectedSlashCommandIndex}
         setPreviewFile={setPreviewFile}
         setMarkdownRawMode={setMarkdownRawMode}
         setAboutModalOpen={setAboutModalOpen}

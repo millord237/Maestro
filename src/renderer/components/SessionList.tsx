@@ -78,6 +78,13 @@ export function SessionList(props: SessionListProps) {
       }}
       onClick={() => setActiveFocus('sidebar')}
       onFocus={() => setActiveFocus('sidebar')}
+      onKeyDown={(e) => {
+        // Open session filter with / key when sidebar has focus
+        if (e.key === '/' && activeFocus === 'sidebar' && leftSidebarOpen && !sessionFilterOpen) {
+          e.preventDefault();
+          setSessionFilterOpen(true);
+        }
+      }}
     >
       {/* Resize Handle */}
       {leftSidebarOpen && (
@@ -302,7 +309,7 @@ export function SessionList(props: SessionListProps) {
                 <Plus className="w-3 h-3" />
               </button>
             </div>
-            {[...sessions.filter(s => !s.groupId)].sort((a, b) => a.name.localeCompare(b.name)).map((session) => {
+            {[...filteredSessions.filter(s => !s.groupId)].sort((a, b) => a.name.localeCompare(b.name)).map((session) => {
               const globalIdx = sessions.findIndex(s => s.id === session.id);
               const isKeyboardSelected = activeFocus === 'sidebar' && globalIdx === selectedSidebarIndex;
               return (
