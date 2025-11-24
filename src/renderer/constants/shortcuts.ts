@@ -16,4 +16,5 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   goToScratchpad: { id: 'goToScratchpad', label: 'Go to Scratchpad Tab', keys: ['Meta', 'Shift', 's'] },
   copyFilePath: { id: 'copyFilePath', label: 'Copy File Path (in Preview)', keys: ['Meta', 'p'] },
   toggleMarkdownMode: { id: 'toggleMarkdownMode', label: 'Toggle Markdown Raw/Preview', keys: ['Meta', 'e'] },
+  focusInput: { id: 'focusInput', label: 'Focus Input Field', keys: ['Meta', '.'] },
 };

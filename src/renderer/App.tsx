@@ -924,6 +924,11 @@ export default function MaestroConsole() {
       else if (isShortcut(e, 'goToFiles')) { setRightPanelOpen(true); setActiveRightTab('files'); setActiveFocus('right'); }
       else if (isShortcut(e, 'goToHistory')) { setRightPanelOpen(true); setActiveRightTab('history'); setActiveFocus('right'); }
       else if (isShortcut(e, 'goToScratchpad')) { setRightPanelOpen(true); setActiveRightTab('scratchpad'); setActiveFocus('right'); }
+      else if (isShortcut(e, 'focusInput')) {
+        e.preventDefault();
+        setActiveFocus('main');
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
 
       // Forward slash to open file tree filter when file tree has focus
       if (e.key === '/' && activeFocus === 'right' && activeRightTab === 'files') {

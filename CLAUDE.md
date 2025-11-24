@@ -411,6 +411,7 @@ The main application is structured in three columns:
 The app is keyboard-first with these patterns:
 
 **Focus Management:**
+- Cmd+. → Jump to input field (from anywhere in main interface)
 - Escape in input → Focus output window
 - Escape in output → Focus back to input
 - Escape in file preview → Return to file tree
@@ -968,6 +969,10 @@ Currently no test suite implemented. When adding tests, use the `test` script in
 
 ## Recent Features Added
 
+- **Focus Input Shortcut** - Cmd+. (configurable) jumps to input field from anywhere in the main interface (PED-INPUT-SHORTCUT)
+  - Works from any focus area (sidebar, output, file tree, etc.)
+  - Shortcut is configurable in Settings → Shortcuts
+  - Automatically switches focus to main panel and focuses the input textarea
 - **Custom Shell Selection** - Users can now select their preferred terminal shell (zsh, bash, sh, fish, tcsh) in General Settings (PED-CUSTOM-SHELL)
   - Automatic detection of available shells on the system
   - Only available shells are shown as selectable options
