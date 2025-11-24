@@ -197,21 +197,10 @@ function setupIpcHandlers() {
     }
   });
 
-  // Tunnel management (placeholder - will integrate ngrok/cloudflare)
-  ipcMain.handle('tunnel:start', async (_event, port: number, provider: string) => {
-    // TODO: Implement actual tunnel spawning
-    console.log(`Starting tunnel on port ${port} with ${provider}`);
-    return {
-      url: `https://mock-${Math.random().toString(36).substr(2, 9)}.ngrok.io`,
-      active: true,
-    };
-  });
-
-  ipcMain.handle('tunnel:stop', async (_event, sessionId: string) => {
-    // TODO: Implement tunnel cleanup
-    console.log(`Stopping tunnel for session ${sessionId}`);
-    return true;
-  });
+  // Tunnel management
+  // NOTE: Tunnel feature is planned for Phase 6 (see PRD.md and CLAUDE.md:385)
+  // When implemented, will support ngrok/cloudflare for remote access
+  // Remove this comment when implementing the feature
 
   // Web server management
   ipcMain.handle('webserver:getUrl', async () => {

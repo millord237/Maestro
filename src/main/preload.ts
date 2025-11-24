@@ -40,12 +40,6 @@ contextBridge.exposeInMainWorld('maestro', {
     readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   },
 
-  // Tunnel API
-  tunnel: {
-    start: (port: number, provider: string) => ipcRenderer.invoke('tunnel:start', port, provider),
-    stop: (sessionId: string) => ipcRenderer.invoke('tunnel:stop', sessionId),
-  },
-
   // Web Server API
   webserver: {
     getUrl: () => ipcRenderer.invoke('webserver:getUrl'),
@@ -103,10 +97,6 @@ export interface MaestroAPI {
   fs: {
     readDir: (dirPath: string) => Promise<any[]>;
     readFile: (filePath: string) => Promise<string>;
-  };
-  tunnel: {
-    start: (port: number, provider: string) => Promise<{ url: string; active: boolean }>;
-    stop: (sessionId: string) => Promise<boolean>;
   };
   webserver: {
     getUrl: () => Promise<string>;
