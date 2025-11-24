@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wand2, Radio, ExternalLink, Wifi, Info, Columns } from 'lucide-react';
+import { Wand2, Radio, ExternalLink, Wifi, Info, Columns, Copy } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
 import { InputArea } from './InputArea';
@@ -93,6 +93,9 @@ export function MainPanel(props: MainPanelProps) {
   // Git diff preview state
   const [gitDiffPreview, setGitDiffPreview] = useState<string | null>(null);
 
+  // Tunnel tooltip hover state
+  const [tunnelTooltipOpen, setTunnelTooltipOpen] = useState(false);
+
   // Handler to view git diff
   const handleViewGitDiff = async () => {
     if (!activeSession || !activeSession.isGitRepo) return;
@@ -102,6 +105,15 @@ export function MainPanel(props: MainPanelProps) {
 
     if (diff.diff) {
       setGitDiffPreview(diff.diff);
+    }
+  };
+
+  // Copy to clipboard handler
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
     }
   };
 
@@ -167,23 +179,55 @@ export function MainPanel(props: MainPanelProps) {
                 </span>
               </div>
 
-              <div className="relative group">
+              <div className="relative">
                 <button
                   onClick={() => toggleTunnel(activeSession.id)}
+                  onMouseEnter={() => activeSession.tunnelActive && setTunnelTooltipOpen(true)}
+                  onMouseLeave={() => setTunnelTooltipOpen(false)}
                   className={`flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${activeSession.tunnelActive ? 'bg-green-500/20 text-green-500' : 'text-gray-500 hover:bg-gray-800'}`}
                 >
                   <Radio className={`w-3 h-3 ${activeSession.tunnelActive ? 'animate-pulse' : ''}`} />
                   {activeSession.tunnelActive ? 'LIVE' : 'OFFLINE'}
                 </button>
-                {activeSession.tunnelActive && (
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-black border border-gray-700 rounded p-3 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                {activeSession.tunnelActive && tunnelTooltipOpen && (
+                  <div
+                    className="absolute top-full left-0 mt-2 w-72 bg-black border border-gray-700 rounded p-3 shadow-xl z-50"
+                    onMouseEnter={() => setTunnelTooltipOpen(true)}
+                    onMouseLeave={() => setTunnelTooltipOpen(false)}
+                  >
                     <div className="text-[10px] uppercase font-bold text-gray-500 mb-2">Public Endpoint</div>
-                    <div className="flex items-center gap-1 text-xs text-green-400 font-mono mb-2 select-all">
-                      <ExternalLink className="w-3 h-3" /> {activeSession.tunnelUrl}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-1 text-xs text-green-400 font-mono select-all flex-1 overflow-hidden">
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{activeSession.tunnelUrl}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(activeSession.tunnelUrl || '');
+                        }}
+                        className="p-1.5 rounded hover:bg-gray-800 transition-colors shrink-0"
+                        title="Copy public URL"
+                      >
+                        <Copy className="w-3 h-3 text-gray-400 hover:text-gray-200" />
+                      </button>
                     </div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 mb-2">Local Address</div>
-                    <div className="flex items-center gap-1 text-xs text-gray-300 font-mono select-all">
-                      <Wifi className="w-3 h-3" /> http://192.168.1.42:{activeSession.port}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1 text-xs text-gray-300 font-mono select-all flex-1 overflow-hidden">
+                        <Wifi className="w-3 h-3 shrink-0" />
+                        <span className="truncate">http://192.168.1.42:{activeSession.port}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(`http://192.168.1.42:${activeSession.port}`);
+                        }}
+                        className="p-1.5 rounded hover:bg-gray-800 transition-colors shrink-0"
+                        title="Copy local URL"
+                      >
+                        <Copy className="w-3 h-3 text-gray-400 hover:text-gray-200" />
+                      </button>
                     </div>
                   </div>
                 )}
