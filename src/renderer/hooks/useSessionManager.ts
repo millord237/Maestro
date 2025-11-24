@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Session, Group, ToolType, LogEntry } from '../types';
 import { generateId } from '../utils/ids';
+import { gitService } from '../services/git';
 
 export interface UseSessionManagerReturn {
   // State
@@ -59,10 +60,17 @@ export function useSessionManager(): UseSessionManagerReturn {
 
         // Handle sessions
         if (savedSessions && savedSessions.length > 0) {
-          setSessions(savedSessions);
+          // Check Git repository status for all loaded sessions
+          const sessionsWithGitStatus = await Promise.all(
+            savedSessions.map(async (session) => {
+              const isGitRepo = await gitService.isRepo(session.cwd);
+              return { ...session, isGitRepo };
+            })
+          );
+          setSessions(sessionsWithGitStatus);
           // Set active session to first one if we have sessions
-          if (savedSessions.length > 0) {
-            setActiveSessionId(savedSessions[0].id);
+          if (sessionsWithGitStatus.length > 0) {
+            setActiveSessionId(sessionsWithGitStatus[0].id);
           }
         } else {
           // Try to migrate from localStorage
@@ -70,12 +78,19 @@ export function useSessionManager(): UseSessionManagerReturn {
             const localStorageSessions = localStorage.getItem('maestro_sessions');
             if (localStorageSessions) {
               const parsed = JSON.parse(localStorageSessions);
-              setSessions(parsed);
-              if (parsed.length > 0) {
-                setActiveSessionId(parsed[0].id);
+              // Check Git repository status for migrated sessions
+              const sessionsWithGitStatus = await Promise.all(
+                parsed.map(async (session: Session) => {
+                  const isGitRepo = await gitService.isRepo(session.cwd);
+                  return { ...session, isGitRepo };
+                })
+              );
+              setSessions(sessionsWithGitStatus);
+              if (sessionsWithGitStatus.length > 0) {
+                setActiveSessionId(sessionsWithGitStatus[0].id);
               }
               // Save to electron-store for future
-              await window.maestro.sessions.setAll(parsed);
+              await window.maestro.sessions.setAll(sessionsWithGitStatus);
               // Clean up localStorage
               localStorage.removeItem('maestro_sessions');
             } else {
@@ -201,6 +216,9 @@ export function useSessionManager(): UseSessionManagerReturn {
         throw new Error('Failed to spawn terminal process');
       }
 
+      // Check if the working directory is a Git repository
+      const isGitRepo = await gitService.isRepo(workingDir);
+
       const newSession: Session = {
         id: newId,
         name,
@@ -208,7 +226,7 @@ export function useSessionManager(): UseSessionManagerReturn {
         state: 'idle',
         cwd: workingDir,
         fullPath: workingDir,
-        isGitRepo: false,
+        isGitRepo,
         aiLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: isClaudeBatchMode ? 'Claude Code ready (batch mode - will spawn on first message)' : `${name} ready.` }],
         shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
         workLog: [],
