@@ -336,6 +336,50 @@ export default function MaestroConsole() {
     window.maestro.settings.set('shortcuts', shortcuts);
   }, [shortcuts]);
 
+  // Set up process event listeners for real-time output
+  useEffect(() => {
+    // Handle process output data
+    window.maestro.process.onData((sessionId: string, data: string) => {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s;
+
+        const targetLogKey = s.inputMode === 'ai' ? 'aiLogs' : 'shellLogs';
+        const newLog: LogEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          source: 'stdout',
+          text: data
+        };
+
+        return {
+          ...s,
+          [targetLogKey]: [...s[targetLogKey], newLog]
+        };
+      }));
+    });
+
+    // Handle process exit
+    window.maestro.process.onExit((sessionId: string, code: number) => {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s;
+
+        const targetLogKey = s.inputMode === 'ai' ? 'aiLogs' : 'shellLogs';
+        const exitLog: LogEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          source: 'system',
+          text: `Process exited with code ${code}`
+        };
+
+        return {
+          ...s,
+          state: 'idle' as SessionState,
+          [targetLogKey]: [...s[targetLogKey], exitLog]
+        };
+      }));
+    });
+  }, []);
+
   // Refs
   const logsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1002,25 +1046,31 @@ export default function MaestroConsole() {
 
     setInputValue('');
     setStagedImages([]);
-    
+
     // Reset height
     if (inputRef.current) inputRef.current.style.height = 'auto';
 
-    setTimeout(() => {
-      setSessions(prev => prev.map(s => {
-        if (s.id !== activeSessionId) return s;
-        return {
-          ...s,
-          state: 'idle',
-          [targetLogKey]: [...s[targetLogKey], { 
-            id: generateId(), 
-            timestamp: Date.now(), 
-            source: 'stdout', 
-            text: currentMode === 'ai' ? 'Received command. Processing...' : `Executed: ${inputValue}`
-          }]
-        };
-      }));
-    }, 1000);
+    // Write to process stdin
+    if (activeSession.pid > 0) {
+      // Add newline for terminal/shell commands
+      const dataToSend = currentMode === 'terminal' ? inputValue + '\n' : inputValue;
+      window.maestro.process.write(activeSession.id, dataToSend).catch(error => {
+        console.error('Failed to write to process:', error);
+        setSessions(prev => prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          return {
+            ...s,
+            state: 'idle',
+            [targetLogKey]: [...s[targetLogKey], {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'system',
+              text: `Error: Failed to write to process - ${error.message}`
+            }]
+          };
+        }));
+      });
+    }
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
