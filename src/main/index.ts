@@ -39,6 +39,30 @@ const store = new Store<MaestroSettings>({
   },
 });
 
+// Sessions store
+interface SessionsData {
+  sessions: any[];
+}
+
+const sessionsStore = new Store<SessionsData>({
+  name: 'maestro-sessions',
+  defaults: {
+    sessions: [],
+  },
+});
+
+// Groups store
+interface GroupsData {
+  groups: any[];
+}
+
+const groupsStore = new Store<GroupsData>({
+  name: 'maestro-groups',
+  defaults: {
+    groups: [],
+  },
+});
+
 let mainWindow: BrowserWindow | null = null;
 let processManager: ProcessManager | null = null;
 let webServer: WebServer | null = null;
@@ -126,6 +150,26 @@ function setupIpcHandlers() {
 
   ipcMain.handle('settings:getAll', async () => {
     return store.store;
+  });
+
+  // Sessions persistence
+  ipcMain.handle('sessions:getAll', async () => {
+    return sessionsStore.get('sessions', []);
+  });
+
+  ipcMain.handle('sessions:setAll', async (_, sessions: any[]) => {
+    sessionsStore.set('sessions', sessions);
+    return true;
+  });
+
+  // Groups persistence
+  ipcMain.handle('groups:getAll', async () => {
+    return groupsStore.get('groups', []);
+  });
+
+  ipcMain.handle('groups:setAll', async (_, groups: any[]) => {
+    groupsStore.set('groups', groups);
+    return true;
   });
 
   // Session/Process management

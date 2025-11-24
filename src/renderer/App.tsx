@@ -61,19 +61,8 @@ const MOCK_SESSIONS: Session[] = process.env.NODE_ENV === 'development' ? [
 
 export default function MaestroConsole() {
   // --- STATE ---
-  const [sessions, setSessions] = useState<Session[]>(() => {
-    try {
-      const saved = localStorage.getItem('maestro_sessions');
-      return saved ? JSON.parse(saved) : MOCK_SESSIONS;
-    } catch { return MOCK_SESSIONS; }
-  });
-  
-  const [groups, setGroups] = useState<Group[]>(() => {
-    try {
-      const saved = localStorage.getItem('maestro_groups');
-      return saved ? JSON.parse(saved) : MOCK_GROUPS;
-    } catch { return MOCK_GROUPS; }
-  });
+  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [groups, setGroups] = useState<Group[]>(MOCK_GROUPS);
 
   const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0]?.id || 's1');
   
@@ -272,6 +261,59 @@ export default function MaestroConsole() {
     loadSettings();
   }, []);
 
+  // Load sessions and groups from electron-store on mount (with localStorage migration)
+  useEffect(() => {
+    const loadSessionsAndGroups = async () => {
+      try {
+        // Try to load from electron-store first
+        const savedSessions = await window.maestro.sessions.getAll();
+        const savedGroups = await window.maestro.groups.getAll();
+
+        // If electron-store has data, use it
+        if (savedSessions && savedSessions.length > 0) {
+          setSessions(savedSessions);
+        } else {
+          // Otherwise, try to migrate from localStorage
+          try {
+            const localStorageSessions = localStorage.getItem('maestro_sessions');
+            if (localStorageSessions) {
+              const parsed = JSON.parse(localStorageSessions);
+              setSessions(parsed);
+              // Save to electron-store for future
+              await window.maestro.sessions.setAll(parsed);
+              // Clean up localStorage
+              localStorage.removeItem('maestro_sessions');
+            }
+          } catch (e) {
+            console.error('Failed to migrate sessions from localStorage:', e);
+          }
+        }
+
+        if (savedGroups && savedGroups.length > 0) {
+          setGroups(savedGroups);
+        } else {
+          // Otherwise, try to migrate from localStorage
+          try {
+            const localStorageGroups = localStorage.getItem('maestro_groups');
+            if (localStorageGroups) {
+              const parsed = JSON.parse(localStorageGroups);
+              setGroups(parsed);
+              // Save to electron-store for future
+              await window.maestro.groups.setAll(parsed);
+              // Clean up localStorage
+              localStorage.removeItem('maestro_groups');
+            }
+          } catch (e) {
+            console.error('Failed to migrate groups from localStorage:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load sessions/groups:', e);
+      }
+    };
+    loadSessionsAndGroups();
+  }, []);
+
   // Apply font size to HTML root element so rem-based Tailwind classes scale
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`;
@@ -316,17 +358,14 @@ export default function MaestroConsole() {
     return sorted;
   }, [sessions, groups]);
 
-  // --- PERSISTENCE MOCK ---
+  // Persist sessions and groups to electron-store
   useEffect(() => {
-    localStorage.setItem('maestro_sessions', JSON.stringify(sessions));
-    localStorage.setItem('maestro_groups', JSON.stringify(groups));
-  }, [sessions, groups]);
+    window.maestro.sessions.setAll(sessions);
+  }, [sessions]);
 
   useEffect(() => {
-    localStorage.setItem('maestro_settings', JSON.stringify({
-      activeThemeId, shortcuts, llmProvider, modelSlug, apiKey, tunnelProvider, tunnelApiKey
-    }));
-  }, [activeThemeId, shortcuts, llmProvider, modelSlug, apiKey, tunnelProvider, tunnelApiKey]);
+    window.maestro.groups.setAll(groups);
+  }, [groups]);
 
   // Set CSS variable for accent color (for scrollbar styling)
   useEffect(() => {

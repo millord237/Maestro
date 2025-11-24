@@ -32,6 +32,18 @@ contextBridge.exposeInMainWorld('maestro', {
     getAll: () => ipcRenderer.invoke('settings:getAll'),
   },
 
+  // Sessions persistence API
+  sessions: {
+    getAll: () => ipcRenderer.invoke('sessions:getAll'),
+    setAll: (sessions: any[]) => ipcRenderer.invoke('sessions:setAll', sessions),
+  },
+
+  // Groups persistence API
+  groups: {
+    getAll: () => ipcRenderer.invoke('groups:getAll'),
+    setAll: (groups: any[]) => ipcRenderer.invoke('groups:setAll', groups),
+  },
+
   // Process/Session API
   process: {
     spawn: (config: ProcessConfig) => ipcRenderer.invoke('process:spawn', config),
@@ -102,6 +114,14 @@ export interface MaestroAPI {
     get: (key: string) => Promise<unknown>;
     set: (key: string, value: unknown) => Promise<boolean>;
     getAll: () => Promise<Record<string, unknown>>;
+  };
+  sessions: {
+    getAll: () => Promise<any[]>;
+    setAll: (sessions: any[]) => Promise<boolean>;
+  };
+  groups: {
+    getAll: () => Promise<any[]>;
+    setAll: (groups: any[]) => Promise<boolean>;
   };
   process: {
     spawn: (config: ProcessConfig) => Promise<{ pid: number; success: boolean }>;
