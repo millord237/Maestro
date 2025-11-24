@@ -160,6 +160,40 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     return filteredLines.join('\n');
   };
 
+  // Helper function to separate stdout and stderr based on error indicators
+  const separateStdoutStderr = (text: string): { stdout: string; stderr: string } => {
+    const lines = text.split('\n');
+    const stdoutLines: string[] = [];
+    const stderrLines: string[] = [];
+
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      // Detect error lines by common patterns
+      if (
+        lowerLine.includes('error:') ||
+        lowerLine.includes('error ') ||
+        /\berror\b/i.test(line) && (lowerLine.includes('failed') || lowerLine.includes('exception') || lowerLine.includes('fatal')) ||
+        lowerLine.includes('failed:') ||
+        lowerLine.includes('failed ') ||
+        lowerLine.includes('exception:') ||
+        lowerLine.includes('fatal:') ||
+        lowerLine.includes('panic:') ||
+        lowerLine.startsWith('error') ||
+        lowerLine.startsWith('fatal') ||
+        /^\s*(error|fatal|exception|panic)/i.test(line)
+      ) {
+        stderrLines.push(line);
+      } else if (line.trim()) {
+        stdoutLines.push(line);
+      }
+    }
+
+    return {
+      stdout: stdoutLines.join('\n'),
+      stderr: stderrLines.join('\n')
+    };
+  };
+
   // Auto-focus on search input when opened
   useEffect(() => {
     if (outputSearchOpen) {
@@ -316,24 +350,42 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
         const processedText = processLogText(textToProcess, isTerminal && log.source !== 'user');
 
+        // Separate stdout and stderr for terminal output
+        const separated = isTerminal && log.source !== 'user'
+          ? separateStdoutStderr(processedText)
+          : { stdout: processedText, stderr: '' };
+
         // Apply local filter if active for this log entry
         const localFilterQuery = localFilters.get(log.id) || '';
-        const filteredText = localFilterQuery && log.source !== 'user'
-          ? filterTextByLines(processedText, localFilterQuery)
-          : processedText;
+        const filteredStdout = localFilterQuery && log.source !== 'user'
+          ? filterTextByLines(separated.stdout, localFilterQuery)
+          : separated.stdout;
+        const filteredStderr = localFilterQuery && log.source !== 'user'
+          ? filterTextByLines(separated.stderr, localFilterQuery)
+          : separated.stderr;
 
-        // Skip rendering if text is empty after processing and filtering
-        if (!filteredText.trim() && log.source !== 'user') return null;
+        // Skip rendering if both stdout and stderr are empty after processing and filtering
+        if (!filteredStdout.trim() && !filteredStderr.trim() && log.source !== 'user') return null;
 
         // Apply search highlighting before ANSI conversion for terminal output
-        const textWithHighlights = isTerminal && log.source !== 'user' && outputSearchQuery
-          ? addHighlightMarkers(filteredText, outputSearchQuery)
-          : filteredText;
+        const stdoutWithHighlights = isTerminal && log.source !== 'user' && outputSearchQuery
+          ? addHighlightMarkers(filteredStdout, outputSearchQuery)
+          : filteredStdout;
+        const stderrWithHighlights = isTerminal && log.source !== 'user' && outputSearchQuery
+          ? addHighlightMarkers(filteredStderr, outputSearchQuery)
+          : filteredStderr;
 
         // Convert ANSI codes to HTML for terminal output and sanitize
-        const htmlContent = isTerminal && log.source !== 'user'
-          ? DOMPurify.sanitize(ansiConverter.toHtml(textWithHighlights))
-          : filteredText;
+        const stdoutHtmlContent = isTerminal && log.source !== 'user'
+          ? DOMPurify.sanitize(ansiConverter.toHtml(stdoutWithHighlights))
+          : filteredStdout;
+        const stderrHtmlContent = isTerminal && log.source !== 'user' && filteredStderr
+          ? DOMPurify.sanitize(ansiConverter.toHtml(stderrWithHighlights))
+          : filteredStderr;
+
+        // For non-terminal output, use the original logic
+        const htmlContent = stdoutHtmlContent;
+        const filteredText = filteredStdout;
 
         // Count lines in the filtered text
         const lineCount = filteredText.split('\n').length;
@@ -441,7 +493,22 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     }}
                   >
                     {isTerminal && log.source !== 'user' ? (
-                      <div dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
+                      <>
+                        <div dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
+                        {filteredStderr && (
+                          <div className="mt-2 flex items-center gap-2 opacity-75">
+                            <span
+                              className="px-2 py-0.5 rounded text-xs font-semibold"
+                              style={{
+                                backgroundColor: `color-mix(in srgb, ${theme.colors.error} 20%, ${theme.colors.bgActivity})`,
+                                color: theme.colors.error
+                              }}
+                            >
+                              + stderr output
+                            </span>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       displayText
                     )}
@@ -470,7 +537,29 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     }}
                   >
                     {isTerminal && log.source !== 'user' ? (
-                      <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                      <>
+                        {/* Stdout section */}
+                        {stdoutHtmlContent && (
+                          <div dangerouslySetInnerHTML={{ __html: stdoutHtmlContent }} />
+                        )}
+                        {/* Stderr section with red label */}
+                        {stderrHtmlContent && filteredStderr && (
+                          <div className="mt-3 pt-3 border-t" style={{ borderColor: theme.colors.border }}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span
+                                className="px-2 py-0.5 rounded text-xs font-semibold"
+                                style={{
+                                  backgroundColor: `color-mix(in srgb, ${theme.colors.error} 20%, ${theme.colors.bgActivity})`,
+                                  color: theme.colors.error
+                                }}
+                              >
+                                stderr
+                              </span>
+                            </div>
+                            <div dangerouslySetInnerHTML={{ __html: stderrHtmlContent }} />
+                          </div>
+                        )}
+                      </>
                     ) : log.source === 'user' && isTerminal ? (
                       <div className="font-mono">
                         <span style={{ color: theme.colors.accent }}>$ </span>
@@ -496,11 +585,37 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
               ) : (
                 <>
                   {isTerminal && log.source !== 'user' ? (
-                    <div
-                      className="whitespace-pre-wrap text-sm font-mono overflow-x-auto"
-                      dangerouslySetInnerHTML={{ __html: htmlContent }}
-                      style={{ color: theme.colors.textMain }}
-                    />
+                    <>
+                      {/* Stdout section */}
+                      {stdoutHtmlContent && (
+                        <div
+                          className="whitespace-pre-wrap text-sm font-mono overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: stdoutHtmlContent }}
+                          style={{ color: theme.colors.textMain }}
+                        />
+                      )}
+                      {/* Stderr section with red label */}
+                      {stderrHtmlContent && filteredStderr && (
+                        <div className="mt-3 pt-3 border-t" style={{ borderColor: theme.colors.border }}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span
+                              className="px-2 py-0.5 rounded text-xs font-semibold"
+                              style={{
+                                backgroundColor: `color-mix(in srgb, ${theme.colors.error} 20%, ${theme.colors.bgActivity})`,
+                                color: theme.colors.error
+                              }}
+                            >
+                              stderr
+                            </span>
+                          </div>
+                          <div
+                            className="whitespace-pre-wrap text-sm font-mono overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: stderrHtmlContent }}
+                            style={{ color: theme.colors.textMain }}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : log.source === 'user' && isTerminal ? (
                     <div className="whitespace-pre-wrap text-sm font-mono" style={{ color: theme.colors.textMain }}>
                       <span style={{ color: theme.colors.accent }}>$ </span>
