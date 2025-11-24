@@ -456,6 +456,219 @@ Use conventional commits:
 4. **Minimal preload exposure** - Only expose necessary APIs via contextBridge
 5. **Process spawning** - Use `spawn()` with `shell: false` flag
 
+### Error Handling Patterns
+
+Maestro uses different error handling strategies depending on the architectural layer:
+
+#### IPC Handler Errors (Main Process)
+
+IPC handlers in `src/main/index.ts` should handle errors gracefully but may throw for critical failures:
+
+**Pattern 1: Throw for critical failures**
+```typescript
+ipcMain.handle('process:spawn', async (_, config) => {
+  if (!processManager) throw new Error('Process manager not initialized');
+  return processManager.spawn(config);
+});
+```
+- Use for: Initialization failures, missing required services
+- Effect: Renderer will receive rejected promise
+
+**Pattern 2: Try-catch with boolean return**
+```typescript
+ipcMain.handle('git:isRepo', async (_, cwd: string) => {
+  try {
+    const result = await execFileNoThrow('git', ['rev-parse', '--is-inside-work-tree'], cwd);
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+});
+```
+- Use for: Optional operations where false is a valid answer
+- Effect: Graceful degradation (e.g., git features disabled)
+
+**Pattern 3: Return error in result object**
+```typescript
+ipcMain.handle('git:status', async (_, cwd: string) => {
+  const result = await execFileNoThrow('git', ['status', '--porcelain'], cwd);
+  return { stdout: result.stdout, stderr: result.stderr };
+});
+```
+- Use for: Operations where both success and error info are valuable
+- Effect: Caller can inspect both stdout and stderr
+
+#### Service Layer Errors (Renderer)
+
+Services in `src/renderer/services/` wrap IPC calls and should never throw:
+
+```typescript
+export const gitService = {
+  async isRepo(cwd: string): Promise<boolean> {
+    try {
+      const result = await window.maestro.git.isRepo(cwd);
+      return result;
+    } catch (error) {
+      console.error('Git isRepo error:', error);
+      return false;
+    }
+  },
+
+  async getStatus(cwd: string): Promise<GitStatus> {
+    try {
+      const result = await window.maestro.git.status(cwd);
+      return result;
+    } catch (error) {
+      console.error('Git status error:', error);
+      return { files: [] }; // Safe default
+    }
+  }
+};
+```
+
+**Pattern**: Try-catch with safe default return
+- Always catch errors from IPC calls
+- Log error to console (or use logger utility)
+- Return safe default value (empty array, empty string, false, etc.)
+- Never throw - let the UI continue functioning
+
+#### ProcessManager Errors (Main Process)
+
+`ProcessManager` extends `EventEmitter` and uses events for runtime errors:
+
+```typescript
+// Spawn errors - throw immediately
+spawn(config: ProcessConfig): { pid: number; success: boolean } {
+  try {
+    // ... spawn logic
+    return { pid: ptyProcess.pid, success: true };
+  } catch (error) {
+    console.error('Failed to spawn process:', error);
+    throw error; // Propagate to IPC handler
+  }
+}
+
+// Runtime errors - emit events
+ptyProcess.onExit(({ exitCode }) => {
+  this.emit('exit', sessionId, exitCode);
+  this.processes.delete(sessionId);
+});
+```
+
+**Pattern**: Throw on spawn failure, emit events for runtime errors
+- Spawn failures: Throw error (critical, can't continue)
+- Process exit: Emit 'exit' event with exit code
+- Process output: Emit 'data' event
+- Let renderer handle process lifecycle errors
+
+#### React Component Errors (Renderer)
+
+React components use Error Boundaries to catch rendering errors:
+
+```typescript
+// Wrap major UI sections in ErrorBoundary
+<ErrorBoundary>
+  <SessionList {...props} />
+</ErrorBoundary>
+```
+
+**Pattern**: Use Error Boundaries for component isolation
+- Error boundaries defined in `src/renderer/components/ErrorBoundary.tsx`
+- Wrap major UI sections (sidebar, main panel, right panel)
+- Display fallback UI with error details and recovery options
+- Prevents one component crash from taking down the entire app
+
+**Component-level error handling**:
+```typescript
+const handleFileLoad = async (path: string) => {
+  try {
+    const content = await window.maestro.fs.readFile(path);
+    setFileContent(content);
+  } catch (error) {
+    console.error('Failed to load file:', error);
+    setError('Failed to load file'); // Show user-friendly message
+  }
+};
+```
+- Use try-catch for async operations
+- Display user-friendly error messages in UI
+- Don't crash the component - maintain partial functionality
+
+#### Custom Hook Errors (Renderer)
+
+Custom hooks should handle errors internally and expose error state:
+
+```typescript
+const useFileExplorer = (activeSession, setActiveFocus) => {
+  const [error, setError] = useState<string | null>(null);
+
+  const loadFileTree = async (dirPath: string) => {
+    try {
+      setError(null);
+      const tree = await buildFileTree(dirPath);
+      setFileTree(tree);
+    } catch (err) {
+      console.error('Failed to load file tree:', err);
+      setError('Failed to load directory');
+      setFileTree([]); // Safe default
+    }
+  };
+
+  return { loadFileTree, error, /* ... */ };
+};
+```
+
+**Pattern**: Internal try-catch with error state
+- Expose error state so components can display messages
+- Reset error state before retry
+- Return safe defaults to keep UI functional
+
+#### Utility Function Errors
+
+Utility functions should document their error behavior clearly:
+
+**Option 1: Return default value (no throw)**
+```typescript
+// src/main/utils/execFile.ts
+export async function execFileNoThrow(
+  command: string,
+  args: string[],
+  cwd?: string
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  // Never throws - returns exitCode !== 0 for failures
+  try {
+    // ... execution logic
+  } catch (error) {
+    return { stdout: '', stderr: String(error), exitCode: 1 };
+  }
+}
+```
+
+**Option 2: Throw errors (document clearly)**
+```typescript
+/**
+ * Load file tree recursively
+ * @throws {Error} If directory cannot be read
+ */
+export async function buildFileTree(dirPath: string): Promise<FileTreeNode[]> {
+  // Throws on filesystem errors - caller must handle
+  const entries = await fs.readdir(dirPath);
+  // ...
+}
+```
+
+#### Summary of Patterns
+
+| Layer | Pattern | Example |
+|-------|---------|---------|
+| **IPC Handlers** | Throw critical failures, try-catch optional ops | `git:isRepo` returns false on error |
+| **Services** | Never throw, return safe defaults | `gitService.getStatus()` returns `{ files: [] }` |
+| **ProcessManager** | Throw spawn failures, emit runtime events | `emit('exit', sessionId, code)` |
+| **React Components** | Try-catch async ops, show UI errors | Display "Failed to load" message |
+| **Error Boundaries** | Catch render errors, show fallback UI | Wrap major sections |
+| **Custom Hooks** | Internal try-catch, expose error state | Return `{ error, ... }` |
+| **Utilities** | Document throw behavior clearly | JSDoc with `@throws` |
+
 ## Technology Stack
 
 ### Backend (Main Process)
