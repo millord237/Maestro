@@ -29,7 +29,7 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path'>[] = [
     name: 'Claude Code',
     binaryName: 'claude',
     command: 'claude',
-    args: ['--print', '--output-format', 'text'],
+    args: ['--print', '--output-format', 'json'],
     configOptions: [
       {
         key: 'yoloMode',

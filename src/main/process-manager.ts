@@ -33,8 +33,18 @@ export class ProcessManager extends EventEmitter {
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
     const { sessionId, toolType, cwd, command, args, requiresPty, prompt } = config;
 
-    // For batch mode with prompt, append prompt to args
-    const finalArgs = prompt ? [...args, prompt] : args;
+    // For batch mode with prompt, append prompt to args with -- separator
+    // The -- ensures prompt is treated as positional arg, not a flag (even if it starts with --)
+    const finalArgs = prompt ? [...args, '--', prompt] : args;
+
+    console.log('[ProcessManager] spawn() config:', {
+      sessionId,
+      toolType,
+      hasPrompt: !!prompt,
+      promptValue: prompt,
+      baseArgs: args,
+      finalArgs
+    });
 
     // Determine if this should use a PTY:
     // - If toolType is 'terminal', always use PTY for full shell emulation
@@ -129,9 +139,17 @@ export class ProcessManager extends EventEmitter {
         childProcess.stdout?.on('data', (data: Buffer) => {
           const output = data.toString();
 
+          console.log('[ProcessManager] stdout data received:', {
+            sessionId,
+            isBatchMode,
+            dataLength: output.length,
+            dataPreview: output.substring(0, 200)
+          });
+
           if (isBatchMode) {
             // In batch mode, accumulate JSON output
             managedProcess.jsonBuffer = (managedProcess.jsonBuffer || '') + output;
+            console.log('[ProcessManager] Accumulated JSON buffer length:', managedProcess.jsonBuffer.length);
           } else {
             // In interactive mode, emit data immediately
             this.emit('data', sessionId, output);
