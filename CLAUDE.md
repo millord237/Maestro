@@ -997,6 +997,7 @@ Currently no test suite implemented. When adding tests, use the `test` script in
 - **Session Restoration Improvements** - Automatic detection and fixing of corrupted sessions with mismatched inputMode/toolType
 - **Agent Config Serialization** - Non-serializable functions stripped from agent configs before IPC transmission
 - **System Log Viewer** - Cmd+K → "View System Logs" for internal logging with color-coded levels, search, and export
+- **Process Monitor** - Cmd+K → "View System Processes" for debugging process lifecycle, shows collapsible tree of groups, sessions, and dual processes (AI + terminal) with PIDs and status indicators
 - **Structured Logging** - Configurable log levels (Debug, Info, Warn, Error) with persistence and UI controls
 - **Component Extraction** - MainPanel component to keep App.tsx minimal and maintainable
 - **Output Search/Filter** - Press `/` in output window to filter logs
