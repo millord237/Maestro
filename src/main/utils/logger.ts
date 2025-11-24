@@ -33,6 +33,18 @@ class Logger {
     return this.minLevel;
   }
 
+  setMaxLogBuffer(max: number): void {
+    this.maxLogs = max;
+    // Trim logs if current size exceeds new max
+    if (this.logs.length > this.maxLogs) {
+      this.logs = this.logs.slice(-this.maxLogs);
+    }
+  }
+
+  getMaxLogBuffer(): number {
+    return this.maxLogs;
+  }
+
   private shouldLog(level: LogLevel): boolean {
     return this.levelPriority[level] >= this.levelPriority[this.minLevel];
   }

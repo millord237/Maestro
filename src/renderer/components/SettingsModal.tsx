@@ -31,6 +31,8 @@ interface SettingsModalProps {
   setTerminalWidth: (width: number) => void;
   logLevel: string;
   setLogLevel: (level: string) => void;
+  maxLogBuffer: number;
+  setMaxLogBuffer: (buffer: number) => void;
   maxOutputLines: number;
   setMaxOutputLines: (lines: number) => void;
   defaultShell: string;
@@ -804,6 +806,64 @@ export function SettingsModal(props: SettingsModalProps) {
                 </div>
                 <p className="text-xs opacity-50 mt-2">
                   Higher levels show fewer logs. Debug shows all logs, Error shows only errors.
+                </p>
+              </div>
+
+              {/* Max Log Buffer */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2">Maximum Log Buffer</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => props.setMaxLogBuffer(500)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.maxLogBuffer === 500 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.maxLogBuffer === 500 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    500
+                  </button>
+                  <button
+                    onClick={() => props.setMaxLogBuffer(1000)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.maxLogBuffer === 1000 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.maxLogBuffer === 1000 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    1000
+                  </button>
+                  <button
+                    onClick={() => props.setMaxLogBuffer(2500)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.maxLogBuffer === 2500 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.maxLogBuffer === 2500 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    2500
+                  </button>
+                  <button
+                    onClick={() => props.setMaxLogBuffer(5000)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.maxLogBuffer === 5000 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.maxLogBuffer === 5000 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    5000
+                  </button>
+                </div>
+                <p className="text-xs opacity-50 mt-2">
+                  Maximum number of log messages to keep in memory. Older logs are automatically removed.
                 </p>
               </div>
 

@@ -147,6 +147,8 @@ contextBridge.exposeInMainWorld('maestro', {
     clearLogs: () => ipcRenderer.invoke('logger:clearLogs'),
     setLogLevel: (level: string) => ipcRenderer.invoke('logger:setLogLevel', level),
     getLogLevel: () => ipcRenderer.invoke('logger:getLogLevel'),
+    setMaxLogBuffer: (max: number) => ipcRenderer.invoke('logger:setMaxLogBuffer', max),
+    getMaxLogBuffer: () => ipcRenderer.invoke('logger:getMaxLogBuffer'),
   },
 });
 
@@ -224,6 +226,8 @@ export interface MaestroAPI {
     clearLogs: () => Promise<void>;
     setLogLevel: (level: string) => Promise<void>;
     getLogLevel: () => Promise<string>;
+    setMaxLogBuffer: (max: number) => Promise<void>;
+    getMaxLogBuffer: () => Promise<number>;
   };
 }
 

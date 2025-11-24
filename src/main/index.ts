@@ -154,6 +154,8 @@ app.whenReady().then(() => {
   // Load logger settings first
   const logLevel = store.get('logLevel', 'info');
   logger.setLogLevel(logLevel);
+  const maxLogBuffer = store.get('maxLogBuffer', 1000);
+  logger.setMaxLogBuffer(maxLogBuffer);
 
   logger.info('Maestro application starting', 'Startup', {
     version: app.getVersion(),
@@ -584,6 +586,15 @@ function setupIpcHandlers() {
 
   ipcMain.handle('logger:getLogLevel', async () => {
     return logger.getLogLevel();
+  });
+
+  ipcMain.handle('logger:setMaxLogBuffer', async (_event, max: number) => {
+    logger.setMaxLogBuffer(max);
+    store.set('maxLogBuffer', max);
+  });
+
+  ipcMain.handle('logger:getMaxLogBuffer', async () => {
+    return logger.getMaxLogBuffer();
   });
 }
 

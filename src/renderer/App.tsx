@@ -181,6 +181,7 @@ export default function MaestroConsole() {
 
   // Logging Config
   const [logLevel, setLogLevelState] = useState('info');
+  const [maxLogBuffer, setMaxLogBufferState] = useState(1000);
 
   // Output Config
   const [maxOutputLines, setMaxOutputLinesState] = useState(25);
@@ -241,6 +242,11 @@ export default function MaestroConsole() {
     await window.maestro.logger.setLogLevel(value);
   };
 
+  const setMaxLogBuffer = async (value: number) => {
+    setMaxLogBufferState(value);
+    await window.maestro.logger.setMaxLogBuffer(value);
+  };
+
   const setMaxOutputLines = (value: number) => {
     setMaxOutputLinesState(value);
     window.maestro.settings.set('maxOutputLines', value);
@@ -270,6 +276,7 @@ export default function MaestroConsole() {
       const savedMarkdownRawMode = await window.maestro.settings.get('markdownRawMode');
       const savedShortcuts = await window.maestro.settings.get('shortcuts');
       const savedLogLevel = await window.maestro.logger.getLogLevel();
+      const savedMaxLogBuffer = await window.maestro.logger.getMaxLogBuffer();
       const savedMaxOutputLines = await window.maestro.settings.get('maxOutputLines');
 
       // Migration: if old setting exists but new ones don't, migrate
@@ -298,6 +305,7 @@ export default function MaestroConsole() {
       if (savedRightPanelWidth !== undefined) setRightPanelWidthState(savedRightPanelWidth);
       if (savedMarkdownRawMode !== undefined) setMarkdownRawModeState(savedMarkdownRawMode);
       if (savedLogLevel !== undefined) setLogLevelState(savedLogLevel);
+      if (savedMaxLogBuffer !== undefined) setMaxLogBufferState(savedMaxLogBuffer);
       if (savedMaxOutputLines !== undefined) setMaxOutputLinesState(savedMaxOutputLines);
 
       // Merge saved shortcuts with defaults (in case new shortcuts were added)
@@ -2193,6 +2201,8 @@ export default function MaestroConsole() {
         setTerminalWidth={setTerminalWidth}
         logLevel={logLevel}
         setLogLevel={setLogLevel}
+        maxLogBuffer={maxLogBuffer}
+        setMaxLogBuffer={setMaxLogBuffer}
         maxOutputLines={maxOutputLines}
         setMaxOutputLines={setMaxOutputLines}
         initialTab={settingsTab}
