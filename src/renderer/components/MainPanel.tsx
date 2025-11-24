@@ -6,7 +6,6 @@ import { InputArea } from './InputArea';
 import { FilePreview } from './FilePreview';
 import { ErrorBoundary } from './ErrorBoundary';
 import { GitStatusWidget } from './GitStatusWidget';
-import { GitDiffViewer } from './GitDiffViewer';
 import { gitService } from '../services/git';
 import type { Session, Theme, Shortcut, FocusArea } from '../types';
 
@@ -76,6 +75,7 @@ interface MainPanelProps {
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   getContextColor: (usage: number, theme: Theme) => string;
+  setActiveSessionId: (id: string) => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -90,11 +90,19 @@ export function MainPanel(props: MainPanelProps) {
     setSelectedSlashCommandIndex, setPreviewFile, setMarkdownRawMode,
     setAboutModalOpen, setRightPanelOpen, inputRef, logsEndRef, terminalOutputRef,
     fileTreeContainerRef, toggleTunnel, toggleInputMode, processInput, handleInterrupt,
-    handleInputKeyDown, handlePaste, handleDrop, getContextColor
+    handleInputKeyDown, handlePaste, handleDrop, getContextColor, setActiveSessionId
   } = props;
 
   // Tunnel tooltip hover state
   const [tunnelTooltipOpen, setTunnelTooltipOpen] = useState(false);
+
+  // Handler for input focus - select session in sidebar
+  const handleInputFocus = () => {
+    if (activeSession) {
+      setActiveSessionId(activeSession.id);
+      setActiveFocus('main');
+    }
+  };
 
   // Handler to view git diff
   const handleViewGitDiff = async () => {
@@ -297,6 +305,7 @@ export function MainPanel(props: MainPanelProps) {
             toggleInputMode={toggleInputMode}
             processInput={processInput}
             handleInterrupt={handleInterrupt}
+            onInputFocus={handleInputFocus}
           />
 
           {/* File Preview Overlay */}
@@ -318,15 +327,6 @@ export function MainPanel(props: MainPanelProps) {
             />
           )}
 
-          {/* Git Diff Preview Overlay */}
-          {gitDiffPreview && activeSession && (
-            <GitDiffViewer
-              diffText={gitDiffPreview}
-              cwd={activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd}
-              theme={theme}
-              onClose={() => setGitDiffPreview(null)}
-            />
-          )}
         </div>
       </ErrorBoundary>
     </>

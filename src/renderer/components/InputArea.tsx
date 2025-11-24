@@ -35,6 +35,7 @@ interface InputAreaProps {
   toggleInputMode: () => void;
   processInput: () => void;
   handleInterrupt: () => void;
+  onInputFocus: () => void;
 }
 
 export function InputArea(props: InputAreaProps) {
@@ -46,7 +47,7 @@ export function InputArea(props: InputAreaProps) {
     slashCommandOpen, setSlashCommandOpen, slashCommands,
     selectedSlashCommandIndex, setSelectedSlashCommandIndex,
     inputRef, handleInputKeyDown, handlePaste, handleDrop,
-    toggleInputMode, processInput, handleInterrupt
+    toggleInputMode, processInput, handleInterrupt, onInputFocus
   } = props;
 
   // Filter slash commands based on input
@@ -209,6 +210,7 @@ export function InputArea(props: InputAreaProps) {
             style={{ color: theme.colors.textMain }}
             placeholder={session.inputMode === 'terminal' ? "Run shell command..." : "Ask Claude..."}
             value={inputValue}
+            onFocus={onInputFocus}
             onChange={e => {
               const value = e.target.value;
               setInputValue(value);

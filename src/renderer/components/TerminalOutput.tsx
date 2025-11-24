@@ -451,6 +451,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     <div className="flex items-center gap-2 p-2 rounded border" style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}>
                       {/* Include/Exclude Toggle */}
                       <button
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setFilterModes(prev => {
                             const newMap = new Map(prev);
@@ -468,6 +469,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
                       {/* Regex Toggle */}
                       <button
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setFilterModes(prev => {
                             const newMap = new Map(prev);
@@ -476,11 +478,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                             return newMap;
                           });
                         }}
-                        className="p-1 rounded hover:opacity-70 transition-opacity"
+                        className="px-2 py-1 rounded hover:opacity-70 transition-opacity font-mono text-xs font-bold"
                         style={{ color: filterMode.regex ? theme.colors.accent : theme.colors.textDim }}
                         title={filterMode.regex ? 'Using regex' : 'Using plain text'}
                       >
-                        <Code className="w-3.5 h-3.5" />
+                        {filterMode.regex ? '.*' : 'Aa'}
                       </button>
 
                       {/* Search Input */}
@@ -507,7 +509,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                             setActiveLocalFilter(null);
                           }
                         }}
-                        placeholder={filterMode.regex ? "Regex pattern..." : "Filter lines..."}
+                        placeholder={
+                          filterMode.mode === 'include'
+                            ? (filterMode.regex ? "Include by RegEx" : "Include by keyword")
+                            : (filterMode.regex ? "Exclude by RegEx" : "Exclude by keyword")
+                        }
                         className="w-40 px-2 py-1 text-xs rounded border bg-transparent outline-none"
                         style={{
                           borderColor: theme.colors.accent,

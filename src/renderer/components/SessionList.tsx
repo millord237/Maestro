@@ -333,7 +333,7 @@ export function SessionList(props: SessionListProps) {
                   draggable
                   onDragStart={() => handleDragStart(session.id)}
                   onClick={() => setActiveSessionId(session.id)}
-                  className={`px-3 py-2 rounded cursor-move flex items-center justify-between mb-1 hover:bg-opacity-50 border-l-2 transition-all ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
+                  className={`px-4 py-2 rounded cursor-move flex items-center justify-between mb-1 hover:bg-opacity-50 border-l-2 transition-all ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
                   style={{
                     borderColor: (activeSessionId === session.id || isKeyboardSelected) ? theme.colors.accent : 'transparent',
                     backgroundColor: activeSessionId === session.id ? theme.colors.bgActivity : (isKeyboardSelected ? theme.colors.bgActivity + '40' : 'transparent')

@@ -26,6 +26,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MainPanel } from './components/MainPanel';
 import { ProcessMonitor } from './components/ProcessMonitor';
+import { GitDiffViewer } from './components/GitDiffViewer';
 
 // Import custom hooks
 import { useSettings, useSessionManager, useFileExplorer } from './hooks';
@@ -1997,6 +1998,16 @@ export default function MaestroConsole() {
         />
       )}
 
+      {/* --- GIT DIFF VIEWER --- */}
+      {gitDiffPreview && activeSession && (
+        <GitDiffViewer
+          diffText={gitDiffPreview}
+          cwd={activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd}
+          theme={theme}
+          onClose={() => setGitDiffPreview(null)}
+        />
+      )}
+
       {/* --- SHORTCUTS HELP MODAL --- */}
       {shortcutsHelpOpen && (
         <ShortcutsHelpModal
@@ -2177,6 +2188,7 @@ export default function MaestroConsole() {
         handlePaste={handlePaste}
         handleDrop={handleDrop}
         getContextColor={getContextColor}
+        setActiveSessionId={setActiveSessionId}
       />
 
       {/* --- RIGHT PANEL --- */}
