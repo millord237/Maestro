@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, X, Activity } from 'lucide-react';
 import type { Session, Group, Theme } from '../types';
+import { useLayerStack } from '../hooks/useLayerStack';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface ProcessMonitorProps {
   theme: Theme;
@@ -26,17 +28,35 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
   const { theme, sessions, groups, onClose } = props;
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
+
+  // Register layer on mount
+  useEffect(() => {
+    const layerId = registerLayer({
+      id: 'process-monitor',
+      type: 'modal',
+      priority: MODAL_PRIORITIES.PROCESS_MONITOR,
+      blocksLowerLayers: true,
+      capturesFocus: true,
+      focusTrap: 'strict',
+      ariaLabel: 'System Processes',
+      onEscape: () => {}
+    });
+    layerIdRef.current = layerId;
+    return () => unregisterLayer(layerId);
+  }, [registerLayer, unregisterLayer]);
+
+  // Update handler when onClose changes
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, onClose);
+    }
+  }, [onClose, updateLayerHandler]);
 
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    }
-  };
 
   const toggleNode = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -261,10 +281,12 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
       <div
         ref={containerRef}
         tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="System Processes"
         className="w-[700px] max-h-[80vh] rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none"
         style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div
