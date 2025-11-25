@@ -6,8 +6,8 @@ import { gitService } from '../services/git';
 interface GitFileChange {
   path: string;
   status: string;
-  additions?: boolean;
-  deletions?: boolean;
+  additions: number;
+  deletions: number;
   modified?: boolean;
 }
 
@@ -37,55 +37,63 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
     const loadGitStatus = async () => {
       setLoading(true);
       try {
-        const status = await gitService.getStatus(cwd);
+        const [status, numstat] = await Promise.all([
+          gitService.getStatus(cwd),
+          gitService.getNumstat(cwd)
+        ]);
 
-        // Parse porcelain format: XY PATH
-        // X = index status, Y = working tree status
-        // ' ' = unmodified, M = modified, A = added, D = deleted, R = renamed, C = copied
-        // ? = untracked, ! = ignored
+        // Create a map of path -> numstat data
+        const numstatMap = new Map<string, { additions: number; deletions: number }>();
+        numstat.files.forEach(file => {
+          numstatMap.set(file.path, { additions: file.additions, deletions: file.deletions });
+        });
+
+        // Parse porcelain format and merge with numstat
         const changes: GitFileChange[] = [];
-        let adds = 0;
-        let dels = 0;
-        let mods = 0;
+        let totalAdds = 0;
+        let totalDels = 0;
+        let totalMods = 0;
 
         status.files.forEach(file => {
           const statusCode = file.status.trim();
           const indexStatus = statusCode[0];
           const workingStatus = statusCode[1] || ' ';
+          const stats = numstatMap.get(file.path) || { additions: 0, deletions: 0 };
 
           const change: GitFileChange = {
             path: file.path,
             status: statusCode,
-            additions: false,
-            deletions: false,
+            additions: stats.additions,
+            deletions: stats.deletions,
             modified: false
           };
 
-          // Check for additions (new files)
-          if (indexStatus === 'A' || indexStatus === '?' || workingStatus === 'A' || workingStatus === '?') {
-            change.additions = true;
-            adds++;
-          }
-
-          // Check for deletions
-          if (indexStatus === 'D' || workingStatus === 'D') {
-            change.deletions = true;
-            dels++;
-          }
+          // Accumulate totals
+          totalAdds += stats.additions;
+          totalDels += stats.deletions;
 
           // Check for modifications
           if (indexStatus === 'M' || workingStatus === 'M' || indexStatus === 'R' || workingStatus === 'R') {
             change.modified = true;
-            mods++;
+            totalMods++;
+          }
+
+          // Count additions and deletions for the summary
+          if (indexStatus === 'A' || indexStatus === '?' || workingStatus === 'A' || workingStatus === '?') {
+            // New file
+          }
+
+          if (indexStatus === 'D' || workingStatus === 'D') {
+            // Deleted file
           }
 
           changes.push(change);
         });
 
         setFileChanges(changes);
-        setAdditions(adds);
-        setDeletions(dels);
-        setModified(mods);
+        setAdditions(totalAdds);
+        setDeletions(totalDels);
+        setModified(totalMods);
       } catch (error) {
         console.error('Failed to load git status:', error);
       } finally {
@@ -138,9 +146,9 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
         )}
       </button>
 
-      {/* Hover tooltip showing file list */}
+      {/* Hover tooltip showing file list with GitHub-style diff bars */}
       <div
-        className="absolute top-full left-0 mt-2 w-80 rounded shadow-xl z-50 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity pointer-events-none"
+        className="absolute top-full left-0 mt-2 min-w-[600px] max-w-[800px] rounded shadow-xl z-50 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity pointer-events-none"
         style={{
           backgroundColor: theme.colors.bgSidebar,
           borderColor: theme.colors.border,
@@ -154,32 +162,55 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
             borderColor: theme.colors.border
           }}
         >
-          Changed Files ({totalChanges})
+          Changed Files ({totalChanges}) • +{additions} −{deletions}
         </div>
-        <div className="max-h-64 overflow-y-auto">
-          {fileChanges.map((file, idx) => (
-            <div
-              key={idx}
-              className="flex items-center gap-2 px-3 py-2 text-xs border-b last:border-b-0 font-mono"
-              style={{
-                borderColor: theme.colors.border,
-                color: theme.colors.textMain
-              }}
-            >
-              <div className="flex items-center gap-1 shrink-0">
-                {file.additions && (
-                  <Plus className="w-3 h-3 text-green-500" />
-                )}
-                {file.deletions && (
-                  <Minus className="w-3 h-3 text-red-500" />
-                )}
-                {file.modified && !file.additions && !file.deletions && (
-                  <FileEdit className="w-3 h-3 text-orange-500" />
+        <div className="max-h-96 overflow-y-auto">
+          {fileChanges.map((file, idx) => {
+            const total = file.additions + file.deletions;
+            const maxBarWidth = 100; // Max width in pixels for the bar
+            const additionsWidth = total > 0 ? (file.additions / total) * maxBarWidth : 0;
+            const deletionsWidth = total > 0 ? (file.deletions / total) * maxBarWidth : 0;
+
+            return (
+              <div
+                key={idx}
+                className="px-3 py-2 text-xs border-b last:border-b-0"
+                style={{
+                  borderColor: theme.colors.border,
+                  color: theme.colors.textMain
+                }}
+              >
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <span className="font-mono flex-1 min-w-0" title={file.path}>{file.path}</span>
+                  <div className="flex items-center gap-2 shrink-0 text-[10px]">
+                    {file.additions > 0 && (
+                      <span className="text-green-500">+{file.additions}</span>
+                    )}
+                    {file.deletions > 0 && (
+                      <span className="text-red-500">−{file.deletions}</span>
+                    )}
+                  </div>
+                </div>
+                {/* GitHub-style diff bar */}
+                {total > 0 && (
+                  <div className="flex gap-0.5 h-2">
+                    {file.additions > 0 && (
+                      <div
+                        className="bg-green-500 rounded-sm"
+                        style={{ width: `${additionsWidth}px` }}
+                      />
+                    )}
+                    {file.deletions > 0 && (
+                      <div
+                        className="bg-red-500 rounded-sm"
+                        style={{ width: `${deletionsWidth}px` }}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
-              <span className="truncate" title={file.path}>{file.path}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div
           className="text-[10px] p-2 text-center border-t"

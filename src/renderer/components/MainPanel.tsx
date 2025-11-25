@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wand2, Radio, ExternalLink, Wifi, Info, Columns, Copy } from 'lucide-react';
+import { Wand2, Radio, ExternalLink, Wifi, Info, Columns, Copy, FileText } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
 import { InputArea } from './InputArea';
@@ -250,6 +250,9 @@ export function MainPanel(props: MainPanelProps) {
 
               <button onClick={() => setAboutModalOpen(true)} className="p-2 rounded hover:bg-white/5" title="About Maestro">
                 <Info className="w-4 h-4" />
+              </button>
+              <button onClick={() => setLogViewerOpen(true)} className="p-2 rounded hover:bg-white/5" title="System Logs">
+                <FileText className="w-4 h-4" />
               </button>
               {!rightPanelOpen && (
                 <button onClick={() => setRightPanelOpen(true)} className="p-2 rounded hover:bg-white/5" title={`Show right panel (${shortcuts.toggleRightPanel.keys.join('+').replace('Meta', 'Cmd')})`}>

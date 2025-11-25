@@ -65,6 +65,11 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
     setFilteredLogs(filtered);
   }, [logs, searchQuery, selectedLevel]);
 
+  // Auto-focus container on mount for keyboard navigation
+  useEffect(() => {
+    containerRef.current?.focus();
+  }, []);
+
   // Focus search input when opened
   useEffect(() => {
     if (searchOpen) {
@@ -120,6 +125,11 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
       setSearchOpen(false);
       setSearchQuery('');
       containerRef.current?.focus();
+    }
+    // Close log viewer with Escape (when search is not open)
+    else if (e.key === 'Escape' && !searchOpen) {
+      e.preventDefault();
+      onClose();
     }
     // Scroll with arrow keys
     else if (e.key === 'ArrowUp' && !searchOpen) {

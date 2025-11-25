@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, Activity, X, Keyboard,
-  Globe, Network, PanelLeftClose, PanelLeftOpen, Folder, Info, FileText
+  Globe, Network, PanelLeftClose, PanelLeftOpen, Folder, Info, FileText, GitBranch
 } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
 import { getStatusColor, getContextColor } from '../utils/theme';
+import { gitService } from '../services/git';
 
 interface SessionListProps {
   // State
@@ -62,6 +63,33 @@ export function SessionList(props: SessionListProps) {
 
   const [sessionFilter, setSessionFilter] = useState('');
   const [sessionFilterOpen, setSessionFilterOpen] = useState(false);
+  const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
+
+  // Track git file change counts per session
+  const [gitFileCounts, setGitFileCounts] = useState<Map<string, number>>(new Map());
+
+  // Poll git status for all Git sessions
+  useEffect(() => {
+    const pollGitStatus = async () => {
+      const newCounts = new Map<string, number>();
+
+      for (const session of sessions.filter(s => s.isGitRepo)) {
+        try {
+          const cwd = session.inputMode === 'terminal' ? (session.shellCwd || session.cwd) : session.cwd;
+          const status = await gitService.getStatus(cwd);
+          newCounts.set(session.id, status.files.length);
+        } catch (error) {
+          // Ignore errors, don't show indicator if we can't get status
+        }
+      }
+
+      setGitFileCounts(newCounts);
+    };
+
+    pollGitStatus();
+    const interval = setInterval(pollGitStatus, 10000); // Poll every 10 seconds
+    return () => clearInterval(interval);
+  }, [sessions]);
 
   // Filter sessions based on search query
   const filteredSessions = sessionFilter
@@ -138,16 +166,8 @@ export function SessionList(props: SessionListProps) {
                   </div>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-1">
               <button onClick={() => setShortcutsHelpOpen(true)} className="p-1.5 rounded hover:bg-white/5 text-xs" title={`Shortcuts (${shortcuts.help.keys.join('+').replace('Meta', 'Cmd')})`} style={{ color: theme.colors.textDim }}>
                 <Keyboard className="w-4 h-4" />
-              </button>
-              <button onClick={() => setLogViewerOpen(true)} className="p-1.5 rounded hover:bg-white/5" title="System Logs" style={{ color: theme.colors.textDim }}>
-                <FileText className="w-4 h-4" />
-              </button>
-              <button onClick={() => setAboutModalOpen(true)} className="p-1.5 rounded hover:bg-white/5" title="About Maestro" style={{ color: theme.colors.textDim }}>
-                <Info className="w-4 h-4" />
               </button>
               <button onClick={() => { setSettingsModalOpen(true); setSettingsTab('general'); }} className="p-1.5 rounded hover:bg-white/5" title="Settings" style={{ color: theme.colors.textDim }}>
                 <Settings className="w-4 h-4" />
@@ -272,17 +292,27 @@ export function SessionList(props: SessionListProps) {
                               <Activity className="w-3 h-3" /> {session.toolType}
                             </div>
                           </div>
-                          <div
-                            className={`w-2 h-2 rounded-full ml-2 ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
-                            style={{ backgroundColor: getStatusColor(session.state, theme) }}
-                            title={
-                              session.state === 'idle' ? 'Ready and waiting' :
-                              session.state === 'busy' ? 'Agent is thinking' :
-                              session.state === 'connecting' ? 'Attempting to establish connection' :
-                              session.state === 'error' ? 'No connection with agent' :
-                              'Waiting for input'
-                            }
-                          />
+                          <div className="flex items-center gap-2 ml-2">
+                            {/* Git Dirty Indicator (only in wide mode) */}
+                            {leftSidebarOpen && session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
+                              <div className="flex items-center gap-0.5 text-[10px]" style={{ color: theme.colors.warning }}>
+                                <GitBranch className="w-2.5 h-2.5" />
+                                <span>{gitFileCounts.get(session.id)}</span>
+                              </div>
+                            )}
+                            {/* AI Status Indicator */}
+                            <div
+                              className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
+                              style={{ backgroundColor: getStatusColor(session.state, theme) }}
+                              title={
+                                session.state === 'idle' ? 'Ready and waiting' :
+                                session.state === 'busy' ? 'Agent is thinking' :
+                                session.state === 'connecting' ? 'Attempting to establish connection' :
+                                session.state === 'error' ? 'No connection with agent' :
+                                'Waiting for input'
+                              }
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -307,27 +337,38 @@ export function SessionList(props: SessionListProps) {
             );
           })}
 
-          {/* GROUPLESS SESSIONS */}
-          <div
-            className="mt-4 px-3"
-            onDragOver={handleDragOver}
-            onDrop={handleDropOnUngrouped}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-bold uppercase opacity-50">Ungrouped</div>
+          {/* UNGROUPED SESSIONS (as collapsible group) */}
+          <div className="mb-1 mt-4">
+            <div
+              className="px-3 py-1.5 flex items-center justify-between cursor-pointer hover:bg-opacity-50 group"
+              onClick={() => setUngroupedCollapsed(!ungroupedCollapsed)}
+              onDragOver={handleDragOver}
+              onDrop={handleDropOnUngrouped}
+            >
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider flex-1" style={{ color: theme.colors.textDim }}>
+                {ungroupedCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                <Folder className="w-3.5 h-3.5" />
+                <span>Ungrouped</span>
+              </div>
               <button
-                onClick={createNewGroup}
-                className="p-1 rounded hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  createNewGroup();
+                }}
+                className="p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ color: theme.colors.textDim }}
                 title="Create new group"
               >
                 <Plus className="w-3 h-3" />
               </button>
             </div>
-            {[...filteredSessions.filter(s => !s.groupId)].sort((a, b) => a.name.localeCompare(b.name)).map((session) => {
-              const globalIdx = sessions.findIndex(s => s.id === session.id);
-              const isKeyboardSelected = activeFocus === 'sidebar' && globalIdx === selectedSidebarIndex;
-              return (
+
+            {!ungroupedCollapsed && (
+              <div className="flex flex-col border-l ml-4" style={{ borderColor: theme.colors.border }}>
+                {[...filteredSessions.filter(s => !s.groupId)].sort((a, b) => a.name.localeCompare(b.name)).map((session) => {
+                  const globalIdx = sortedSessions.findIndex(s => s.id === session.id);
+                  const isKeyboardSelected = activeFocus === 'sidebar' && globalIdx === selectedSidebarIndex;
+                  return (
                 <div
                   key={session.id}
                   draggable
@@ -359,20 +400,35 @@ export function SessionList(props: SessionListProps) {
                         {session.name}
                       </div>
                     )}
+                    <div className="flex items-center gap-2 text-[10px] mt-0.5 opacity-70">
+                      <Activity className="w-3 h-3" /> {session.toolType}
+                    </div>
                   </div>
-                  <div
-                    className={`w-2 h-2 rounded-full ml-2 ${session.state === 'busy' ? 'animate-pulse' : ''}`}
-                    style={{ backgroundColor: getStatusColor(session.state, theme) }}
-                  />
+                  <div className="flex items-center gap-2 ml-2">
+                    {/* Git Dirty Indicator (only in wide mode) */}
+                    {leftSidebarOpen && session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
+                      <div className="flex items-center gap-0.5 text-[10px]" style={{ color: theme.colors.warning }}>
+                        <GitBranch className="w-2.5 h-2.5" />
+                        <span>{gitFileCounts.get(session.id)}</span>
+                      </div>
+                    )}
+                    {/* AI Status Indicator */}
+                    <div
+                      className={`w-2 h-2 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
+                      style={{ backgroundColor: getStatusColor(session.state, theme) }}
+                    />
+                  </div>
                 </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ) : (
         /* SIDEBAR CONTENT: SKINNY MODE */
         <div className="flex-1 flex flex-col items-center py-4 gap-2 overflow-y-auto overflow-x-visible no-scrollbar">
-          {sessions.map(session => (
+          {sortedSessions.map(session => (
             <div
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
@@ -416,6 +472,17 @@ export function SessionList(props: SessionListProps) {
                       }}
                     />
                   </div>
+
+                  {/* Git Status */}
+                  {session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
+                    <div className="flex items-center justify-between text-[10px] pt-1">
+                      <span className="flex items-center gap-1" style={{ color: theme.colors.textDim }}>
+                        <GitBranch className="w-3 h-3" />
+                        Git Changes
+                      </span>
+                      <span style={{ color: theme.colors.warning }}>{gitFileCounts.get(session.id)} files</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-1.5 text-[10px] font-mono pt-1" style={{ color: theme.colors.textDim }}>
                     <Folder className="w-3 h-3 shrink-0" />

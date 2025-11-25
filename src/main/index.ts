@@ -357,6 +357,11 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('git:numstat', async (_, cwd: string) => {
+    const result = await execFileNoThrow('git', ['diff', '--numstat'], cwd);
+    return { stdout: result.stdout, stderr: result.stderr };
+  });
+
   // File system operations
   ipcMain.handle('fs:readDir', async (_, dirPath: string) => {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -370,8 +375,22 @@ function setupIpcHandlers() {
 
   ipcMain.handle('fs:readFile', async (_, filePath: string) => {
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return content;
+      // Check if file is an image
+      const ext = filePath.split('.').pop()?.toLowerCase();
+      const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'];
+      const isImage = imageExtensions.includes(ext || '');
+
+      if (isImage) {
+        // Read image as buffer and convert to base64 data URL
+        const buffer = await fs.readFile(filePath);
+        const base64 = buffer.toString('base64');
+        const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+        return `data:${mimeType};base64,${base64}`;
+      } else {
+        // Read text files as UTF-8
+        const content = await fs.readFile(filePath, 'utf-8');
+        return content;
+      }
     } catch (error) {
       throw new Error(`Failed to read file: ${error}`);
     }

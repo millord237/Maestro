@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('maestro', {
     status: (cwd: string) => ipcRenderer.invoke('git:status', cwd),
     diff: (cwd: string, file?: string) => ipcRenderer.invoke('git:diff', cwd, file),
     isRepo: (cwd: string) => ipcRenderer.invoke('git:isRepo', cwd),
+    numstat: (cwd: string) => ipcRenderer.invoke('git:numstat', cwd),
   },
 
   // File System API

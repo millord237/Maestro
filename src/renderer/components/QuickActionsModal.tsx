@@ -237,7 +237,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-32 z-[110] animate-in fade-in duration-100">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-32 z-[9999] animate-in fade-in duration-100">
       <div className="w-[500px] rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[550px]"
            style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center gap-3" style={{ borderColor: theme.colors.border }}>

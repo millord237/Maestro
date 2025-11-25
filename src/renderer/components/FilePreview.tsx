@@ -378,7 +378,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
         {isImage ? (
           <div className="flex items-center justify-center h-full">
             <img
-              src={`file://${file.path}`}
+              src={file.content}
               alt={file.name}
               className="max-w-full max-h-full object-contain"
               style={{ imageRendering: 'crisp-edges' }}
