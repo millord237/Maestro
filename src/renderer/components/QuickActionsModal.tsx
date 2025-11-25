@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
+import { useLayerStack } from '../hooks/useLayerStack';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface QuickAction {
   id: string;
@@ -65,10 +67,59 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const layerIdRef = useRef<string>();
+  const modalRef = useRef<HTMLDivElement>(null);
 
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
-  useEffect(() => inputRef.current?.focus(), []);
+  // Register layer on mount
+  useEffect(() => {
+    layerIdRef.current = registerLayer({
+      type: 'modal',
+      priority: MODAL_PRIORITIES.QUICK_ACTION,
+      blocksLowerLayers: true,
+      capturesFocus: true,
+      focusTrap: 'strict',
+      ariaLabel: 'Quick Actions',
+      onEscape: () => {
+        // Handle escape based on current mode
+        if (mode === 'move-to-group') {
+          setMode('main');
+          setSelectedIndex(0);
+        } else {
+          setQuickActionOpen(false);
+        }
+      }
+    });
+
+    return () => {
+      if (layerIdRef.current) {
+        unregisterLayer(layerIdRef.current);
+      }
+    };
+  }, [registerLayer, unregisterLayer]);
+
+  // Update handler when dependencies change
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, () => {
+        // Handle escape based on current mode
+        if (mode === 'move-to-group') {
+          setMode('main');
+          setSelectedIndex(0);
+        } else {
+          setQuickActionOpen(false);
+        }
+      });
+    }
+  }, [mode, setQuickActionOpen, updateLayerHandler]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    // Also focus the modal container for ARIA compliance
+    modalRef.current?.focus();
+  }, []);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -221,10 +272,6 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
           setQuickActionOpen(false);
         }
       }
-    } else if (e.key === 'Escape' && mode === 'move-to-group') {
-      e.preventDefault();
-      setMode('main');
-      setSelectedIndex(0);
     } else if (e.metaKey && ['1', '2', '3', '4', '5', '6', '7', '8'].includes(e.key)) {
       e.preventDefault();
       const number = parseInt(e.key);
@@ -240,8 +287,14 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-32 z-[9999] animate-in fade-in duration-100">
-      <div className="w-[500px] rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[550px]"
-           style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}>
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quick Actions"
+        tabIndex={-1}
+        className="w-[500px] rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[550px] outline-none"
+        style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center gap-3" style={{ borderColor: theme.colors.border }}>
           <Search className="w-5 h-5" style={{ color: theme.colors.textDim }} />
           {renamingSession ? (
