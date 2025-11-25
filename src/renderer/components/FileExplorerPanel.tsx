@@ -56,6 +56,7 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
       return (
         <div key={idx} className={depth > 0 ? "ml-3 border-l pl-2" : ""} style={{ borderColor: theme.colors.border }}>
           <div
+            data-file-index={currentIndex}
             className={`flex items-center gap-2 py-1 text-xs cursor-pointer hover:bg-white/5 px-2 rounded transition-colors border-l-2 ${isSelected ? 'bg-white/10' : ''}`}
             style={{
               color: change ? theme.colors.textMain : theme.colors.textDim,

@@ -324,6 +324,25 @@ export default function MaestroConsole() {
     loadSettings();
   }, []);
 
+  // Restore focus when LogViewer closes to ensure global hotkeys work
+  useEffect(() => {
+    // When LogViewer closes, restore focus to main container or input
+    if (!logViewerOpen) {
+      setTimeout(() => {
+        // Try to focus input first, otherwise focus document body to ensure hotkeys work
+        if (inputRef.current) {
+          inputRef.current.focus();
+        } else if (terminalOutputRef.current) {
+          terminalOutputRef.current.focus();
+        } else {
+          // Blur any focused element to let global handlers work
+          (document.activeElement as HTMLElement)?.blur();
+          document.body.focus();
+        }
+      }, 50);
+    }
+  }, [logViewerOpen]);
+
   // Restore a persisted session by respawning its process
   const restoreSession = async (session: Session): Promise<Session> => {
     try {
@@ -1001,7 +1020,7 @@ export default function MaestroConsole() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview]);
+  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen, renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview, lightboxImage]);
 
   // Sync selectedSidebarIndex with activeSessionId
   useEffect(() => {
@@ -1834,6 +1853,29 @@ export default function MaestroConsole() {
   }, [activeSession?.fileExplorerExpanded, filteredFileTree]);
 
 
+  // Scroll to selected file item when selection changes
+  useEffect(() => {
+    if (activeFocus !== 'right' || activeRightTab !== 'files') return;
+
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      const container = fileTreeContainerRef.current;
+      if (!container) return;
+
+      // Find the selected element
+      const selectedElement = container.querySelector(`[data-file-index="${selectedFileIndex}"]`) as HTMLElement;
+
+      if (selectedElement) {
+        // Use scrollIntoView with immediate scroll for instant feedback
+        selectedElement.scrollIntoView({
+          behavior: 'auto',  // Changed to 'auto' for immediate scroll
+          block: 'nearest',  // Scroll only if needed
+          inline: 'nearest'
+        });
+      }
+    });
+  }, [selectedFileIndex, activeFocus, activeRightTab, flatFileList]);
+
   // File Explorer keyboard navigation
   useEffect(() => {
     const handleFileExplorerKeys = (e: KeyboardEvent) => {
@@ -1852,7 +1894,19 @@ export default function MaestroConsole() {
         e.preventDefault();
         const selectedItem = flatFileList[selectedFileIndex];
         if (selectedItem?.isFolder && expandedFolders.has(selectedItem.fullPath)) {
+          // If selected item is an expanded folder, collapse it
           toggleFolder(selectedItem.fullPath, activeSessionId, setSessions);
+        } else if (selectedItem) {
+          // If selected item is a file or collapsed folder, collapse parent folder
+          const parentPath = selectedItem.fullPath.substring(0, selectedItem.fullPath.lastIndexOf('/'));
+          if (parentPath && expandedFolders.has(parentPath)) {
+            toggleFolder(parentPath, activeSessionId, setSessions);
+            // Move selection to parent folder
+            const parentIndex = flatFileList.findIndex(item => item.fullPath === parentPath);
+            if (parentIndex >= 0) {
+              setSelectedFileIndex(parentIndex);
+            }
+          }
         }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
@@ -1892,6 +1946,7 @@ export default function MaestroConsole() {
       return (
         <div key={idx} className={depth > 0 ? "ml-3 border-l pl-2" : ""} style={{ borderColor: theme.colors.border }}>
           <div
+            data-file-index={currentIndex}
             className={`flex items-center gap-2 py-1 text-xs cursor-pointer hover:bg-white/5 px-2 rounded transition-colors border-l-2 ${isSelected ? 'bg-white/10' : ''}`}
             style={{
               color: change ? theme.colors.textMain : theme.colors.textDim,

@@ -122,6 +122,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
     // Close search with Escape
     else if (e.key === 'Escape' && searchOpen) {
       e.preventDefault();
+      e.stopPropagation();
       setSearchOpen(false);
       setSearchQuery('');
       containerRef.current?.focus();
@@ -129,6 +130,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
     // Close log viewer with Escape (when search is not open)
     else if (e.key === 'Escape' && !searchOpen) {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
     // Scroll with arrow keys
@@ -244,6 +246,35 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
             {level.toUpperCase()}
           </button>
         ))}
+      </div>
+
+      {/* Visual Log History Timeline */}
+      <div
+        className="sticky top-0 z-10 pt-2 px-4"
+        style={{ backgroundColor: theme.colors.bgMain }}
+      >
+        <div className="flex h-2 w-full mb-2 rounded-sm overflow-hidden">
+          {filteredLogs.map((log, idx) => (
+            <div
+              key={idx}
+              className="flex-1 transition-all hover:opacity-70 cursor-pointer"
+              style={{
+                backgroundColor: getLevelColor(log.level),
+                minWidth: '1px'
+              }}
+              title={`${new Date(log.timestamp).toLocaleTimeString()} - ${log.level.toUpperCase()}: ${log.message.substring(0, 50)}${log.message.length > 50 ? '...' : ''}`}
+              onClick={() => {
+                // Calculate scroll position based on log index
+                if (containerRef.current) {
+                  const container = containerRef.current;
+                  const scrollPercentage = idx / Math.max(filteredLogs.length - 1, 1);
+                  const targetScroll = scrollPercentage * (container.scrollHeight - container.clientHeight);
+                  container.scrollTo({ top: targetScroll, behavior: 'smooth' });
+                }
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Search Bar */}
