@@ -79,6 +79,19 @@ export interface LayerStackAPI {
    * @returns Array of all registered layers
    */
   getLayers: () => Layer[];
+
+  /**
+   * Check if any layers are currently open
+   * Use this to block global shortcuts when modals/overlays are active
+   * @returns true if at least one layer is registered
+   */
+  hasOpenLayers: () => boolean;
+
+  /**
+   * Get the current layer count
+   * @returns Number of registered layers
+   */
+  layerCount: number;
 }
 
 /**
@@ -144,6 +157,13 @@ export function useLayerStack(): LayerStackAPI {
    */
   const getLayers = useCallback((): Layer[] => {
     return [...layers];
+  }, [layers]);
+
+  /**
+   * Check if any layers are open
+   */
+  const hasOpenLayers = useCallback((): boolean => {
+    return layers.length > 0;
   }, [layers]);
 
   /**
@@ -259,5 +279,7 @@ export function useLayerStack(): LayerStackAPI {
     getTopLayer,
     closeTopLayer,
     getLayers,
+    hasOpenLayers,
+    layerCount: layers.length,
   };
 }

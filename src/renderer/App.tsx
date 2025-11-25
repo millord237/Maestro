@@ -25,7 +25,7 @@ import { LayerStackDevTools } from './components/dev/LayerStackDevTools';
 import { useSettings, useSessionManager, useFileExplorer } from './hooks';
 
 // Import contexts
-import { LayerStackProvider } from './contexts/LayerStackContext';
+import { useLayerStack } from './contexts/LayerStackContext';
 
 // Import services
 import { gitService } from './services/git';
@@ -44,6 +44,9 @@ import { fuzzyMatch } from './utils/search';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 
 export default function MaestroConsole() {
+  // --- LAYER STACK (for blocking shortcuts when modals are open) ---
+  const { hasOpenLayers } = useLayerStack();
+
   // --- STATE ---
   const [sessions, setSessions] = useState<Session[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -805,6 +808,16 @@ export default function MaestroConsole() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Block ALL shortcuts when any layer (modal/overlay) is open
+      // Escape is handled by LayerStackContext in capture phase
+      // Tab is allowed for accessibility within modals
+      if (hasOpenLayers()) {
+        // Allow Tab for accessibility navigation within modals
+        if (e.key === 'Tab') return;
+        // Block all other shortcuts - let the layer handle them
+        return;
+      }
+
       // Sidebar navigation with arrow keys (works when sidebar has focus)
       if (activeFocus === 'sidebar' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -956,7 +969,7 @@ export default function MaestroConsole() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen, renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview, lightboxImage]);
+  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen, renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview, lightboxImage, hasOpenLayers]);
 
   // Sync selectedSidebarIndex with activeSessionId
   useEffect(() => {
@@ -1922,7 +1935,6 @@ export default function MaestroConsole() {
   };
 
   return (
-    <LayerStackProvider>
       <div className="flex h-screen w-full font-mono overflow-hidden transition-colors duration-300 pt-10"
            style={{
              backgroundColor: theme.colors.bgMain,
@@ -2268,7 +2280,6 @@ export default function MaestroConsole() {
       {/* Dev Tools (only in development) */}
       {process.env.NODE_ENV === 'development' && <LayerStackDevTools />}
       </div>
-    </LayerStackProvider>
   );
 }
 
