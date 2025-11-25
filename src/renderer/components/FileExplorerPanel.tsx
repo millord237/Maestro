@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, ChevronUp, Folder } from 'lucide-react';
 import type { Session, Theme, FileChangeType } from '../types';
 import { getFileIcon } from '../utils/theme';
+import { useLayerStack } from '../contexts/LayerStackContext';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface FileNode {
   name: string;
@@ -39,6 +41,40 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
     previewFile, setActiveFocus, fileTreeContainerRef, toggleFolder, handleFileClick, expandAllFolders,
     collapseAllFolders, updateSessionWorkingDirectory, setSessions
   } = props;
+
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
+
+  // Register layer when filter is open
+  useEffect(() => {
+    if (fileTreeFilterOpen) {
+      const id = registerLayer({
+        type: 'overlay',
+        priority: MODAL_PRIORITIES.FILE_TREE_FILTER,
+        blocksLowerLayers: false,
+        capturesFocus: true,
+        focusTrap: 'none',
+        onEscape: () => {
+          setFileTreeFilterOpen(false);
+          setFileTreeFilter('');
+        },
+        allowClickOutside: true,
+        ariaLabel: 'File Tree Filter'
+      });
+      layerIdRef.current = id;
+      return () => unregisterLayer(id);
+    }
+  }, [fileTreeFilterOpen, registerLayer, unregisterLayer]);
+
+  // Update handler when dependencies change
+  useEffect(() => {
+    if (fileTreeFilterOpen && layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, () => {
+        setFileTreeFilterOpen(false);
+        setFileTreeFilter('');
+      });
+    }
+  }, [fileTreeFilterOpen, setFileTreeFilterOpen, setFileTreeFilter, updateLayerHandler]);
 
   const renderTree = (nodes: FileNode[], currentPath = '', depth = 0, globalIndex = { value: 0 }) => {
     const expandedSet = new Set(session.fileExplorerExpanded || []);
@@ -111,12 +147,6 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
             placeholder="Filter files..."
             value={fileTreeFilter}
             onChange={(e) => setFileTreeFilter(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setFileTreeFilterOpen(false);
-                setFileTreeFilter('');
-              }
-            }}
             className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"
             style={{ borderColor: theme.colors.accent, color: theme.colors.textMain }}
           />

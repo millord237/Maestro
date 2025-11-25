@@ -58,6 +58,9 @@ export const MODAL_PRIORITIES = {
 
   /** Slash command autocomplete */
   SLASH_AUTOCOMPLETE: 50,
+
+  /** File tree filter input */
+  FILE_TREE_FILTER: 30,
 } as const;
 
 /**
