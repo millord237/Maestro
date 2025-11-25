@@ -3,6 +3,8 @@ import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, C
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
+import { useLayerStack } from '../hooks/useLayerStack';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface TerminalOutputProps {
   session: Session;
@@ -38,6 +40,47 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
   // Track filter modes per log entry (log ID -> {mode: 'include'|'exclude', regex: boolean})
   const [filterModes, setFilterModes] = useState<Map<string, { mode: 'include' | 'exclude'; regex: boolean }>>(new Map());
+
+  // Layer stack integration for search overlay
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
+
+  // Register layer when search is open
+  useEffect(() => {
+    if (outputSearchOpen) {
+      layerIdRef.current = registerLayer({
+        type: 'overlay',
+        priority: MODAL_PRIORITIES.SLASH_AUTOCOMPLETE, // Use same priority as slash autocomplete (low priority)
+        blocksLowerLayers: false,
+        capturesFocus: true,
+        focusTrap: 'none',
+        onEscape: () => {
+          setOutputSearchOpen(false);
+          setOutputSearchQuery('');
+          terminalOutputRef.current?.focus();
+        },
+        allowClickOutside: true,
+        ariaLabel: 'Output Search'
+      });
+
+      return () => {
+        if (layerIdRef.current) {
+          unregisterLayer(layerIdRef.current);
+        }
+      };
+    }
+  }, [outputSearchOpen, registerLayer, unregisterLayer]);
+
+  // Update the handler when dependencies change
+  useEffect(() => {
+    if (outputSearchOpen && layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, () => {
+        setOutputSearchOpen(false);
+        setOutputSearchQuery('');
+        terminalOutputRef.current?.focus();
+      });
+    }
+  }, [outputSearchOpen, updateLayerHandler]);
 
   const toggleExpanded = (logId: string) => {
     setExpandedLogs(prev => {
@@ -279,19 +322,14 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           setOutputSearchOpen(true);
           return;
         }
-        // Escape handling
-        if (e.key === 'Escape') {
+        // Escape handling removed - delegated to layer stack for search
+        // When search is not open, Escape should still focus back to input
+        if (e.key === 'Escape' && !outputSearchOpen) {
           e.preventDefault();
           e.stopPropagation();
-          if (outputSearchOpen) {
-            // Close search but stay focused on output
-            setOutputSearchOpen(false);
-            setOutputSearchQuery('');
-          } else {
-            // Focus back to text input
-            inputRef.current?.focus();
-            setActiveFocus('main');
-          }
+          // Focus back to text input
+          inputRef.current?.focus();
+          setActiveFocus('main');
           return;
         }
         // Arrow key scrolling
@@ -326,14 +364,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             type="text"
             value={outputSearchQuery}
             onChange={(e) => setOutputSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.stopPropagation();
-                setOutputSearchOpen(false);
-                setOutputSearchQuery('');
-                terminalOutputRef.current?.focus();
-              }
-            }}
             placeholder="Filter output... (Esc to close)"
             className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"
             style={{ borderColor: theme.colors.accent, color: theme.colors.textMain, backgroundColor: theme.colors.bgSidebar }}
