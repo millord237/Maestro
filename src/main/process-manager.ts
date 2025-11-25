@@ -390,10 +390,11 @@ export class ProcessManager extends EventEmitter {
         shellArgs = ['-c', command];
       } else {
         // POSIX-compatible shells (bash, zsh, sh, tcsh, etc.)
-        // -i: interactive mode (sources .bashrc/.zshrc)
-        // -l: login mode (sources .bash_profile/.zprofile)
+        // -l: login mode (sources .bash_profile/.zprofile which typically source rc files)
         // -c: execute the command string
-        shellArgs = ['-i', '-l', '-c', command];
+        // Note: We avoid -i (interactive) because it tries to initialize zle/readline
+        // which fails without a real TTY and produces errors like "can't change option: zle"
+        shellArgs = ['-l', '-c', command];
       }
 
       const childProcess = spawn(shell, shellArgs, {
@@ -407,10 +408,22 @@ export class ProcessManager extends EventEmitter {
 
       // Handle stdout - emit data events for real-time streaming
       childProcess.stdout?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        stdoutBuffer += output;
-        // Emit immediately for real-time display
-        this.emit('data', sessionId, output);
+        let output = data.toString();
+
+        // Filter out shell integration sequences that may appear in interactive shells
+        // These include iTerm2, VSCode, and other terminal emulator integration markers
+        // Format: ]1337;..., ]133;..., ]7;... (with or without ESC prefix)
+        output = output.replace(/\x1b?\]1337;[^\x07\x1b\n]*(\x07|\x1b\\)?/g, '');
+        output = output.replace(/\x1b?\]133;[^\x07\x1b\n]*(\x07|\x1b\\)?/g, '');
+        output = output.replace(/\x1b?\]7;[^\x07\x1b\n]*(\x07|\x1b\\)?/g, '');
+        // Remove OSC sequences for window title, etc.
+        output = output.replace(/\x1b?\][0-9];[^\x07\x1b\n]*(\x07|\x1b\\)?/g, '');
+
+        // Only emit if there's actual content after filtering
+        if (output.trim()) {
+          stdoutBuffer += output;
+          this.emit('data', sessionId, output);
+        }
       });
 
       // Handle stderr - emit with [stderr] prefix for differentiation

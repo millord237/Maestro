@@ -101,6 +101,7 @@
     "react-diff-view": "^3.3.2",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.0",
+    "react-virtuoso": "^4.15.0",
     "remark-gfm": "^4.0.1",
     "ws": "^8.16.0"
   },

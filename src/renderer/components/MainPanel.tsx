@@ -19,6 +19,7 @@ interface MainPanelProps {
   logViewerOpen: boolean;
   activeSession: Session | null;
   theme: Theme;
+  fontFamily: string;
   activeFocus: FocusArea;
   outputSearchOpen: boolean;
   outputSearchQuery: string;
@@ -78,6 +79,7 @@ interface MainPanelProps {
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   getContextColor: (usage: number, theme: Theme) => string;
   setActiveSessionId: (id: string) => void;
+  onDeleteLog?: (logId: string) => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -294,6 +296,7 @@ export function MainPanel(props: MainPanelProps) {
                 ref={terminalOutputRef}
                 session={activeSession}
                 theme={theme}
+                fontFamily={props.fontFamily}
                 activeFocus={activeFocus}
                 outputSearchOpen={outputSearchOpen}
                 outputSearchQuery={outputSearchQuery}
@@ -304,6 +307,7 @@ export function MainPanel(props: MainPanelProps) {
                 inputRef={inputRef}
                 logsEndRef={logsEndRef}
                 maxOutputLines={maxOutputLines}
+                onDeleteLog={props.onDeleteLog}
               />
 
               {/* Input Area */}

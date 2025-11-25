@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, X, Copy, FileText, Eye } from 'lucide-react';
+import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -110,11 +110,14 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
   const [searchOpen, setSearchOpen] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<{ url: string; x: number; y: number } | null>(null);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const layerIdRef = useRef<string>();
+  const matchElementsRef = useRef<HTMLElement[]>([]);
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
 
@@ -145,6 +148,8 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
         if (searchOpen) {
           setSearchOpen(false);
           setSearchQuery('');
+          // Refocus container so keyboard navigation (arrow keys) still works
+          containerRef.current?.focus();
         } else {
           onClose();
         }
@@ -166,6 +171,8 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
         if (searchOpen) {
           setSearchOpen(false);
           setSearchQuery('');
+          // Refocus container so keyboard navigation (arrow keys) still works
+          containerRef.current?.focus();
         } else {
           onClose();
         }
@@ -182,7 +189,12 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
 
   // Highlight search matches in syntax-highlighted code
   useEffect(() => {
-    if (!searchQuery.trim() || !codeContainerRef.current || isMarkdown || isImage) return;
+    if (!searchQuery.trim() || !codeContainerRef.current || isMarkdown || isImage) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+      matchElementsRef.current = [];
+      return;
+    }
 
     const container = codeContainerRef.current;
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
@@ -197,6 +209,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
     // Escape regex special characters
     const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedQuery, 'gi');
+    const matchElements: HTMLElement[] = [];
 
     // Highlight matches using safe DOM methods
     textNodes.forEach(textNode => {
@@ -219,8 +232,10 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
           mark.style.color = '#000';
           mark.style.padding = '0 2px';
           mark.style.borderRadius = '2px';
+          mark.className = 'search-match';
           mark.textContent = match;
           fragment.appendChild(mark);
+          matchElements.push(mark);
 
           lastIndex = offset + match.length;
           return match;
@@ -235,22 +250,81 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
       }
     });
 
+    // Store match elements and update count
+    matchElementsRef.current = matchElements;
+    setTotalMatches(matchElements.length);
+    setCurrentMatchIndex(matchElements.length > 0 ? 0 : -1);
+
+    // Highlight first match with different color and scroll to it
+    if (matchElements.length > 0) {
+      matchElements[0].style.backgroundColor = theme.colors.accent;
+      matchElements[0].style.color = '#fff';
+      matchElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     // Cleanup function to remove highlights
     return () => {
-      container.querySelectorAll('mark').forEach(mark => {
+      container.querySelectorAll('mark.search-match').forEach(mark => {
         const parent = mark.parentNode;
         if (parent) {
           parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
           parent.normalize();
         }
       });
+      matchElementsRef.current = [];
     };
-  }, [searchQuery, file.content, isMarkdown, isImage]);
+  }, [searchQuery, file.content, isMarkdown, isImage, theme.colors.accent]);
 
   const copyPathToClipboard = () => {
     navigator.clipboard.writeText(file.path);
     setShowCopyNotification(true);
     setTimeout(() => setShowCopyNotification(false), 2000);
+  };
+
+  // Navigate to next search match
+  const goToNextMatch = () => {
+    if (totalMatches === 0) return;
+    const matches = matchElementsRef.current;
+
+    // Reset current match highlight
+    if (matches[currentMatchIndex]) {
+      matches[currentMatchIndex].style.backgroundColor = '#ffd700';
+      matches[currentMatchIndex].style.color = '#000';
+    }
+
+    // Move to next match (wrap around)
+    const nextIndex = (currentMatchIndex + 1) % totalMatches;
+    setCurrentMatchIndex(nextIndex);
+
+    // Highlight new current match and scroll to it
+    if (matches[nextIndex]) {
+      matches[nextIndex].style.backgroundColor = theme.colors.accent;
+      matches[nextIndex].style.color = '#fff';
+      matches[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  // Navigate to previous search match
+  const goToPrevMatch = () => {
+    if (totalMatches === 0) return;
+    const matches = matchElementsRef.current;
+
+    // Reset current match highlight
+    if (matches[currentMatchIndex]) {
+      matches[currentMatchIndex].style.backgroundColor = '#ffd700';
+      matches[currentMatchIndex].style.color = '#000';
+    }
+
+    // Move to previous match (wrap around)
+    const prevIndex = (currentMatchIndex - 1 + totalMatches) % totalMatches;
+    setCurrentMatchIndex(prevIndex);
+
+    // Highlight new current match and scroll to it
+    if (matches[prevIndex]) {
+      matches[prevIndex].style.backgroundColor = theme.colors.accent;
+      matches[prevIndex].style.color = '#fff';
+      matches[prevIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   // Format shortcut keys for display
@@ -269,13 +343,61 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
     return keys.join('');
   };
 
-  // Highlight search matches in content
+  // Highlight search matches in content (for markdown/text)
   const highlightMatches = (content: string): string => {
     if (!searchQuery.trim()) return content;
 
-    const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return content.replace(regex, '<mark style="background-color: #ffd700; color: #000;">$1</mark>');
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+
+    // Count matches and highlight with special class for navigation
+    let matchIndex = 0;
+    return content.replace(regex, (match) => {
+      const isCurrentMatch = matchIndex === currentMatchIndex;
+      const style = isCurrentMatch
+        ? `background-color: ${theme.colors.accent}; color: #fff;`
+        : 'background-color: #ffd700; color: #000;';
+      matchIndex++;
+      return `<mark class="search-match-md" data-match-index="${matchIndex - 1}" style="${style}">${match}</mark>`;
+    });
   };
+
+  // Update match count for markdown/text content
+  useEffect(() => {
+    if ((isMarkdown || isImage) && searchQuery.trim()) {
+      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedQuery, 'gi');
+      const matches = file.content.match(regex);
+      const count = matches ? matches.length : 0;
+      setTotalMatches(count);
+      if (count > 0 && currentMatchIndex >= count) {
+        setCurrentMatchIndex(0);
+      }
+    } else if (isMarkdown || isImage) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+    }
+  }, [searchQuery, file.content, isMarkdown, isImage]);
+
+  // Scroll to current match for markdown content
+  useEffect(() => {
+    if ((isMarkdown && markdownRawMode) || (isMarkdown && searchQuery.trim())) {
+      const marks = contentRef.current?.querySelectorAll('mark.search-match-md');
+      if (marks && marks.length > 0 && currentMatchIndex >= 0 && currentMatchIndex < marks.length) {
+        marks.forEach((mark, i) => {
+          const el = mark as HTMLElement;
+          if (i === currentMatchIndex) {
+            el.style.backgroundColor = theme.colors.accent;
+            el.style.color = '#fff';
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            el.style.backgroundColor = '#ffd700';
+            el.style.color = '#000';
+          }
+        });
+      }
+    }
+  }, [currentMatchIndex, isMarkdown, markdownRawMode, searchQuery, theme.colors.accent]);
 
   // Helper to check if a shortcut matches
   const isShortcut = (e: React.KeyboardEvent, shortcutId: string) => {
@@ -398,26 +520,59 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
         {/* Floating Search */}
         {searchOpen && (
           <div className="sticky top-0 z-10 pb-4">
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSearchOpen(false);
-                  setSearchQuery('');
-                  // Refocus container so keyboard navigation still works
-                  containerRef.current?.focus();
-                }
-              }}
-              placeholder="Search in file... (Esc to close)"
-              className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"
-              style={{ borderColor: theme.colors.accent, color: theme.colors.textMain, backgroundColor: theme.colors.bgSidebar }}
-              autoFocus
-            />
+            <div className="flex items-center gap-2">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSearchOpen(false);
+                    setSearchQuery('');
+                    // Refocus container so keyboard navigation still works
+                    containerRef.current?.focus();
+                  } else if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    goToNextMatch();
+                  } else if (e.key === 'Enter' && e.shiftKey) {
+                    e.preventDefault();
+                    goToPrevMatch();
+                  }
+                }}
+                placeholder="Search in file... (Enter: next, Shift+Enter: prev)"
+                className="flex-1 px-3 py-2 rounded border bg-transparent outline-none text-sm"
+                style={{ borderColor: theme.colors.accent, color: theme.colors.textMain, backgroundColor: theme.colors.bgSidebar }}
+                autoFocus
+              />
+              {searchQuery.trim() && (
+                <>
+                  <span className="text-xs whitespace-nowrap" style={{ color: theme.colors.textDim }}>
+                    {totalMatches > 0 ? `${currentMatchIndex + 1}/${totalMatches}` : 'No matches'}
+                  </span>
+                  <button
+                    onClick={goToPrevMatch}
+                    disabled={totalMatches === 0}
+                    className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
+                    style={{ color: theme.colors.textDim }}
+                    title="Previous match (Shift+Enter)"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={goToNextMatch}
+                    disabled={totalMatches === 0}
+                    className="p-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
+                    style={{ color: theme.colors.textDim }}
+                    title="Next match (Enter)"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         )}
         {isImage ? (

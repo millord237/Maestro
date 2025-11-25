@@ -148,7 +148,7 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
 
       {/* Hover tooltip showing file list with GitHub-style diff bars */}
       <div
-        className="absolute top-full left-0 mt-2 min-w-[600px] max-w-[800px] rounded shadow-xl z-50 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity pointer-events-none"
+        className="absolute top-full left-0 mt-2 w-max max-w-[400px] rounded shadow-xl z-[100] opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity pointer-events-none"
         style={{
           backgroundColor: theme.colors.bgSidebar,
           borderColor: theme.colors.border,
@@ -167,7 +167,7 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
         <div className="max-h-96 overflow-y-auto">
           {fileChanges.map((file, idx) => {
             const total = file.additions + file.deletions;
-            const maxBarWidth = 100; // Max width in pixels for the bar
+            const maxBarWidth = 60; // Max width in pixels for the bar
             const additionsWidth = total > 0 ? (file.additions / total) * maxBarWidth : 0;
             const deletionsWidth = total > 0 ? (file.deletions / total) * maxBarWidth : 0;
 

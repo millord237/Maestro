@@ -375,7 +375,7 @@ export default function MaestroConsole() {
     // Handle process output data
     // sessionId will be in format: "{id}-ai" or "{id}-terminal"
     const unsubscribeData = window.maestro.process.onData((sessionId: string, data: string) => {
-      console.log('[onData] Received data for session:', sessionId, 'Data:', data);
+      console.log('[onData] Received data for session:', sessionId, 'Data:', data.substring(0, 100));
 
       // Parse sessionId to determine which process this is from
       let actualSessionId: string;
@@ -385,10 +385,13 @@ export default function MaestroConsole() {
         actualSessionId = sessionId.slice(0, -3); // Remove "-ai" suffix
         isFromAi = true;
       } else if (sessionId.endsWith('-terminal')) {
-        actualSessionId = sessionId.slice(0, -9); // Remove "-terminal" suffix
-        isFromAi = false;
+        // Ignore PTY terminal output - we use runCommand for terminal commands now,
+        // which emits data without the -terminal suffix. The PTY process is only kept
+        // alive for shell state tracking (cwd), not for capturing output.
+        console.log('[onData] Ignoring PTY terminal output (using runCommand instead)');
+        return;
       } else {
-        // Fallback for old sessions without suffix
+        // Plain session ID = output from runCommand (terminal commands)
         actualSessionId = sessionId;
         isFromAi = false;
       }
@@ -400,12 +403,13 @@ export default function MaestroConsole() {
         const targetLogKey = isFromAi ? 'aiLogs' : 'shellLogs';
         const existingLogs = s[targetLogKey];
         const lastLog = existingLogs[existingLogs.length - 1];
-        const now = Date.now();
 
-        // Group consecutive stdout outputs within 500ms into the same log entry
+        // For terminal commands (runCommand), group all output while command is running
+        // For AI processes, use time-based grouping (500ms window)
+        const isTerminalCommand = !isFromAi;
         const shouldGroup = lastLog &&
                            lastLog.source === 'stdout' &&
-                           (now - lastLog.timestamp) < 500;
+                           (isTerminalCommand ? s.state === 'busy' : (Date.now() - lastLog.timestamp) < 500);
 
         if (shouldGroup) {
           // Append to existing log entry
@@ -418,14 +422,16 @@ export default function MaestroConsole() {
           console.log('[onData] Appending to existing log for', targetLogKey, 'session', actualSessionId);
           return {
             ...s,
-            state: 'idle' as SessionState,
+            // For terminal commands, keep busy state (will be set to idle by onCommandExit)
+            // For AI, set to idle on each data chunk
+            state: isTerminalCommand ? s.state : 'idle' as SessionState,
             [targetLogKey]: updatedLogs
           };
         } else {
           // Create new log entry
           const newLog: LogEntry = {
             id: generateId(),
-            timestamp: now,
+            timestamp: Date.now(),
             source: 'stdout',
             text: data
           };
@@ -433,7 +439,9 @@ export default function MaestroConsole() {
           console.log('[onData] Creating new log for', targetLogKey, 'session', actualSessionId);
           return {
             ...s,
-            state: 'idle' as SessionState,
+            // For terminal commands, keep busy state (will be set to idle by onCommandExit)
+            // For AI, set to idle on each data chunk
+            state: isTerminalCommand ? s.state : 'idle' as SessionState,
             [targetLogKey]: [...existingLogs, newLog]
           };
         }
@@ -506,25 +514,20 @@ export default function MaestroConsole() {
     const unsubscribeStderr = window.maestro.process.onStderr((sessionId: string, data: string) => {
       console.log('[onStderr] Received stderr for session:', sessionId, 'Data:', data);
 
-      // Parse sessionId (runCommand uses the format "{id}-terminal")
-      let actualSessionId: string;
-      if (sessionId.endsWith('-terminal')) {
-        actualSessionId = sessionId.slice(0, -9);
-      } else {
-        actualSessionId = sessionId;
-      }
+      // runCommand now uses plain session ID (no -terminal suffix)
+      const actualSessionId = sessionId;
 
       setSessions(prev => prev.map(s => {
         if (s.id !== actualSessionId) return s;
 
         const existingLogs = s.shellLogs;
         const lastLog = existingLogs[existingLogs.length - 1];
-        const now = Date.now();
 
-        // Group consecutive stderr outputs within 500ms into the same log entry
+        // Group all stderr while command is running (state === 'busy')
+        // This ensures all stderr from a single command goes into one cell
         const shouldGroup = lastLog &&
                            lastLog.source === 'stderr' &&
-                           (now - lastLog.timestamp) < 500;
+                           s.state === 'busy';
 
         if (shouldGroup) {
           const updatedLogs = [...existingLogs];
@@ -536,7 +539,7 @@ export default function MaestroConsole() {
         } else {
           const newLog: LogEntry = {
             id: generateId(),
-            timestamp: now,
+            timestamp: Date.now(),
             source: 'stderr',
             text: data
           };
@@ -549,12 +552,8 @@ export default function MaestroConsole() {
     const unsubscribeCommandExit = window.maestro.process.onCommandExit((sessionId: string, code: number) => {
       console.log('[onCommandExit] Command exited for session:', sessionId, 'Code:', code);
 
-      let actualSessionId: string;
-      if (sessionId.endsWith('-terminal')) {
-        actualSessionId = sessionId.slice(0, -9);
-      } else {
-        actualSessionId = sessionId;
-      }
+      // runCommand now uses plain session ID (no -terminal suffix)
+      const actualSessionId = sessionId;
 
       setSessions(prev => prev.map(s => {
         if (s.id !== actualSessionId) return s;
@@ -1514,8 +1513,10 @@ export default function MaestroConsole() {
       })();
     } else if (currentMode === 'terminal') {
       // Terminal mode: Use runCommand for clean stdout/stderr capture (no PTY echoes/prompts)
+      // Use plain session ID (not suffixed) - runCommand is a separate subprocess,
+      // not the PTY process, so it doesn't need the -terminal suffix
       window.maestro.process.runCommand({
-        sessionId: targetSessionId,
+        sessionId: activeSession.id,
         command: capturedInputValue,
         cwd: activeSession.shellCwd || activeSession.cwd
       }).catch(error => {
@@ -2157,6 +2158,7 @@ export default function MaestroConsole() {
         logViewerOpen={logViewerOpen}
         activeSession={activeSession}
         theme={theme}
+        fontFamily={fontFamily}
         activeFocus={activeFocus}
         outputSearchOpen={outputSearchOpen}
         outputSearchQuery={outputSearchQuery}
@@ -2210,6 +2212,43 @@ export default function MaestroConsole() {
         handleDrop={handleDrop}
         getContextColor={getContextColor}
         setActiveSessionId={setActiveSessionId}
+        onDeleteLog={(logId: string) => {
+          if (!activeSession) return;
+
+          // Find the log entry and its index
+          const logIndex = activeSession.shellLogs.findIndex(log => log.id === logId);
+          if (logIndex === -1) return;
+
+          const log = activeSession.shellLogs[logIndex];
+          if (log.source !== 'user') return; // Only delete user commands
+
+          // Find the next user command index (or end of array)
+          let endIndex = activeSession.shellLogs.length;
+          for (let i = logIndex + 1; i < activeSession.shellLogs.length; i++) {
+            if (activeSession.shellLogs[i].source === 'user') {
+              endIndex = i;
+              break;
+            }
+          }
+
+          // Remove logs from logIndex to endIndex (exclusive)
+          const newLogs = [
+            ...activeSession.shellLogs.slice(0, logIndex),
+            ...activeSession.shellLogs.slice(endIndex)
+          ];
+
+          // Also remove from command history
+          const commandText = log.text.trim();
+          const newCommandHistory = (activeSession.commandHistory || []).filter(
+            cmd => cmd !== commandText
+          );
+
+          setSessions(sessions.map(s =>
+            s.id === activeSession.id
+              ? { ...s, shellLogs: newLogs, commandHistory: newCommandHistory }
+              : s
+          ));
+        }}
       />
 
       {/* --- RIGHT PANEL --- */}
