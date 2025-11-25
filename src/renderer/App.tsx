@@ -31,6 +31,9 @@ import { GitDiffViewer } from './components/GitDiffViewer';
 // Import custom hooks
 import { useSettings, useSessionManager, useFileExplorer } from './hooks';
 
+// Import contexts
+import { LayerStackProvider } from './contexts/LayerStackContext';
+
 // Import services
 import { gitService } from './services/git';
 
@@ -1987,13 +1990,14 @@ export default function MaestroConsole() {
   };
 
   return (
-    <div className="flex h-screen w-full font-mono overflow-hidden transition-colors duration-300 pt-10"
-         style={{
-           backgroundColor: theme.colors.bgMain,
-           color: theme.colors.textMain,
-           fontFamily: fontFamily,
-           fontSize: `${fontSize}px`
-         }}>
+    <LayerStackProvider>
+      <div className="flex h-screen w-full font-mono overflow-hidden transition-colors duration-300 pt-10"
+           style={{
+             backgroundColor: theme.colors.bgMain,
+             color: theme.colors.textMain,
+             fontFamily: fontFamily,
+             fontSize: `${fontSize}px`
+           }}>
 
       {/* --- DRAGGABLE TITLE BAR --- */}
       <div
@@ -2328,7 +2332,8 @@ export default function MaestroConsole() {
         setMaxOutputLines={setMaxOutputLines}
         initialTab={settingsTab}
       />
-    </div>
+      </div>
+    </LayerStackProvider>
   );
 }
 
