@@ -12,7 +12,7 @@ Maestro features a three-panel layout:
 - **Main Window** - Center workspace with two modes:
   - **AI Terminal** - Interact with Claude Code AI assistant
   - **Command Terminal** - Execute shell commands and scripts
-  - **System Log Viewer** - View system logs and debugging information
+  - **File Preview** - View images and text documents wtih source highlighting and markdown rendering.
 - **Right Bar** - File explorer, command history, and scratchpad
 
 ### Session Status Indicators
