@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X, Wand2, ExternalLink, FileCode } from 'lucide-react';
 import type { Theme } from '../types';
+import { useLayerStack } from '../contexts/LayerStackContext';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface AboutModalProps {
   theme: Theme;
@@ -8,8 +10,49 @@ interface AboutModalProps {
 }
 
 export function AboutModal({ theme, onClose }: AboutModalProps) {
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Register layer on mount
+  useEffect(() => {
+    const id = registerLayer({
+      type: 'modal',
+      priority: MODAL_PRIORITIES.ABOUT,
+      blocksLowerLayers: true,
+      capturesFocus: true,
+      focusTrap: 'strict',
+      ariaLabel: 'About Maestro',
+      onEscape: onClose,
+    });
+    layerIdRef.current = id;
+
+    // Auto-focus the container for immediate keyboard control
+    containerRef.current?.focus();
+
+    return () => {
+      if (layerIdRef.current) {
+        unregisterLayer(layerIdRef.current);
+      }
+    };
+  }, [registerLayer, unregisterLayer]);
+
+  // Update handler when dependencies change
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, onClose);
+    }
+  }, [onClose, updateLayerHandler]);
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+    <div
+      ref={containerRef}
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-label="About Maestro"
+      tabIndex={-1}
+    >
       <div className="w-[450px] border rounded-lg shadow-2xl overflow-hidden" style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: theme.colors.border }}>
           <h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>About Maestro</h2>
