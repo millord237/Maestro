@@ -3,6 +3,8 @@ import { Diff, Hunk, tokenize } from 'react-diff-view';
 import { X, Plus, Minus } from 'lucide-react';
 import type { Theme } from '../types';
 import { parseGitDiff, getFileName, getDiffStats, ParsedFileDiff } from '../utils/gitDiffParser';
+import { useLayerStack } from '../hooks/useLayerStack';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import 'react-diff-view/style/index.css';
 
 interface GitDiffViewerProps {
@@ -15,9 +17,38 @@ interface GitDiffViewerProps {
 export function GitDiffViewer({ diffText, cwd, theme, onClose }: GitDiffViewerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
 
   // Parse the diff into separate files
   const parsedFiles = useMemo(() => parseGitDiff(diffText), [diffText]);
+
+  // Register layer on mount
+  useEffect(() => {
+    layerIdRef.current = registerLayer({
+      type: 'overlay',
+      priority: MODAL_PRIORITIES.GIT_DIFF,
+      blocksLowerLayers: true,
+      capturesFocus: true,
+      focusTrap: 'lenient',
+      ariaLabel: 'Git Diff Preview',
+      onEscape: onClose,
+      allowClickOutside: true
+    });
+
+    return () => {
+      if (layerIdRef.current) {
+        unregisterLayer(layerIdRef.current);
+      }
+    };
+  }, [registerLayer, unregisterLayer, onClose]);
+
+  // Update handler when dependencies change
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, onClose);
+    }
+  }, [updateLayerHandler, onClose]);
 
   // Auto-scroll to active tab when it changes
   useEffect(() => {
@@ -31,15 +62,11 @@ export function GitDiffViewer({ diffText, cwd, theme, onClose }: GitDiffViewerPr
     }
   }, [activeTab]);
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts (tab navigation only)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
       // Cmd+Shift+[ - Previous tab
-      else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
         e.preventDefault();
         setActiveTab(prev => prev === 0 ? parsedFiles.length - 1 : prev - 1);
       }
@@ -52,7 +79,7 @@ export function GitDiffViewer({ diffText, cwd, theme, onClose }: GitDiffViewerPr
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, parsedFiles.length]);
+  }, [parsedFiles.length]);
 
   if (parsedFiles.length === 0) {
     return (
@@ -65,6 +92,11 @@ export function GitDiffViewer({ diffText, cwd, theme, onClose }: GitDiffViewerPr
           className="w-[85%] max-w-[1400px] h-[90%] rounded-lg shadow-2xl flex flex-col overflow-hidden"
           style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border, border: '1px solid' }}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Git Diff Preview"
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
         >
           <div
             className="flex items-center justify-between px-6 py-4 border-b"
@@ -100,6 +132,11 @@ export function GitDiffViewer({ diffText, cwd, theme, onClose }: GitDiffViewerPr
         className="w-[85%] max-w-[1400px] h-[90%] rounded-lg shadow-2xl flex flex-col overflow-hidden"
         style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border, border: '1px solid' }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Git Diff Preview"
+        tabIndex={-1}
+        ref={(el) => el?.focus()}
       >
         {/* Header */}
         <div
