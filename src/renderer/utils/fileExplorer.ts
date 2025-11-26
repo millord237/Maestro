@@ -24,7 +24,7 @@ export interface FileTreeNode {
  */
 export async function loadFileTree(
   dirPath: string,
-  maxDepth = 3,
+  maxDepth = 10,
   currentDepth = 0
 ): Promise<FileTreeNode[]> {
   if (currentDepth >= maxDepth) return [];

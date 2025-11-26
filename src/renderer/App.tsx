@@ -1632,7 +1632,14 @@ export default function MaestroConsole() {
     // Handle slash commands
     if (inputValue.trim().startsWith('/')) {
       const commandText = inputValue.trim();
-      const matchingCommand = slashCommands.find(cmd => cmd.command === commandText);
+      const isTerminalMode = activeSession.inputMode === 'terminal';
+      const matchingCommand = slashCommands.find(cmd => {
+        if (cmd.command !== commandText) return false;
+        // Apply mode filtering (same as autocomplete)
+        if (cmd.terminalOnly && !isTerminalMode) return false;
+        if (cmd.aiOnly && isTerminalMode) return false;
+        return true;
+      });
 
       if (matchingCommand) {
         matchingCommand.execute({
@@ -1651,6 +1658,30 @@ export default function MaestroConsole() {
           spawnBackgroundSynopsis
         });
 
+        setInputValue('');
+        setSlashCommandOpen(false);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        return;
+      }
+
+      // Check if command exists but isn't available in current mode
+      const existingCommand = slashCommands.find(cmd => cmd.command === commandText);
+      if (existingCommand) {
+        // Command exists but not available in this mode - show error and don't send to AI
+        const modeLabel = isTerminalMode ? 'AI' : 'terminal';
+        const targetLogKey = activeSession.inputMode === 'ai' ? 'aiLogs' : 'shellLogs';
+        setSessions(prev => prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          return {
+            ...s,
+            [targetLogKey]: [...s[targetLogKey], {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'system',
+              text: `${commandText} is only available in ${modeLabel} mode.`
+            }]
+          };
+        }));
         setInputValue('');
         setSlashCommandOpen(false);
         if (inputRef.current) inputRef.current.style.height = 'auto';
@@ -2234,21 +2265,11 @@ export default function MaestroConsole() {
       // Jump to root - select first item
       targetIndex = 0;
     } else {
-      // Find the folder in the flat list, then select its first child
+      // Find the folder in the flat list and select it directly
       const folderIndex = flatFileList.findIndex(item => item.fullPath === jumpPath && item.isFolder);
 
-      if (folderIndex !== -1 && folderIndex + 1 < flatFileList.length) {
-        // Check if the next item is a child of this folder
-        const nextItem = flatFileList[folderIndex + 1];
-        if (nextItem.fullPath.startsWith(jumpPath + '/')) {
-          // Select the first child
-          targetIndex = folderIndex + 1;
-        } else {
-          // Folder has no visible children, select the folder itself
-          targetIndex = folderIndex;
-        }
-      } else if (folderIndex !== -1) {
-        // Folder found but no children, select the folder
+      if (folderIndex !== -1) {
+        // Select the folder itself (not its first child)
         targetIndex = folderIndex;
       }
       // If folder not found, stay at 0
