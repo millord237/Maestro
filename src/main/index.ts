@@ -710,39 +710,50 @@ function setupIpcHandlers() {
 
             let firstUserMessage = '';
             let timestamp = stats.mtime.toISOString();
-            let messageCount = 0;
 
-            // Token usage tracking for cost calculation
-            let totalInputTokens = 0;
-            let totalOutputTokens = 0;
-            let totalCacheReadTokens = 0;
-            let totalCacheCreationTokens = 0;
+            // Fast regex-based extraction to avoid parsing JSON for every line
+            // Count user and assistant messages using "type":"user" and "type":"assistant" patterns
+            const userMessageCount = (content.match(/"type"\s*:\s*"user"/g) || []).length;
+            const assistantMessageCount = (content.match(/"type"\s*:\s*"assistant"/g) || []).length;
+            const messageCount = userMessageCount + assistantMessageCount;
 
-            // Parse lines to find first user message, count messages, and sum usage
-            for (const line of lines) {
+            // Extract first user message content - parse only first few lines
+            for (let i = 0; i < Math.min(lines.length, 20); i++) {
               try {
-                const entry = JSON.parse(line);
-                if (entry.type === 'user' && entry.message?.content && !firstUserMessage) {
+                const entry = JSON.parse(lines[i]);
+                if (entry.type === 'user' && entry.message?.content) {
                   firstUserMessage = typeof entry.message.content === 'string'
                     ? entry.message.content
                     : JSON.stringify(entry.message.content);
                   timestamp = entry.timestamp || timestamp;
-                }
-                if (entry.type === 'user' || entry.type === 'assistant') {
-                  messageCount++;
-                }
-                // Sum up token usage from assistant messages
-                if (entry.type === 'assistant' && entry.message?.usage) {
-                  const usage = entry.message.usage;
-                  totalInputTokens += usage.input_tokens || 0;
-                  totalOutputTokens += usage.output_tokens || 0;
-                  totalCacheReadTokens += usage.cache_read_input_tokens || 0;
-                  totalCacheCreationTokens += usage.cache_creation_input_tokens || 0;
+                  break; // Found first user message, stop parsing
                 }
               } catch {
                 // Skip malformed lines
               }
             }
+
+            // Fast regex-based token extraction for cost calculation
+            let totalInputTokens = 0;
+            let totalOutputTokens = 0;
+            let totalCacheReadTokens = 0;
+            let totalCacheCreationTokens = 0;
+
+            // Match "input_tokens":NUMBER pattern
+            const inputMatches = content.matchAll(/"input_tokens"\s*:\s*(\d+)/g);
+            for (const m of inputMatches) totalInputTokens += parseInt(m[1], 10);
+
+            // Match "output_tokens":NUMBER pattern
+            const outputMatches = content.matchAll(/"output_tokens"\s*:\s*(\d+)/g);
+            for (const m of outputMatches) totalOutputTokens += parseInt(m[1], 10);
+
+            // Match "cache_read_input_tokens":NUMBER pattern
+            const cacheReadMatches = content.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g);
+            for (const m of cacheReadMatches) totalCacheReadTokens += parseInt(m[1], 10);
+
+            // Match "cache_creation_input_tokens":NUMBER pattern
+            const cacheCreationMatches = content.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g);
+            for (const m of cacheCreationMatches) totalCacheCreationTokens += parseInt(m[1], 10);
 
             // Calculate cost estimate using Claude Sonnet 4 pricing:
             // Input: $3 per million tokens, Output: $15 per million tokens
