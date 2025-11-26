@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Bot, User, ExternalLink, Copy, Check } from 'lucide-react';
+import { X, Bot, User, ExternalLink, Copy, Check, CheckCircle, XCircle } from 'lucide-react';
 import type { Theme, HistoryEntry } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -105,6 +105,24 @@ export function HistoryDetailModal({
           style={{ borderColor: theme.colors.border }}
         >
           <div className="flex items-center gap-3">
+            {/* Success/Failure Indicator for AUTO entries */}
+            {entry.type === 'AUTO' && entry.success !== undefined && (
+              <span
+                className="flex items-center justify-center w-6 h-6 rounded-full"
+                style={{
+                  backgroundColor: entry.success ? theme.colors.success + '20' : theme.colors.error + '20',
+                  border: `1px solid ${entry.success ? theme.colors.success + '40' : theme.colors.error + '40'}`
+                }}
+                title={entry.success ? 'Task completed successfully' : 'Task failed'}
+              >
+                {entry.success ? (
+                  <CheckCircle className="w-4 h-4" style={{ color: theme.colors.success }} />
+                ) : (
+                  <XCircle className="w-4 h-4" style={{ color: theme.colors.error }} />
+                )}
+              </span>
+            )}
+
             {/* Type Pill */}
             <span
               className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"

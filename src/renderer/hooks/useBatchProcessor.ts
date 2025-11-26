@@ -182,41 +182,41 @@ export function useBatchProcessor({
           }
         }));
 
-        // Add history entry for this task
-        if (result.success) {
-          // Extract a summary from the response (first 1-2 sentences, max ~150 chars)
-          const fullResponse = result.response || '';
-          let summary = `Task ${i + 1} of ${totalTasks}`;
+        // Add history entry for this task (both success and failure)
+        const fullResponse = result.response || '';
+        let summary = `Task ${i + 1} of ${totalTasks}`;
 
-          if (fullResponse) {
-            // Try to extract meaningful text - skip ANSI codes and find actual content
-            const cleanResponse = fullResponse
-              .replace(/\x1b\[[0-9;]*m/g, '') // Remove ANSI codes
-              .replace(/─+/g, '') // Remove horizontal lines
-              .replace(/[│┌┐└┘├┤┬┴┼]/g, '') // Remove box drawing chars
-              .trim();
+        if (fullResponse) {
+          // Try to extract meaningful text - skip ANSI codes and find actual content
+          const cleanResponse = fullResponse
+            .replace(/\x1b\[[0-9;]*m/g, '') // Remove ANSI codes
+            .replace(/─+/g, '') // Remove horizontal lines
+            .replace(/[│┌┐└┘├┤┬┴┼]/g, '') // Remove box drawing chars
+            .trim();
 
-            // Find first meaningful sentence(s) - skip empty lines and very short lines
-            const lines = cleanResponse.split('\n').filter(l => l.trim().length > 10);
-            if (lines.length > 0) {
-              // Take first line that looks like content, truncate to ~150 chars
-              const firstContent = lines[0].trim();
-              summary = firstContent.length > 150
-                ? firstContent.substring(0, 147) + '...'
-                : firstContent;
-            }
+          // Find first meaningful sentence(s) - skip empty lines and very short lines
+          const lines = cleanResponse.split('\n').filter(l => l.trim().length > 10);
+          if (lines.length > 0) {
+            // Take first line that looks like content, truncate to ~150 chars
+            const firstContent = lines[0].trim();
+            summary = firstContent.length > 150
+              ? firstContent.substring(0, 147) + '...'
+              : firstContent;
           }
-
-          onAddHistoryEntry({
-            type: 'AUTO',
-            timestamp: Date.now(),
-            summary,
-            fullResponse: fullResponse || undefined,
-            claudeSessionId: result.claudeSessionId,
-            projectPath: session.cwd,
-            sessionId: sessionId // Associate with this Maestro session for isolation
-          });
+        } else if (!result.success) {
+          summary = `Task ${i + 1} of ${totalTasks} failed`;
         }
+
+        onAddHistoryEntry({
+          type: 'AUTO',
+          timestamp: Date.now(),
+          summary,
+          fullResponse: fullResponse || undefined,
+          claudeSessionId: result.claudeSessionId,
+          projectPath: session.cwd,
+          sessionId: sessionId, // Associate with this Maestro session for isolation
+          success: result.success
+        });
 
         // Re-read the scratchpad file to check remaining tasks and sync to UI
         const readResult = await window.maestro.tempfile.read(writeResult.path);

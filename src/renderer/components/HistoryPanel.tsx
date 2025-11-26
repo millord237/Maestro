@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
-import { Bot, User, ExternalLink } from 'lucide-react';
+import { Bot, User, ExternalLink, Check, X } from 'lucide-react';
 import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
 
@@ -226,6 +226,24 @@ export const HistoryPanel = forwardRef<HistoryPanelHandle, HistoryPanelProps>(fu
                 {/* Header Row */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
+                    {/* Success/Failure Indicator for AUTO entries */}
+                    {entry.type === 'AUTO' && entry.success !== undefined && (
+                      <span
+                        className="flex items-center justify-center w-5 h-5 rounded-full"
+                        style={{
+                          backgroundColor: entry.success ? theme.colors.success + '20' : theme.colors.error + '20',
+                          border: `1px solid ${entry.success ? theme.colors.success + '40' : theme.colors.error + '40'}`
+                        }}
+                        title={entry.success ? 'Task completed successfully' : 'Task failed'}
+                      >
+                        {entry.success ? (
+                          <Check className="w-3 h-3" style={{ color: theme.colors.success }} />
+                        ) : (
+                          <X className="w-3 h-3" style={{ color: theme.colors.error }} />
+                        )}
+                      </span>
+                    )}
+
                     {/* Type Pill */}
                     <span
                       className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
