@@ -320,7 +320,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
           <div className="px-2 py-0.5 rounded text-xs font-bold" style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.textDim }}>ESC</div>
         </div>
         {!renamingSession && (
-          <div className="overflow-y-auto py-2" ref={scrollContainerRef} onScroll={handleScroll}>
+          <div className="overflow-y-auto py-2 scrollbar-thin" ref={scrollContainerRef} onScroll={handleScroll}>
             {filtered.map((a, i) => {
               // Calculate dynamic number badge (1-8) based on first visible item
               const distanceFromFirstVisible = i - firstVisibleIndex;

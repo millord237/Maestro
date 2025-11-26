@@ -441,7 +441,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
         </div>
 
         {/* Process tree */}
-        <div className="overflow-y-auto flex-1">
+        <div className="overflow-y-auto flex-1 scrollbar-thin">
           {processTree.length === 0 ? (
             <div
               className="px-6 py-8 text-center"

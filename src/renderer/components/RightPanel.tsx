@@ -142,7 +142,7 @@ export function RightPanel(props: RightPanelProps) {
       {/* Tab Content */}
       <div
         ref={fileTreeContainerRef}
-        className="flex-1 px-4 pb-4 overflow-y-auto min-w-[24rem] outline-none"
+        className="flex-1 px-4 pb-4 overflow-y-auto min-w-[24rem] outline-none scrollbar-thin"
         tabIndex={-1}
         onClick={() => {
           setActiveFocus('right');

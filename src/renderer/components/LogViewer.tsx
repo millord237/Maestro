@@ -355,7 +355,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
       {/* Logs Container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-2 outline-none"
+        className="flex-1 overflow-y-auto p-4 space-y-2 outline-none scrollbar-thin"
         tabIndex={-1}
         style={{ backgroundColor: theme.colors.bgMain }}
       >
@@ -421,7 +421,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
                       </button>
                       {expandedData.has(index) && (
                         <pre
-                          className="text-xs mt-1 p-2 rounded overflow-x-auto font-mono"
+                          className="text-xs mt-1 p-2 rounded overflow-x-auto font-mono scrollbar-thin"
                           style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.textDim }}
                         >
                           {JSON.stringify(log.data, null, 2)}

@@ -81,7 +81,7 @@ export function InputArea(props: InputAreaProps) {
   return (
     <div className="relative p-4 border-t" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
       {stagedImages.length > 0 && (
-        <div className="flex gap-2 mb-3 pb-2 overflow-x-auto overflow-y-visible">
+        <div className="flex gap-2 mb-3 pb-2 overflow-x-auto overflow-y-visible scrollbar-thin">
           {stagedImages.map((img, idx) => (
             <div key={idx} className="relative group">
               <img
@@ -110,7 +110,7 @@ export function InputArea(props: InputAreaProps) {
           className="absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-2xl max-h-64 overflow-hidden"
           style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
         >
-          <div className="overflow-y-auto max-h-64">
+          <div className="overflow-y-auto max-h-64 scrollbar-thin">
             {filteredSlashCommands.map((cmd, idx) => (
               <div
                 key={cmd.command}
@@ -186,7 +186,7 @@ export function InputArea(props: InputAreaProps) {
               }}
             />
           </div>
-          <div className="max-h-48 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto scrollbar-thin">
             {Array.from(new Set(currentCommandHistory))
               .filter(cmd => cmd.toLowerCase().includes(commandHistoryFilter.toLowerCase()))
               .reverse()

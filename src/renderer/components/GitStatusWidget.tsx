@@ -164,7 +164,7 @@ export function GitStatusWidget({ cwd, isGitRepo, theme, onViewDiff }: GitStatus
         >
           Changed Files ({totalChanges}) • +{additions} −{deletions}
         </div>
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-96 overflow-y-auto scrollbar-thin">
           {fileChanges.map((file, idx) => {
             const total = file.additions + file.deletions;
             const maxBarWidth = 60; // Max width in pixels for the bar

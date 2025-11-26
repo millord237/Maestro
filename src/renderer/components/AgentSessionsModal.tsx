@@ -327,7 +327,7 @@ export function AgentSessionsModal({
         {viewingSession ? (
           <div
             ref={messagesContainerRef}
-            className="flex-1 overflow-y-auto p-4 space-y-4"
+            className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin"
             onScroll={handleMessagesScroll}
           >
             {/* Load more indicator */}
@@ -380,7 +380,7 @@ export function AgentSessionsModal({
             )}
           </div>
         ) : (
-          <div className="overflow-y-auto py-2 flex-1">
+          <div className="overflow-y-auto py-2 flex-1 scrollbar-thin">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin" style={{ color: theme.colors.textDim }} />

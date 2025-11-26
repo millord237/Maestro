@@ -477,7 +477,7 @@ export function AgentSessionsBrowser({
       {viewingSession ? (
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto p-6 space-y-4 outline-none"
+          className="flex-1 overflow-y-auto p-6 space-y-4 outline-none scrollbar-thin"
           onScroll={handleMessagesScroll}
           onKeyDown={handleKeyDown}
           tabIndex={0}
@@ -651,7 +651,7 @@ export function AgentSessionsBrowser({
           </div>
 
           {/* Session list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto scrollbar-thin">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin" style={{ color: theme.colors.textDim }} />

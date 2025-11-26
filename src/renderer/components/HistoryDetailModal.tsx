@@ -146,7 +146,7 @@ export function HistoryDetailModal({
 
         {/* Content */}
         <div
-          className="flex-1 overflow-y-auto px-6 py-5"
+          className="flex-1 overflow-y-auto px-6 py-5 scrollbar-thin"
           style={{ color: theme.colors.textMain }}
         >
           <pre

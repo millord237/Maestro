@@ -317,7 +317,7 @@ export function Scratchpad({
         ) : (
           <div
             ref={previewRef}
-            className="h-full border rounded p-4 overflow-y-auto prose prose-sm max-w-none outline-none"
+            className="h-full border rounded p-4 overflow-y-auto prose prose-sm max-w-none outline-none scrollbar-thin"
             tabIndex={0}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 'e') {

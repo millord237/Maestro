@@ -223,7 +223,7 @@ export function SessionList(props: SessionListProps) {
 
       {/* SIDEBAR CONTENT: EXPANDED */}
       {leftSidebarOpen ? (
-        <div className="flex-1 overflow-y-auto py-2 select-none">
+        <div className="flex-1 overflow-y-auto py-2 select-none scrollbar-thin">
           {/* Session Filter */}
           {sessionFilterOpen && (
             <div className="mx-3 mb-3">

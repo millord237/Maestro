@@ -88,7 +88,7 @@ export function ShortcutsHelpModal({ theme, shortcuts, onClose }: ShortcutsHelpM
             autoFocus
           />
         </div>
-        <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto">
+        <div className="p-4 space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
           {filteredShortcuts.map((sc, i) => (
             <div key={i} className="flex justify-between items-center text-sm">
               <span style={{ color: theme.colors.textDim }}>{sc.label}</span>

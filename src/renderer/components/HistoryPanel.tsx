@@ -174,7 +174,7 @@ export function HistoryPanel({ session, theme, onJumpToClaudeSession }: HistoryP
       {/* History List */}
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto space-y-3 outline-none"
+        className="flex-1 overflow-y-auto space-y-3 outline-none scrollbar-thin"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >

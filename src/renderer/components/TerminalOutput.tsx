@@ -562,7 +562,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             </div>
           )}
           {log.images && log.images.length > 0 && (
-            <div className="flex gap-2 mb-2 overflow-x-auto">
+            <div className="flex gap-2 mb-2 overflow-x-auto scrollbar-thin">
               {log.images.map((img, imgIdx) => (
                 <img key={imgIdx} src={img} className="h-20 rounded border cursor-zoom-in" onClick={() => setLightboxImage(img)} />
               ))}
@@ -618,7 +618,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           ) : shouldCollapse && isExpanded ? (
             <div>
               <div
-                className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre-wrap text-sm overflow-x-auto' : 'whitespace-pre-wrap text-sm'}`}
+                className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre-wrap text-sm overflow-x-auto scrollbar-thin' : 'whitespace-pre-wrap text-sm'}`}
                 style={{
                   maxHeight: '600px',
                   overflow: 'auto',
@@ -654,7 +654,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             <>
               {isTerminal && log.source !== 'user' ? (
                 <div
-                  className="whitespace-pre-wrap text-sm overflow-x-auto"
+                  className="whitespace-pre-wrap text-sm overflow-x-auto scrollbar-thin"
                   dangerouslySetInnerHTML={{ __html: displayHtmlContent }}
                   style={{ color: theme.colors.textMain, fontFamily }}
                 />

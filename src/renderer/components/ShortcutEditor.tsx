@@ -39,7 +39,7 @@ export function ShortcutEditor({ theme, shortcuts, setShortcuts }: ShortcutEdito
   };
 
   return (
-    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
       {Object.values(shortcuts).map(sc => (
         <div key={sc.id} className="flex items-center justify-between p-3 rounded border" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}>
           <span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>{sc.label}</span>
