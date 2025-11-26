@@ -95,6 +95,19 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('process:command-exit', handler);
       return () => ipcRenderer.removeListener('process:command-exit', handler);
     },
+    // Usage statistics listener for AI responses
+    onUsage: (callback: (sessionId: string, usageStats: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      totalCostUsd: number;
+      contextWindow: number;
+    }) => void) => {
+      const handler = (_: any, sessionId: string, usageStats: any) => callback(sessionId, usageStats);
+      ipcRenderer.on('process:usage', handler);
+      return () => ipcRenderer.removeListener('process:usage', handler);
+    },
   },
 
   // Git API
@@ -207,6 +220,14 @@ export interface MaestroAPI {
     onSessionId: (callback: (sessionId: string, claudeSessionId: string) => void) => () => void;
     onStderr: (callback: (sessionId: string, data: string) => void) => () => void;
     onCommandExit: (callback: (sessionId: string, code: number) => void) => () => void;
+    onUsage: (callback: (sessionId: string, usageStats: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      totalCostUsd: number;
+      contextWindow: number;
+    }) => void) => () => void;
   };
   git: {
     status: (cwd: string) => Promise<string>;

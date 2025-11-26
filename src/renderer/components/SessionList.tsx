@@ -520,6 +520,16 @@ export function SessionList(props: SessionListProps) {
                     </div>
                   )}
 
+                  {/* Session Cost */}
+                  {session.usageStats && session.usageStats.totalCostUsd > 0 && (
+                    <div className="flex items-center justify-between text-[10px] pt-1">
+                      <span style={{ color: theme.colors.textDim }}>Session Cost</span>
+                      <span className="font-mono font-bold" style={{ color: theme.colors.success }}>
+                        ${session.usageStats.totalCostUsd.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-1.5 text-[10px] font-mono pt-1" style={{ color: theme.colors.textDim }}>
                     <Folder className="w-3 h-3 shrink-0" />
                     <span className="truncate">{session.cwd}</span>

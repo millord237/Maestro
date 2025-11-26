@@ -5,6 +5,7 @@ import type { Session, Theme } from '../types';
 interface SlashCommand {
   command: string;
   description: string;
+  terminalOnly?: boolean;
 }
 
 interface InputAreaProps {
@@ -50,10 +51,14 @@ export function InputArea(props: InputAreaProps) {
     toggleInputMode, processInput, handleInterrupt, onInputFocus
   } = props;
 
-  // Filter slash commands based on input
-  const filteredSlashCommands = slashCommands.filter(cmd =>
-    cmd.command.toLowerCase().startsWith(inputValue.toLowerCase())
-  );
+  // Filter slash commands based on input and current mode
+  const isTerminalMode = session.inputMode === 'terminal';
+  const filteredSlashCommands = slashCommands.filter(cmd => {
+    // Check if command is only available in terminal mode
+    if (cmd.terminalOnly && !isTerminalMode) return false;
+    // Check if command matches input
+    return cmd.command.toLowerCase().startsWith(inputValue.toLowerCase());
+  });
 
   return (
     <div className="relative p-4 border-t" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
@@ -204,11 +209,21 @@ export function InputArea(props: InputAreaProps) {
 
       <div className="flex gap-3">
         <div className="flex-1 relative border rounded-lg bg-opacity-50 flex flex-col" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}>
-          <textarea
-            ref={inputRef}
-            className="w-full bg-transparent text-sm outline-none p-3 resize-none min-h-[2.5rem] max-h-[8rem] scrollbar-thin"
-            style={{ color: theme.colors.textMain }}
-            placeholder={session.inputMode === 'terminal' ? "Run shell command..." : "Ask Claude..."}
+          <div className="flex items-start">
+            {/* Terminal mode prefix */}
+            {isTerminalMode && (
+              <span
+                className="text-sm font-mono font-bold select-none pl-3 pt-3"
+                style={{ color: theme.colors.accent }}
+              >
+                $
+              </span>
+            )}
+            <textarea
+              ref={inputRef}
+              className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] max-h-[8rem] scrollbar-thin`}
+              style={{ color: theme.colors.textMain }}
+              placeholder={isTerminalMode ? "Run shell command..." : "Ask Claude..."}
             value={inputValue}
             onFocus={onInputFocus}
             onChange={e => {
@@ -232,12 +247,13 @@ export function InputArea(props: InputAreaProps) {
             onDrop={handleDrop}
             onDragOver={e => e.preventDefault()}
             rows={1}
-          />
+            />
+          </div>
 
           <div className="flex justify-between items-center px-2 pb-2">
             <div className="flex gap-1 items-center">
               {session.inputMode === 'terminal' && (
-                <div className="text-[10px] font-mono opacity-50 px-2" style={{ color: theme.colors.textDim }}>
+                <div className="text-xs font-mono opacity-60 px-2" style={{ color: theme.colors.textDim }}>
                   {(session.shellCwd || session.cwd)?.replace(/^\/Users\/[^\/]+/, '~') || '~'}
                 </div>
               )}

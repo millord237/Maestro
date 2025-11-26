@@ -157,11 +157,9 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
 
       {/* Header with CWD and controls */}
       <div
-        className="sticky top-0 z-10 flex items-center justify-between text-xs font-bold pt-4 pb-2 mb-2 -mx-4 px-4"
+        className="sticky top-0 z-10 flex items-center justify-between text-xs font-bold pt-4 pb-2 mb-2"
         style={{
-          backgroundColor: theme.colors.bgSidebar,
-          borderLeft: activeFocus === 'right' && activeRightTab === 'files' ? `1px solid ${theme.colors.accent}` : 'none',
-          borderRight: activeFocus === 'right' && activeRightTab === 'files' ? `1px solid ${theme.colors.accent}` : 'none'
+          backgroundColor: theme.colors.bgSidebar
         }}
       >
         <span className="opacity-50">{session.cwd}</span>

@@ -102,7 +102,8 @@ export class ProcessManager extends EventEmitter {
 
     if (hasImages && prompt) {
       // Use stream-json mode for images - prompt will be sent via stdin
-      finalArgs = [...args, '--input-format', 'stream-json', '--output-format', 'stream-json', '-p'];
+      // Note: --verbose is required when using --print with --output-format=stream-json
+      finalArgs = [...args, '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json', '-p'];
     } else if (prompt) {
       // Regular batch mode - prompt as CLI arg
       // The -- ensures prompt is treated as positional arg, not a flag (even if it starts with --)
@@ -368,12 +369,38 @@ export class ProcessManager extends EventEmitter {
                 this.emit('session-id', sessionId, jsonResponse.session_id);
               }
 
+              // Extract and emit usage statistics
+              if (jsonResponse.usage || jsonResponse.total_cost_usd !== undefined) {
+                const usage = jsonResponse.usage || {};
+                // Extract context window from modelUsage (first model found)
+                let contextWindow = 200000; // Default for Claude
+                if (jsonResponse.modelUsage) {
+                  const firstModel = Object.values(jsonResponse.modelUsage)[0] as any;
+                  if (firstModel?.contextWindow) {
+                    contextWindow = firstModel.contextWindow;
+                  }
+                }
+
+                const usageStats = {
+                  inputTokens: usage.input_tokens || 0,
+                  outputTokens: usage.output_tokens || 0,
+                  cacheReadInputTokens: usage.cache_read_input_tokens || 0,
+                  cacheCreationInputTokens: usage.cache_creation_input_tokens || 0,
+                  totalCostUsd: jsonResponse.total_cost_usd || 0,
+                  contextWindow
+                };
+
+                console.log('[ProcessManager] Emitting usage stats:', usageStats);
+                this.emit('usage', sessionId, usageStats);
+              }
+
               // Emit full response for debugging
               console.log('[ProcessManager] Batch mode JSON response:', {
                 sessionId,
                 hasResult: !!jsonResponse.result,
                 hasSessionId: !!jsonResponse.session_id,
-                sessionIdValue: jsonResponse.session_id
+                sessionIdValue: jsonResponse.session_id,
+                hasCost: jsonResponse.total_cost_usd !== undefined
               });
             } catch (error) {
               console.error('[ProcessManager] Failed to parse JSON response:', error);

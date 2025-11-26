@@ -60,6 +60,16 @@ export interface WorkLogItem {
   relatedFiles?: number;
 }
 
+// Usage statistics from Claude Code CLI
+export interface UsageStats {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  totalCostUsd: number;
+  contextWindow: number; // e.g., 200000 for Claude
+}
+
 export interface Session {
   id: string;
   groupId?: string;
@@ -73,6 +83,8 @@ export interface Session {
   workLog: WorkLogItem[];
   scratchPadContent: string;
   contextUsage: number;
+  // Usage statistics from AI responses
+  usageStats?: UsageStats;
   inputMode: 'terminal' | 'ai';
   // Dual-process PIDs: each session has both AI and terminal processes
   aiPid: number;

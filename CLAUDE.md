@@ -123,6 +123,7 @@ All process operations go through IPC handlers in `src/main/index.ts`:
 Events are emitted back to renderer via:
 - `process:data` - Stdout/stderr output
 - `process:exit` - Process exit code
+- `process:usage` - Usage statistics from AI responses (tokens, cost, context window)
 
 ### Session Model
 
@@ -134,6 +135,7 @@ Each "session" is a unified abstraction running **two processes simultaneously**
 - `inputMode` - Input routing mode ('terminal' or 'ai')
 - `aiPid` - Process ID for the AI agent process
 - `terminalPid` - Process ID for the terminal process
+- `usageStats` - Token usage and cost statistics from AI responses (optional)
 
 This dual-process model allows seamless switching between AI and terminal modes without restarting processes. Input is routed to the appropriate process based on `inputMode`.
 
@@ -226,6 +228,7 @@ Maestro implements an extensible slash command system in `src/renderer/slashComm
 export interface SlashCommand {
   command: string;        // The command string (e.g., "/clear")
   description: string;    // Human-readable description
+  terminalOnly?: boolean; // Only show in terminal mode (optional)
   execute: (context: SlashCommandContext) => void;  // Command handler
 }
 ```
@@ -236,15 +239,17 @@ export interface SlashCommand {
 - Keyboard navigation with arrow keys, Tab/Enter to select
 - Commands receive execution context (activeSessionId, sessions, setSessions, currentMode)
 - Commands can modify session state, trigger actions, or interact with IPC
+- Commands can be mode-specific using `terminalOnly: true` flag
 
 **Adding new commands:**
 1. Add new entry to `slashCommands` array in `src/renderer/slashCommands.ts`
 2. Implement `execute` function with desired behavior
-3. Command automatically appears in autocomplete
+3. Optionally set `terminalOnly: true` to restrict to terminal mode
+4. Command automatically appears in autocomplete (filtered by mode)
 
 **Current commands:**
 - `/clear` - Clears output history for current mode (AI or terminal)
-- `/jump` - Jumps to current working directory in file tree, expanding parent folders and focusing the tree
+- `/jump` - Jumps to current working directory in file tree (terminal mode only)
 
 ### Layer Stack System
 

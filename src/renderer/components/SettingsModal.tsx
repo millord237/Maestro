@@ -4,6 +4,11 @@ import type { AgentConfig, Theme, Shortcut, ShellInfo } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
+// Feature flags - set to true to enable dormant features
+const FEATURE_FLAGS = {
+  LLM_SETTINGS: false,  // LLM provider configuration (OpenRouter, Anthropic, Ollama)
+};
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -133,7 +138,9 @@ export function SettingsModal(props: SettingsModalProps) {
     if (!isOpen) return;
 
     const handleTabNavigation = (e: KeyboardEvent) => {
-      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network'> = ['general', 'llm', 'shortcuts', 'theme', 'network'];
+      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network'> = FEATURE_FLAGS.LLM_SETTINGS
+        ? ['general', 'llm', 'shortcuts', 'theme', 'network']
+        : ['general', 'shortcuts', 'theme', 'network'];
       const currentIndex = tabs.indexOf(activeTab);
 
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
@@ -499,7 +506,9 @@ export function SettingsModal(props: SettingsModalProps) {
 
         <div className="flex border-b" style={{ borderColor: theme.colors.border }}>
           <button onClick={() => setActiveTab('general')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'general' ? 'border-indigo-500' : 'border-transparent'}`} tabIndex={-1}>General</button>
-          <button onClick={() => setActiveTab('llm')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'llm' ? 'border-indigo-500' : 'border-transparent'}`} tabIndex={-1}>LLM</button>
+          {FEATURE_FLAGS.LLM_SETTINGS && (
+            <button onClick={() => setActiveTab('llm')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'llm' ? 'border-indigo-500' : 'border-transparent'}`} tabIndex={-1}>LLM</button>
+          )}
           <button onClick={() => setActiveTab('shortcuts')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'shortcuts' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1}>
             Shortcuts
             <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
@@ -1133,7 +1142,7 @@ export function SettingsModal(props: SettingsModalProps) {
             </div>
           )}
 
-          {activeTab === 'llm' && (
+          {activeTab === 'llm' && FEATURE_FLAGS.LLM_SETTINGS && (
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-bold opacity-70 uppercase mb-2">LLM Provider</label>

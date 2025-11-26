@@ -1,6 +1,7 @@
 export interface SlashCommand {
   command: string;
   description: string;
+  terminalOnly?: boolean; // Only show this command in terminal mode
   execute: (context: SlashCommandContext) => void;
 }
 
@@ -42,6 +43,7 @@ export const slashCommands: SlashCommand[] = [
   {
     command: '/jump',
     description: 'Jump to CWD in file tree',
+    terminalOnly: true, // Only available in terminal mode
     execute: (context: SlashCommandContext) => {
       const { activeSessionId, sessions, setSessions, setRightPanelOpen, setActiveRightTab, setActiveFocus } = context;
 

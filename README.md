@@ -31,6 +31,7 @@ Download the latest release for your platform from the [Releases](https://github
 - 📝 **Scratchpad** - Built-in markdown editor with live preview
 - ⚡ **Slash Commands** - Extensible command system with autocomplete
 - 🌐 **Remote Access** - Built-in web server with optional ngrok/Cloudflare tunneling
+- 💰 **Cost Tracking** - Real-time token usage and cost tracking per session
 
 > **Note**: Maestro currently supports Claude Code only. Support for other agentic coding tools may be added in future releases based on community demand.
 
@@ -84,6 +85,7 @@ Each session shows a color-coded status indicator:
 | Go to History Tab | `Cmd+Shift+H` | `Ctrl+Shift+H` |
 | Go to Scratchpad | `Cmd+Shift+S` | `Ctrl+Shift+S` |
 | Toggle Markdown Raw/Preview | `Cmd+E` | `Ctrl+E` |
+| Insert Checkbox (Scratchpad) | `Cmd+L` | `Ctrl+L` |
 
 ### Input & Output
 
@@ -130,7 +132,7 @@ Maestro includes an extensible slash command system with autocomplete:
 | Command | Description |
 |---------|-------------|
 | `/clear` | Clear the output history for the current mode |
-| `/jump` | Jump to current working directory in file tree |
+| `/jump` | Jump to current working directory in file tree (terminal mode only) |
 
 Type `/` in the input area to open the autocomplete menu, use arrow keys to navigate, and press `Tab` or `Enter` to select.
 

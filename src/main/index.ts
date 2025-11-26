@@ -999,5 +999,18 @@ function setupProcessListeners() {
     processManager.on('command-exit', (sessionId: string, code: number) => {
       mainWindow?.webContents.send('process:command-exit', sessionId, code);
     });
+
+    // Handle usage statistics from AI responses
+    processManager.on('usage', (sessionId: string, usageStats: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      totalCostUsd: number;
+      contextWindow: number;
+    }) => {
+      console.log('[IPC] Forwarding process:usage to renderer:', { sessionId, usageStats });
+      mainWindow?.webContents.send('process:usage', sessionId, usageStats);
+    });
   }
 }

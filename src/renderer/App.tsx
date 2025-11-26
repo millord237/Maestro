@@ -468,20 +468,27 @@ export default function MaestroConsole() {
       setSessions(prev => prev.map(s => {
         if (s.id !== actualSessionId) return s;
 
-        // Route to correct log array based on which process exited
-        const targetLogKey = isFromAi ? 'aiLogs' : 'shellLogs';
-        const processType = isFromAi ? 'AI agent' : 'Terminal';
+        // For AI agent exits, just update state without adding log entry
+        // For terminal exits, show the exit code
+        if (isFromAi) {
+          return {
+            ...s,
+            state: 'idle' as SessionState
+          };
+        }
+
+        // Terminal exit - show exit code
         const exitLog: LogEntry = {
           id: generateId(),
           timestamp: Date.now(),
           source: 'system',
-          text: `${processType} process exited with code ${code}`
+          text: `Terminal process exited with code ${code}`
         };
 
         return {
           ...s,
           state: 'idle' as SessionState,
-          [targetLogKey]: [...s[targetLogKey], exitLog]
+          shellLogs: [...s.shellLogs, exitLog]
         };
       }));
     });
@@ -572,6 +579,40 @@ export default function MaestroConsole() {
       }));
     });
 
+    // Handle usage statistics from AI responses
+    const unsubscribeUsage = window.maestro.process.onUsage((sessionId: string, usageStats) => {
+      console.log('[onUsage] Received usage stats:', usageStats, 'for session:', sessionId);
+
+      // Parse sessionId to get actual session ID (handles -ai suffix)
+      let actualSessionId: string;
+      if (sessionId.endsWith('-ai')) {
+        actualSessionId = sessionId.slice(0, -3);
+      } else {
+        actualSessionId = sessionId;
+      }
+
+      setSessions(prev => prev.map(s => {
+        if (s.id !== actualSessionId) return s;
+
+        // Calculate total tokens used for context percentage
+        const totalTokens = usageStats.inputTokens + usageStats.outputTokens +
+                          usageStats.cacheReadInputTokens + usageStats.cacheCreationInputTokens;
+        const contextPercentage = Math.min(Math.round((totalTokens / usageStats.contextWindow) * 100), 100);
+
+        // Accumulate cost if there's already usage stats
+        const existingCost = s.usageStats?.totalCostUsd || 0;
+
+        return {
+          ...s,
+          contextUsage: contextPercentage,
+          usageStats: {
+            ...usageStats,
+            totalCostUsd: existingCost + usageStats.totalCostUsd
+          }
+        };
+      }));
+    });
+
     // Cleanup listeners on unmount
     return () => {
       unsubscribeData();
@@ -579,6 +620,7 @@ export default function MaestroConsole() {
       unsubscribeSessionId();
       unsubscribeStderr();
       unsubscribeCommandExit();
+      unsubscribeUsage();
     };
   }, []);
 

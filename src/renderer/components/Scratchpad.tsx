@@ -101,6 +101,42 @@ export function Scratchpad({
       return;
     }
 
+    // Command-L to insert a markdown checkbox
+    if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+      e.preventDefault();
+      e.stopPropagation();
+      const textarea = e.currentTarget;
+      const cursorPos = textarea.selectionStart;
+      const textBeforeCursor = content.substring(0, cursorPos);
+      const textAfterCursor = content.substring(cursorPos);
+
+      // Check if we're at the start of a line or have text before
+      const lastNewline = textBeforeCursor.lastIndexOf('\n');
+      const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+      const textOnCurrentLine = textBeforeCursor.substring(lineStart);
+
+      let newContent: string;
+      let newCursorPos: number;
+
+      if (textOnCurrentLine.length === 0) {
+        // At start of line, just insert checkbox
+        newContent = textBeforeCursor + '- [ ] ' + textAfterCursor;
+        newCursorPos = cursorPos + 6; // "- [ ] " is 6 chars
+      } else {
+        // In middle of line, insert newline then checkbox
+        newContent = textBeforeCursor + '\n- [ ] ' + textAfterCursor;
+        newCursorPos = cursorPos + 7; // "\n- [ ] " is 7 chars
+      }
+
+      onChange(newContent);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       const textarea = e.currentTarget;
       const cursorPos = textarea.selectionStart;

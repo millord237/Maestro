@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot } from 'lucide-react';
+import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign } from 'lucide-react';
 import type { Theme, Session, LogEntry } from '../types';
+import { useLayerStack } from '../contexts/LayerStackContext';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 type SearchMode = 'title' | 'user' | 'assistant' | 'all';
 
@@ -67,6 +69,53 @@ export function AgentSessionsBrowser({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const searchModeDropdownRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const layerIdRef = useRef<string>();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const viewingSessionRef = useRef(viewingSession);
+  viewingSessionRef.current = viewingSession;
+
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+
+  // Register layer on mount for Escape key handling
+  useEffect(() => {
+    layerIdRef.current = registerLayer({
+      type: 'modal',
+      priority: MODAL_PRIORITIES.AGENT_SESSIONS,
+      blocksLowerLayers: true,
+      capturesFocus: true,
+      focusTrap: 'lenient',
+      ariaLabel: 'Agent Sessions Browser',
+      onEscape: () => {
+        if (viewingSessionRef.current) {
+          setViewingSession(null);
+          setMessages([]);
+        } else {
+          onCloseRef.current();
+        }
+      },
+    });
+
+    return () => {
+      if (layerIdRef.current) {
+        unregisterLayer(layerIdRef.current);
+      }
+    };
+  }, [registerLayer, unregisterLayer]);
+
+  // Update handler when viewingSession changes
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, () => {
+        if (viewingSessionRef.current) {
+          setViewingSession(null);
+          setMessages([]);
+        } else {
+          onCloseRef.current();
+        }
+      });
+    }
+  }, [viewingSession, updateLayerHandler]);
 
   // Load sessions on mount
   useEffect(() => {
@@ -508,6 +557,14 @@ export function AgentSessionsBrowser({
                   {formatSize(stats.totalSize)}
                 </span>
               </div>
+              {activeSession?.usageStats && activeSession.usageStats.totalCostUsd > 0 && (
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4" style={{ color: theme.colors.success }} />
+                  <span className="text-xs font-medium font-mono" style={{ color: theme.colors.success }}>
+                    ${activeSession.usageStats.totalCostUsd.toFixed(2)}
+                  </span>
+                </div>
+              )}
               {stats.oldestSession && (
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4" style={{ color: theme.colors.textDim }} />

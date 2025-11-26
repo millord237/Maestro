@@ -107,6 +107,8 @@ export function MainPanel(props: MainPanelProps) {
 
   // Tunnel tooltip hover state
   const [tunnelTooltipOpen, setTunnelTooltipOpen] = useState(false);
+  // Context window tooltip hover state
+  const [contextTooltipOpen, setContextTooltipOpen] = useState(false);
 
   // Handler for input focus - select session in sidebar
   const handleInputFocus = () => {
@@ -198,15 +200,6 @@ export function MainPanel(props: MainPanelProps) {
                 <span className={`text-xs px-2 py-0.5 rounded-full border ${activeSession.isGitRepo ? 'border-orange-500/30 text-orange-500 bg-orange-500/10' : 'border-blue-500/30 text-blue-500 bg-blue-500/10'}`}>
                   {activeSession.isGitRepo ? 'GIT' : 'LOCAL'}
                 </span>
-                {activeSession.inputMode === 'ai' && activeSession.claudeSessionId && (
-                  <span
-                    className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent }}
-                    title={`Session ID: ${activeSession.claudeSessionId}`}
-                  >
-                    {activeSession.claudeSessionId.split('-')[0].toUpperCase()}
-                  </span>
-                )}
               </div>
 
               <div className="relative">
@@ -270,9 +263,32 @@ export function MainPanel(props: MainPanelProps) {
                 theme={theme}
                 onViewDiff={handleViewGitDiff}
               />
+
+              {/* Session ID - moved after Git Status */}
+              {activeSession.inputMode === 'ai' && activeSession.claudeSessionId && (
+                <span
+                  className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border"
+                  style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent, borderColor: theme.colors.accent + '30' }}
+                  title={`Session ID: ${activeSession.claudeSessionId}`}
+                >
+                  {activeSession.claudeSessionId.split('-')[0].toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex flex-col items-end mr-2">
+              {/* Cost Tracker - styled as pill */}
+              {activeSession.inputMode === 'ai' && activeSession.usageStats && activeSession.usageStats.totalCostUsd > 0 && (
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
+                  ${activeSession.usageStats.totalCostUsd.toFixed(2)}
+                </span>
+              )}
+
+              {/* Context Window Widget with Tooltip */}
+              <div
+                className="flex flex-col items-end mr-2 relative cursor-pointer"
+                onMouseEnter={() => setContextTooltipOpen(true)}
+                onMouseLeave={() => setContextTooltipOpen(false)}
+              >
                 <span className="text-[10px] font-bold uppercase" style={{ color: theme.colors.textDim }}>Context Window</span>
                 <div className="w-24 h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: theme.colors.border }}>
                   <div
@@ -283,6 +299,74 @@ export function MainPanel(props: MainPanelProps) {
                     }}
                   />
                 </div>
+
+                {/* Context Window Tooltip */}
+                {contextTooltipOpen && activeSession.inputMode === 'ai' && activeSession.usageStats && (
+                  <div
+                    className="absolute top-full right-0 mt-2 w-64 border rounded-lg p-3 shadow-xl z-50"
+                    style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+                    onMouseEnter={() => setContextTooltipOpen(true)}
+                    onMouseLeave={() => setContextTooltipOpen(false)}
+                  >
+                    <div className="text-[10px] uppercase font-bold mb-3" style={{ color: theme.colors.textDim }}>Context Details</div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs" style={{ color: theme.colors.textDim }}>Input Tokens</span>
+                        <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
+                          {activeSession.usageStats.inputTokens.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs" style={{ color: theme.colors.textDim }}>Output Tokens</span>
+                        <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
+                          {activeSession.usageStats.outputTokens.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs" style={{ color: theme.colors.textDim }}>Cache Read</span>
+                        <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
+                          {activeSession.usageStats.cacheReadInputTokens.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs" style={{ color: theme.colors.textDim }}>Cache Write</span>
+                        <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
+                          {activeSession.usageStats.cacheCreationInputTokens.toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="border-t pt-2 mt-2" style={{ borderColor: theme.colors.border }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Total Tokens</span>
+                          <span className="text-xs font-mono font-bold" style={{ color: theme.colors.accent }}>
+                            {(
+                              activeSession.usageStats.inputTokens +
+                              activeSession.usageStats.outputTokens +
+                              activeSession.usageStats.cacheReadInputTokens +
+                              activeSession.usageStats.cacheCreationInputTokens
+                            ).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Size</span>
+                          <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
+                            {activeSession.usageStats.contextWindow.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Usage</span>
+                          <span
+                            className="text-xs font-mono font-bold"
+                            style={{ color: getContextColor(activeSession.contextUsage, theme) }}
+                          >
+                            {activeSession.contextUsage}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button onClick={() => setAboutModalOpen(true)} className="p-2 rounded hover:bg-white/5" title="About Maestro">
