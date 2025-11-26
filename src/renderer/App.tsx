@@ -74,6 +74,7 @@ export default function MaestroConsole() {
     audioFeedbackEnabled, setAudioFeedbackEnabled,
     audioFeedbackCommand, setAudioFeedbackCommand,
     shortcuts, setShortcuts,
+    customAICommands, setCustomAICommands,
   } = settings;
 
   // --- STATE ---
@@ -742,6 +743,16 @@ export default function MaestroConsole() {
   const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0] || null;
   const theme = THEMES[activeThemeId];
   const anyTunnelActive = sessions.some(s => s.tunnelActive);
+
+  // Combine built-in slash commands with custom AI commands for autocomplete
+  const allSlashCommands = useMemo(() => {
+    const customCommandsAsSlash = customAICommands.map(cmd => ({
+      command: cmd.command,
+      description: cmd.description,
+      aiOnly: true, // Custom AI commands are only available in AI mode
+    }));
+    return [...slashCommands, ...customCommandsAsSlash];
+  }, [customAICommands]);
 
   // Derive current input value and setter based on active session mode
   const isAiMode = activeSession?.inputMode === 'ai';
@@ -1869,6 +1880,36 @@ export default function MaestroConsole() {
         if (inputRef.current) inputRef.current.style.height = 'auto';
         return;
       }
+
+      // Check for custom AI commands (only in AI mode)
+      if (!isTerminalMode) {
+        const matchingCustomCommand = customAICommands.find(cmd => cmd.command === commandText);
+        if (matchingCustomCommand) {
+          // Execute the custom AI command by sending its prompt
+          setInputValue('');
+          setSlashCommandOpen(false);
+          if (inputRef.current) inputRef.current.style.height = 'auto';
+
+          // Add user log showing the command was executed
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSessionId) return s;
+            return {
+              ...s,
+              aiLogs: [...s.aiLogs, {
+                id: generateId(),
+                timestamp: Date.now(),
+                source: 'user',
+                text: `${commandText}: ${matchingCustomCommand.description}`
+              }],
+              aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), commandText])).slice(-50)
+            };
+          }));
+
+          // Send the custom command's prompt to the AI agent
+          spawnAgentWithPrompt(matchingCustomCommand.prompt);
+          return;
+        }
+      }
     }
 
     const currentMode = activeSession.inputMode;
@@ -2240,7 +2281,7 @@ export default function MaestroConsole() {
     // Handle slash command autocomplete
     if (slashCommandOpen) {
       const isTerminalMode = activeSession.inputMode === 'terminal';
-      const filteredCommands = slashCommands.filter(cmd => {
+      const filteredCommands = allSlashCommands.filter(cmd => {
         // Check if command is only available in terminal mode
         if (cmd.terminalOnly && !isTerminalMode) return false;
         // Check if command is only available in AI mode
@@ -2869,7 +2910,7 @@ export default function MaestroConsole() {
         commandHistoryFilter={commandHistoryFilter}
         commandHistorySelectedIndex={commandHistorySelectedIndex}
         slashCommandOpen={slashCommandOpen}
-        slashCommands={slashCommands}
+        slashCommands={allSlashCommands}
         selectedSlashCommandIndex={selectedSlashCommandIndex}
         previewFile={previewFile}
         markdownRawMode={markdownRawMode}
@@ -3135,6 +3176,8 @@ export default function MaestroConsole() {
         setAudioFeedbackEnabled={setAudioFeedbackEnabled}
         audioFeedbackCommand={audioFeedbackCommand}
         setAudioFeedbackCommand={setAudioFeedbackCommand}
+        customAICommands={customAICommands}
+        setCustomAICommands={setCustomAICommands}
         initialTab={settingsTab}
       />
 

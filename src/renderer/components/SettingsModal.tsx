@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2 } from 'lucide-react';
-import type { AgentConfig, Theme, Shortcut, ShellInfo } from '../types';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2, Cpu } from 'lucide-react';
+import type { AgentConfig, Theme, Shortcut, ShellInfo, CustomAICommand } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { AICommandsPanel } from './AICommandsPanel';
 
 // Feature flags - set to true to enable dormant features
 const FEATURE_FLAGS = {
@@ -54,12 +55,14 @@ interface SettingsModalProps {
   setAudioFeedbackEnabled: (value: boolean) => void;
   audioFeedbackCommand: string;
   setAudioFeedbackCommand: (value: string) => void;
-  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications';
+  customAICommands: CustomAICommand[];
+  setCustomAICommands: (commands: CustomAICommand[]) => void;
+  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications' | 'aicommands';
 }
 
 export function SettingsModal(props: SettingsModalProps) {
   const { isOpen, onClose, theme, themes, initialTab } = props;
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications' | 'aicommands'>('general');
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [customFontInput, setCustomFontInput] = useState('');
   const [customFonts, setCustomFonts] = useState<string[]>([]);
@@ -144,9 +147,9 @@ export function SettingsModal(props: SettingsModalProps) {
     if (!isOpen) return;
 
     const handleTabNavigation = (e: KeyboardEvent) => {
-      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications'> = FEATURE_FLAGS.LLM_SETTINGS
-        ? ['general', 'llm', 'shortcuts', 'theme', 'network', 'notifications']
-        : ['general', 'shortcuts', 'theme', 'network', 'notifications'];
+      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications' | 'aicommands'> = FEATURE_FLAGS.LLM_SETTINGS
+        ? ['general', 'llm', 'shortcuts', 'theme', 'network', 'notifications', 'aicommands']
+        : ['general', 'shortcuts', 'theme', 'network', 'notifications', 'aicommands'];
       const currentIndex = tabs.indexOf(activeTab);
 
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
@@ -535,6 +538,10 @@ export function SettingsModal(props: SettingsModalProps) {
           <button onClick={() => setActiveTab('notifications')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'notifications' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1}>
             <Bell className="w-4 h-4" />
             Notify
+          </button>
+          <button onClick={() => setActiveTab('aicommands')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'aicommands' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1}>
+            <Cpu className="w-4 h-4" />
+            AI Cmds
           </button>
           <div className="flex-1 flex justify-end items-center pr-4">
             <button onClick={onClose} tabIndex={-1}><X className="w-5 h-5 opacity-50 hover:opacity-100" /></button>
@@ -1448,6 +1455,14 @@ export function SettingsModal(props: SettingsModalProps) {
                 </ul>
               </div>
             </div>
+          )}
+
+          {activeTab === 'aicommands' && (
+            <AICommandsPanel
+              theme={theme}
+              customAICommands={props.customAICommands}
+              setCustomAICommands={props.setCustomAICommands}
+            />
           )}
         </div>
       </div>

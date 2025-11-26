@@ -194,3 +194,12 @@ export interface ShellInfo {
   available: boolean;
   path?: string;
 }
+
+// Custom AI command definition for user-configurable slash commands
+export interface CustomAICommand {
+  id: string;
+  command: string; // The slash command (e.g., '/commit')
+  description: string; // Short description shown in autocomplete
+  prompt: string; // The actual prompt sent to the AI agent
+  isBuiltIn?: boolean; // If true, cannot be deleted (only edited)
+}

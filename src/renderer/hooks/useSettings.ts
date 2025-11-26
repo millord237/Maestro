@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
-import type { LLMProvider, ThemeId, Shortcut } from '../types';
+import type { LLMProvider, ThemeId, Shortcut, CustomAICommand } from '../types';
 import { DEFAULT_SHORTCUTS } from '../constants/shortcuts';
+
+// Default AI commands that ship with Maestro
+const DEFAULT_AI_COMMANDS: CustomAICommand[] = [
+  {
+    id: 'commit',
+    command: '/commit',
+    description: 'Commit outstanding changes and push up',
+    prompt: 'Examine the current git diff and determine if we need to make any updates to the README.md or CLAUDE.md files. Then make a sensible git commit message and push it all up to origin',
+    isBuiltIn: true,
+  },
+];
 
 export interface UseSettingsReturn {
   // LLM settings
@@ -72,6 +83,10 @@ export interface UseSettingsReturn {
   // Shortcuts
   shortcuts: Record<string, Shortcut>;
   setShortcuts: (value: Record<string, Shortcut>) => void;
+
+  // Custom AI Commands
+  customAICommands: CustomAICommand[];
+  setCustomAICommands: (value: CustomAICommand[]) => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -120,6 +135,9 @@ export function useSettings(): UseSettingsReturn {
 
   // Shortcuts
   const [shortcuts, setShortcutsState] = useState<Record<string, Shortcut>>(DEFAULT_SHORTCUTS);
+
+  // Custom AI Commands
+  const [customAICommands, setCustomAICommandsState] = useState<CustomAICommand[]>(DEFAULT_AI_COMMANDS);
 
   // Wrapper functions that persist to electron-store
   const setLlmProvider = (value: LLMProvider) => {
@@ -242,6 +260,11 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('audioFeedbackCommand', value);
   };
 
+  const setCustomAICommands = (value: CustomAICommand[]) => {
+    setCustomAICommandsState(value);
+    window.maestro.settings.set('customAICommands', value);
+  };
+
   // Load settings from electron-store on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -272,6 +295,7 @@ export function useSettings(): UseSettingsReturn {
       const savedOsNotificationsEnabled = await window.maestro.settings.get('osNotificationsEnabled');
       const savedAudioFeedbackEnabled = await window.maestro.settings.get('audioFeedbackEnabled');
       const savedAudioFeedbackCommand = await window.maestro.settings.get('audioFeedbackCommand');
+      const savedCustomAICommands = await window.maestro.settings.get('customAICommands');
 
       // Migration: if old setting exists but new ones don't, migrate
       if (oldEnterToSend !== undefined && savedEnterToSendAI === undefined && savedEnterToSendTerminal === undefined) {
@@ -309,6 +333,23 @@ export function useSettings(): UseSettingsReturn {
       // Merge saved shortcuts with defaults (in case new shortcuts were added)
       if (savedShortcuts !== undefined) {
         setShortcutsState({ ...DEFAULT_SHORTCUTS, ...savedShortcuts });
+      }
+
+      // Merge saved AI commands with defaults (ensure built-in commands always exist)
+      if (savedCustomAICommands !== undefined) {
+        // Start with defaults, then merge saved commands (by ID to avoid duplicates)
+        const commandsById = new Map<string, CustomAICommand>();
+        DEFAULT_AI_COMMANDS.forEach(cmd => commandsById.set(cmd.id, cmd));
+        savedCustomAICommands.forEach((cmd: CustomAICommand) => {
+          // For built-in commands, merge to allow user edits but preserve isBuiltIn flag
+          if (commandsById.has(cmd.id)) {
+            const existing = commandsById.get(cmd.id)!;
+            commandsById.set(cmd.id, { ...cmd, isBuiltIn: existing.isBuiltIn });
+          } else {
+            commandsById.set(cmd.id, cmd);
+          }
+        });
+        setCustomAICommandsState(Array.from(commandsById.values()));
       }
     };
     loadSettings();
@@ -368,5 +409,7 @@ export function useSettings(): UseSettingsReturn {
     setAudioFeedbackCommand,
     shortcuts,
     setShortcuts,
+    customAICommands,
+    setCustomAICommands,
   };
 }
