@@ -248,8 +248,8 @@ export function InputArea(props: InputAreaProps) {
             )}
             <textarea
               ref={inputRef}
-              className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] max-h-[8rem] scrollbar-thin`}
-              style={{ color: theme.colors.textMain }}
+              className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] scrollbar-thin`}
+              style={{ color: theme.colors.textMain, maxHeight: '7rem' }}
               placeholder={isReadOnlyMode ? "Auto mode active - Claude in read-only mode..." : (isTerminalMode ? "Run shell command..." : "Ask Claude...")}
               value={inputValue}
               onFocus={onInputFocus}
@@ -265,9 +265,9 @@ export function InputArea(props: InputAreaProps) {
                   setSlashCommandOpen(false);
                 }
 
-                // Auto-grow logic
+                // Auto-grow logic - limit to 5 lines (~112px with text-sm)
                 e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 112)}px`;
               }}
               onKeyDown={handleInputKeyDown}
               onPaste={handlePaste}
