@@ -230,5 +230,44 @@ export const THEMES: Record<ThemeId, Theme> = {
       warning: '#f2ae49',
       error: '#f07171'
     }
+  },
+  // Special themes
+  pedurple: {
+    id: 'pedurple',
+    name: 'Pedurple',
+    mode: 'dark',
+    colors: {
+      bgMain: '#1a0f24',
+      bgSidebar: '#140a1c',
+      bgActivity: '#2a1a3a',
+      border: '#4a2a6a',
+      textMain: '#e8d5f5',
+      textDim: '#b89fd0',
+      accent: '#d4af37',
+      accentDim: 'rgba(212, 175, 55, 0.25)',
+      accentText: '#ffd700',
+      success: '#7cb342',
+      warning: '#ffb300',
+      error: '#e91e63'
+    }
+  },
+  'maestros-choice': {
+    id: 'maestros-choice',
+    name: "Maestro's Choice",
+    mode: 'dark',
+    colors: {
+      bgMain: '#2d3a3a',
+      bgSidebar: '#243030',
+      bgActivity: '#3a4848',
+      border: '#4a5858',
+      textMain: '#e0d8c8',
+      textDim: '#a09888',
+      accent: '#c06050',
+      accentDim: 'rgba(192, 96, 80, 0.25)',
+      accentText: '#e08070',
+      success: '#70a860',
+      warning: '#d0a040',
+      error: '#d05050'
+    }
   }
 };
