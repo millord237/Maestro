@@ -11,6 +11,7 @@ interface HistoryPanelProps {
 
 export interface HistoryPanelHandle {
   focus: () => void;
+  refreshHistory: () => void;
 }
 
 export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPanelProps>(function HistoryPanel({ session, theme, onJumpToClaudeSession }, ref) {
@@ -26,7 +27,23 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Expose focus method to parent
+  // Load history entries function - reusable for initial load and refresh
+  const loadHistory = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Pass sessionId to filter: only show entries from this session or legacy entries without sessionId
+      const entries = await window.maestro.history.getAll(session.cwd, session.id);
+      // Ensure entries is an array and has valid shape
+      setHistoryEntries(Array.isArray(entries) ? entries : []);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+      setHistoryEntries([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session.cwd, session.id]);
+
+  // Expose focus and refreshHistory methods to parent
   useImperativeHandle(ref, () => ({
     focus: () => {
       listRef.current?.focus();
@@ -34,28 +51,16 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
       if (selectedIndex < 0 && historyEntries.length > 0) {
         setSelectedIndex(0);
       }
+    },
+    refreshHistory: () => {
+      loadHistory();
     }
-  }), [selectedIndex, historyEntries.length]);
+  }), [selectedIndex, historyEntries.length, loadHistory]);
 
   // Load history entries on mount and when session changes
   useEffect(() => {
-    const loadHistory = async () => {
-      setIsLoading(true);
-      try {
-        // Pass sessionId to filter: only show entries from this session or legacy entries without sessionId
-        const entries = await window.maestro.history.getAll(session.cwd, session.id);
-        // Ensure entries is an array and has valid shape
-        setHistoryEntries(Array.isArray(entries) ? entries : []);
-      } catch (error) {
-        console.error('Failed to load history:', error);
-        setHistoryEntries([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadHistory();
-  }, [session.cwd, session.id]);
+  }, [loadHistory]);
 
   // Toggle a filter
   const toggleFilter = (type: HistoryEntryType) => {

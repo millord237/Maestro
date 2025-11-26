@@ -26,6 +26,8 @@ export interface SlashCommandContext {
   spawnBackgroundSynopsis?: (sessionId: string, cwd: string, resumeClaudeSessionId: string, prompt: string) => Promise<{ success: boolean; response?: string; claudeSessionId?: string }>;
   // Toast notifications
   addToast?: (toast: { type: 'success' | 'info' | 'warning' | 'error'; title: string; message: string; group?: string; project?: string; taskDuration?: number; duration?: number }) => void;
+  // Refresh history panel after adding entries
+  refreshHistoryPanel?: () => void;
 }
 
 // Synopsis prompt for getting a summary of recent work
@@ -37,7 +39,7 @@ export const slashCommands: SlashCommand[] = [
     description: 'Get a synopsis of recent work and add to history',
     aiOnly: true,
     execute: async (context: SlashCommandContext) => {
-      const { activeSessionId, sessions, setSessions, spawnBackgroundSynopsis, addHistoryEntry } = context;
+      const { activeSessionId, sessions, setSessions, spawnBackgroundSynopsis, addHistoryEntry, refreshHistoryPanel } = context;
 
       const actualActiveId = activeSessionId || (sessions.length > 0 ? sessions[0].id : '');
       if (!actualActiveId) return;
@@ -75,6 +77,8 @@ export const slashCommands: SlashCommand[] = [
             summary: result.response,
             claudeSessionId: activeSession.claudeSessionId
           });
+          // Refresh history panel to show the new entry
+          refreshHistoryPanel?.();
         }
       }
     }
@@ -83,7 +87,7 @@ export const slashCommands: SlashCommand[] = [
     command: '/clear',
     description: 'Clear output history and start new AI session',
     execute: async (context: SlashCommandContext) => {
-      const { activeSessionId, sessions, setSessions, currentMode, groups, spawnBackgroundSynopsis, addHistoryEntry, startNewClaudeSession, addToast } = context;
+      const { activeSessionId, sessions, setSessions, currentMode, groups, spawnBackgroundSynopsis, addHistoryEntry, startNewClaudeSession, addToast, refreshHistoryPanel } = context;
 
       // Use fallback to first session if activeSessionId is empty
       const actualActiveId = activeSessionId || (sessions.length > 0 ? sessions[0].id : '');
@@ -126,6 +130,9 @@ export const slashCommands: SlashCommand[] = [
                 summary: result.response,
                 claudeSessionId: oldClaudeSessionId
               });
+
+              // Refresh history panel to show the new entry
+              refreshHistoryPanel?.();
 
               // Show toast notification
               if (addToast) {

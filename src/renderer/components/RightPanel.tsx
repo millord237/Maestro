@@ -1,9 +1,13 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import type { Session, Theme, RightPanelTab, Shortcut, BatchRunState } from '../types';
 import { FileExplorerPanel } from './FileExplorerPanel';
 import { HistoryPanel, HistoryPanelHandle } from './HistoryPanel';
 import { Scratchpad } from './Scratchpad';
+
+export interface RightPanelHandle {
+  refreshHistoryPanel: () => void;
+}
 
 interface RightPanelProps {
   // Session & Theme
@@ -61,7 +65,7 @@ interface RightPanelProps {
   onJumpToClaudeSession?: (claudeSessionId: string) => void;
 }
 
-export function RightPanel(props: RightPanelProps) {
+export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function RightPanel(props, ref) {
   const {
     session, theme, shortcuts, rightPanelOpen, setRightPanelOpen, rightPanelWidth,
     setRightPanelWidthState, activeRightTab, setActiveRightTab, activeFocus, setActiveFocus,
@@ -73,6 +77,13 @@ export function RightPanel(props: RightPanelProps) {
   } = props;
 
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
+
+  // Expose refreshHistoryPanel method to parent
+  useImperativeHandle(ref, () => ({
+    refreshHistoryPanel: () => {
+      historyPanelRef.current?.refreshHistory();
+    }
+  }), []);
 
   // Focus the history panel when switching to history tab
   useEffect(() => {
@@ -226,4 +237,4 @@ export function RightPanel(props: RightPanelProps) {
       </div>
     </div>
   );
-}
+});

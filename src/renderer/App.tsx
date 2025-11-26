@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { NewInstanceModal } from './components/NewInstanceModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionList } from './components/SessionList';
-import { RightPanel } from './components/RightPanel';
+import { RightPanel, RightPanelHandle } from './components/RightPanel';
 import { QuickActionsModal } from './components/QuickActionsModal';
 import { LightboxModal } from './components/LightboxModal';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
@@ -748,6 +748,7 @@ export default function MaestroConsole() {
   const terminalOutputRef = useRef<HTMLDivElement>(null);
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
   const fileTreeFilterInputRef = useRef<HTMLInputElement>(null);
+  const rightPanelRef = useRef<RightPanelHandle>(null);
 
   // Refs for toast notifications (to access latest values in event handlers)
   const groupsRef = useRef(groups);
@@ -1908,6 +1909,7 @@ export default function MaestroConsole() {
           startNewClaudeSession,
           spawnBackgroundSynopsis,
           addToast,
+          refreshHistoryPanel: () => rightPanelRef.current?.refreshHistoryPanel(),
         });
 
         setInputValue('');
@@ -3128,6 +3130,7 @@ export default function MaestroConsole() {
       {/* --- RIGHT PANEL --- */}
       <ErrorBoundary>
         <RightPanel
+          ref={rightPanelRef}
           session={activeSession}
           theme={theme}
           shortcuts={shortcuts}
