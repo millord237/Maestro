@@ -89,6 +89,7 @@ interface HistoryEntry {
   fullResponse?: string;
   claudeSessionId?: string;
   projectPath: string;
+  sessionId?: string; // Maestro session ID for isolation
 }
 
 interface HistoryData {
@@ -1033,14 +1034,22 @@ function setupIpcHandlers() {
     }
   });
 
-  // History persistence (per-project)
-  ipcMain.handle('history:getAll', async (_event, projectPath?: string) => {
+  // History persistence (per-project and optionally per-session)
+  ipcMain.handle('history:getAll', async (_event, projectPath?: string, sessionId?: string) => {
     const allEntries = historyStore.get('entries', []);
+    let filteredEntries = allEntries;
+
     if (projectPath) {
       // Filter by project path
-      return allEntries.filter(entry => entry.projectPath === projectPath);
+      filteredEntries = filteredEntries.filter(entry => entry.projectPath === projectPath);
     }
-    return allEntries;
+
+    if (sessionId) {
+      // Filter by session ID - only show entries from this session OR entries without a sessionId (legacy)
+      filteredEntries = filteredEntries.filter(entry => !entry.sessionId || entry.sessionId === sessionId);
+    }
+
+    return filteredEntries;
   });
 
   ipcMain.handle('history:add', async (_event, entry: HistoryEntry) => {

@@ -24,7 +24,8 @@ export function HistoryPanel({ session, theme, onJumpToClaudeSession }: HistoryP
     const loadHistory = async () => {
       setIsLoading(true);
       try {
-        const entries = await window.maestro.history.getAll(session.cwd);
+        // Pass sessionId to filter: only show entries from this session or legacy entries without sessionId
+        const entries = await window.maestro.history.getAll(session.cwd, session.id);
         // Ensure entries is an array and has valid shape
         setHistoryEntries(Array.isArray(entries) ? entries : []);
       } catch (error) {
@@ -36,7 +37,7 @@ export function HistoryPanel({ session, theme, onJumpToClaudeSession }: HistoryP
     };
 
     loadHistory();
-  }, [session.cwd]);
+  }, [session.cwd, session.id]);
 
   // Toggle a filter
   const toggleFilter = (type: HistoryEntryType) => {

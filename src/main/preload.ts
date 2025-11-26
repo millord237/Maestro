@@ -204,9 +204,9 @@ contextBridge.exposeInMainWorld('maestro', {
 
   // History API (per-project persistence)
   history: {
-    getAll: (projectPath?: string) =>
-      ipcRenderer.invoke('history:getAll', projectPath),
-    add: (entry: { id: string; type: 'AUTO' | 'USER'; timestamp: number; summary: string; claudeSessionId?: string; projectPath: string }) =>
+    getAll: (projectPath?: string, sessionId?: string) =>
+      ipcRenderer.invoke('history:getAll', projectPath, sessionId),
+    add: (entry: { id: string; type: 'AUTO' | 'USER'; timestamp: number; summary: string; claudeSessionId?: string; projectPath: string; sessionId?: string }) =>
       ipcRenderer.invoke('history:add', entry),
     clear: (projectPath?: string) =>
       ipcRenderer.invoke('history:clear', projectPath),
@@ -336,13 +336,14 @@ export interface MaestroAPI {
     delete: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   };
   history: {
-    getAll: (projectPath?: string) => Promise<Array<{
+    getAll: (projectPath?: string, sessionId?: string) => Promise<Array<{
       id: string;
       type: 'AUTO' | 'USER';
       timestamp: number;
       summary: string;
       claudeSessionId?: string;
       projectPath: string;
+      sessionId?: string;
     }>>;
     add: (entry: {
       id: string;
@@ -351,6 +352,7 @@ export interface MaestroAPI {
       summary: string;
       claudeSessionId?: string;
       projectPath: string;
+      sessionId?: string;
     }) => Promise<boolean>;
     clear: (projectPath?: string) => Promise<boolean>;
   };

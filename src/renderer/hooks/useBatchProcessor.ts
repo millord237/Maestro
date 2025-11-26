@@ -213,14 +213,20 @@ export function useBatchProcessor({
             summary,
             fullResponse: fullResponse || undefined,
             claudeSessionId: result.claudeSessionId,
-            projectPath: session.cwd
+            projectPath: session.cwd,
+            sessionId: sessionId // Associate with this Maestro session for isolation
           });
         }
 
-        // Re-read the scratchpad file to check remaining tasks
+        // Re-read the scratchpad file to check remaining tasks and sync to UI
         const readResult = await window.maestro.tempfile.read(writeResult.path);
         if (readResult.success && readResult.content) {
+          // Sync scratchpad changes to UI after each task
+          console.log('[BatchProcessor] Syncing scratchpad after task', i + 1, 'for session:', sessionId);
+          onUpdateSession(sessionId, { scratchPadContent: readResult.content });
+
           const remainingTasks = countUnfinishedTasks(readResult.content);
+          console.log('[BatchProcessor] Remaining unchecked tasks:', remainingTasks);
 
           // If no more tasks, we're done
           if (remainingTasks === 0) {

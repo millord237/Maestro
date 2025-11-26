@@ -384,7 +384,7 @@ export default function MaestroConsole() {
   // Set up process event listeners for real-time output
   useEffect(() => {
     // Handle process output data
-    // sessionId will be in format: "{id}-ai" or "{id}-terminal"
+    // sessionId will be in format: "{id}-ai", "{id}-terminal", "{id}-batch-{timestamp}", etc.
     const unsubscribeData = window.maestro.process.onData((sessionId: string, data: string) => {
       console.log('[onData] Received data for session:', sessionId, 'Data:', data.substring(0, 100));
 
@@ -398,6 +398,10 @@ export default function MaestroConsole() {
       } else if (sessionId.endsWith('-terminal')) {
         // Ignore PTY terminal output - we use runCommand for terminal commands now,
         // which emits data without the -terminal suffix
+        return;
+      } else if (sessionId.includes('-batch-')) {
+        // Ignore batch task output - these are handled separately by spawnAgentForSession
+        // and their output goes to history entries, not to the AI terminal
         return;
       } else {
         // Plain session ID = output from runCommand (terminal commands)
@@ -465,6 +469,9 @@ export default function MaestroConsole() {
       } else if (sessionId.endsWith('-terminal')) {
         actualSessionId = sessionId.slice(0, -9);
         isFromAi = false;
+      } else if (sessionId.includes('-batch-')) {
+        // Ignore batch task exits - handled separately by spawnAgentForSession's own listener
+        return;
       } else {
         actualSessionId = sessionId;
         isFromAi = false;
@@ -653,8 +660,9 @@ export default function MaestroConsole() {
       const agent = await window.maestro.agents.get('claude-code');
       if (!agent) return { success: false };
 
-      // For batch processing, we always use a fresh session (no resume)
-      const targetSessionId = `${sessionId}-ai`;
+      // For batch processing, use a unique session ID per task run to avoid contaminating the main AI terminal
+      // This prevents batch output from appearing in the interactive AI terminal
+      const targetSessionId = `${sessionId}-batch-${Date.now()}`;
 
       // Set session to busy
       setSessions(prev => prev.map(s =>

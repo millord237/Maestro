@@ -71,6 +71,7 @@ export interface HistoryEntry {
   fullResponse?: string; // Complete agent response for expansion
   claudeSessionId?: string; // For clicking to jump to session
   projectPath: string; // For per-project filtering
+  sessionId?: string; // Maestro session ID for isolation (interactive sessions exclude batch entries)
 }
 
 // Batch processing state
