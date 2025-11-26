@@ -30,6 +30,16 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the input when modal opens
+  useEffect(() => {
+    // Small delay to ensure modal is rendered
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Register layer on mount
   useEffect(() => {
@@ -94,8 +104,6 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Create New Group"
-      tabIndex={-1}
-      ref={(el) => el?.focus()}
     >
       <div className="w-[400px] border rounded-lg shadow-2xl overflow-hidden" style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: theme.colors.border }}>
@@ -127,6 +135,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
                 Group Name
               </label>
               <input
+                ref={inputRef}
                 type="text"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
@@ -139,7 +148,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
                 placeholder="Enter group name..."
                 className="w-full p-3 rounded border bg-transparent outline-none h-[52px]"
                 style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                autoFocus={!emojiPickerOpen}
+                autoFocus
               />
             </div>
           </div>
@@ -148,7 +157,10 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
           {emojiPickerOpen && (
             <div
               className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]"
-              onClick={() => setEmojiPickerOpen(false)}
+              onClick={() => {
+                setEmojiPickerOpen(false);
+                inputRef.current?.focus();
+              }}
               onKeyDown={(e) => {
                 // Keep internal emoji picker escape handler
                 // This closes the emoji picker, not the modal
@@ -156,6 +168,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
                   e.preventDefault();
                   e.stopPropagation();
                   setEmojiPickerOpen(false);
+                  inputRef.current?.focus();
                 }
               }}
               tabIndex={0}
@@ -168,7 +181,10 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
               >
                 {/* Close button */}
                 <button
-                  onClick={() => setEmojiPickerOpen(false)}
+                  onClick={() => {
+                    setEmojiPickerOpen(false);
+                    inputRef.current?.focus();
+                  }}
                   className="absolute -top-3 -right-3 z-10 p-2 rounded-full shadow-lg hover:scale-110 transition-transform"
                   style={{ backgroundColor: theme.colors.bgSidebar, color: theme.colors.textMain, border: `2px solid ${theme.colors.border}` }}
                 >
@@ -179,6 +195,7 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
                   onEmojiSelect={(emoji: any) => {
                     setGroupEmoji(emoji.native);
                     setEmojiPickerOpen(false);
+                    inputRef.current?.focus();
                   }}
                   theme={theme.mode}
                   previewPosition="none"
