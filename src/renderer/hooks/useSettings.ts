@@ -61,6 +61,14 @@ export interface UseSettingsReturn {
   maxOutputLines: number;
   setMaxOutputLines: (value: number) => void;
 
+  // Notification settings
+  osNotificationsEnabled: boolean;
+  setOsNotificationsEnabled: (value: boolean) => void;
+  audioFeedbackEnabled: boolean;
+  setAudioFeedbackEnabled: (value: boolean) => void;
+  audioFeedbackCommand: string;
+  setAudioFeedbackCommand: (value: string) => void;
+
   // Shortcuts
   shortcuts: Record<string, Shortcut>;
   setShortcuts: (value: Record<string, Shortcut>) => void;
@@ -104,6 +112,11 @@ export function useSettings(): UseSettingsReturn {
 
   // Output Config
   const [maxOutputLines, setMaxOutputLinesState] = useState(25);
+
+  // Notification Config
+  const [osNotificationsEnabled, setOsNotificationsEnabledState] = useState(true); // Default: on
+  const [audioFeedbackEnabled, setAudioFeedbackEnabledState] = useState(false); // Default: off
+  const [audioFeedbackCommand, setAudioFeedbackCommandState] = useState('say'); // Default: macOS say command
 
   // Shortcuts
   const [shortcuts, setShortcutsState] = useState<Record<string, Shortcut>>(DEFAULT_SHORTCUTS);
@@ -214,6 +227,21 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('maxOutputLines', value);
   };
 
+  const setOsNotificationsEnabled = (value: boolean) => {
+    setOsNotificationsEnabledState(value);
+    window.maestro.settings.set('osNotificationsEnabled', value);
+  };
+
+  const setAudioFeedbackEnabled = (value: boolean) => {
+    setAudioFeedbackEnabledState(value);
+    window.maestro.settings.set('audioFeedbackEnabled', value);
+  };
+
+  const setAudioFeedbackCommand = (value: string) => {
+    setAudioFeedbackCommandState(value);
+    window.maestro.settings.set('audioFeedbackCommand', value);
+  };
+
   // Load settings from electron-store on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -241,6 +269,9 @@ export function useSettings(): UseSettingsReturn {
       const savedLogLevel = await window.maestro.logger.getLogLevel();
       const savedMaxLogBuffer = await window.maestro.logger.getMaxLogBuffer();
       const savedMaxOutputLines = await window.maestro.settings.get('maxOutputLines');
+      const savedOsNotificationsEnabled = await window.maestro.settings.get('osNotificationsEnabled');
+      const savedAudioFeedbackEnabled = await window.maestro.settings.get('audioFeedbackEnabled');
+      const savedAudioFeedbackCommand = await window.maestro.settings.get('audioFeedbackCommand');
 
       // Migration: if old setting exists but new ones don't, migrate
       if (oldEnterToSend !== undefined && savedEnterToSendAI === undefined && savedEnterToSendTerminal === undefined) {
@@ -271,6 +302,9 @@ export function useSettings(): UseSettingsReturn {
       if (savedLogLevel !== undefined) setLogLevelState(savedLogLevel);
       if (savedMaxLogBuffer !== undefined) setMaxLogBufferState(savedMaxLogBuffer);
       if (savedMaxOutputLines !== undefined) setMaxOutputLinesState(savedMaxOutputLines);
+      if (savedOsNotificationsEnabled !== undefined) setOsNotificationsEnabledState(savedOsNotificationsEnabled);
+      if (savedAudioFeedbackEnabled !== undefined) setAudioFeedbackEnabledState(savedAudioFeedbackEnabled);
+      if (savedAudioFeedbackCommand !== undefined) setAudioFeedbackCommandState(savedAudioFeedbackCommand);
 
       // Merge saved shortcuts with defaults (in case new shortcuts were added)
       if (savedShortcuts !== undefined) {
@@ -326,6 +360,12 @@ export function useSettings(): UseSettingsReturn {
     setMaxLogBuffer,
     maxOutputLines,
     setMaxOutputLines,
+    osNotificationsEnabled,
+    setOsNotificationsEnabled,
+    audioFeedbackEnabled,
+    setAudioFeedbackEnabled,
+    audioFeedbackCommand,
+    setAudioFeedbackCommand,
     shortcuts,
     setShortcuts,
   };

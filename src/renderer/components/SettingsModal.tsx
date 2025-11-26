@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2 } from 'lucide-react';
 import type { AgentConfig, Theme, Shortcut, ShellInfo } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -48,12 +48,18 @@ interface SettingsModalProps {
   setEnterToSendAI: (value: boolean) => void;
   enterToSendTerminal: boolean;
   setEnterToSendTerminal: (value: boolean) => void;
-  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network';
+  osNotificationsEnabled: boolean;
+  setOsNotificationsEnabled: (value: boolean) => void;
+  audioFeedbackEnabled: boolean;
+  setAudioFeedbackEnabled: (value: boolean) => void;
+  audioFeedbackCommand: string;
+  setAudioFeedbackCommand: (value: string) => void;
+  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications';
 }
 
 export function SettingsModal(props: SettingsModalProps) {
   const { isOpen, onClose, theme, themes, initialTab } = props;
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'network'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications'>('general');
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [customFontInput, setCustomFontInput] = useState('');
   const [customFonts, setCustomFonts] = useState<string[]>([]);
@@ -138,9 +144,9 @@ export function SettingsModal(props: SettingsModalProps) {
     if (!isOpen) return;
 
     const handleTabNavigation = (e: KeyboardEvent) => {
-      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network'> = FEATURE_FLAGS.LLM_SETTINGS
-        ? ['general', 'llm', 'shortcuts', 'theme', 'network']
-        : ['general', 'shortcuts', 'theme', 'network'];
+      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications'> = FEATURE_FLAGS.LLM_SETTINGS
+        ? ['general', 'llm', 'shortcuts', 'theme', 'network', 'notifications']
+        : ['general', 'shortcuts', 'theme', 'network', 'notifications'];
       const currentIndex = tabs.indexOf(activeTab);
 
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
@@ -526,6 +532,10 @@ export function SettingsModal(props: SettingsModalProps) {
           </button>
           <button onClick={() => setActiveTab('theme')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'theme' ? 'border-indigo-500' : 'border-transparent'}`} tabIndex={-1}>Themes</button>
           <button onClick={() => setActiveTab('network')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'network' ? 'border-indigo-500' : 'border-transparent'}`} tabIndex={-1}>Network</button>
+          <button onClick={() => setActiveTab('notifications')} className={`px-6 py-4 text-sm font-bold border-b-2 ${activeTab === 'notifications' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1}>
+            <Bell className="w-4 h-4" />
+            Notify
+          </button>
           <div className="flex-1 flex justify-end items-center pr-4">
             <button onClick={onClose} tabIndex={-1}><X className="w-5 h-5 opacity-50 hover:opacity-100" /></button>
           </div>
@@ -1329,6 +1339,116 @@ export function SettingsModal(props: SettingsModalProps) {
           })()}
 
           {activeTab === 'theme' && themePickerContent}
+
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              {/* OS Notifications */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Bell className="w-3 h-3" />
+                  Operating System Notifications
+                </label>
+                <label
+                  className="flex items-center gap-3 p-3 rounded border cursor-pointer hover:bg-opacity-10"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={props.osNotificationsEnabled}
+                    onChange={(e) => props.setOsNotificationsEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                    style={{ accentColor: theme.colors.accent }}
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                      Enable OS Notifications
+                    </div>
+                    <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                      Show desktop notifications when tasks complete or require attention
+                    </div>
+                  </div>
+                </label>
+                <button
+                  onClick={() => window.maestro.notification.show('Maestro', 'Test notification - notifications are working!')}
+                  className="mt-2 px-3 py-1.5 rounded text-xs font-medium transition-all"
+                  style={{
+                    backgroundColor: theme.colors.bgActivity,
+                    color: theme.colors.textMain,
+                    border: `1px solid ${theme.colors.border}`
+                  }}
+                >
+                  Test Notification
+                </button>
+              </div>
+
+              {/* Audio Feedback */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Volume2 className="w-3 h-3" />
+                  Audio Feedback
+                </label>
+                <label
+                  className="flex items-center gap-3 p-3 rounded border cursor-pointer hover:bg-opacity-10"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={props.audioFeedbackEnabled}
+                    onChange={(e) => props.setAudioFeedbackEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                    style={{ accentColor: theme.colors.accent }}
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                      Enable Audio Feedback
+                    </div>
+                    <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                      Speak the one-sentence feedback synopsis from LLM analysis using text-to-speech
+                    </div>
+                  </div>
+                </label>
+
+                {/* Audio Command Configuration */}
+                <div className="mt-3">
+                  <label className="block text-xs font-medium opacity-70 mb-1">TTS Command</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={props.audioFeedbackCommand}
+                      onChange={(e) => props.setAudioFeedbackCommand(e.target.value)}
+                      placeholder="say"
+                      className="flex-1 p-2 rounded border bg-transparent outline-none text-sm font-mono"
+                      style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                    />
+                    <button
+                      onClick={() => window.maestro.notification.speak('Hello! Audio feedback is working correctly.', props.audioFeedbackCommand)}
+                      className="px-3 py-2 rounded text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: theme.colors.bgActivity,
+                        color: theme.colors.textMain,
+                        border: `1px solid ${theme.colors.border}`
+                      }}
+                    >
+                      Test
+                    </button>
+                  </div>
+                  <p className="text-xs opacity-50 mt-2" style={{ color: theme.colors.textDim }}>
+                    Command that accepts text via stdin. Examples: <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>say</code> (macOS), <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>espeak</code> (Linux), <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>festival --tts</code>
+                  </p>
+                </div>
+              </div>
+
+              {/* Info about when notifications are triggered */}
+              <div className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.bgActivity, border: `1px solid ${theme.colors.border}` }}>
+                <div className="text-xs font-medium mb-2" style={{ color: theme.colors.textMain }}>When are notifications triggered?</div>
+                <ul className="text-xs opacity-70 space-y-1" style={{ color: theme.colors.textDim }}>
+                  <li>• When an AI task completes</li>
+                  <li>• When a long-running command finishes</li>
+                  <li>• When the LLM analysis generates a feedback synopsis (audio only, if configured)</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

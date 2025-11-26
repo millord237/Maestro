@@ -1212,6 +1212,57 @@ function setupIpcHandlers() {
     }
     return true;
   });
+
+  // Notification operations
+  ipcMain.handle('notification:show', async (_event, title: string, body: string) => {
+    try {
+      const { Notification } = await import('electron');
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title,
+          body,
+          silent: true, // Don't play system sound - we have our own audio feedback option
+        });
+        notification.show();
+        logger.debug('Showed OS notification', 'Notification', { title, body });
+        return { success: true };
+      } else {
+        logger.warn('OS notifications not supported on this platform', 'Notification');
+        return { success: false, error: 'Notifications not supported' };
+      }
+    } catch (error) {
+      logger.error('Error showing notification', 'Notification', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Audio feedback using system TTS command (non-blocking)
+  ipcMain.handle('notification:speak', async (_event, text: string, command?: string) => {
+    try {
+      const { spawn } = await import('child_process');
+      const ttsCommand = command || 'say'; // Default to macOS 'say' command
+
+      // Spawn the TTS process without waiting for it to complete (non-blocking)
+      // This runs in the background and won't block the main process
+      const child = spawn(ttsCommand, [], {
+        stdio: ['pipe', 'ignore', 'ignore'],
+        detached: true, // Run independently
+      });
+
+      // Write the text to stdin and close it
+      child.stdin?.write(text);
+      child.stdin?.end();
+
+      // Unref to allow the parent to exit independently
+      child.unref();
+
+      logger.debug('Started audio feedback', 'Notification', { command: ttsCommand, textLength: text.length });
+      return { success: true };
+    } catch (error) {
+      logger.error('Error starting audio feedback', 'Notification', error);
+      return { success: false, error: String(error) };
+    }
+  });
 }
 
 // Handle process output streaming (set up after initialization)

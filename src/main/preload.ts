@@ -215,6 +215,14 @@ contextBridge.exposeInMainWorld('maestro', {
     clear: (projectPath?: string) =>
       ipcRenderer.invoke('history:clear', projectPath),
   },
+
+  // Notification API
+  notification: {
+    show: (title: string, body: string) =>
+      ipcRenderer.invoke('notification:show', title, body),
+    speak: (text: string, command?: string) =>
+      ipcRenderer.invoke('notification:speak', text, command),
+  },
 });
 
 // Type definitions for TypeScript
@@ -369,6 +377,10 @@ export interface MaestroAPI {
       sessionId?: string;
     }) => Promise<boolean>;
     clear: (projectPath?: string) => Promise<boolean>;
+  };
+  notification: {
+    show: (title: string, body: string) => Promise<{ success: boolean; error?: string }>;
+    speak: (text: string, command?: string) => Promise<{ success: boolean; error?: string }>;
   };
 }
 

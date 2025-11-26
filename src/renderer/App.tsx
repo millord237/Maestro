@@ -70,6 +70,9 @@ export default function MaestroConsole() {
     logLevel, setLogLevel,
     maxLogBuffer, setMaxLogBuffer,
     maxOutputLines, setMaxOutputLines,
+    osNotificationsEnabled, setOsNotificationsEnabled,
+    audioFeedbackEnabled, setAudioFeedbackEnabled,
+    audioFeedbackCommand, setAudioFeedbackCommand,
     shortcuts, setShortcuts,
   } = settings;
 
@@ -3109,6 +3112,12 @@ export default function MaestroConsole() {
         setMaxLogBuffer={setMaxLogBuffer}
         maxOutputLines={maxOutputLines}
         setMaxOutputLines={setMaxOutputLines}
+        osNotificationsEnabled={osNotificationsEnabled}
+        setOsNotificationsEnabled={setOsNotificationsEnabled}
+        audioFeedbackEnabled={audioFeedbackEnabled}
+        setAudioFeedbackEnabled={setAudioFeedbackEnabled}
+        audioFeedbackCommand={audioFeedbackCommand}
+        setAudioFeedbackCommand={setAudioFeedbackCommand}
         initialTab={settingsTab}
       />
 
