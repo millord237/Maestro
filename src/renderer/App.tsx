@@ -82,8 +82,9 @@ export default function MaestroConsole() {
 
   const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0]?.id || 's1');
 
-  // Input State
-  const [inputValue, setInputValue] = useState('');
+  // Input State - separate for AI and terminal modes
+  const [aiInputValue, setAiInputValue] = useState('');
+  const [terminalInputValue, setTerminalInputValue] = useState('');
   const [slashCommandOpen, setSlashCommandOpen] = useState(false);
   const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
 
@@ -160,8 +161,8 @@ export default function MaestroConsole() {
   const [commandHistoryFilter, setCommandHistoryFilter] = useState('');
   const [commandHistorySelectedIndex, setCommandHistorySelectedIndex] = useState(0);
 
-  // Images Staging
-  const [stagedImages, setStagedImages] = useState<string[]>([]);
+  // Images Staging (only for AI mode - terminal doesn't support images)
+  const [aiStagedImages, setAiStagedImages] = useState<string[]>([]);
 
   // Restore focus when LogViewer closes to ensure global hotkeys work
   useEffect(() => {
@@ -713,6 +714,14 @@ export default function MaestroConsole() {
   const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0] || null;
   const theme = THEMES[activeThemeId];
   const anyTunnelActive = sessions.some(s => s.tunnelActive);
+
+  // Derive current input value and setter based on active session mode
+  const isAiMode = activeSession?.inputMode === 'ai';
+  const inputValue = isAiMode ? aiInputValue : terminalInputValue;
+  const setInputValue = isAiMode ? setAiInputValue : setTerminalInputValue;
+  // Images are only used in AI mode
+  const stagedImages = aiStagedImages;
+  const setStagedImages = setAiStagedImages;
 
   // --- BATCH PROCESSOR ---
   // Helper to spawn a Claude agent and wait for completion (for a specific session)

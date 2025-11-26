@@ -80,7 +80,8 @@ export function InputArea(props: InputAreaProps) {
 
   return (
     <div className="relative p-4 border-t" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
-      {stagedImages.length > 0 && (
+      {/* Only show staged images in AI mode */}
+      {session.inputMode === 'ai' && stagedImages.length > 0 && (
         <div className="flex gap-2 mb-3 pb-2 overflow-x-auto overflow-y-visible scrollbar-thin">
           {stagedImages.map((img, idx) => (
             <div key={idx} className="relative group">
