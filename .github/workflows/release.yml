@@ -14,15 +14,18 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
         include:
           - os: macos-latest
             platform: mac
+            arch: universal
           - os: ubuntu-latest
             platform: linux
+            arch: x64
           - os: windows-latest
             platform: win
+            arch: x64
 
     runs-on: ${{ matrix.os }}
 
@@ -36,25 +39,58 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # Linux: Install build dependencies for native modules and electron-builder
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
+      # Windows: Setup for native module compilation
+      - name: Setup Windows build tools
+        if: matrix.platform == 'win'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install dependencies
         run: npm ci
+
+      # Rebuild native modules for the target platform
+      - name: Rebuild native modules
+        run: npm run postinstall
+        env:
+          npm_config_build_from_source: true
 
       - name: Build application
         run: npm run build
 
+      # List release directory before packaging for debugging
+      - name: Create release directory
+        run: mkdir -p release
+        shell: bash
+
       - name: Package for macOS
         if: matrix.platform == 'mac'
-        run: npm run package:mac
+        run: npx electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          DEBUG: electron-builder
 
       - name: Package for Windows
         if: matrix.platform == 'win'
-        run: npm run package:win
+        run: npx electron-builder --win --publish never
+        env:
+          DEBUG: electron-builder
 
       - name: Package for Linux
         if: matrix.platform == 'linux'
-        run: npm run package:linux
+        run: npx electron-builder --linux --publish never
+        env:
+          DEBUG: electron-builder
+
+      # List what was built for debugging
+      - name: List release artifacts
+        run: ls -la release/
+        shell: bash
 
       - name: Upload macOS artifacts
         if: matrix.platform == 'mac'
@@ -64,6 +100,9 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*-mac.zip
+            release/*-mac-*.zip
+          if-no-files-found: error
           retention-days: 5
 
       - name: Upload Windows artifacts
@@ -73,6 +112,7 @@ jobs:
           name: maestro-windows
           path: |
             release/*.exe
+          if-no-files-found: error
           retention-days: 5
 
       - name: Upload Linux artifacts
@@ -84,6 +124,8 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/*.snap
+          if-no-files-found: warn
           retention-days: 5
 
   release:
@@ -97,8 +139,11 @@ jobs:
         with:
           path: artifacts
 
+      - name: List downloaded artifacts
+        run: find artifacts -type f | head -50
+
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/maestro-macos/*
