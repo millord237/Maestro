@@ -76,6 +76,7 @@ export default function MaestroConsole() {
     toastDuration, setToastDuration,
     shortcuts, setShortcuts,
     customAICommands, setCustomAICommands,
+    globalStats, updateGlobalStats,
   } = settings;
 
   // --- STATE ---
@@ -716,6 +717,15 @@ export default function MaestroConsole() {
           }
         };
       }));
+
+      // Update persistent global stats
+      updateGlobalStatsRef.current({
+        totalInputTokens: usageStats.inputTokens,
+        totalOutputTokens: usageStats.outputTokens,
+        totalCacheReadTokens: usageStats.cacheReadInputTokens,
+        totalCacheCreationTokens: usageStats.cacheCreationInputTokens,
+        totalCostUsd: usageStats.totalCostUsd,
+      });
     });
 
     // Cleanup listeners on unmount
@@ -740,9 +750,11 @@ export default function MaestroConsole() {
   const groupsRef = useRef(groups);
   const addToastRef = useRef(addToast);
   const sessionsRef = useRef(sessions);
+  const updateGlobalStatsRef = useRef(updateGlobalStats);
   groupsRef.current = groups;
   addToastRef.current = addToast;
   sessionsRef.current = sessions;
+  updateGlobalStatsRef.current = updateGlobalStats;
 
   // Expose addToast to window for debugging/testing
   useEffect(() => {
@@ -1689,6 +1701,8 @@ export default function MaestroConsole() {
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);
+      // Track session creation in global stats
+      updateGlobalStats({ totalSessions: 1 });
     } catch (error) {
       console.error('Failed to create session:', error);
       // TODO: Show error to user
@@ -2805,6 +2819,7 @@ export default function MaestroConsole() {
         <AboutModal
           theme={theme}
           sessions={sessions}
+          persistedStats={globalStats}
           onClose={() => setAboutModalOpen(false)}
         />
       )}

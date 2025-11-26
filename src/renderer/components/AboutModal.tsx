@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { X, Wand2, ExternalLink, FileCode, BarChart3 } from 'lucide-react';
-import type { Theme, Session, UsageStats } from '../types';
+import type { Theme, Session, GlobalStats } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import pedramAvatar from '../assets/pedram-avatar.png';
@@ -8,57 +8,42 @@ import pedramAvatar from '../assets/pedram-avatar.png';
 interface AboutModalProps {
   theme: Theme;
   sessions: Session[];
+  persistedStats: GlobalStats;
   onClose: () => void;
 }
 
-// Calculate aggregated stats from all sessions
-interface GlobalStats {
-  totalSessions: number;
-  totalMessages: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalCacheReadTokens: number;
-  totalCacheCreationTokens: number;
-  totalCostUsd: number;
-  totalActiveTimeMs: number;
-}
-
-export function AboutModal({ theme, sessions, onClose }: AboutModalProps) {
+export function AboutModal({ theme, sessions, persistedStats, onClose }: AboutModalProps) {
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
 
-  // Calculate global stats from all sessions
-  const globalStats = useMemo<GlobalStats>(() => {
-    const stats: GlobalStats = {
-      totalSessions: sessions.length,
-      totalMessages: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalCacheReadTokens: 0,
-      totalCacheCreationTokens: 0,
-      totalCostUsd: 0,
-      totalActiveTimeMs: 0,
-    };
+  // Calculate current session stats (in-memory, for this run)
+  const currentSessionStats = useMemo(() => {
+    let totalMessages = 0;
+    let totalActiveTimeMs = 0;
 
     for (const session of sessions) {
       // Count messages (AI logs from user source)
-      stats.totalMessages += session.aiLogs.filter(log => log.source === 'user').length;
-
-      // Aggregate usage stats
-      if (session.usageStats) {
-        stats.totalInputTokens += session.usageStats.inputTokens || 0;
-        stats.totalOutputTokens += session.usageStats.outputTokens || 0;
-        stats.totalCacheReadTokens += session.usageStats.cacheReadInputTokens || 0;
-        stats.totalCacheCreationTokens += session.usageStats.cacheCreationInputTokens || 0;
-        stats.totalCostUsd += session.usageStats.totalCostUsd || 0;
-      }
-
+      totalMessages += session.aiLogs.filter(log => log.source === 'user').length;
       // Aggregate active time
-      stats.totalActiveTimeMs += session.activeTimeMs || 0;
+      totalActiveTimeMs += session.activeTimeMs || 0;
     }
 
-    return stats;
+    return { totalMessages, totalActiveTimeMs, totalSessions: sessions.length };
   }, [sessions]);
+
+  // Combine persisted stats with current session stats
+  // Persisted stats track: tokens and cost (accumulated across restarts)
+  // Current session stats track: sessions, messages, active time (this run only, but messages/time could be persisted later)
+  const globalStats: GlobalStats = useMemo(() => ({
+    totalSessions: currentSessionStats.totalSessions,
+    totalMessages: currentSessionStats.totalMessages,
+    totalInputTokens: persistedStats.totalInputTokens,
+    totalOutputTokens: persistedStats.totalOutputTokens,
+    totalCacheReadTokens: persistedStats.totalCacheReadTokens,
+    totalCacheCreationTokens: persistedStats.totalCacheCreationTokens,
+    totalCostUsd: persistedStats.totalCostUsd,
+    totalActiveTimeMs: currentSessionStats.totalActiveTimeMs,
+  }), [persistedStats, currentSessionStats]);
 
   // Format token count with K/M suffix
   const formatTokens = (count: number): string => {
@@ -175,8 +160,8 @@ export function AboutModal({ theme, sessions, onClose }: AboutModalProps) {
             </div>
           </div>
 
-          {/* Global Usage Stats */}
-          {globalStats.totalSessions > 0 && (
+          {/* Global Usage Stats - show if we have any stats (sessions or persisted tokens/cost) */}
+          {(globalStats.totalSessions > 0 || globalStats.totalCostUsd > 0 || globalStats.totalInputTokens > 0) && (
             <div className="p-4 rounded border" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}>
               <div className="flex items-center gap-2 mb-3">
                 <BarChart3 className="w-4 h-4" style={{ color: theme.colors.accent }} />

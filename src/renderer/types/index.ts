@@ -100,6 +100,18 @@ export interface UsageStats {
   contextWindow: number; // e.g., 200000 for Claude
 }
 
+// Persistent global statistics (survives app restarts)
+export interface GlobalStats {
+  totalSessions: number;
+  totalMessages: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  totalCostUsd: number;
+  totalActiveTimeMs: number;
+}
+
 export interface Session {
   id: string;
   groupId?: string;
@@ -202,4 +214,17 @@ export interface CustomAICommand {
   description: string; // Short description shown in autocomplete
   prompt: string; // The actual prompt sent to the AI agent
   isBuiltIn?: boolean; // If true, cannot be deleted (only edited)
+}
+
+// Persistent global stats that survive app restarts
+export interface GlobalStats {
+  totalSessions: number;
+  totalMessages: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  totalCostUsd: number;
+  totalActiveTimeMs: number;
+  lastUpdated: number; // Timestamp for tracking when stats were last updated
 }

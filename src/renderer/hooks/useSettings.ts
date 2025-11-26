@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react';
-import type { LLMProvider, ThemeId, Shortcut, CustomAICommand } from '../types';
+import type { LLMProvider, ThemeId, Shortcut, CustomAICommand, GlobalStats } from '../types';
 import { DEFAULT_SHORTCUTS } from '../constants/shortcuts';
+
+// Default global stats
+const DEFAULT_GLOBAL_STATS: GlobalStats = {
+  totalSessions: 0,
+  totalMessages: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalCacheReadTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCostUsd: 0,
+  totalActiveTimeMs: 0,
+};
 
 // Default AI commands that ship with Maestro
 const DEFAULT_AI_COMMANDS: CustomAICommand[] = [
@@ -89,6 +101,11 @@ export interface UseSettingsReturn {
   // Custom AI Commands
   customAICommands: CustomAICommand[];
   setCustomAICommands: (value: CustomAICommand[]) => void;
+
+  // Global Stats (persistent across restarts)
+  globalStats: GlobalStats;
+  setGlobalStats: (value: GlobalStats) => void;
+  updateGlobalStats: (delta: Partial<GlobalStats>) => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -141,6 +158,9 @@ export function useSettings(): UseSettingsReturn {
 
   // Custom AI Commands
   const [customAICommands, setCustomAICommandsState] = useState<CustomAICommand[]>(DEFAULT_AI_COMMANDS);
+
+  // Global Stats (persistent)
+  const [globalStats, setGlobalStatsState] = useState<GlobalStats>(DEFAULT_GLOBAL_STATS);
 
   // Wrapper functions that persist to electron-store
   const setLlmProvider = (value: LLMProvider) => {
@@ -273,6 +293,29 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('customAICommands', value);
   };
 
+  const setGlobalStats = (value: GlobalStats) => {
+    setGlobalStatsState(value);
+    window.maestro.settings.set('globalStats', value);
+  };
+
+  // Update global stats by adding deltas to existing values
+  const updateGlobalStats = (delta: Partial<GlobalStats>) => {
+    setGlobalStatsState(prev => {
+      const updated: GlobalStats = {
+        totalSessions: prev.totalSessions + (delta.totalSessions || 0),
+        totalMessages: prev.totalMessages + (delta.totalMessages || 0),
+        totalInputTokens: prev.totalInputTokens + (delta.totalInputTokens || 0),
+        totalOutputTokens: prev.totalOutputTokens + (delta.totalOutputTokens || 0),
+        totalCacheReadTokens: prev.totalCacheReadTokens + (delta.totalCacheReadTokens || 0),
+        totalCacheCreationTokens: prev.totalCacheCreationTokens + (delta.totalCacheCreationTokens || 0),
+        totalCostUsd: prev.totalCostUsd + (delta.totalCostUsd || 0),
+        totalActiveTimeMs: prev.totalActiveTimeMs + (delta.totalActiveTimeMs || 0),
+      };
+      window.maestro.settings.set('globalStats', updated);
+      return updated;
+    });
+  };
+
   // Load settings from electron-store on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -305,6 +348,7 @@ export function useSettings(): UseSettingsReturn {
       const savedAudioFeedbackCommand = await window.maestro.settings.get('audioFeedbackCommand');
       const savedToastDuration = await window.maestro.settings.get('toastDuration');
       const savedCustomAICommands = await window.maestro.settings.get('customAICommands');
+      const savedGlobalStats = await window.maestro.settings.get('globalStats');
 
       // Migration: if old setting exists but new ones don't, migrate
       if (oldEnterToSend !== undefined && savedEnterToSendAI === undefined && savedEnterToSendTerminal === undefined) {
@@ -360,6 +404,11 @@ export function useSettings(): UseSettingsReturn {
           }
         });
         setCustomAICommandsState(Array.from(commandsById.values()));
+      }
+
+      // Load global stats
+      if (savedGlobalStats !== undefined) {
+        setGlobalStatsState({ ...DEFAULT_GLOBAL_STATS, ...savedGlobalStats });
       }
     };
     loadSettings();
@@ -423,5 +472,8 @@ export function useSettings(): UseSettingsReturn {
     setShortcuts,
     customAICommands,
     setCustomAICommands,
+    globalStats,
+    setGlobalStats,
+    updateGlobalStats,
   };
 }

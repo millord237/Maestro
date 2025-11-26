@@ -298,7 +298,7 @@ export function SessionList(props: SessionListProps) {
                       <Info className="w-5 h-5" style={{ color: theme.colors.accent }} />
                       <div className="flex-1">
                         <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>About Maestro</div>
-                        <div className="text-xs" style={{ color: theme.colors.textDim }}>Version and credits</div>
+                        <div className="text-xs" style={{ color: theme.colors.textDim }}>Version, Credits, Stats</div>
                       </div>
                     </button>
                   </div>
