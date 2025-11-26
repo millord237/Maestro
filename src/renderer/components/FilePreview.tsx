@@ -7,6 +7,7 @@ import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown } from 'lucide
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { MermaidRenderer } from './MermaidRenderer';
 
 interface FilePreviewProps {
   file: { name: string; content: string; path: string } | null;
@@ -645,6 +646,12 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
                 code: ({ node, inline, className, children, ...props }) => {
                   const match = (className || '').match(/language-(\w+)/);
                   const language = match ? match[1] : 'text';
+                  const codeContent = String(children).replace(/\n$/, '');
+
+                  // Handle mermaid code blocks
+                  if (!inline && language === 'mermaid') {
+                    return <MermaidRenderer chart={codeContent} theme={theme} />;
+                  }
 
                   return !inline && match ? (
                     <SyntaxHighlighter
@@ -659,7 +666,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
                       }}
                       PreTag="div"
                     >
-                      {String(children).replace(/\n$/, '')}
+                      {codeContent}
                     </SyntaxHighlighter>
                   ) : (
                     <code className={className} {...props}>

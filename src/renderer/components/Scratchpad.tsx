@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Eye, Edit, Play, Square, Loader2, HelpCircle } from 'lucide-react';
 import type { BatchRunState } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
+import { MermaidRenderer } from './MermaidRenderer';
 
 interface ScratchpadProps {
   content: string;
@@ -390,7 +393,42 @@ export function Scratchpad({
                 margin-left: -1.5em;
               }
             `}</style>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code: ({ node, inline, className, children, ...props }: any) => {
+                  const match = (className || '').match(/language-(\w+)/);
+                  const language = match ? match[1] : 'text';
+                  const codeContent = String(children).replace(/\n$/, '');
+
+                  // Handle mermaid code blocks
+                  if (!inline && language === 'mermaid') {
+                    return <MermaidRenderer chart={codeContent} theme={theme} />;
+                  }
+
+                  return !inline && match ? (
+                    <SyntaxHighlighter
+                      language={language}
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: '0.5em 0',
+                        padding: '1em',
+                        background: theme.colors.bgActivity,
+                        fontSize: '0.9em',
+                        borderRadius: '6px',
+                      }}
+                      PreTag="div"
+                    >
+                      {codeContent}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+              }}
+            >
               {content || '*No content yet. Switch to Edit mode to start writing.*'}
             </ReactMarkdown>
           </div>
