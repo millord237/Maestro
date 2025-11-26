@@ -368,8 +368,7 @@ function setupIpcHandlers() {
     if (!processManager) throw new Error('Process manager not initialized');
 
     // Get the shell from settings if not provided
-    // Use just the shell name (e.g., 'zsh') - not the full path
-    // This matches how PTY spawns shells successfully
+    // Shell name (e.g., 'zsh') will be resolved to full path in process-manager
     const shell = config.shell || store.get('defaultShell', 'zsh');
 
     logger.debug(`Running command: ${config.command}`, 'ProcessManager', {

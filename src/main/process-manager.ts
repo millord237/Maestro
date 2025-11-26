@@ -635,12 +635,29 @@ export class ProcessManager extends EventEmitter {
         env.PATH = standardPaths;
       }
 
-      console.log('[ProcessManager] runCommand spawning:', { shell, wrappedCommand, cwd, PATH: env.PATH?.substring(0, 100) });
+      // Resolve shell to full path - Electron's internal PATH may not include /bin
+      // where common shells like zsh and bash are located
+      let shellPath = shell;
+      if (!shell.includes('/')) {
+        const fs = require('fs');
+        const commonPaths = ['/bin/', '/usr/bin/', '/usr/local/bin/', '/opt/homebrew/bin/'];
+        for (const prefix of commonPaths) {
+          try {
+            fs.accessSync(prefix + shell, fs.constants.X_OK);
+            shellPath = prefix + shell;
+            break;
+          } catch {
+            // Try next path
+          }
+        }
+      }
+
+      console.log('[ProcessManager] runCommand spawning:', { shell, shellPath, wrappedCommand, cwd, PATH: env.PATH?.substring(0, 100) });
 
       const childProcess = spawn(wrappedCommand, [], {
         cwd,
         env,
-        shell: shell, // Use specified shell to interpret command
+        shell: shellPath, // Use resolved full path to shell
       });
 
       let stdoutBuffer = '';

@@ -86,7 +86,7 @@ export function useFileExplorer(
   };
 
   // Load file tree from directory
-  const loadFileTree = async (dirPath: string, maxDepth = 3, currentDepth = 0): Promise<any[]> => {
+  const loadFileTree = async (dirPath: string, maxDepth = 10, currentDepth = 0): Promise<any[]> => {
     if (currentDepth >= maxDepth) return [];
 
     try {
