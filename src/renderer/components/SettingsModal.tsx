@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2, Cpu } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2, Cpu, Clock } from 'lucide-react';
 import type { AgentConfig, Theme, Shortcut, ShellInfo, CustomAICommand } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -55,6 +55,8 @@ interface SettingsModalProps {
   setAudioFeedbackEnabled: (value: boolean) => void;
   audioFeedbackCommand: string;
   setAudioFeedbackCommand: (value: string) => void;
+  toastDuration: number;
+  setToastDuration: (value: number) => void;
   customAICommands: CustomAICommand[];
   setCustomAICommands: (commands: CustomAICommand[]) => void;
   initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'network' | 'notifications' | 'aicommands';
@@ -1443,6 +1445,79 @@ export function SettingsModal(props: SettingsModalProps) {
                     Command that accepts text via stdin. Examples: <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>say</code> (macOS), <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>espeak</code> (Linux), <code className="px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity }}>festival --tts</code>
                   </p>
                 </div>
+              </div>
+
+              {/* Toast Duration */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Clock className="w-3 h-3" />
+                  Toast Notification Duration
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => props.setToastDuration(5)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 5 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === 5 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    5s
+                  </button>
+                  <button
+                    onClick={() => props.setToastDuration(10)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 10 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === 10 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    10s
+                  </button>
+                  <button
+                    onClick={() => props.setToastDuration(20)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 20 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === 20 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    20s
+                  </button>
+                  <button
+                    onClick={() => props.setToastDuration(30)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 30 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === 30 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    30s
+                  </button>
+                  <button
+                    onClick={() => props.setToastDuration(0)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 0 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === 0 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    Never
+                  </button>
+                </div>
+                <p className="text-xs opacity-50 mt-2">
+                  How long toast notifications remain on screen. "Never" means they stay until manually dismissed.
+                </p>
               </div>
 
               {/* Info about when notifications are triggered */}

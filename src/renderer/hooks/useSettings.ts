@@ -79,6 +79,8 @@ export interface UseSettingsReturn {
   setAudioFeedbackEnabled: (value: boolean) => void;
   audioFeedbackCommand: string;
   setAudioFeedbackCommand: (value: string) => void;
+  toastDuration: number;
+  setToastDuration: (value: number) => void;
 
   // Shortcuts
   shortcuts: Record<string, Shortcut>;
@@ -132,6 +134,7 @@ export function useSettings(): UseSettingsReturn {
   const [osNotificationsEnabled, setOsNotificationsEnabledState] = useState(true); // Default: on
   const [audioFeedbackEnabled, setAudioFeedbackEnabledState] = useState(false); // Default: off
   const [audioFeedbackCommand, setAudioFeedbackCommandState] = useState('say'); // Default: macOS say command
+  const [toastDuration, setToastDurationState] = useState(20); // Default: 20 seconds, 0 = never auto-dismiss
 
   // Shortcuts
   const [shortcuts, setShortcutsState] = useState<Record<string, Shortcut>>(DEFAULT_SHORTCUTS);
@@ -260,6 +263,11 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('audioFeedbackCommand', value);
   };
 
+  const setToastDuration = (value: number) => {
+    setToastDurationState(value);
+    window.maestro.settings.set('toastDuration', value);
+  };
+
   const setCustomAICommands = (value: CustomAICommand[]) => {
     setCustomAICommandsState(value);
     window.maestro.settings.set('customAICommands', value);
@@ -295,6 +303,7 @@ export function useSettings(): UseSettingsReturn {
       const savedOsNotificationsEnabled = await window.maestro.settings.get('osNotificationsEnabled');
       const savedAudioFeedbackEnabled = await window.maestro.settings.get('audioFeedbackEnabled');
       const savedAudioFeedbackCommand = await window.maestro.settings.get('audioFeedbackCommand');
+      const savedToastDuration = await window.maestro.settings.get('toastDuration');
       const savedCustomAICommands = await window.maestro.settings.get('customAICommands');
 
       // Migration: if old setting exists but new ones don't, migrate
@@ -329,6 +338,7 @@ export function useSettings(): UseSettingsReturn {
       if (savedOsNotificationsEnabled !== undefined) setOsNotificationsEnabledState(savedOsNotificationsEnabled);
       if (savedAudioFeedbackEnabled !== undefined) setAudioFeedbackEnabledState(savedAudioFeedbackEnabled);
       if (savedAudioFeedbackCommand !== undefined) setAudioFeedbackCommandState(savedAudioFeedbackCommand);
+      if (savedToastDuration !== undefined) setToastDurationState(savedToastDuration);
 
       // Merge saved shortcuts with defaults (in case new shortcuts were added)
       if (savedShortcuts !== undefined) {
@@ -407,6 +417,8 @@ export function useSettings(): UseSettingsReturn {
     setAudioFeedbackEnabled,
     audioFeedbackCommand,
     setAudioFeedbackCommand,
+    toastDuration,
+    setToastDuration,
     shortcuts,
     setShortcuts,
     customAICommands,

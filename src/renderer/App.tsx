@@ -46,7 +46,7 @@ export default function MaestroConsole() {
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
   // --- TOAST NOTIFICATIONS ---
-  const { addToast } = useToast();
+  const { addToast, setDefaultDuration: setToastDefaultDuration } = useToast();
 
   // --- SETTINGS (from useSettings hook) ---
   const settings = useSettings();
@@ -73,6 +73,7 @@ export default function MaestroConsole() {
     osNotificationsEnabled, setOsNotificationsEnabled,
     audioFeedbackEnabled, setAudioFeedbackEnabled,
     audioFeedbackCommand, setAudioFeedbackCommand,
+    toastDuration, setToastDuration,
     shortcuts, setShortcuts,
     customAICommands, setCustomAICommands,
   } = settings;
@@ -186,6 +187,11 @@ export default function MaestroConsole() {
       }, 50);
     }
   }, [logViewerOpen]);
+
+  // Sync toast duration setting to ToastContext
+  useEffect(() => {
+    setToastDefaultDuration(toastDuration);
+  }, [toastDuration, setToastDefaultDuration]);
 
   // Close file preview when switching sessions
   useEffect(() => {
@@ -3198,6 +3204,8 @@ export default function MaestroConsole() {
         setAudioFeedbackEnabled={setAudioFeedbackEnabled}
         audioFeedbackCommand={audioFeedbackCommand}
         setAudioFeedbackCommand={setAudioFeedbackCommand}
+        toastDuration={toastDuration}
+        setToastDuration={setToastDuration}
         customAICommands={customAICommands}
         setCustomAICommands={setCustomAICommands}
         initialTab={settingsTab}
