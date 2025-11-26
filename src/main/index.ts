@@ -464,6 +464,52 @@ function setupIpcHandlers() {
     };
   });
 
+  ipcMain.handle('git:log', async (_, cwd: string, options?: { limit?: number; search?: string }) => {
+    // Get git log with formatted output for parsing
+    // Format: hash|author|date|refs|subject
+    const limit = options?.limit || 100;
+    const args = [
+      'log',
+      `--max-count=${limit}`,
+      '--pretty=format:%H|%an|%ad|%D|%s',
+      '--date=iso-strict'
+    ];
+
+    // Add search filter if provided
+    if (options?.search) {
+      args.push('--all', `--grep=${options.search}`, '-i');
+    }
+
+    const result = await execFileNoThrow('git', args, cwd);
+
+    if (result.exitCode !== 0) {
+      return { entries: [], error: result.stderr };
+    }
+
+    const entries = result.stdout
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => {
+        const [hash, author, date, refs, ...subjectParts] = line.split('|');
+        return {
+          hash,
+          shortHash: hash?.slice(0, 7),
+          author,
+          date,
+          refs: refs ? refs.split(', ').filter(r => r.trim()) : [],
+          subject: subjectParts.join('|'), // In case subject contains |
+        };
+      });
+
+    return { entries, error: null };
+  });
+
+  ipcMain.handle('git:show', async (_, cwd: string, hash: string) => {
+    // Get the full diff for a specific commit
+    const result = await execFileNoThrow('git', ['show', '--stat', '--patch', hash], cwd);
+    return { stdout: result.stdout, stderr: result.stderr };
+  });
+
   // File system operations
   ipcMain.handle('fs:readDir', async (_, dirPath: string) => {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });

@@ -56,6 +56,9 @@ export const MODAL_PRIORITIES = {
   /** Git diff preview overlay */
   GIT_DIFF: 200,
 
+  /** Git log viewer overlay */
+  GIT_LOG: 190,
+
   /** Image lightbox overlay */
   LIGHTBOX: 150,
 

@@ -16,6 +16,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { MainPanel } from './components/MainPanel';
 import { ProcessMonitor } from './components/ProcessMonitor';
 import { GitDiffViewer } from './components/GitDiffViewer';
+import { GitLogViewer } from './components/GitLogViewer';
 import { BatchRunnerModal } from './components/BatchRunnerModal';
 
 // Import custom hooks
@@ -109,6 +110,9 @@ export default function MaestroConsole() {
 
   // Git Diff State
   const [gitDiffPreview, setGitDiffPreview] = useState<string | null>(null);
+
+  // Git Log Viewer State
+  const [gitLogOpen, setGitLogOpen] = useState(false);
 
   // Renaming State
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -1516,6 +1520,12 @@ export default function MaestroConsole() {
         e.preventDefault();
         handleViewGitDiff();
       }
+      else if (isShortcut(e, 'viewGitLog')) {
+        e.preventDefault();
+        if (activeSession?.isGitRepo) {
+          setGitLogOpen(true);
+        }
+      }
       else if (isShortcut(e, 'agentSessions')) {
         e.preventDefault();
         if (activeSession?.toolType === 'claude-code') {
@@ -1531,7 +1541,7 @@ export default function MaestroConsole() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen, renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview, lightboxImage, hasOpenLayers, hasOpenModal, visibleSessions, sortedSessions, groups]);
+  }, [shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId, quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen, processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen, renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview, gitLogOpen, lightboxImage, hasOpenLayers, hasOpenModal, visibleSessions, sortedSessions, groups]);
 
   // Sync selectedSidebarIndex with activeSessionId
   // IMPORTANT: Only sync when activeSessionId changes, NOT when sortedSessions changes
@@ -2779,6 +2789,8 @@ export default function MaestroConsole() {
           setProcessMonitorOpen={setProcessMonitorOpen}
           setActiveRightTab={setActiveRightTab}
           setAgentSessionsOpen={setAgentSessionsOpen}
+          setGitDiffPreview={setGitDiffPreview}
+          setGitLogOpen={setGitLogOpen}
           startFreshSession={() => {
             // Create a fresh AI terminal session by clearing the Claude session ID and AI logs
             if (activeSession) {
@@ -2822,6 +2834,15 @@ export default function MaestroConsole() {
           cwd={activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd}
           theme={theme}
           onClose={() => setGitDiffPreview(null)}
+        />
+      )}
+
+      {/* --- GIT LOG VIEWER --- */}
+      {gitLogOpen && activeSession && (
+        <GitLogViewer
+          cwd={activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd}
+          theme={theme}
+          onClose={() => setGitLogOpen(false)}
         />
       )}
 

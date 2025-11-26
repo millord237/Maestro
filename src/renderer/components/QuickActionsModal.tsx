@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { gitService } from '../services/git';
 
 interface QuickAction {
   id: string;
@@ -45,6 +46,8 @@ interface QuickActionsModalProps {
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
+  setGitDiffPreview: (diff: string | null) => void;
+  setGitLogOpen: (open: boolean) => void;
   startFreshSession: () => void;
 }
 
@@ -58,7 +61,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setLeftSidebarOpen, setRightPanelOpen, setActiveRightTab, toggleInputMode,
     deleteSession, addNewSession, setSettingsModalOpen, setSettingsTab,
     setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
-    setAgentSessionsOpen, startFreshSession
+    setAgentSessionsOpen, setGitDiffPreview, setGitLogOpen, startFreshSession
   } = props;
 
   const [search, setSearch] = useState('');
@@ -207,6 +210,15 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'logs', label: 'View System Logs', action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
     { id: 'processes', label: 'View System Processes', action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
     ...(activeSession ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
+    ...(activeSession?.isGitRepo ? [{ id: 'gitDiff', label: 'View Git Diff', shortcut: shortcuts.viewGitDiff, action: async () => {
+      const cwd = activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd;
+      const diff = await gitService.getDiff(cwd);
+      if (diff.diff) {
+        setGitDiffPreview(diff.diff);
+      }
+      setQuickActionOpen(false);
+    } }] : []),
+    ...(activeSession?.isGitRepo ? [{ id: 'gitLog', label: 'View Git Log', shortcut: shortcuts.viewGitLog, action: () => { setGitLogOpen(true); setQuickActionOpen(false); } }] : []),
     { id: 'devtools', label: 'Toggle JavaScript Console', action: () => { window.maestro.devtools.toggle(); setQuickActionOpen(false); } },
     { id: 'about', label: 'About Maestro', action: () => { setAboutModalOpen(true); setQuickActionOpen(false); } },
     { id: 'goToFiles', label: 'Go to Files Tab', action: () => { setRightPanelOpen(true); setActiveRightTab('files'); setQuickActionOpen(false); } },
