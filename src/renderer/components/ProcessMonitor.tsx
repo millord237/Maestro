@@ -27,7 +27,9 @@ interface ProcessNode {
 export function ProcessMonitor(props: ProcessMonitorProps) {
   const { theme, sessions, groups, onClose } = props;
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const selectedNodeRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
 
@@ -57,6 +59,11 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  // Scroll selected node into view
+  useEffect(() => {
+    selectedNodeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedNodeId]);
 
   const toggleNode = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -156,24 +163,135 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
     return sessionNode;
   };
 
+  // Build flat list of visible nodes for keyboard navigation
+  const getVisibleNodes = (nodes: ProcessNode[]): ProcessNode[] => {
+    const result: ProcessNode[] = [];
+    const traverse = (nodeList: ProcessNode[]) => {
+      nodeList.forEach(node => {
+        result.push(node);
+        if (node.children && node.children.length > 0 && expandedNodes.has(node.id)) {
+          traverse(node.children);
+        }
+      });
+    };
+    traverse(nodes);
+    return result;
+  };
+
+  // Keyboard navigation handler
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const processTree = buildProcessTree();
+    const visibleNodes = getVisibleNodes(processTree);
+
+    if (visibleNodes.length === 0) return;
+
+    const currentIndex = selectedNodeId
+      ? visibleNodes.findIndex(n => n.id === selectedNodeId)
+      : -1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        if (currentIndex < visibleNodes.length - 1) {
+          setSelectedNodeId(visibleNodes[currentIndex + 1].id);
+        } else if (currentIndex === -1 && visibleNodes.length > 0) {
+          // If nothing selected, select first node
+          setSelectedNodeId(visibleNodes[0].id);
+        }
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        if (currentIndex > 0) {
+          setSelectedNodeId(visibleNodes[currentIndex - 1].id);
+        } else if (currentIndex === -1 && visibleNodes.length > 0) {
+          // If nothing selected, select last node
+          setSelectedNodeId(visibleNodes[visibleNodes.length - 1].id);
+        }
+        break;
+
+      case 'ArrowRight':
+        e.preventDefault();
+        if (selectedNodeId) {
+          const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);
+          if (selectedNode && selectedNode.children && selectedNode.children.length > 0) {
+            if (!expandedNodes.has(selectedNodeId)) {
+              // Expand the node
+              setExpandedNodes(prev => new Set([...prev, selectedNodeId]));
+            } else {
+              // Already expanded, move to first child
+              setSelectedNodeId(selectedNode.children[0].id);
+            }
+          }
+        }
+        break;
+
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (selectedNodeId) {
+          const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);
+          if (selectedNode && expandedNodes.has(selectedNodeId) && selectedNode.children && selectedNode.children.length > 0) {
+            // Collapse the node
+            setExpandedNodes(prev => {
+              const next = new Set(prev);
+              next.delete(selectedNodeId);
+              return next;
+            });
+          } else {
+            // Move to parent - find parent by checking which node contains this as a child
+            const findParent = (nodes: ProcessNode[], targetId: string, parent: ProcessNode | null = null): ProcessNode | null => {
+              for (const node of nodes) {
+                if (node.id === targetId) return parent;
+                if (node.children) {
+                  const found = findParent(node.children, targetId, node);
+                  if (found !== null) return found;
+                }
+              }
+              return null;
+            };
+            const parent = findParent(processTree, selectedNodeId);
+            if (parent) {
+              setSelectedNodeId(parent.id);
+            }
+          }
+        }
+        break;
+
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (selectedNodeId) {
+          const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);
+          if (selectedNode && selectedNode.children && selectedNode.children.length > 0) {
+            toggleNode(selectedNodeId);
+          }
+        }
+        break;
+    }
+  };
+
   const renderNode = (node: ProcessNode, depth: number = 0): React.ReactNode => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children && node.children.length > 0;
     const paddingLeft = depth * 20 + 16; // 20px per depth level + 16px base
+    const isSelected = selectedNodeId === node.id;
 
     if (node.type === 'group') {
       return (
         <div key={node.id}>
           <button
-            onClick={() => toggleNode(node.id)}
+            ref={isSelected ? selectedNodeRef as React.RefObject<HTMLButtonElement> : null}
+            onClick={() => { setSelectedNodeId(node.id); toggleNode(node.id); }}
             className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-opacity-5"
             style={{
               paddingLeft: `${paddingLeft}px`,
-              backgroundColor: 'transparent',
-              color: theme.colors.textMain
+              backgroundColor: isSelected ? `${theme.colors.accent}25` : 'transparent',
+              color: theme.colors.textMain,
+              outline: isSelected ? `2px solid ${theme.colors.accent}` : 'none',
+              outlineOffset: '-2px'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${theme.colors.accent}15`}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = `${theme.colors.accent}15`; }}
+            onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             {hasChildren && (
               isExpanded ?
@@ -202,15 +320,18 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
       return (
         <div key={node.id}>
           <button
-            onClick={() => toggleNode(node.id)}
+            ref={isSelected ? selectedNodeRef as React.RefObject<HTMLButtonElement> : null}
+            onClick={() => { setSelectedNodeId(node.id); toggleNode(node.id); }}
             className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-opacity-5"
             style={{
               paddingLeft: `${paddingLeft}px`,
-              backgroundColor: 'transparent',
-              color: theme.colors.textMain
+              backgroundColor: isSelected ? `${theme.colors.accent}25` : 'transparent',
+              color: theme.colors.textMain,
+              outline: isSelected ? `2px solid ${theme.colors.accent}` : 'none',
+              outlineOffset: '-2px'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${theme.colors.accent}15`}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = `${theme.colors.accent}15`; }}
+            onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             {hasChildren && (
               isExpanded ?
@@ -239,12 +360,20 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
 
       return (
         <div
+          ref={isSelected ? selectedNodeRef as React.RefObject<HTMLDivElement> : null}
           key={node.id}
-          className="px-4 py-2 flex items-center gap-2"
+          tabIndex={0}
+          className="px-4 py-2 flex items-center gap-2 cursor-default"
           style={{
             paddingLeft: `${paddingLeft}px`,
-            color: theme.colors.textMain
+            color: theme.colors.textMain,
+            backgroundColor: isSelected ? `${theme.colors.accent}25` : 'transparent',
+            outline: isSelected ? `2px solid ${theme.colors.accent}` : 'none',
+            outlineOffset: '-2px'
           }}
+          onClick={() => setSelectedNodeId(node.id)}
+          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = `${theme.colors.accent}15`; }}
+          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           <div className="w-4 h-4 flex-shrink-0" />
           <div
@@ -287,6 +416,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
         className="w-[700px] max-h-[80vh] rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none"
         style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div
@@ -334,8 +464,9 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             color: theme.colors.textDim
           }}
         >
-          <div>
-            {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'} • {groups.length} {groups.length === 1 ? 'group' : 'groups'}
+          <div className="flex items-center gap-4">
+            <span>{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'} • {groups.length} {groups.length === 1 ? 'group' : 'groups'}</span>
+            <span style={{ opacity: 0.7 }}>↑↓ navigate • ←→ collapse/expand</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.colors.success }} />
