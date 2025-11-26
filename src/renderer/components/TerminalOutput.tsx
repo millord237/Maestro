@@ -370,7 +370,8 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   }, [collapsedLogs, outputSearchQuery]);
 
   // Auto-scroll to bottom when new logs are added (not when deleted)
-  const prevLogCountRef = useRef(filteredLogs.length);
+  // Initialize to 0 so that on first load with existing logs, we scroll to bottom
+  const prevLogCountRef = useRef(0);
   useEffect(() => {
     // Only scroll when new logs are added, not when deleted
     if (filteredLogs.length > prevLogCountRef.current && filteredLogs.length > 0) {
