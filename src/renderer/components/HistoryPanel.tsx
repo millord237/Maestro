@@ -348,33 +348,18 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
                   </span>
                 </div>
 
-                {/* Summary */}
+                {/* Summary - 3 lines max */}
                 <p
                   className="text-xs leading-relaxed overflow-hidden"
                   style={{
                     color: theme.colors.textMain,
                     display: '-webkit-box',
-                    WebkitLineClamp: 2,
+                    WebkitLineClamp: 3,
                     WebkitBoxOrient: 'vertical' as const
                   }}
                 >
                   {entry.summary || 'No summary available'}
                 </p>
-
-                {/* Full response preview */}
-                {entry.fullResponse && (
-                  <p
-                    className="text-[10px] mt-1.5 opacity-60 leading-relaxed overflow-hidden"
-                    style={{
-                      color: theme.colors.textDim,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 1,
-                      WebkitBoxOrient: 'vertical' as const
-                    }}
-                  >
-                    {entry.fullResponse.slice(0, 200)}
-                  </p>
-                )}
               </div>
             );
           })
