@@ -127,6 +127,7 @@ export class AgentDetector {
       `${home}/.local/bin`,          // User local installs (pip, etc.)
       `${home}/.npm-global/bin`,     // npm global with custom prefix
       `${home}/bin`,                 // User bin directory
+      `${home}/.claude/local`,       // Sneaky Claude loccation
       '/usr/bin',
       '/bin',
       '/usr/sbin',
@@ -188,3 +189,4 @@ export class AgentDetector {
     this.cachedAgents = null;
   }
 }
+
