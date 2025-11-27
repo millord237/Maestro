@@ -81,6 +81,26 @@ const agentConfigsStore = new Store<AgentConfigsData>({
   },
 });
 
+// Window state store (for remembering window size/position)
+interface WindowState {
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+  isMaximized: boolean;
+  isFullScreen: boolean;
+}
+
+const windowStateStore = new Store<WindowState>({
+  name: 'maestro-window-state',
+  defaults: {
+    width: 1400,
+    height: 900,
+    isMaximized: false,
+    isFullScreen: false,
+  },
+});
+
 // History entries store (per-project history for AUTO and USER entries)
 interface HistoryEntry {
   id: string;
@@ -120,9 +140,14 @@ let sessionWebServerManager: SessionWebServerManager | null = null;
 let agentDetector: AgentDetector | null = null;
 
 function createWindow() {
+  // Restore saved window state
+  const savedState = windowStateStore.store;
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    x: savedState.x,
+    y: savedState.y,
+    width: savedState.width,
+    height: savedState.height,
     minWidth: 1000,
     minHeight: 600,
     backgroundColor: '#0b0b0d',
@@ -134,10 +159,40 @@ function createWindow() {
     },
   });
 
+  // Restore maximized/fullscreen state after window is created
+  if (savedState.isFullScreen) {
+    mainWindow.setFullScreen(true);
+  } else if (savedState.isMaximized) {
+    mainWindow.maximize();
+  }
+
   logger.info('Browser window created', 'Window', {
-    size: '1400x900',
+    size: `${savedState.width}x${savedState.height}`,
+    maximized: savedState.isMaximized,
+    fullScreen: savedState.isFullScreen,
     mode: process.env.NODE_ENV || 'production'
   });
+
+  // Save window state before closing
+  const saveWindowState = () => {
+    if (!mainWindow) return;
+
+    const isMaximized = mainWindow.isMaximized();
+    const isFullScreen = mainWindow.isFullScreen();
+    const bounds = mainWindow.getBounds();
+
+    // Only save bounds if not maximized/fullscreen (to restore proper size later)
+    if (!isMaximized && !isFullScreen) {
+      windowStateStore.set('x', bounds.x);
+      windowStateStore.set('y', bounds.y);
+      windowStateStore.set('width', bounds.width);
+      windowStateStore.set('height', bounds.height);
+    }
+    windowStateStore.set('isMaximized', isMaximized);
+    windowStateStore.set('isFullScreen', isFullScreen);
+  };
+
+  mainWindow.on('close', saveWindowState);
 
   // Load the app
   if (process.env.NODE_ENV === 'development') {

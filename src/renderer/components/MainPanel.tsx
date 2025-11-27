@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Wand2, Radio, ExternalLink, Columns, Copy, List, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit } from 'lucide-react';
+import { Wand2, Radio, ExternalLink, Columns, Copy, List, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit, Play } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
 import { InputArea } from './InputArea';
@@ -10,6 +10,13 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { gitService } from '../services/git';
 import { formatActiveTime } from '../utils/theme';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
+
+// Recent Claude session for quick access
+interface RecentClaudeSession {
+  sessionId: string;
+  firstMessage: string;
+  timestamp: string;
+}
 
 interface SlashCommand {
   command: string;
@@ -98,6 +105,10 @@ interface MainPanelProps {
 
   // TTS settings
   audioFeedbackCommand?: string;
+
+  // Recent Claude sessions for quick access
+  recentClaudeSessions: RecentClaudeSession[];
+  onResumeRecentSession: (sessionId: string) => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -128,9 +139,14 @@ export function MainPanel(props: MainPanelProps) {
   const [showSessionIdCopied, setShowSessionIdCopied] = useState(false);
   // Git pill tooltip hover state
   const [gitTooltipOpen, setGitTooltipOpen] = useState(false);
+  // Agent sessions tooltip hover state
+  const [sessionsTooltipOpen, setSessionsTooltipOpen] = useState(false);
   // Panel width for responsive hiding of widgets
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // Extract recent sessions from props
+  const { recentClaudeSessions, onResumeRecentSession } = props;
 
   // Track panel width for responsive widget hiding
   useEffect(() => {
@@ -618,9 +634,79 @@ export function MainPanel(props: MainPanelProps) {
                 )}
               </div>
 
-              <button onClick={() => setAgentSessionsOpen(true)} className="p-2 rounded hover:bg-white/5" title={`Agent Sessions (${shortcuts.agentSessions.keys.join('+').replace('Meta', 'Cmd').replace('Shift', '\u21E7')})`}>
-                <List className="w-4 h-4" />
-              </button>
+              {/* Agent Sessions Button with Recent Sessions Hover */}
+              <div
+                className="relative"
+                onMouseEnter={() => setSessionsTooltipOpen(true)}
+                onMouseLeave={() => setSessionsTooltipOpen(false)}
+              >
+                <button
+                  onClick={() => setAgentSessionsOpen(true)}
+                  className="p-2 rounded hover:bg-white/5"
+                  title={`Agent Sessions (${shortcuts.agentSessions.keys.join('+').replace('Meta', 'Cmd').replace('Shift', '\u21E7')})`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+
+                {/* Recent Sessions Hover Overlay */}
+                {sessionsTooltipOpen && recentClaudeSessions.length > 0 && (
+                  <div
+                    className="absolute top-full right-0 mt-1 w-72 rounded-lg border shadow-xl z-50"
+                    style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+                    onMouseEnter={() => setSessionsTooltipOpen(true)}
+                    onMouseLeave={() => setSessionsTooltipOpen(false)}
+                  >
+                    <div
+                      className="px-3 py-2 text-xs font-bold uppercase border-b"
+                      style={{ color: theme.colors.textDim, borderColor: theme.colors.border }}
+                    >
+                      Recent Sessions
+                    </div>
+                    <div className="max-h-64 overflow-y-auto scrollbar-thin">
+                      {recentClaudeSessions.slice(0, 5).map((session) => (
+                        <button
+                          key={session.sessionId}
+                          onClick={() => {
+                            onResumeRecentSession(session.sessionId);
+                            setSessionsTooltipOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-white/5 transition-colors flex items-center gap-2"
+                        >
+                          <Play className="w-3 h-3 shrink-0" style={{ color: theme.colors.accent }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs truncate" style={{ color: theme.colors.textMain }}>
+                              {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+                            </div>
+                            <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
+                              {(() => {
+                                const date = new Date(session.timestamp);
+                                const now = new Date();
+                                const diffMs = now.getTime() - date.getTime();
+                                const diffMins = Math.floor(diffMs / 60000);
+                                const diffHours = Math.floor(diffMins / 60);
+                                if (diffMins < 1) return 'just now';
+                                if (diffMins < 60) return `${diffMins}m ago`;
+                                if (diffHours < 24) return `${diffHours}h ago`;
+                                return date.toLocaleDateString();
+                              })()}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div
+                      className="px-3 py-2 text-xs border-t text-center cursor-pointer hover:bg-white/5"
+                      style={{ color: theme.colors.accent, borderColor: theme.colors.border }}
+                      onClick={() => {
+                        setAgentSessionsOpen(true);
+                        setSessionsTooltipOpen(false);
+                      }}
+                    >
+                      View all sessions →
+                    </div>
+                  </div>
+                )}
+              </div>
               {!rightPanelOpen && (
                 <button onClick={() => setRightPanelOpen(true)} className="p-2 rounded hover:bg-white/5" title={`Show right panel (${shortcuts.toggleRightPanel.keys.join('+').replace('Meta', 'Cmd')})`}>
                   <Columns className="w-4 h-4" />

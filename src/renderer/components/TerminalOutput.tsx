@@ -41,9 +41,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Virtuoso ref for programmatic scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
-  // Track if user is viewing expanded content (disable auto-scroll)
-  const [userScrolledAway, setUserScrolledAway] = useState(false);
-
   // Track which log entries are expanded (by log ID)
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
@@ -213,7 +210,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           key={`match-${index}`}
           style={{
             backgroundColor: theme.colors.warning,
-            color: theme.mode === 'dark' ? '#000' : '#fff',
+            color: theme.mode === 'light' ? '#fff' : '#000',
             padding: '1px 2px',
             borderRadius: '2px'
           }}
@@ -253,7 +250,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       result += text.substring(lastIndex, index);
 
       // Add marked match with special tags
-      result += `<mark style="background-color: ${theme.colors.warning}; color: ${theme.mode === 'dark' ? '#000' : '#fff'}; padding: 1px 2px; border-radius: 2px;">`;
+      result += `<mark style="background-color: ${theme.colors.warning}; color: ${theme.mode === 'light' ? '#fff' : '#000'}; padding: 1px 2px; border-radius: 2px;">`;
       result += text.substring(index, index + query.length);
       result += '</mark>';
 
@@ -402,6 +399,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Initialize to 0 so that on first load with existing logs, we scroll to bottom
   const prevLogCountRef = useRef(0);
   useEffect(() => {
+    // Don't auto-scroll if user has expanded logs (viewing full content)
+    if (hasExpandedLogs) {
+      prevLogCountRef.current = filteredLogs.length;
+      return;
+    }
     // Only scroll when new logs are added, not when deleted
     if (filteredLogs.length > prevLogCountRef.current && filteredLogs.length > 0) {
       // Use setTimeout to ensure scroll happens after render
@@ -414,11 +416,16 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       }, 0);
     }
     prevLogCountRef.current = filteredLogs.length;
-  }, [filteredLogs.length]);
+  }, [filteredLogs.length, hasExpandedLogs]);
 
   // Auto-scroll to bottom when session becomes busy to show thinking indicator
   const prevBusyStateRef = useRef(session.state === 'busy');
   useEffect(() => {
+    // Don't auto-scroll if user has expanded logs (viewing full content)
+    if (hasExpandedLogs) {
+      prevBusyStateRef.current = session.state === 'busy';
+      return;
+    }
     const isBusy = session.state === 'busy';
     // Scroll when transitioning to busy state
     if (isBusy && !prevBusyStateRef.current) {
@@ -432,11 +439,16 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       }, 50);
     }
     prevBusyStateRef.current = isBusy;
-  }, [session.state, filteredLogs.length]);
+  }, [session.state, filteredLogs.length, hasExpandedLogs]);
 
   // Auto-scroll to bottom when message queue changes
   const prevQueueLengthRef = useRef(session.messageQueue?.length || 0);
   useEffect(() => {
+    // Don't auto-scroll if user has expanded logs (viewing full content)
+    if (hasExpandedLogs) {
+      prevQueueLengthRef.current = session.messageQueue?.length || 0;
+      return;
+    }
     const queueLength = session.messageQueue?.length || 0;
     // Scroll when new messages are added to the queue
     if (queueLength > prevQueueLengthRef.current) {
@@ -449,7 +461,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       }, 50);
     }
     prevQueueLengthRef.current = queueLength;
-  }, [session.messageQueue?.length, filteredLogs.length]);
+  }, [session.messageQueue?.length, filteredLogs.length, hasExpandedLogs]);
 
   // Render a single log item - used by Virtuoso
   const LogItem = useCallback(({ index, log }: { index: number; log: LogEntry }) => {
@@ -820,12 +832,15 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             </>
           )}
           {/* Action buttons - bottom right corner */}
-          <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          <div
+            className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100"
+            style={{ transition: 'opacity 0.15s ease-in-out' }}
+          >
             {/* Speak Button - only show for non-user messages when TTS is configured */}
             {audioFeedbackCommand && log.source !== 'user' && (
               <button
                 onClick={() => speakText(log.text)}
-                className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
+                className="p-1.5 rounded opacity-50 hover:opacity-100"
                 style={{ color: theme.colors.textDim }}
                 title="Speak text"
               >
@@ -835,7 +850,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             {/* Copy to Clipboard Button */}
             <button
               onClick={() => copyToClipboard(log.text)}
-              className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
+              className="p-1.5 rounded opacity-50 hover:opacity-100"
               style={{ color: theme.colors.textDim }}
               title="Copy to clipboard"
             >
@@ -934,24 +949,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         ref={virtuosoRef}
         data={filteredLogs}
         className="flex-1"
-        atBottomStateChange={(atBottom) => {
-          // Only update state when the value actually changes to reduce re-renders
-          setUserScrolledAway(prev => {
-            const newValue = !atBottom;
-            return prev === newValue ? prev : newValue;
-          });
-        }}
-        followOutput={(isAtBottom) => {
+        followOutput={() => {
           // Don't auto-scroll if user has expanded logs (viewing full content)
           if (hasExpandedLogs) return false;
-          // Don't auto-scroll if user has scrolled away (e.g., reading content)
-          if (userScrolledAway && !isAtBottom) return false;
-          // Always scroll when session becomes busy to show the thinking indicator
-          if (session.state === 'busy' && isAtBottom) return 'smooth';
-          // Always scroll when there are queued messages to show them
-          if (session.messageQueue && session.messageQueue.length > 0 && isAtBottom) return 'smooth';
-          // Otherwise, only follow if user is already at bottom
-          return isAtBottom ? 'smooth' : false;
+          // Don't follow output - we handle scrolling manually
+          return false;
         }}
         itemContent={(index, log) => <LogItem index={index} log={log} />}
         components={{

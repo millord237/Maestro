@@ -542,7 +542,7 @@ export function AgentSessionsBrowser({
                 className="max-w-[75%] rounded-lg px-4 py-3 text-sm"
                 style={{
                   backgroundColor: msg.type === 'user' ? theme.colors.accent : theme.colors.bgActivity,
-                  color: msg.type === 'user' ? theme.colors.accentText : theme.colors.textMain,
+                  color: msg.type === 'user' ? (theme.mode === 'light' ? '#fff' : '#000') : theme.colors.textMain,
                 }}
               >
                 <div className="whitespace-pre-wrap break-words">
@@ -550,7 +550,7 @@ export function AgentSessionsBrowser({
                 </div>
                 <div
                   className="text-[10px] mt-2 opacity-60"
-                  style={{ color: msg.type === 'user' ? theme.colors.accentText : theme.colors.textDim }}
+                  style={{ color: msg.type === 'user' ? (theme.mode === 'light' ? '#fff' : '#000') : theme.colors.textDim }}
                 >
                   {formatRelativeTime(msg.timestamp)}
                 </div>

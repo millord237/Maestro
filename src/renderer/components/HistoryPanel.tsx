@@ -80,10 +80,10 @@ const ActivityGraph: React.FC<ActivityGraphProps> = ({ entries, theme }) => {
       className="flex-1 min-w-0 flex flex-col relative mt-0.5"
       title={hoveredIndex === null ? `Last 24h: ${totalAuto} auto, ${totalUser} user` : undefined}
     >
-      {/* Hover tooltip */}
+      {/* Hover tooltip - positioned below the graph */}
       {hoveredIndex !== null && (
         <div
-          className="absolute bottom-full mb-1 px-2 py-1.5 rounded text-[10px] font-mono whitespace-nowrap z-20 pointer-events-none"
+          className="absolute top-full mt-1 px-2 py-1.5 rounded text-[10px] font-mono whitespace-nowrap z-20 pointer-events-none"
           style={{
             backgroundColor: theme.colors.bgSidebar,
             border: `1px solid ${theme.colors.border}`,

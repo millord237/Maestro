@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2 } from 'lucide-react';
+import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Star } from 'lucide-react';
 import type { Theme, Session } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -46,6 +46,7 @@ export function AgentSessionsModal({
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
   const [messagesOffset, setMessagesOffset] = useState(0);
+  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
@@ -96,8 +97,13 @@ export function AgentSessionsModal({
     }
   }, [viewingSession, updateLayerHandler]);
 
-  // Load sessions on mount
+  // Load sessions on mount and reset to list view
   useEffect(() => {
+    // Always reset to list view when modal opens
+    setViewingSession(null);
+    setMessages([]);
+    setMessagesOffset(0);
+
     const loadSessions = async () => {
       if (!activeSession?.cwd) {
         console.log('AgentSessionsModal: No activeSession.cwd');
@@ -107,6 +113,13 @@ export function AgentSessionsModal({
 
       console.log('AgentSessionsModal: Loading sessions for cwd:', activeSession.cwd);
       try {
+        // Load starred sessions for this project
+        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
+        const savedStarred = await window.maestro.settings.get(starredKey);
+        if (savedStarred && Array.isArray(savedStarred)) {
+          setStarredSessions(new Set(savedStarred));
+        }
+
         const result = await window.maestro.claude.listSessions(activeSession.cwd);
         console.log('AgentSessionsModal: Got sessions:', result.length);
         setSessions(result);
@@ -119,6 +132,25 @@ export function AgentSessionsModal({
 
     loadSessions();
   }, [activeSession?.cwd]);
+
+  // Toggle star status for a session
+  const toggleStar = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger session view
+
+    const newStarred = new Set(starredSessions);
+    if (newStarred.has(sessionId)) {
+      newStarred.delete(sessionId);
+    } else {
+      newStarred.add(sessionId);
+    }
+    setStarredSessions(newStarred);
+
+    // Persist to settings
+    if (activeSession?.cwd) {
+      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
+      await window.maestro.settings.set(starredKey, Array.from(newStarred));
+    }
+  }, [starredSessions, activeSession?.cwd]);
 
   // Focus input on mount
   useEffect(() => {
@@ -193,11 +225,20 @@ export function AgentSessionsModal({
     }
   }, [hasMoreMessages, messagesLoading, handleLoadMore]);
 
-  // Filter sessions by search
-  const filteredSessions = sessions.filter(s =>
-    s.firstMessage.toLowerCase().includes(search.toLowerCase()) ||
-    s.sessionId.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter sessions by search and sort starred to top
+  const filteredSessions = sessions
+    .filter(s =>
+      s.firstMessage.toLowerCase().includes(search.toLowerCase()) ||
+      s.sessionId.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aStarred = starredSessions.has(a.sessionId);
+      const bStarred = starredSessions.has(b.sessionId);
+      if (aStarred && !bStarred) return -1;
+      if (!aStarred && bStarred) return 1;
+      // Within same starred status, sort by most recent
+      return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+    });
 
   // Reset selected index when search changes
   useEffect(() => {
@@ -357,7 +398,7 @@ export function AgentSessionsModal({
                   className="max-w-[85%] rounded-lg px-4 py-2 text-sm"
                   style={{
                     backgroundColor: msg.type === 'user' ? theme.colors.accent : theme.colors.bgMain,
-                    color: msg.type === 'user' ? theme.colors.accentText : theme.colors.textMain,
+                    color: msg.type === 'user' ? (theme.mode === 'light' ? '#fff' : '#000') : theme.colors.textMain,
                   }}
                 >
                   <div className="whitespace-pre-wrap break-words">
@@ -365,7 +406,7 @@ export function AgentSessionsModal({
                   </div>
                   <div
                     className="text-[10px] mt-1 opacity-60"
-                    style={{ color: msg.type === 'user' ? theme.colors.accentText : theme.colors.textDim }}
+                    style={{ color: msg.type === 'user' ? (theme.mode === 'light' ? '#fff' : '#000') : theme.colors.textDim }}
                   >
                     {formatRelativeTime(msg.timestamp)}
                   </div>
@@ -390,38 +431,55 @@ export function AgentSessionsModal({
                 {sessions.length === 0 ? 'No Claude sessions found for this project' : 'No sessions match your search'}
               </div>
             ) : (
-              filteredSessions.map((session, i) => (
-                <button
-                  key={session.sessionId}
-                  ref={i === selectedIndex ? selectedItemRef : null}
-                  onClick={() => handleViewSession(session)}
-                  className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-opacity-10 transition-colors"
-                  style={{
-                    backgroundColor: i === selectedIndex ? theme.colors.accent : 'transparent',
-                    color: theme.colors.textMain,
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate text-sm">
-                      {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+              filteredSessions.map((session, i) => {
+                const isStarred = starredSessions.has(session.sessionId);
+                return (
+                  <button
+                    key={session.sessionId}
+                    ref={i === selectedIndex ? selectedItemRef : null}
+                    onClick={() => handleViewSession(session)}
+                    className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-opacity-10 transition-colors group"
+                    style={{
+                      backgroundColor: i === selectedIndex ? theme.colors.accent : 'transparent',
+                      color: theme.colors.textMain,
+                    }}
+                  >
+                    {/* Star button */}
+                    <button
+                      onClick={(e) => toggleStar(session.sessionId, e)}
+                      className="p-1 -ml-1 rounded hover:bg-white/10 transition-colors shrink-0"
+                      title={isStarred ? 'Remove from favorites' : 'Add to favorites'}
+                    >
+                      <Star
+                        className="w-4 h-4"
+                        style={{
+                          color: isStarred ? theme.colors.warning : theme.colors.textDim,
+                          fill: isStarred ? theme.colors.warning : 'transparent',
+                        }}
+                      />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate text-sm">
+                        {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: theme.colors.textDim }}>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatRelativeTime(session.modifiedAt)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" />
+                          {session.messageCount} msgs
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" />
+                          {formatSize(session.sizeBytes)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: theme.colors.textDim }}>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatRelativeTime(session.modifiedAt)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        {session.messageCount} msgs
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <HardDrive className="w-3 h-3" />
-                        {formatSize(session.sizeBytes)}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         )}
