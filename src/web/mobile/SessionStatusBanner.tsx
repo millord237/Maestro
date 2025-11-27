@@ -127,6 +127,110 @@ function CostTracker({ usageStats }: { usageStats?: UsageStats | null }) {
 }
 
 /**
+ * Calculate context usage percentage from usage stats
+ * Returns the percentage of context window used (0-100)
+ */
+function calculateContextUsage(usageStats?: UsageStats | null): number | null {
+  if (!usageStats) return null;
+
+  const { inputTokens, outputTokens, contextWindow } = usageStats;
+
+  // Need all three values to calculate percentage
+  if (
+    inputTokens === undefined || inputTokens === null ||
+    outputTokens === undefined || outputTokens === null ||
+    contextWindow === undefined || contextWindow === null ||
+    contextWindow === 0
+  ) {
+    return null;
+  }
+
+  // Context usage = (input + output tokens) / context window
+  const contextTokens = inputTokens + outputTokens;
+  const percentage = Math.min(Math.round((contextTokens / contextWindow) * 100), 100);
+
+  return percentage;
+}
+
+/**
+ * Get color for context usage bar based on percentage
+ * Green for low usage, yellow for medium, red for high
+ */
+function getContextBarColor(percentage: number, colors: ReturnType<typeof useThemeColors>): string {
+  if (percentage >= 90) return colors.error;
+  if (percentage >= 70) return colors.warning;
+  return colors.success;
+}
+
+/**
+ * ContextUsageBar component - displays context window usage as a progress bar
+ * Shows a visual indicator of how much of the context window has been used.
+ */
+function ContextUsageBar({ usageStats }: { usageStats?: UsageStats | null }) {
+  const colors = useThemeColors();
+
+  const percentage = calculateContextUsage(usageStats);
+
+  // Don't render if we can't calculate percentage
+  if (percentage === null) {
+    return null;
+  }
+
+  const barColor = getContextBarColor(percentage, colors);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        flexShrink: 0,
+      }}
+      title={`Context window: ${percentage}% used`}
+      aria-label={`Context window ${percentage}% used`}
+      role="progressbar"
+      aria-valuenow={percentage}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      {/* Progress bar container */}
+      <div
+        style={{
+          width: '40px',
+          height: '6px',
+          backgroundColor: `${colors.textDim}20`,
+          borderRadius: '3px',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Progress bar fill */}
+        <div
+          style={{
+            width: `${percentage}%`,
+            height: '100%',
+            backgroundColor: barColor,
+            borderRadius: '3px',
+            transition: 'width 0.3s ease-out, background-color 0.3s ease-out',
+          }}
+        />
+      </div>
+      {/* Percentage label */}
+      <span
+        style={{
+          fontSize: '10px',
+          fontWeight: 500,
+          color: colors.textDim,
+          minWidth: '28px',
+          textAlign: 'right',
+        }}
+      >
+        {percentage}%
+      </span>
+    </div>
+  );
+}
+
+/**
  * Thinking animation component - three dots that animate in sequence
  */
 function ThinkingIndicator() {
@@ -269,6 +373,9 @@ export function SessionStatusBanner({
 
           {/* Cost tracker */}
           <CostTracker usageStats={session.usageStats} />
+
+          {/* Context usage bar */}
+          <ContextUsageBar usageStats={session.usageStats} />
         </div>
 
         {/* Working directory */}
