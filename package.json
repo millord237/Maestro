@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Multi-Instance AI Coding Console - Unified IDE for managing multiple AI coding assistants",
   "main": "dist/index.js",
-  "author": "Maestro Team",
+  "author": {
+    "name": "Maestro Team",
+    "email": "maestro@example.com"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
