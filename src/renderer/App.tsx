@@ -1015,6 +1015,9 @@ export default function MaestroConsole() {
       contextUsage: activeSession.contextUsage,
       usageStats: activeSession.usageStats
     });
+
+    // Refresh history panel to show the new entry
+    rightPanelRef.current?.refreshHistoryPanel();
   }, [activeSession]);
 
   // Helper to start a new Claude session

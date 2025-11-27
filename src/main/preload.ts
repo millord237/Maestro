@@ -187,6 +187,9 @@ contextBridge.exposeInMainWorld('maestro', {
     getLogLevel: () => ipcRenderer.invoke('logger:getLogLevel'),
     setMaxLogBuffer: (max: number) => ipcRenderer.invoke('logger:setMaxLogBuffer', max),
     getMaxLogBuffer: () => ipcRenderer.invoke('logger:getMaxLogBuffer'),
+    // Convenience method for logging toast notifications
+    toast: (title: string, data?: unknown) =>
+      ipcRenderer.invoke('logger:log', 'toast', title, 'Toast', data),
   },
 
   // Claude Code sessions API

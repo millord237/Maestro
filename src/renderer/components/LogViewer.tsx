@@ -6,7 +6,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
 interface SystemLogEntry {
   timestamp: number;
-  level: 'debug' | 'info' | 'warn' | 'error';
+  level: 'debug' | 'info' | 'warn' | 'error' | 'toast';
   message: string;
   context?: string;
   data?: unknown;
@@ -22,7 +22,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
   const [filteredLogs, setFilteredLogs] = useState<SystemLogEntry[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState<'debug' | 'info' | 'warn' | 'error' | 'all'>('all');
+  const [selectedLevel, setSelectedLevel] = useState<'debug' | 'info' | 'warn' | 'error' | 'toast' | 'all'>('all');
   const [expandedData, setExpandedData] = useState<Set<number>>(new Set());
   const logsEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -199,6 +199,8 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
         return '#f59e0b'; // Amber
       case 'error':
         return '#ef4444'; // Red
+      case 'toast':
+        return '#a855f7'; // Purple
       default:
         return theme.colors.textDim;
     }
@@ -214,6 +216,8 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
         return 'rgba(245, 158, 11, 0.15)';
       case 'error':
         return 'rgba(239, 68, 68, 0.15)';
+      case 'toast':
+        return 'rgba(168, 85, 247, 0.15)';
       default:
         return 'transparent';
     }
@@ -278,7 +282,7 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
         <span className="text-xs font-bold opacity-70 uppercase mr-2" style={{ color: theme.colors.textDim }}>
           Filter:
         </span>
-        {(['all', 'debug', 'info', 'warn', 'error'] as const).map(level => (
+        {(['all', 'debug', 'info', 'warn', 'error', 'toast'] as const).map(level => (
           <button
             key={level}
             onClick={() => setSelectedLevel(level)}
