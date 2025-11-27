@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState, useCallback } from 'react';
-import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, StopCircle } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
@@ -956,20 +956,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                         <span>Cache: {session.usageStats.cacheReadInputTokens.toLocaleString()}</span>
                       )}
                     </div>
-                  )}
-                  {onInterrupt && (
-                    <button
-                      onClick={onInterrupt}
-                      className="flex items-center gap-2 mt-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90"
-                      style={{
-                        backgroundColor: theme.colors.error,
-                        color: '#fff'
-                      }}
-                      title="Interrupt (Ctrl+C)"
-                    >
-                      <StopCircle className="w-4 h-4" />
-                      Stop
-                    </button>
                   )}
                 </div>
               )}

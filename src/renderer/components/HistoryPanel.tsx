@@ -151,6 +151,11 @@ export interface HistoryPanelHandle {
   refreshHistory: () => void;
 }
 
+// Constants for history pagination
+const MAX_HISTORY_IN_MEMORY = 500;  // Maximum entries to keep in memory
+const INITIAL_DISPLAY_COUNT = 50;   // Initial entries to render
+const LOAD_MORE_COUNT = 50;         // Entries to add when scrolling
+
 export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPanelProps>(function HistoryPanel({ session, theme, onJumpToClaudeSession }, ref) {
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<HistoryEntryType>>(new Set(['AUTO', 'USER']));
@@ -159,6 +164,7 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
   const [detailModalEntry, setDetailModalEntry] = useState<HistoryEntry | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
   const [searchFilterOpen, setSearchFilterOpen] = useState(false);
+  const [displayCount, setDisplayCount] = useState(INITIAL_DISPLAY_COUNT);
 
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
