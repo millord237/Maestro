@@ -22,7 +22,8 @@ import { CommandInputBar, type InputMode } from './CommandInputBar';
 import { CommandHistoryDrawer } from './CommandHistoryDrawer';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SessionStatusBanner } from './SessionStatusBanner';
-import type { Session } from '../hooks/useSessions';
+import { ResponseViewer } from './ResponseViewer';
+import type { Session, LastResponsePreview } from '../hooks/useSessions';
 
 /**
  * Map WebSocket state to display properties
@@ -141,6 +142,8 @@ export default function MobileApp() {
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [commandInput, setCommandInput] = useState('');
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [showResponseViewer, setShowResponseViewer] = useState(false);
+  const [selectedResponse, setSelectedResponse] = useState<LastResponsePreview | null>(null);
 
   // Command history hook
   const {
@@ -355,6 +358,21 @@ export default function MobileApp() {
     // Haptic feedback is provided by the drawer
   }, []);
 
+  // Handle expanding response to full-screen viewer
+  const handleExpandResponse = useCallback((response: LastResponsePreview) => {
+    setSelectedResponse(response);
+    setShowResponseViewer(true);
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+    console.log('[Mobile] Opening response viewer');
+  }, []);
+
+  // Handle closing response viewer
+  const handleCloseResponseViewer = useCallback(() => {
+    setShowResponseViewer(false);
+    // Keep selectedResponse so animation can complete
+    setTimeout(() => setSelectedResponse(null), 300);
+  }, []);
+
   // Get active session for input mode
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
@@ -511,7 +529,10 @@ export default function MobileApp() {
 
       {/* Session status banner - shown when connected and a session is selected */}
       {showSessionPillBar && activeSession && (
-        <SessionStatusBanner session={activeSession} />
+        <SessionStatusBanner
+          session={activeSession}
+          onExpandResponse={handleExpandResponse}
+        />
       )}
 
       {/* All Sessions view - full-screen modal with larger session cards */}
@@ -613,6 +634,14 @@ export default function MobileApp() {
         onSelectCommand={handleSelectHistoryCommand}
         onDeleteCommand={removeFromHistory}
         onClearHistory={clearHistory}
+      />
+
+      {/* Full-screen response viewer modal */}
+      <ResponseViewer
+        isOpen={showResponseViewer}
+        response={selectedResponse}
+        onClose={handleCloseResponseViewer}
+        sessionName={activeSession?.name}
       />
     </div>
   );
