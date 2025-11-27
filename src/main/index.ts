@@ -120,6 +120,8 @@ interface HistoryEntry {
     totalCostUsd: number;
     contextWindow: number;
   };
+  success?: boolean; // For AUTO entries: whether the task completed successfully
+  elapsedTimeMs?: number; // Time taken to complete this task in milliseconds
 }
 
 interface HistoryData {

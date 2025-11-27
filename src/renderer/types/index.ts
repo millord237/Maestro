@@ -75,6 +75,7 @@ export interface HistoryEntry {
   contextUsage?: number; // Context window usage percentage at time of entry
   usageStats?: UsageStats; // Token usage and cost at time of entry
   success?: boolean; // For AUTO entries: whether the task completed successfully (true) or failed (false)
+  elapsedTimeMs?: number; // Time taken to complete this task in milliseconds
 }
 
 // Batch processing state

@@ -1,8 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Bot, User, ExternalLink, Copy, Check, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { X, Bot, User, ExternalLink, Copy, Check, CheckCircle, XCircle, Trash2, Clock, Cpu, Zap } from 'lucide-react';
 import type { Theme, HistoryEntry } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+
+// Format elapsed time in human-readable format
+const formatElapsedTime = (ms: number): string => {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+};
 
 interface HistoryDetailModalProps {
   theme: Theme;
@@ -191,39 +204,97 @@ export function HistoryDetailModal({
             </span>
           </div>
 
-          {/* Right side widgets */}
-          <div className="flex items-center gap-3">
-            {/* Cost Tracker - styled as pill */}
-            {entry.usageStats && entry.usageStats.totalCostUsd > 0 && (
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
-                ${entry.usageStats.totalCostUsd.toFixed(2)}
-              </span>
-            )}
-
-            {/* Context Window Widget */}
-            {entry.contextUsage !== undefined && (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold uppercase" style={{ color: theme.colors.textDim }}>Context Window</span>
-                <div className="w-24 h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: theme.colors.border }}>
-                  <div
-                    className="h-full transition-all duration-500 ease-out"
-                    style={{
-                      width: `${entry.contextUsage}%`,
-                      backgroundColor: getContextColor(entry.contextUsage, theme)
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={onClose}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5" style={{ color: theme.colors.textDim }} />
-            </button>
-          </div>
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-white/10 transition-colors"
+          >
+            <X className="w-5 h-5" style={{ color: theme.colors.textDim }} />
+          </button>
         </div>
+
+        {/* Stats Panel - shown when we have usage stats */}
+        {(entry.usageStats || entry.contextUsage !== undefined || entry.elapsedTimeMs) && (
+          <div
+            className="px-6 py-4 border-b shrink-0"
+            style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain + '40' }}
+          >
+            <div className="flex items-center gap-6 flex-wrap">
+              {/* Context Window Widget */}
+              {entry.contextUsage !== undefined && entry.usageStats && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <Cpu className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+                    <span className="text-[10px] font-bold uppercase" style={{ color: theme.colors.textDim }}>
+                      Context
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.colors.border }}>
+                        <div
+                          className="h-full transition-all duration-500 ease-out"
+                          style={{
+                            width: `${entry.contextUsage}%`,
+                            backgroundColor: getContextColor(entry.contextUsage, theme)
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono font-bold" style={{ color: getContextColor(entry.contextUsage, theme) }}>
+                        {entry.contextUsage}%
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono" style={{ color: theme.colors.textDim }}>
+                      {((entry.usageStats.inputTokens + entry.usageStats.outputTokens) / 1000).toFixed(1)}k / {(entry.usageStats.contextWindow / 1000).toFixed(0)}k tokens
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Token Breakdown */}
+              {entry.usageStats && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+                    <span className="text-[10px] font-bold uppercase" style={{ color: theme.colors.textDim }}>
+                      Tokens
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-mono">
+                    <span style={{ color: theme.colors.accent }}>
+                      <span style={{ color: theme.colors.textDim }}>In:</span> {entry.usageStats.inputTokens.toLocaleString()}
+                    </span>
+                    <span style={{ color: theme.colors.success }}>
+                      <span style={{ color: theme.colors.textDim }}>Out:</span> {entry.usageStats.outputTokens.toLocaleString()}
+                    </span>
+                    {entry.usageStats.cacheReadInputTokens > 0 && (
+                      <span style={{ color: theme.colors.warning }}>
+                        <span style={{ color: theme.colors.textDim }}>Cache:</span> {entry.usageStats.cacheReadInputTokens.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Elapsed Time */}
+              {entry.elapsedTimeMs !== undefined && (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+                  <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
+                    {formatElapsedTime(entry.elapsedTimeMs)}
+                  </span>
+                </div>
+              )}
+
+              {/* Cost */}
+              {entry.usageStats && entry.usageStats.totalCostUsd > 0 && (
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
+                  ${entry.usageStats.totalCostUsd.toFixed(4)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div

@@ -146,6 +146,9 @@ export function useBatchProcessor({
     const claudeSessionIds: string[] = [];
     let completedCount = 0;
 
+    // Helper to get current session state (for capturing updated usage stats)
+    const getCurrentSession = () => sessions.find(s => s.id === sessionId);
+
     for (let i = 0; i < totalTasks; i++) {
       // Check if stop was requested for this session
       if (stopRequestedRefs.current[sessionId]) {
@@ -163,8 +166,14 @@ export function useBatchProcessor({
       }));
 
       try {
+        // Capture start time for elapsed time tracking
+        const taskStartTime = Date.now();
+
         // Spawn agent with the prompt for this specific session
         const result = await onSpawnAgent(sessionId, finalPrompt);
+
+        // Capture elapsed time
+        const elapsedTimeMs = Date.now() - taskStartTime;
 
         if (result.claudeSessionId) {
           claudeSessionIds.push(result.claudeSessionId);
@@ -184,6 +193,9 @@ export function useBatchProcessor({
             sessionIds: [...(prev[sessionId]?.sessionIds || []), result.claudeSessionId || '']
           }
         }));
+
+        // Get current session state to capture usage stats
+        const currentSession = getCurrentSession();
 
         // Add history entry for this task (both success and failure)
         const fullResponse = result.response || '';
@@ -218,7 +230,18 @@ export function useBatchProcessor({
           claudeSessionId: result.claudeSessionId,
           projectPath: session.cwd,
           sessionId: sessionId, // Associate with this Maestro session for isolation
-          success: result.success
+          success: result.success,
+          // Capture usage stats and context at time of task completion
+          contextUsage: currentSession?.contextUsage,
+          usageStats: currentSession?.usageStats ? {
+            inputTokens: currentSession.usageStats.inputTokens,
+            outputTokens: currentSession.usageStats.outputTokens,
+            cacheReadInputTokens: currentSession.usageStats.cacheReadInputTokens,
+            cacheCreationInputTokens: currentSession.usageStats.cacheCreationInputTokens,
+            totalCostUsd: currentSession.usageStats.totalCostUsd,
+            contextWindow: currentSession.usageStats.contextWindow,
+          } : undefined,
+          elapsedTimeMs
         });
 
         // Re-read the scratchpad file to check remaining tasks and sync to UI
