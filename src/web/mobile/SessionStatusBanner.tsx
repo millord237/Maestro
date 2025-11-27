@@ -10,13 +10,15 @@
  * - Color-coded status indicator
  * - Thinking indicator when AI is processing
  * - Cost tracker showing session spend
+ * - Context window usage bar
+ * - Collapsible last response preview (first 3 lines)
  * - Compact design optimized for mobile viewports
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
-import type { Session, UsageStats } from '../hooks/useSessions';
+import type { Session, UsageStats, LastResponsePreview } from '../hooks/useSessions';
 
 /**
  * Props for SessionStatusBanner component
@@ -28,6 +30,8 @@ export interface SessionStatusBannerProps {
   className?: string;
   /** Optional inline styles */
   style?: React.CSSProperties;
+  /** Callback when user taps to expand the full response (for task 1.30) */
+  onExpandResponse?: (lastResponse: LastResponsePreview) => void;
 }
 
 /**
@@ -276,6 +280,169 @@ function ThinkingIndicator() {
 }
 
 /**
+ * Format relative time for last response timestamp
+ */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+/**
+ * Props for LastResponsePreviewSection component
+ */
+interface LastResponsePreviewSectionProps {
+  lastResponse: LastResponsePreview | null | undefined;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onExpand?: (lastResponse: LastResponsePreview) => void;
+}
+
+/**
+ * LastResponsePreviewSection component
+ *
+ * Displays a collapsible preview of the last AI response.
+ * Shows first 3 lines with option to expand to full response viewer.
+ */
+function LastResponsePreviewSection({
+  lastResponse,
+  isExpanded,
+  onToggle,
+  onExpand,
+}: LastResponsePreviewSectionProps) {
+  const colors = useThemeColors();
+
+  // Don't render if no last response
+  if (!lastResponse || !lastResponse.text) {
+    return null;
+  }
+
+  const hasMoreContent = lastResponse.fullLength > lastResponse.text.length;
+
+  return (
+    <div
+      style={{
+        borderTop: `1px solid ${colors.border}`,
+        backgroundColor: `${colors.bgSidebar}80`,
+      }}
+    >
+      {/* Collapsible header */}
+      <button
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          padding: '8px 16px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: colors.textDim,
+          fontSize: '11px',
+          fontWeight: 500,
+          textAlign: 'left',
+        }}
+        aria-expanded={isExpanded}
+        aria-label={isExpanded ? 'Collapse last response' : 'Expand last response'}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Chevron icon */}
+          <span
+            style={{
+              display: 'inline-block',
+              transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease',
+              fontSize: '10px',
+            }}
+          >
+            ▶
+          </span>
+          <span>Last Response</span>
+          <span style={{ opacity: 0.7 }}>
+            ({formatRelativeTime(lastResponse.timestamp)})
+          </span>
+        </span>
+        {hasMoreContent && !isExpanded && (
+          <span style={{ opacity: 0.7, fontSize: '10px' }}>
+            {lastResponse.fullLength} chars
+          </span>
+        )}
+      </button>
+
+      {/* Expandable content */}
+      {isExpanded && (
+        <div
+          style={{
+            padding: '0 16px 12px 16px',
+          }}
+        >
+          {/* Preview text */}
+          <div
+            onClick={() => onExpand?.(lastResponse)}
+            style={{
+              fontFamily: 'monospace',
+              fontSize: '11px',
+              lineHeight: 1.4,
+              color: colors.textMain,
+              backgroundColor: colors.bgMain,
+              padding: '10px 12px',
+              borderRadius: '6px',
+              border: `1px solid ${colors.border}`,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: '120px',
+              overflow: 'hidden',
+              cursor: onExpand ? 'pointer' : 'default',
+              position: 'relative',
+            }}
+            role={onExpand ? 'button' : undefined}
+            tabIndex={onExpand ? 0 : undefined}
+            aria-label={onExpand ? 'Tap to view full response' : undefined}
+          >
+            {lastResponse.text}
+
+            {/* Fade gradient at bottom if there's more content */}
+            {hasMoreContent && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '40px',
+                  background: `linear-gradient(transparent, ${colors.bgMain})`,
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+          </div>
+
+          {/* Tap to expand hint */}
+          {hasMoreContent && onExpand && (
+            <div
+              style={{
+                marginTop: '6px',
+                textAlign: 'center',
+                fontSize: '10px',
+                color: colors.textDim,
+                opacity: 0.8,
+              }}
+            >
+              Tap to view full response
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * SessionStatusBanner component
  *
  * Renders a compact banner showing the active session's status.
@@ -290,8 +457,15 @@ export function SessionStatusBanner({
   session,
   className = '',
   style,
+  onExpandResponse,
 }: SessionStatusBannerProps) {
   const colors = useThemeColors();
+  const [isResponseExpanded, setIsResponseExpanded] = useState(false);
+
+  // Toggle handler for the collapsible last response preview
+  const handleToggleResponse = useCallback(() => {
+    setIsResponseExpanded((prev) => !prev);
+  }, []);
 
   // Don't render if no session is selected
   if (!session) {
@@ -307,14 +481,15 @@ export function SessionStatusBanner({
   const statusLabel = getStatusLabel(sessionState);
   const truncatedCwd = truncatePath(session.cwd);
 
+  // Access lastResponse from session (if available from web data)
+  const lastResponse = (session as any).lastResponse as LastResponsePreview | undefined;
+
   return (
     <div
       className={className}
       style={{
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 16px',
+        flexDirection: 'column',
         backgroundColor: colors.bgMain,
         borderBottom: `1px solid ${colors.border}`,
         ...style,
@@ -323,108 +498,126 @@ export function SessionStatusBanner({
       aria-live="polite"
       aria-label={`Current session: ${session.name}, status: ${statusLabel}`}
     >
-      {/* Left side: Session name and working directory */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '2px',
-          flex: 1,
-          minWidth: 0, // Allow text truncation
-        }}
-      >
-        {/* Session name */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: colors.textMain,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {session.name}
-          </span>
-
-          {/* Mode indicator */}
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 600,
-              color: session.inputMode === 'ai' ? colors.accent : colors.textDim,
-              backgroundColor:
-                session.inputMode === 'ai' ? `${colors.accent}20` : `${colors.textDim}20`,
-              padding: '2px 5px',
-              borderRadius: '4px',
-              lineHeight: 1,
-              flexShrink: 0,
-            }}
-          >
-            {session.inputMode === 'ai' ? 'AI' : 'Terminal'}
-          </span>
-
-          {/* Cost tracker */}
-          <CostTracker usageStats={session.usageStats} />
-
-          {/* Context usage bar */}
-          <ContextUsageBar usageStats={session.usageStats} />
-        </div>
-
-        {/* Working directory */}
-        <span
-          style={{
-            fontSize: '11px',
-            color: colors.textDim,
-            fontFamily: 'monospace',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-          title={session.cwd}
-        >
-          {truncatedCwd}
-        </span>
-      </div>
-
-      {/* Right side: Status indicator */}
+      {/* Main status row */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
-          flexShrink: 0,
-          paddingLeft: '12px',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
         }}
       >
-        <StatusDot status={status} size="sm" />
-        <span
+        {/* Left side: Session name and working directory */}
+        <div
           style={{
-            fontSize: '12px',
-            fontWeight: 500,
-            color:
-              status === 'idle'
-                ? colors.success
-                : status === 'busy'
-                  ? colors.warning
-                  : status === 'connecting'
-                    ? '#f97316' // Orange
-                    : colors.error,
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
+            gap: '2px',
+            flex: 1,
+            minWidth: 0, // Allow text truncation
           }}
         >
-          {statusLabel}
-          {isThinking && <ThinkingIndicator />}
-        </span>
+          {/* Session name */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: colors.textMain,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {session.name}
+            </span>
+
+            {/* Mode indicator */}
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                color: session.inputMode === 'ai' ? colors.accent : colors.textDim,
+                backgroundColor:
+                  session.inputMode === 'ai' ? `${colors.accent}20` : `${colors.textDim}20`,
+                padding: '2px 5px',
+                borderRadius: '4px',
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              {session.inputMode === 'ai' ? 'AI' : 'Terminal'}
+            </span>
+
+            {/* Cost tracker */}
+            <CostTracker usageStats={session.usageStats} />
+
+            {/* Context usage bar */}
+            <ContextUsageBar usageStats={session.usageStats} />
+          </div>
+
+          {/* Working directory */}
+          <span
+            style={{
+              fontSize: '11px',
+              color: colors.textDim,
+              fontFamily: 'monospace',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={session.cwd}
+          >
+            {truncatedCwd}
+          </span>
+        </div>
+
+        {/* Right side: Status indicator */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexShrink: 0,
+            paddingLeft: '12px',
+          }}
+        >
+          <StatusDot status={status} size="sm" />
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 500,
+              color:
+                status === 'idle'
+                  ? colors.success
+                  : status === 'busy'
+                    ? colors.warning
+                    : status === 'connecting'
+                      ? '#f97316' // Orange
+                      : colors.error,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {statusLabel}
+            {isThinking && <ThinkingIndicator />}
+          </span>
+        </div>
       </div>
+
+      {/* Collapsible last response preview */}
+      <LastResponsePreviewSection
+        lastResponse={lastResponse}
+        isExpanded={isResponseExpanded}
+        onToggle={handleToggleResponse}
+        onExpand={onExpandResponse}
+      />
     </div>
   );
 }

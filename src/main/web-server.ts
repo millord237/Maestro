@@ -79,6 +79,14 @@ export interface SessionUsageStats {
   contextWindow?: number;
 }
 
+// Last response type for mobile preview (truncated to save bandwidth)
+export interface LastResponsePreview {
+  text: string; // First 3 lines or ~500 chars of the last AI response
+  timestamp: number;
+  source: 'stdout' | 'stderr' | 'system';
+  fullLength: number; // Total length of the original response
+}
+
 // Callback type for fetching sessions data
 export type GetSessionsCallback = () => Array<{
   id: string;
@@ -91,6 +99,7 @@ export type GetSessionsCallback = () => Array<{
   groupName: string | null;
   groupEmoji: string | null;
   usageStats?: SessionUsageStats | null;
+  lastResponse?: LastResponsePreview | null;
 }>;
 
 // Session detail type for single session endpoint

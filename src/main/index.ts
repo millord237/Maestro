@@ -301,6 +301,33 @@ app.whenReady().then(() => {
     return sessions.map((s: any) => {
       // Find the group for this session
       const group = s.groupId ? groups.find((g: any) => g.id === s.groupId) : null;
+
+      // Extract last AI response for mobile preview (first 3 lines, max 500 chars)
+      let lastResponse = null;
+      if (s.aiLogs && s.aiLogs.length > 0) {
+        // Find the last stdout/stderr entry from the AI (not user messages)
+        const lastAiLog = [...s.aiLogs].reverse().find((log: any) =>
+          log.source === 'stdout' || log.source === 'stderr'
+        );
+        if (lastAiLog && lastAiLog.text) {
+          const fullText = lastAiLog.text;
+          // Get first 3 lines or 500 chars, whichever is shorter
+          const lines = fullText.split('\n').slice(0, 3);
+          let previewText = lines.join('\n');
+          if (previewText.length > 500) {
+            previewText = previewText.slice(0, 497) + '...';
+          } else if (fullText.length > previewText.length) {
+            previewText = previewText + '...';
+          }
+          lastResponse = {
+            text: previewText,
+            timestamp: lastAiLog.timestamp,
+            source: lastAiLog.source,
+            fullLength: fullText.length,
+          };
+        }
+      }
+
       return {
         id: s.id,
         name: s.name,
@@ -312,6 +339,7 @@ app.whenReady().then(() => {
         groupName: group?.name || null,
         groupEmoji: group?.emoji || null,
         usageStats: s.usageStats || null,
+        lastResponse,
       };
     });
   });

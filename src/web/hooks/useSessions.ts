@@ -14,10 +14,11 @@ import {
   type UseWebSocketReturn,
   type WebSocketState,
   type UsageStats,
+  type LastResponsePreview,
 } from './useWebSocket';
 
-// Re-export UsageStats type for components
-export type { UsageStats };
+// Re-export types for components
+export type { UsageStats, LastResponsePreview };
 import type { Theme } from '../../shared/theme-types';
 
 /**

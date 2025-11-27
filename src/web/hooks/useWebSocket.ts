@@ -26,6 +26,17 @@ export interface UsageStats {
 }
 
 /**
+ * Last response preview for mobile display
+ * Contains a truncated version of the last AI response
+ */
+export interface LastResponsePreview {
+  text: string; // First 3 lines or ~500 chars of the last AI response
+  timestamp: number;
+  source: 'stdout' | 'stderr' | 'system';
+  fullLength: number; // Total length of the original response
+}
+
+/**
  * Session data received from the server
  */
 export interface SessionData {
@@ -39,6 +50,7 @@ export interface SessionData {
   groupName?: string | null;
   groupEmoji?: string | null;
   usageStats?: UsageStats | null;
+  lastResponse?: LastResponsePreview | null;
 }
 
 /**
