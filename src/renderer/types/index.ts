@@ -5,14 +5,14 @@ export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'e
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 export type RightPanelTab = 'files' | 'history' | 'scratchpad';
 export type ScratchPadMode = 'raw' | 'preview' | 'wysiwyg';
-export type ThemeId = 'dracula' | 'monokai' | 'github-light' | 'solarized-light' | 'nord' | 'tokyo-night' | 'one-light' | 'gruvbox-light' | 'catppuccin-mocha' | 'gruvbox-dark' | 'catppuccin-latte' | 'ayu-light' | 'pedurple' | 'maestros-choice';
+export type ThemeId = 'dracula' | 'monokai' | 'github-light' | 'solarized-light' | 'nord' | 'tokyo-night' | 'one-light' | 'gruvbox-light' | 'catppuccin-mocha' | 'gruvbox-dark' | 'catppuccin-latte' | 'ayu-light' | 'pedurple' | 'maestros-choice' | 'dre-synth' | 'inquest';
 export type FocusArea = 'sidebar' | 'main' | 'right';
 export type LLMProvider = 'openrouter' | 'anthropic' | 'ollama';
 
 export interface Theme {
   id: ThemeId;
   name: string;
-  mode: 'light' | 'dark';
+  mode: 'light' | 'dark' | 'vibe';
   colors: {
     bgMain: string;
     bgSidebar: string;

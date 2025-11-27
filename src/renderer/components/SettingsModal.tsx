@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2, Cpu, Clock, Settings, Palette, Globe } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Volume2, Cpu, Clock, Settings, Palette, Globe, Sparkles } from 'lucide-react';
 import type { AgentConfig, Theme, Shortcut, ShellInfo, CustomAICommand } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -477,10 +477,10 @@ export function SettingsModal(props: SettingsModalProps) {
       tabIndex={0}
       onKeyDown={handleThemePickerKeyDown}
     >
-      {['dark', 'light'].map(mode => (
+      {['dark', 'light', 'vibe'].map(mode => (
         <div key={mode}>
           <div className="text-xs font-bold uppercase mb-3 flex items-center gap-2" style={{ color: theme.colors.textDim }}>
-            {mode === 'dark' ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+            {mode === 'dark' ? <Moon className="w-3 h-3" /> : mode === 'light' ? <Sun className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
             {mode} Mode
           </div>
           <div className="grid grid-cols-2 gap-3">

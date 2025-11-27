@@ -231,11 +231,11 @@ export const THEMES: Record<ThemeId, Theme> = {
       error: '#f07171'
     }
   },
-  // Special themes
+  // Vibe themes
   pedurple: {
     id: 'pedurple',
     name: 'Pedurple',
-    mode: 'dark',
+    mode: 'vibe',
     colors: {
       bgMain: '#1a0f24',
       bgSidebar: '#140a1c',
@@ -248,26 +248,64 @@ export const THEMES: Record<ThemeId, Theme> = {
       accentText: '#ffd700',
       success: '#7cb342',
       warning: '#ffb300',
-      error: '#e91e63'
+      error: '#da70d6'
     }
   },
   'maestros-choice': {
     id: 'maestros-choice',
     name: "Maestro's Choice",
-    mode: 'dark',
+    mode: 'vibe',
     colors: {
-      bgMain: '#2d3a3a',
-      bgSidebar: '#243030',
-      bgActivity: '#3a4848',
-      border: '#4a5858',
-      textMain: '#e0d8c8',
-      textDim: '#a09888',
-      accent: '#c06050',
-      accentDim: 'rgba(192, 96, 80, 0.25)',
-      accentText: '#e08070',
-      success: '#70a860',
-      warning: '#d0a040',
-      error: '#d05050'
+      bgMain: '#0a0a0f',
+      bgSidebar: '#05050a',
+      bgActivity: '#12121a',
+      border: '#2a2a3a',
+      textMain: '#f0e6d3',
+      textDim: '#8a8078',
+      accent: '#c9a227',
+      accentDim: 'rgba(201, 162, 39, 0.2)',
+      accentText: '#e6b830',
+      success: '#4a9c6d',
+      warning: '#c9a227',
+      error: '#8b2942'
+    }
+  },
+  'dre-synth': {
+    id: 'dre-synth',
+    name: 'Dre Synth',
+    mode: 'vibe',
+    colors: {
+      bgMain: '#0d0221',
+      bgSidebar: '#0a0118',
+      bgActivity: '#150530',
+      border: '#2a1050',
+      textMain: '#f0e6ff',
+      textDim: '#9080b0',
+      accent: '#ff2a6d',
+      accentDim: 'rgba(255, 42, 109, 0.25)',
+      accentText: '#ff6b9d',
+      success: '#05ffa1',
+      warning: '#ffd319',
+      error: '#ff2a6d'
+    }
+  },
+  inquest: {
+    id: 'inquest',
+    name: 'InQuest',
+    mode: 'vibe',
+    colors: {
+      bgMain: '#0a0a0a',
+      bgSidebar: '#050505',
+      bgActivity: '#141414',
+      border: '#2a2a2a',
+      textMain: '#f5f5f5',
+      textDim: '#888888',
+      accent: '#cc0033',
+      accentDim: 'rgba(204, 0, 51, 0.25)',
+      accentText: '#ff3355',
+      success: '#f5f5f5',
+      warning: '#cc0033',
+      error: '#cc0033'
     }
   }
 };
