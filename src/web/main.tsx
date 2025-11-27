@@ -156,7 +156,13 @@ function App() {
 
   return (
     <OfflineContext.Provider value={{ isOffline: offline }}>
-      <ThemeProvider>
+      {/*
+        Enable useDevicePreference to respect the device's dark/light mode preference.
+        When no theme is provided from the desktop app via WebSocket, the web interface
+        will automatically use a dark or light theme based on the user's device settings.
+        Once the desktop app sends a theme, it will override the device preference.
+      */}
+      <ThemeProvider useDevicePreference>
         <Suspense fallback={<LoadingFallback />}>
           {isMobile ? <MobileApp /> : <DesktopApp />}
         </Suspense>

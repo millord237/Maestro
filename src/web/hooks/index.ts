@@ -121,3 +121,13 @@ export type {
   UseOfflineQueueOptions,
   UseOfflineQueueReturn,
 } from './useOfflineQueue';
+
+export {
+  useDeviceColorScheme,
+  default as useDeviceColorSchemeDefault,
+} from './useDeviceColorScheme';
+
+export type {
+  ColorSchemePreference,
+  UseDeviceColorSchemeReturn,
+} from './useDeviceColorScheme';
