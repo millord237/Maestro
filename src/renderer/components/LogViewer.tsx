@@ -231,7 +231,6 @@ export function LogViewer({ theme, onClose }: LogViewerProps) {
       aria-modal="true"
       aria-label="System Log Viewer"
       tabIndex={-1}
-      ref={(el) => el?.focus()}
     >
       {/* Header */}
       <div

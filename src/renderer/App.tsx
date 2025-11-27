@@ -462,12 +462,27 @@ export default function MaestroConsole() {
                            lastLog.source === 'stdout' &&
                            (isTerminalCommand ? s.state === 'busy' : (Date.now() - lastLog.timestamp) < 500);
 
+        // Mark the most recent user message as delivered when we receive AI output
+        // This confirms the message was successfully sent to the agent
+        let logsWithDelivery = existingLogs;
+        if (isFromAi) {
+          // Find the most recent undelivered user message and mark it as delivered
+          const lastUserIndex = existingLogs.map((log, i) => ({ log, i }))
+            .filter(({ log }) => log.source === 'user' && !log.delivered)
+            .pop()?.i;
+          if (lastUserIndex !== undefined) {
+            logsWithDelivery = existingLogs.map((log, i) =>
+              i === lastUserIndex ? { ...log, delivered: true } : log
+            );
+          }
+        }
+
         if (shouldGroup) {
           // Append to existing log entry
-          const updatedLogs = [...existingLogs];
+          const updatedLogs = [...logsWithDelivery];
           updatedLogs[updatedLogs.length - 1] = {
-            ...lastLog,
-            text: lastLog.text + data
+            ...updatedLogs[updatedLogs.length - 1],
+            text: updatedLogs[updatedLogs.length - 1].text + data
           };
 
           return {
@@ -489,7 +504,7 @@ export default function MaestroConsole() {
             ...s,
             // Keep state unchanged - let onExit handler manage state transitions
             // This ensures queued messages work correctly (state stays 'busy' during AI processing)
-            [targetLogKey]: [...existingLogs, newLog]
+            [targetLogKey]: [...logsWithDelivery, newLog]
           };
         }
       }));
@@ -2070,23 +2085,43 @@ export default function MaestroConsole() {
           setSlashCommandOpen(false);
           if (inputRef.current) inputRef.current.style.height = 'auto';
 
-          // Add user log showing the command was executed with its prompt
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSessionId) return s;
-            return {
-              ...s,
-              aiLogs: [...s.aiLogs, {
-                id: generateId(),
-                timestamp: Date.now(),
-                source: 'user',
-                text: matchingCustomCommand.prompt
-              }],
-              aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), commandText])).slice(-50)
-            };
-          }));
+          // Substitute template variables and send to the AI agent
+          (async () => {
+            let gitBranch: string | undefined;
+            if (activeSession.isGitRepo) {
+              try {
+                const status = await gitService.getStatus(activeSession.cwd);
+                gitBranch = status.branch;
+              } catch {
+                // Ignore git errors
+              }
+            }
+            const substitutedPrompt = substituteTemplateVariables(
+              matchingCustomCommand.prompt,
+              { session: activeSession, gitBranch }
+            );
 
-          // Send the custom command's prompt to the AI agent
-          spawnAgentWithPrompt(matchingCustomCommand.prompt);
+            // Add user log showing the command with its interpolated prompt
+            setSessions(prev => prev.map(s => {
+              if (s.id !== activeSessionId) return s;
+              return {
+                ...s,
+                aiLogs: [...s.aiLogs, {
+                  id: generateId(),
+                  timestamp: Date.now(),
+                  source: 'user',
+                  text: substitutedPrompt,
+                  aiCommand: {
+                    command: matchingCustomCommand.command,
+                    description: matchingCustomCommand.description
+                  }
+                }],
+                aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), commandText])).slice(-50)
+              };
+            }));
+
+            spawnAgentWithPrompt(substitutedPrompt);
+          })();
           return;
         }
       }
@@ -2489,20 +2524,6 @@ export default function MaestroConsole() {
 
           // Check if this is a custom AI command (has prompt but no execute)
           if ('prompt' in selectedCommand && selectedCommand.prompt && !('execute' in selectedCommand)) {
-            // Add user log showing the command was executed
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSessionId) return s;
-              return {
-                ...s,
-                aiLogs: [...s.aiLogs, {
-                  id: generateId(),
-                  timestamp: Date.now(),
-                  source: 'user',
-                  text: `${selectedCommand.command}: ${selectedCommand.description}`
-                }],
-                aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), selectedCommand.command])).slice(-50)
-              };
-            }));
             // Substitute template variables and send to the AI agent
             (async () => {
               let gitBranch: string | undefined;
@@ -2518,6 +2539,26 @@ export default function MaestroConsole() {
                 selectedCommand.prompt,
                 { session: activeSession, gitBranch }
               );
+
+              // Add user log showing the command with its interpolated prompt
+              setSessions(prev => prev.map(s => {
+                if (s.id !== activeSessionId) return s;
+                return {
+                  ...s,
+                  aiLogs: [...s.aiLogs, {
+                    id: generateId(),
+                    timestamp: Date.now(),
+                    source: 'user',
+                    text: substitutedPrompt,
+                    aiCommand: {
+                      command: selectedCommand.command,
+                      description: selectedCommand.description
+                    }
+                  }],
+                  aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), selectedCommand.command])).slice(-50)
+                };
+              }));
+
               spawnAgentWithPrompt(substitutedPrompt);
             })();
           } else if ('execute' in selectedCommand && selectedCommand.execute) {
@@ -3173,10 +3214,17 @@ export default function MaestroConsole() {
           // Update the active session with the selected Claude session ID and load messages
           // Also reset state to 'idle' since we're just loading historical messages
           // Switch to AI mode since we're resuming an AI session
+          console.log('[onResumeClaudeSession] Resuming session:', claudeSessionId, 'activeSession:', activeSession?.id, activeSession?.claudeSessionId);
           if (activeSession) {
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id ? { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai' } : s
-            ));
+            setSessions(prev => {
+              console.log('[onResumeClaudeSession] Updating sessions, looking for id:', activeSession.id);
+              const updated = prev.map(s =>
+                s.id === activeSession.id ? { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai' } : s
+              );
+              const updatedSession = updated.find(s => s.id === activeSession.id);
+              console.log('[onResumeClaudeSession] Updated session claudeSessionId:', updatedSession?.claudeSessionId);
+              return updated;
+            });
             setActiveClaudeSessionId(claudeSessionId);
 
             // Track this session in recent sessions list

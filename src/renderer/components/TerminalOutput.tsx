@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState, useCallback } from 'react';
-import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, Volume2 } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, Volume2, Check } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
@@ -849,6 +849,27 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     <span style={{ color: theme.colors.accent }}>$ </span>
                     {highlightMatches(filteredText, outputSearchQuery)}
                   </div>
+                ) : log.aiCommand ? (
+                  // AI Command with header and full interpolated prompt
+                  <div className="space-y-3">
+                    {/* Command header */}
+                    <div
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border"
+                      style={{
+                        backgroundColor: theme.colors.accent + '15',
+                        borderColor: theme.colors.accent + '30'
+                      }}
+                    >
+                      <span className="font-mono font-bold text-sm" style={{ color: theme.colors.accent }}>
+                        {log.aiCommand.command}:
+                      </span>
+                      <span className="text-sm" style={{ color: theme.colors.textMain }}>
+                        {log.aiCommand.description}
+                      </span>
+                    </div>
+                    {/* Full interpolated prompt */}
+                    <div>{highlightMatches(filteredText, outputSearchQuery)}</div>
+                  </div>
                 ) : (
                   <div>{highlightMatches(filteredText, outputSearchQuery)}</div>
                 )}
@@ -879,6 +900,29 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                   <span style={{ color: theme.colors.accent }}>$ </span>
                   {highlightMatches(filteredText, outputSearchQuery)}
                 </div>
+              ) : log.aiCommand ? (
+                // AI Command with header and full interpolated prompt
+                <div className="space-y-3">
+                  {/* Command header */}
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border"
+                    style={{
+                      backgroundColor: theme.colors.accent + '15',
+                      borderColor: theme.colors.accent + '30'
+                    }}
+                  >
+                    <span className="font-mono font-bold text-sm" style={{ color: theme.colors.accent }}>
+                      {log.aiCommand.command}:
+                    </span>
+                    <span className="text-sm" style={{ color: theme.colors.textMain }}>
+                      {log.aiCommand.description}
+                    </span>
+                  </div>
+                  {/* Full interpolated prompt */}
+                  <div className="whitespace-pre-wrap text-sm" style={{ color: theme.colors.textMain }}>
+                    {highlightMatches(filteredText, outputSearchQuery)}
+                  </div>
+                </div>
               ) : (
                 <div className="whitespace-pre-wrap text-sm" style={{ color: theme.colors.textMain }}>
                   {highlightMatches(filteredText, outputSearchQuery)}
@@ -888,14 +932,22 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           )}
           {/* Action buttons - bottom right corner */}
           <div
-            className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100"
+            className="absolute bottom-2 right-2 flex items-center gap-1"
             style={{ transition: 'opacity 0.15s ease-in-out' }}
           >
+            {/* Delivery checkmark for user messages in AI mode */}
+            {isUserMessage && isAIMode && log.delivered && (
+              <Check
+                className="w-3.5 h-3.5"
+                style={{ color: theme.colors.success, opacity: 0.6 }}
+                title="Message delivered"
+              />
+            )}
             {/* Speak Button - only show for non-user messages when TTS is configured */}
             {audioFeedbackCommand && log.source !== 'user' && (
               <button
                 onClick={() => speakText(log.text)}
-                className="p-1.5 rounded opacity-50 hover:opacity-100"
+                className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
                 style={{ color: theme.colors.textDim }}
                 title="Speak text"
               >
@@ -905,7 +957,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             {/* Copy to Clipboard Button */}
             <button
               onClick={() => copyToClipboard(log.text)}
-              className="p-1.5 rounded opacity-50 hover:opacity-100"
+              className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100"
               style={{ color: theme.colors.textDim }}
               title="Copy to clipboard"
             >

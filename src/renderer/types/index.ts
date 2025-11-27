@@ -50,6 +50,13 @@ export interface LogEntry {
   interactive?: boolean;
   options?: string[];
   images?: string[];
+  // For custom AI commands - stores the command metadata for display
+  aiCommand?: {
+    command: string;      // e.g., '/commit'
+    description: string;  // e.g., 'Commit outstanding changes and push up'
+  };
+  // For user messages - tracks if message was successfully delivered to the agent
+  delivered?: boolean;
 }
 
 export interface WorkLogItem {
