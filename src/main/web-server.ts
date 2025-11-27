@@ -2,9 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { WebSocket } from 'ws';
 import crypto from 'crypto';
+import path from 'path';
+import { existsSync, readFileSync } from 'fs';
 import type { Theme } from '../shared/theme-types';
 
 // Types for web client messages
@@ -133,6 +136,7 @@ export class WebServer {
   private getThemeCallback: GetThemeCallback | null = null;
   private writeToSessionCallback: WriteToSessionCallback | null = null;
   private interruptSessionCallback: InterruptSessionCallback | null = null;
+  private webAssetsPath: string | null = null;
 
   constructor(port: number = 8000) {
     this.port = port;
@@ -142,8 +146,77 @@ export class WebServer {
       },
     });
 
+    // Determine web assets path (production vs development)
+    this.webAssetsPath = this.resolveWebAssetsPath();
+
     this.setupMiddleware();
     this.setupRoutes();
+  }
+
+  /**
+   * Resolve the path to web assets
+   * In production: dist/web relative to app root
+   * In development: same location but might not exist until built
+   */
+  private resolveWebAssetsPath(): string | null {
+    // Try multiple locations for the web assets
+    const possiblePaths = [
+      // Production: relative to the compiled main process
+      path.join(__dirname, '..', 'web'),
+      // Development: from project root
+      path.join(process.cwd(), 'dist', 'web'),
+      // Alternative: relative to __dirname going up to dist
+      path.join(__dirname, 'web'),
+    ];
+
+    for (const p of possiblePaths) {
+      if (existsSync(path.join(p, 'index.html'))) {
+        console.log(`Web assets found at: ${p}`);
+        return p;
+      }
+    }
+
+    console.warn('Web assets not found. Web interface will not be served. Run "npm run build:web" to build web assets.');
+    return null;
+  }
+
+  /**
+   * Serve the index.html file for SPA routes
+   * Rewrites asset paths to work from the /web prefix
+   */
+  private serveIndexHtml(reply: FastifyReply): void {
+    if (!this.webAssetsPath) {
+      reply.code(503).send({
+        error: 'Service Unavailable',
+        message: 'Web interface not built. Run "npm run build:web" to build web assets.',
+      });
+      return;
+    }
+
+    const indexPath = path.join(this.webAssetsPath, 'index.html');
+    if (!existsSync(indexPath)) {
+      reply.code(404).send({
+        error: 'Not Found',
+        message: 'Web interface index.html not found.',
+      });
+      return;
+    }
+
+    try {
+      // Read and transform the HTML to fix asset paths
+      let html = readFileSync(indexPath, 'utf-8');
+
+      // Transform relative asset paths (./assets/) to use the /web/assets/ prefix
+      html = html.replace(/\.\/assets\//g, '/web/assets/');
+
+      reply.type('text/html').send(html);
+    } catch (err) {
+      console.error('Error serving index.html:', err);
+      reply.code(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to serve web interface.',
+      });
+    }
   }
 
   /**
@@ -318,6 +391,16 @@ export class WebServer {
         return request.ip;
       },
     });
+
+    // Serve static web assets if the build directory exists
+    if (this.webAssetsPath) {
+      await this.server.register(fastifyStatic, {
+        root: this.webAssetsPath,
+        prefix: '/web/assets/',
+        decorateReply: false, // Don't decorate reply to avoid conflicts
+      });
+      console.log(`Serving web assets from ${this.webAssetsPath}`);
+    }
   }
 
   private setupRoutes() {
@@ -624,36 +707,24 @@ export class WebServer {
       };
     });
 
-    // Desktop web interface entry point (placeholder)
-    this.server.get('/web/desktop', getRateLimitConfig, async () => {
-      return {
-        message: 'Desktop web interface - Coming soon',
-        description: 'Full-featured collaborative interface for hackathons/team coding',
-      };
+    // Desktop web interface entry point - serves the SPA
+    this.server.get('/web/desktop', getRateLimitConfig, async (_request, reply) => {
+      this.serveIndexHtml(reply);
     });
 
     // Desktop web interface with wildcard for client-side routing
-    this.server.get('/web/desktop/*', getRateLimitConfig, async () => {
-      return {
-        message: 'Desktop web interface - Coming soon',
-        description: 'Full-featured collaborative interface for hackathons/team coding',
-      };
+    this.server.get('/web/desktop/*', getRateLimitConfig, async (_request, reply) => {
+      this.serveIndexHtml(reply);
     });
 
-    // Mobile web interface entry point (placeholder)
-    this.server.get('/web/mobile', getRateLimitConfig, async () => {
-      return {
-        message: 'Mobile web interface - Coming soon',
-        description: 'Lightweight remote control for sending commands from your phone',
-      };
+    // Mobile web interface entry point - serves the SPA
+    this.server.get('/web/mobile', getRateLimitConfig, async (_request, reply) => {
+      this.serveIndexHtml(reply);
     });
 
     // Mobile web interface with wildcard for client-side routing
-    this.server.get('/web/mobile/*', getRateLimitConfig, async () => {
-      return {
-        message: 'Mobile web interface - Coming soon',
-        description: 'Lightweight remote control for sending commands from your phone',
-      };
+    this.server.get('/web/mobile/*', getRateLimitConfig, async (_request, reply) => {
+      this.serveIndexHtml(reply);
     });
 
     // Web API namespace root
