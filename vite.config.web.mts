@@ -24,6 +24,10 @@ export default defineConfig({
   // Entry point for web interface
   root: path.join(__dirname, 'src/web'),
 
+  // Public directory for static assets (manifest.json, icons, etc.)
+  // Files here are copied to the build output root as-is
+  publicDir: path.join(__dirname, 'src/web/public'),
+
   // Use relative paths for assets (served from Fastify)
   base: './',
 
