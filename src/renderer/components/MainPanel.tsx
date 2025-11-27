@@ -95,6 +95,9 @@ interface MainPanelProps {
   batchRunState?: BatchRunState;
   onStopBatchRun?: () => void;
   showConfirmation?: (message: string, onConfirm: () => void) => void;
+
+  // TTS settings
+  audioFeedbackCommand?: string;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -667,6 +670,7 @@ export function MainPanel(props: MainPanelProps) {
                 onDeleteLog={props.onDeleteLog}
                 onRemoveQueuedMessage={onRemoveQueuedMessage}
                 onInterrupt={handleInterrupt}
+                audioFeedbackCommand={props.audioFeedbackCommand}
               />
 
               {/* Input Area */}

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState, useCallback } from 'react';
-import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, Volume2 } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
@@ -24,13 +24,15 @@ interface TerminalOutputProps {
   onDeleteLog?: (logId: string) => number | null; // Returns the index to scroll to after deletion
   onRemoveQueuedMessage?: (messageId: string) => void; // Callback to remove a queued message
   onInterrupt?: () => void; // Callback to interrupt the current process
+  audioFeedbackCommand?: string; // TTS command for speech synthesis
 }
 
 export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((props, ref) => {
   const {
     session, theme, fontFamily, activeFocus, outputSearchOpen, outputSearchQuery,
     setOutputSearchOpen, setOutputSearchQuery, setActiveFocus, setLightboxImage,
-    inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedMessage, onInterrupt
+    inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedMessage, onInterrupt,
+    audioFeedbackCommand
   } = props;
 
   // Use the forwarded ref if provided, otherwise create a local one
@@ -71,6 +73,16 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       console.error('Failed to copy to clipboard:', err);
     }
   }, []);
+
+  // Speak text using TTS command
+  const speakText = useCallback(async (text: string) => {
+    if (!audioFeedbackCommand) return;
+    try {
+      await window.maestro.notification.speak(text, audioFeedbackCommand);
+    } catch (err) {
+      console.error('Failed to speak text:', err);
+    }
+  }, [audioFeedbackCommand]);
 
   // Elapsed time for thinking indicator (in seconds)
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -808,22 +820,36 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
               )}
             </>
           )}
-          {/* Copy to Clipboard Button - bottom right corner */}
-          <button
-            onClick={() => copyToClipboard(log.text)}
-            className="absolute bottom-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
-            style={{ color: theme.colors.textDim }}
-            title="Copy to clipboard"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
+          {/* Action buttons - bottom right corner */}
+          <div className="absolute bottom-2 right-2 flex items-center gap-1">
+            {/* Speak Button - only show for non-user messages when TTS is configured */}
+            {audioFeedbackCommand && log.source !== 'user' && (
+              <button
+                onClick={() => speakText(log.text)}
+                className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
+                style={{ color: theme.colors.textDim }}
+                title="Speak text"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {/* Copy to Clipboard Button */}
+            <button
+              onClick={() => copyToClipboard(log.text)}
+              className="p-1.5 rounded opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
+              style={{ color: theme.colors.textDim }}
+              title="Copy to clipboard"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     );
   }, [session.inputMode, filteredLogs, theme, fontFamily, outputSearchQuery, localFilters, filterModes,
       expandedLogs, maxOutputLines, deleteConfirmLogId, activeLocalFilter, onDeleteLog, ansiConverter,
       toggleExpanded, toggleLocalFilter, setLocalFilterQuery, setLightboxImage, highlightMatches,
-      addHighlightMarkers, filterTextByLines, processLogText, copyToClipboard]);
+      addHighlightMarkers, filterTextByLines, processLogText, copyToClipboard, speakText, audioFeedbackCommand]);
 
   return (
     <div

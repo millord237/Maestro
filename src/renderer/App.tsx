@@ -3253,6 +3253,7 @@ export default function MaestroConsole() {
             };
           }));
         }}
+        audioFeedbackCommand={audioFeedbackCommand}
       />
 
       {/* --- RIGHT PANEL --- */}
