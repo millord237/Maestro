@@ -13,6 +13,7 @@
  * - Auto-expanding textarea for multi-line commands (up to 4 lines)
  * - Minimum 44px touch targets per Apple HIG guidelines
  * - Mode toggle button (AI / Terminal) with visual indicator
+ * - Voice input button for speech-to-text (uses Web Speech API)
  * - Interrupt button (red X) visible when session is busy
  * - Recent command chips for quick access to recently sent commands
  * - Slash command autocomplete popup when typing `/`
@@ -25,6 +26,86 @@ import { useSwipeUp } from '../hooks/useSwipeUp';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
+
+/**
+ * Web Speech API type declarations
+ * These are needed because TypeScript doesn't include these by default
+ */
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+  readonly message: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onaudioend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudiostart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onnomatch: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onsoundend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  abort(): void;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new(): SpeechRecognition;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
+/**
+ * Check if speech recognition is supported in the current browser
+ */
+function isSpeechRecognitionSupported(): boolean {
+  return typeof window !== 'undefined' &&
+    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+}
+
+/**
+ * Get the SpeechRecognition constructor (with vendor prefix fallback)
+ */
+function getSpeechRecognition(): SpeechRecognitionConstructor | null {
+  if (typeof window === 'undefined') return null;
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
 
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
@@ -154,6 +235,11 @@ export function CommandInputBar({
   // Slash command autocomplete state
   const [slashCommandOpen, setSlashCommandOpen] = useState(false);
   const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
+
+  // Voice input state
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported] = useState(() => isSpeechRecognitionSupported());
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // Determine if input should be disabled
   const isDisabled = externalDisabled || isOffline || !isConnected;
@@ -346,6 +432,126 @@ export function CommandInputBar({
     onInterrupt?.();
   }, [onInterrupt]);
 
+  /**
+   * Initialize speech recognition when voice input starts
+   */
+  const startVoiceInput = useCallback(() => {
+    if (!voiceSupported || isDisabled) return;
+
+    const SpeechRecognitionClass = getSpeechRecognition();
+    if (!SpeechRecognitionClass) return;
+
+    // Create new recognition instance
+    const recognition = new SpeechRecognitionClass();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || 'en-US';
+    recognition.maxAlternatives = 1;
+
+    // Store reference for cleanup
+    recognitionRef.current = recognition;
+
+    // Track interim results to update input in real-time
+    let finalTranscript = '';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      triggerHapticFeedback('medium');
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+
+      // Update input with current transcription (append to existing value)
+      const currentText = value.trim();
+      const separator = currentText ? ' ' : '';
+      const newText = currentText + separator + (finalTranscript || interimTranscript);
+
+      if (controlledValue === undefined) {
+        setInternalValue(newText);
+      }
+      onChange?.(newText);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.warn('Speech recognition error:', event.error);
+      setIsListening(false);
+      recognitionRef.current = null;
+
+      // Haptic feedback on error
+      if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        triggerHapticFeedback('strong');
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+      triggerHapticFeedback('light');
+
+      // Focus textarea after voice input ends
+      textareaRef.current?.focus();
+    };
+
+    try {
+      recognition.start();
+    } catch (err) {
+      console.warn('Failed to start speech recognition:', err);
+      setIsListening(false);
+      recognitionRef.current = null;
+    }
+  }, [voiceSupported, isDisabled, value, controlledValue, onChange]);
+
+  /**
+   * Stop voice input
+   */
+  const stopVoiceInput = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Ignore errors when stopping
+      }
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  /**
+   * Toggle voice input on/off
+   */
+  const handleVoiceToggle = useCallback(() => {
+    if (isListening) {
+      stopVoiceInput();
+    } else {
+      startVoiceInput();
+    }
+  }, [isListening, startVoiceInput, stopVoiceInput]);
+
+  /**
+   * Cleanup recognition on unmount
+   */
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -505,6 +711,77 @@ export function CommandInputBar({
             {inputMode === 'ai' ? 'AI' : 'CLI'}
           </span>
         </button>
+
+        {/* Voice input button - only shown if speech recognition is supported */}
+        {voiceSupported && (
+          <button
+            type="button"
+            onClick={handleVoiceToggle}
+            disabled={isDisabled}
+            style={{
+              padding: '10px',
+              borderRadius: '12px',
+              backgroundColor: isListening ? '#ef444420' : `${colors.textDim}15`,
+              border: `2px solid ${isListening ? '#ef4444' : colors.border}`,
+              cursor: isDisabled ? 'default' : 'pointer',
+              opacity: isDisabled ? 0.5 : 1,
+              // Touch-friendly size - meets Apple HIG 44pt minimum
+              width: `${MIN_TOUCH_TARGET + 4}px`,
+              height: `${MIN_INPUT_HEIGHT}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              // Smooth transitions
+              transition: 'all 150ms ease',
+              // Prevent button from shrinking
+              flexShrink: 0,
+              // Active state feedback
+              WebkitTapHighlightColor: 'transparent',
+              // Pulsing animation when listening
+              animation: isListening ? 'pulse 1.5s ease-in-out infinite' : 'none',
+            }}
+            onTouchStart={(e) => {
+              if (!isDisabled) {
+                e.currentTarget.style.transform = 'scale(0.95)';
+              }
+            }}
+            onTouchEnd={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+            aria-pressed={isListening}
+          >
+            {/* Microphone icon */}
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill={isListening ? '#ef4444' : 'none'}
+              stroke={isListening ? '#ef4444' : colors.textDim}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+          </button>
+        )}
+
+        {/* Inline CSS for pulse animation */}
+        <style>
+          {`
+            @keyframes pulse {
+              0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+              }
+              50% {
+                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+              }
+            }
+          `}
+        </style>
 
         {/* Large touch-friendly command textarea with auto-expansion */}
         <textarea
