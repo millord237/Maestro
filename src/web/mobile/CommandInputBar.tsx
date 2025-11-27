@@ -18,6 +18,7 @@
  * - Recent command chips for quick access to recently sent commands
  * - Slash command autocomplete popup when typing `/`
  * - Haptic feedback on send (if device supports vibration)
+ * - Quick actions menu on long-press of send button
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
@@ -25,6 +26,7 @@ import { useThemeColors } from '../components/ThemeProvider';
 import { useSwipeUp } from '../hooks/useSwipeUp';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
+import { QuickActionsMenu, type QuickAction } from './QuickActionsMenu';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
 
 /**
@@ -110,6 +112,9 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
 
+/** Duration in ms to trigger long-press for quick actions menu */
+const LONG_PRESS_DURATION = 500;
+
 /** Default minimum height for the text input area */
 const MIN_INPUT_HEIGHT = 48;
 
@@ -186,6 +191,12 @@ export interface CommandInputBarProps {
   onSelectRecentCommand?: (command: string) => void;
   /** Available slash commands (uses defaults if not provided) */
   slashCommands?: SlashCommand[];
+  /** Callback when clear session is requested (from quick actions) */
+  onClearSession?: () => void;
+  /** Callback when new session is requested (from quick actions) */
+  onNewSession?: () => void;
+  /** Whether a session is currently active (for quick actions menu) */
+  hasActiveSession?: boolean;
 }
 
 /**
@@ -210,6 +221,9 @@ export function CommandInputBar({
   recentCommands,
   onSelectRecentCommand,
   slashCommands = DEFAULT_SLASH_COMMANDS,
+  onClearSession,
+  onNewSession,
+  hasActiveSession = false,
 }: CommandInputBarProps) {
   const colors = useThemeColors();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -240,6 +254,12 @@ export function CommandInputBar({
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported] = useState(() => isSpeechRecognitionSupported());
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Quick actions menu state
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [quickActionsAnchor, setQuickActionsAnchor] = useState<{ x: number; y: number } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
 
   // Determine if input should be disabled
   const isDisabled = externalDisabled || isOffline || !isConnected;
@@ -538,16 +558,117 @@ export function CommandInputBar({
   }, [isListening, startVoiceInput, stopVoiceInput]);
 
   /**
-   * Cleanup recognition on unmount
+   * Clear long-press timer (used when touch ends or moves)
+   */
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Handle long-press start on send button
+   * Starts a timer that will show the quick actions menu
+   */
+  const handleSendButtonTouchStart = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
+    // Clear any existing timer
+    clearLongPressTimer();
+
+    // Get the button position for menu anchor
+    const button = sendButtonRef.current;
+    if (button) {
+      const rect = button.getBoundingClientRect();
+      const anchor = {
+        x: rect.left + rect.width / 2,
+        y: rect.top,
+      };
+
+      // Start long-press timer
+      longPressTimerRef.current = setTimeout(() => {
+        // Trigger haptic feedback for long-press activation
+        triggerHapticFeedback('medium');
+
+        // Show quick actions menu
+        setQuickActionsAnchor(anchor);
+        setQuickActionsOpen(true);
+
+        // Prevent the normal touch behavior
+        longPressTimerRef.current = null;
+      }, LONG_PRESS_DURATION);
+    }
+
+    // Scale down slightly on touch for tactile feedback
+    if (!isDisabled && value.trim()) {
+      e.currentTarget.style.transform = 'scale(0.95)';
+    }
+  }, [clearLongPressTimer, isDisabled, value]);
+
+  /**
+   * Handle touch end on send button
+   * Clears the long-press timer and handles normal tap
+   */
+  const handleSendButtonTouchEnd = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'scale(1)';
+
+    // If quick actions menu is not open and timer was running, this was a normal tap
+    // The form onSubmit will handle the actual submission
+    clearLongPressTimer();
+  }, [clearLongPressTimer]);
+
+  /**
+   * Handle touch move on send button
+   * Cancels long-press if user moves finger
+   */
+  const handleSendButtonTouchMove = useCallback(() => {
+    clearLongPressTimer();
+  }, [clearLongPressTimer]);
+
+  /**
+   * Handle quick action selection from menu
+   */
+  const handleQuickAction = useCallback((action: QuickAction) => {
+    // Trigger haptic feedback
+    triggerHapticFeedback('medium');
+
+    switch (action) {
+      case 'clear':
+        onClearSession?.();
+        break;
+      case 'new':
+        onNewSession?.();
+        break;
+      case 'switch_mode':
+        // Toggle to the opposite mode
+        const newMode = inputMode === 'ai' ? 'terminal' : 'ai';
+        onModeToggle?.(newMode);
+        break;
+    }
+  }, [inputMode, onModeToggle, onClearSession, onNewSession]);
+
+  /**
+   * Close quick actions menu
+   */
+  const handleCloseQuickActions = useCallback(() => {
+    setQuickActionsOpen(false);
+  }, []);
+
+  /**
+   * Cleanup recognition and timers on unmount
    */
   useEffect(() => {
     return () => {
+      // Clean up speech recognition
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
         } catch {
           // Ignore errors during cleanup
         }
+      }
+      // Clean up long-press timer
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
       }
     };
   }, []);
@@ -907,7 +1028,9 @@ export function CommandInputBar({
         )}
 
         {/* Send button - large touch target matching input height */}
+        {/* Long-press shows quick actions menu */}
         <button
+          ref={sendButtonRef}
           type="submit"
           disabled={isDisabled || !value.trim()}
           style={{
@@ -933,16 +1056,10 @@ export function CommandInputBar({
             // Active state feedback
             WebkitTapHighlightColor: 'transparent',
           }}
-          onTouchStart={(e) => {
-            // Scale down slightly on touch for tactile feedback
-            if (!isDisabled && value.trim()) {
-              e.currentTarget.style.transform = 'scale(0.95)';
-            }
-          }}
-          onTouchEnd={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-          aria-label="Send command"
+          onTouchStart={handleSendButtonTouchStart}
+          onTouchEnd={handleSendButtonTouchEnd}
+          onTouchMove={handleSendButtonTouchMove}
+          aria-label="Send command (long press for quick actions)"
         >
           {/* Arrow up icon for send - larger for touch */}
           <svg
@@ -960,6 +1077,16 @@ export function CommandInputBar({
           </svg>
         </button>
       </form>
+
+      {/* Quick actions menu - shown on long-press of send button */}
+      <QuickActionsMenu
+        isOpen={quickActionsOpen}
+        onClose={handleCloseQuickActions}
+        onSelectAction={handleQuickAction}
+        inputMode={inputMode}
+        anchorPosition={quickActionsAnchor}
+        hasActiveSession={hasActiveSession}
+      />
     </div>
   );
 }

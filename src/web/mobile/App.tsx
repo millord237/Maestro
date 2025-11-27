@@ -484,6 +484,35 @@ export default function MobileApp() {
     }
   }, [activeSessionId]);
 
+  // Handle clear session request (from quick actions menu)
+  const handleClearSession = useCallback(() => {
+    if (!activeSessionId) return;
+
+    // Provide haptic feedback
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+
+    // Send clear command via WebSocket
+    send({
+      type: 'clear_session',
+      sessionId: activeSessionId,
+    });
+
+    console.log('[Mobile] Clear session requested:', activeSessionId);
+  }, [activeSessionId, send]);
+
+  // Handle new session request (from quick actions menu)
+  const handleNewSession = useCallback(() => {
+    // Provide haptic feedback
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+
+    // Send new session command via WebSocket
+    send({
+      type: 'new_session',
+    });
+
+    console.log('[Mobile] New session requested');
+  }, [send]);
+
   // Handle opening history drawer
   const handleOpenHistory = useCallback(() => {
     setShowHistoryDrawer(true);
@@ -796,6 +825,9 @@ export default function MobileApp() {
         onHistoryOpen={handleOpenHistory}
         recentCommands={getUniqueCommands(5)}
         onSelectRecentCommand={handleSelectHistoryCommand}
+        onClearSession={handleClearSession}
+        onNewSession={handleNewSession}
+        hasActiveSession={!!activeSessionId}
       />
 
       {/* Command history drawer - swipe up from input area */}
