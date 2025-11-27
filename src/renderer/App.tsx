@@ -905,8 +905,10 @@ export default function MaestroConsole() {
             // Clean up listeners and resolve
             cleanup();
 
+            // Reset session state to idle, but do NOT overwrite the main session's claudeSessionId
+            // The batch task's claudeSessionId is separate and returned via resolve() for tracking purposes
             setSessions(prev => prev.map(s =>
-              s.id === sessionId ? { ...s, state: 'idle' as SessionState, thinkingStartTime: undefined, claudeSessionId } : s
+              s.id === sessionId ? { ...s, state: 'idle' as SessionState, thinkingStartTime: undefined } : s
             ));
 
             resolve({ success: true, response: responseText, claudeSessionId });
