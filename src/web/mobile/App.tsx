@@ -11,6 +11,7 @@ import React, { useEffect, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useWebSocket, type WebSocketState } from '../hooks/useWebSocket';
 import { Badge, type BadgeVariant } from '../components/Badge';
+import { useOfflineStatus } from '../main';
 
 /**
  * Map WebSocket state to display properties
@@ -21,7 +22,12 @@ interface ConnectionStatusConfig {
   pulse: boolean;
 }
 
-const CONNECTION_STATUS_CONFIG: Record<WebSocketState, ConnectionStatusConfig> = {
+const CONNECTION_STATUS_CONFIG: Record<WebSocketState | 'offline', ConnectionStatusConfig> = {
+  offline: {
+    label: 'Offline',
+    variant: 'error',
+    pulse: false,
+  },
   disconnected: {
     label: 'Disconnected',
     variant: 'error',
@@ -55,12 +61,15 @@ const CONNECTION_STATUS_CONFIG: Record<WebSocketState, ConnectionStatusConfig> =
  */
 interface MobileHeaderProps {
   connectionState: WebSocketState;
+  isOffline: boolean;
   onRetry?: () => void;
 }
 
-function MobileHeader({ connectionState, onRetry }: MobileHeaderProps) {
+function MobileHeader({ connectionState, isOffline, onRetry }: MobileHeaderProps) {
   const colors = useThemeColors();
-  const statusConfig = CONNECTION_STATUS_CONFIG[connectionState];
+  // Show offline status if device is offline, otherwise show connection state
+  const effectiveState = isOffline ? 'offline' : connectionState;
+  const statusConfig = CONNECTION_STATUS_CONFIG[effectiveState];
 
   return (
     <header
@@ -97,9 +106,9 @@ function MobileHeader({ connectionState, onRetry }: MobileHeaderProps) {
           badgeStyle="subtle"
           size="sm"
           pulse={statusConfig.pulse}
-          onClick={connectionState === 'disconnected' ? onRetry : undefined}
+          onClick={!isOffline && connectionState === 'disconnected' ? onRetry : undefined}
           style={{
-            cursor: connectionState === 'disconnected' ? 'pointer' : 'default',
+            cursor: !isOffline && connectionState === 'disconnected' ? 'pointer' : 'default',
           }}
         >
           {statusConfig.label}
@@ -114,6 +123,7 @@ function MobileHeader({ connectionState, onRetry }: MobileHeaderProps) {
  */
 export default function MobileApp() {
   const colors = useThemeColors();
+  const isOffline = useOfflineStatus();
 
   const { state: connectionState, connect, error, reconnectAttempts } = useWebSocket({
     autoReconnect: true,
@@ -141,6 +151,32 @@ export default function MobileApp() {
 
   // Determine content based on connection state
   const renderContent = () => {
+    // Show offline state when device has no network connectivity
+    if (isOffline) {
+      return (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            borderRadius: '12px',
+            backgroundColor: colors.bgSidebar,
+            border: `1px solid ${colors.border}`,
+            maxWidth: '300px',
+          }}
+        >
+          <h2 style={{ fontSize: '16px', marginBottom: '8px', color: colors.textMain }}>
+            You're Offline
+          </h2>
+          <p style={{ fontSize: '14px', color: colors.textDim, marginBottom: '12px' }}>
+            No internet connection. Maestro requires a network connection to communicate with your desktop app.
+          </p>
+          <p style={{ fontSize: '12px', color: colors.textDim }}>
+            The app will automatically reconnect when you're back online.
+          </p>
+        </div>
+      );
+    }
+
     if (connectionState === 'disconnected') {
       return (
         <div
@@ -242,6 +278,7 @@ export default function MobileApp() {
       {/* Header with connection status */}
       <MobileHeader
         connectionState={connectionState}
+        isOffline={isOffline}
         onRetry={handleRetry}
       />
 
@@ -282,33 +319,33 @@ export default function MobileApp() {
         >
           <input
             type="text"
-            placeholder="Enter command..."
-            disabled={connectionState !== 'authenticated' && connectionState !== 'connected'}
+            placeholder={isOffline ? 'Offline...' : 'Enter command...'}
+            disabled={isOffline || (connectionState !== 'authenticated' && connectionState !== 'connected')}
             style={{
               flex: 1,
               padding: '12px 16px',
               borderRadius: '8px',
               backgroundColor: colors.bgMain,
               border: `1px solid ${colors.border}`,
-              color: connectionState === 'authenticated' || connectionState === 'connected'
+              color: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected')
                 ? colors.textMain
                 : colors.textDim,
               fontSize: '14px',
-              opacity: connectionState === 'authenticated' || connectionState === 'connected' ? 1 : 0.5,
+              opacity: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected') ? 1 : 0.5,
             }}
           />
           <button
-            disabled={connectionState !== 'authenticated' && connectionState !== 'connected'}
+            disabled={isOffline || (connectionState !== 'authenticated' && connectionState !== 'connected')}
             style={{
               padding: '12px 16px',
               borderRadius: '8px',
               backgroundColor: colors.accent,
               color: '#fff',
-              opacity: connectionState === 'authenticated' || connectionState === 'connected' ? 1 : 0.5,
+              opacity: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected') ? 1 : 0.5,
               fontSize: '14px',
               fontWeight: 500,
               border: 'none',
-              cursor: connectionState === 'authenticated' || connectionState === 'connected'
+              cursor: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected')
                 ? 'pointer'
                 : 'default',
             }}

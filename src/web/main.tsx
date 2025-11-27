@@ -5,10 +5,28 @@
  * It detects the device type and renders the appropriate interface.
  */
 
-import React, { StrictMode, lazy, Suspense } from 'react';
+import React, { StrictMode, lazy, Suspense, useEffect, useState, createContext, useContext } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from './components/ThemeProvider';
+import { registerServiceWorker, isOffline } from './utils/serviceWorker';
 import './index.css';
+
+/**
+ * Context for offline status
+ * Provides offline state to all components in the app
+ */
+interface OfflineContextValue {
+  isOffline: boolean;
+}
+
+const OfflineContext = createContext<OfflineContextValue>({ isOffline: false });
+
+/**
+ * Hook to access offline status
+ */
+export function useOfflineStatus(): boolean {
+  return useContext(OfflineContext).isOffline;
+}
 
 // Lazy load mobile and desktop apps for code splitting
 // Using webpackChunkName magic comments for Vite compatibility
@@ -106,10 +124,11 @@ function LoadingFallback() {
  * Main App component that routes to mobile or desktop
  */
 function App() {
-  const [isMobile, setIsMobile] = React.useState(isMobileDevice);
+  const [isMobile, setIsMobile] = useState(isMobileDevice);
+  const [offline, setOffline] = useState(isOffline());
 
   // Re-check on resize (for responsive design testing)
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       setIsMobile(isMobileDevice());
     };
@@ -118,12 +137,31 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Register service worker for offline capability
+  useEffect(() => {
+    registerServiceWorker({
+      onSuccess: (registration) => {
+        console.log('[App] Service worker ready:', registration.scope);
+      },
+      onUpdate: (registration) => {
+        console.log('[App] New content available, refresh recommended');
+        // Could show a toast/notification here prompting user to refresh
+      },
+      onOfflineChange: (newOfflineStatus) => {
+        console.log('[App] Offline status changed:', newOfflineStatus);
+        setOffline(newOfflineStatus);
+      },
+    });
+  }, []);
+
   return (
-    <ThemeProvider>
-      <Suspense fallback={<LoadingFallback />}>
-        {isMobile ? <MobileApp /> : <DesktopApp />}
-      </Suspense>
-    </ThemeProvider>
+    <OfflineContext.Provider value={{ isOffline: offline }}>
+      <ThemeProvider>
+        <Suspense fallback={<LoadingFallback />}>
+          {isMobile ? <MobileApp /> : <DesktopApp />}
+        </Suspense>
+      </ThemeProvider>
+    </OfflineContext.Provider>
   );
 }
 
