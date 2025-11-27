@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Eye, Edit, Play, Square, Loader2, HelpCircle } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle } from 'lucide-react';
 import type { BatchRunState } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -434,47 +434,6 @@ export function Scratchpad({
           </div>
         )}
       </div>
-
-      {/* Batch Run Progress */}
-      {batchRunState && batchRunState.isRunning && (
-        <div
-          className="mt-3 px-4 py-3 rounded border"
-          style={{
-            backgroundColor: theme.colors.bgActivity,
-            borderColor: theme.colors.warning
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" style={{ color: theme.colors.warning }} />
-              <span className="text-xs font-bold uppercase" style={{ color: theme.colors.textMain }}>
-                {isStopping ? 'Stopping...' : 'Auto Mode Running'}
-              </span>
-            </div>
-            <span className="text-xs font-mono" style={{ color: theme.colors.textDim }}>
-              {batchRunState.completedTasks} / {batchRunState.totalTasks} tasks
-            </span>
-          </div>
-          {/* Progress bar */}
-          <div
-            className="h-1.5 rounded-full overflow-hidden"
-            style={{ backgroundColor: theme.colors.border }}
-          >
-            <div
-              className="h-full transition-all duration-500 ease-out"
-              style={{
-                width: `${batchRunState.totalTasks > 0 ? (batchRunState.completedTasks / batchRunState.totalTasks) * 100 : 0}%`,
-                backgroundColor: isStopping ? theme.colors.error : theme.colors.warning
-              }}
-            />
-          </div>
-          <div className="mt-2 text-[10px]" style={{ color: theme.colors.textDim }}>
-            {isStopping
-              ? 'Waiting for current task to complete before stopping...'
-              : `Task ${batchRunState.currentTaskIndex + 1} in progress...`}
-          </div>
-        </div>
-      )}
 
       {/* Help Modal */}
       {helpModalOpen && (

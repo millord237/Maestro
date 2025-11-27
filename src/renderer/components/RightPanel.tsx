@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Loader2 } from 'lucide-react';
 import type { Session, Theme, RightPanelTab, Shortcut, BatchRunState } from '../types';
 import { FileExplorerPanel } from './FileExplorerPanel';
 import { HistoryPanel, HistoryPanelHandle } from './HistoryPanel';
@@ -237,6 +237,47 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           />
         )}
       </div>
+
+      {/* Batch Run Progress - shown at bottom of all tabs */}
+      {batchRunState && batchRunState.isRunning && (
+        <div
+          className="mx-4 mb-4 px-4 py-3 rounded border flex-shrink-0"
+          style={{
+            backgroundColor: theme.colors.bgActivity,
+            borderColor: theme.colors.warning
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: theme.colors.warning }} />
+              <span className="text-xs font-bold uppercase" style={{ color: theme.colors.textMain }}>
+                {batchRunState.isStopping ? 'Stopping...' : 'Auto Mode Running'}
+              </span>
+            </div>
+            <span className="text-xs font-mono" style={{ color: theme.colors.textDim }}>
+              {batchRunState.completedTasks} / {batchRunState.totalTasks} tasks
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div
+            className="h-1.5 rounded-full overflow-hidden"
+            style={{ backgroundColor: theme.colors.border }}
+          >
+            <div
+              className="h-full transition-all duration-500 ease-out"
+              style={{
+                width: `${batchRunState.totalTasks > 0 ? (batchRunState.completedTasks / batchRunState.totalTasks) * 100 : 0}%`,
+                backgroundColor: batchRunState.isStopping ? theme.colors.error : theme.colors.warning
+              }}
+            />
+          </div>
+          <div className="mt-2 text-[10px]" style={{ color: theme.colors.textDim }}>
+            {batchRunState.isStopping
+              ? 'Waiting for current task to complete before stopping...'
+              : `Task ${batchRunState.currentTaskIndex + 1} in progress...`}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
