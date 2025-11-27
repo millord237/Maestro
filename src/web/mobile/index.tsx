@@ -20,6 +20,7 @@ import React from 'react';
 import MobileApp from './App';
 import { SessionPillBar, type SessionPillBarProps, ALL_SESSIONS_THRESHOLD } from './SessionPillBar';
 import { AllSessionsView, type AllSessionsViewProps } from './AllSessionsView';
+import { CommandInputBar, type CommandInputBarProps } from './CommandInputBar';
 
 // Re-export the main app component as both default and named
 export { MobileApp };
@@ -30,6 +31,9 @@ export { SessionPillBar, type SessionPillBarProps, ALL_SESSIONS_THRESHOLD };
 
 // Re-export All Sessions view component
 export { AllSessionsView, type AllSessionsViewProps };
+
+// Re-export command input bar component
+export { CommandInputBar, type CommandInputBarProps };
 
 /**
  * Mobile-specific configuration options

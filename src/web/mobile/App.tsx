@@ -17,6 +17,7 @@ import { useOfflineStatus } from '../main';
 import { triggerHaptic, HAPTIC_PATTERNS } from './index';
 import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
+import { CommandInputBar } from './CommandInputBar';
 import type { Session } from '../hooks/useSessions';
 
 /**
@@ -134,6 +135,7 @@ export default function MobileApp() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [commandInput, setCommandInput] = useState('');
 
   const { state: connectionState, connect, send, error, reconnectAttempts } = useWebSocket({
     autoReconnect: true,
@@ -235,6 +237,31 @@ export default function MobileApp() {
   // Handle closing All Sessions view
   const handleCloseAllSessions = useCallback(() => {
     setShowAllSessions(false);
+  }, []);
+
+  // Handle command submission
+  const handleCommandSubmit = useCallback((command: string) => {
+    if (!activeSessionId) return;
+
+    // Provide haptic feedback on send
+    triggerHaptic(HAPTIC_PATTERNS.send);
+
+    // Send the command to the active session
+    send({
+      type: 'send_command',
+      sessionId: activeSessionId,
+      command,
+    });
+
+    // Clear the input
+    setCommandInput('');
+
+    console.log('[Mobile] Command sent:', command, 'to session:', activeSessionId);
+  }, [activeSessionId, send]);
+
+  // Handle command input change
+  const handleCommandChange = useCallback((value: string) => {
+    setCommandInput(value);
   }, []);
 
   // Determine content based on connection state
@@ -353,12 +380,15 @@ export default function MobileApp() {
   };
 
   // CSS variable for dynamic viewport height with fallback
+  // The fixed CommandInputBar requires padding at the bottom of the container
   const containerStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100dvh',
     backgroundColor: colors.bgMain,
     color: colors.textMain,
+    // Add padding at bottom to account for fixed input bar (~70px + safe area)
+    paddingBottom: 'calc(70px + max(12px, env(safe-area-inset-bottom)))',
   };
 
   // Determine if session pill bar should be shown
@@ -456,59 +486,16 @@ export default function MobileApp() {
         </div>
       </main>
 
-      {/* Bottom input bar placeholder */}
-      <footer
-        style={{
-          padding: '12px 16px',
-          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-          borderTop: `1px solid ${colors.border}`,
-          backgroundColor: colors.bgSidebar,
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            alignItems: 'center',
-          }}
-        >
-          <input
-            type="text"
-            placeholder={isOffline ? 'Offline...' : 'Enter command...'}
-            disabled={isOffline || (connectionState !== 'authenticated' && connectionState !== 'connected')}
-            style={{
-              flex: 1,
-              padding: '12px 16px',
-              borderRadius: '8px',
-              backgroundColor: colors.bgMain,
-              border: `1px solid ${colors.border}`,
-              color: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected')
-                ? colors.textMain
-                : colors.textDim,
-              fontSize: '14px',
-              opacity: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected') ? 1 : 0.5,
-            }}
-          />
-          <button
-            disabled={isOffline || (connectionState !== 'authenticated' && connectionState !== 'connected')}
-            style={{
-              padding: '12px 16px',
-              borderRadius: '8px',
-              backgroundColor: colors.accent,
-              color: '#fff',
-              opacity: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected') ? 1 : 0.5,
-              fontSize: '14px',
-              fontWeight: 500,
-              border: 'none',
-              cursor: !isOffline && (connectionState === 'authenticated' || connectionState === 'connected')
-                ? 'pointer'
-                : 'default',
-            }}
-          >
-            Send
-          </button>
-        </div>
-      </footer>
+      {/* Sticky bottom command input bar */}
+      <CommandInputBar
+        isOffline={isOffline}
+        isConnected={connectionState === 'connected' || connectionState === 'authenticated'}
+        value={commandInput}
+        onChange={handleCommandChange}
+        onSubmit={handleCommandSubmit}
+        placeholder={activeSessionId ? 'Enter command...' : 'Select a session first...'}
+        disabled={!activeSessionId}
+      />
     </div>
   );
 }
