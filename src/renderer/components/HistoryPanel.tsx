@@ -56,12 +56,23 @@ const ActivityGraph: React.FC<ActivityGraphProps> = ({ entries, theme }) => {
     { hour: 0, index: 23 }
   ];
 
-  // Get hours ago label for tooltip
-  const getHoursAgoLabel = (index: number) => {
+  // Get time range label for tooltip (e.g., "2PM - 3PM")
+  const getTimeRangeLabel = (index: number) => {
+    const now = new Date();
     const hoursAgo = 23 - index;
-    if (hoursAgo === 0) return 'now';
-    if (hoursAgo === 1) return '1h ago';
-    return `${hoursAgo}h ago`;
+
+    // Calculate the start hour of this bucket
+    const endHour = new Date(now.getTime() - (hoursAgo * 60 * 60 * 1000));
+    const startHour = new Date(endHour.getTime() - (60 * 60 * 1000));
+
+    const formatHour = (date: Date) => {
+      const hour = date.getHours();
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return `${hour12}${ampm}`;
+    };
+
+    return `${formatHour(startHour)} - ${formatHour(endHour)}`;
   };
 
   return (
@@ -72,7 +83,7 @@ const ActivityGraph: React.FC<ActivityGraphProps> = ({ entries, theme }) => {
       {/* Hover tooltip */}
       {hoveredIndex !== null && (
         <div
-          className="absolute bottom-full mb-1 px-2 py-1 rounded text-[10px] font-mono whitespace-nowrap z-20 pointer-events-none"
+          className="absolute bottom-full mb-1 px-2 py-1.5 rounded text-[10px] font-mono whitespace-nowrap z-20 pointer-events-none"
           style={{
             backgroundColor: theme.colors.bgSidebar,
             border: `1px solid ${theme.colors.border}`,
@@ -81,16 +92,18 @@ const ActivityGraph: React.FC<ActivityGraphProps> = ({ entries, theme }) => {
             transform: hoveredIndex < 4 ? 'translateX(0)' : hoveredIndex > 19 ? 'translateX(-100%)' : 'translateX(-50%)'
           }}
         >
-          <div className="font-bold mb-0.5" style={{ color: theme.colors.textDim }}>
-            {getHoursAgoLabel(hoveredIndex)}
+          <div className="font-bold mb-1" style={{ color: theme.colors.textMain }}>
+            {getTimeRangeLabel(hoveredIndex)}
           </div>
-          <div className="flex items-center gap-2">
-            <span style={{ color: theme.colors.warning }}>
-              Auto: {hourlyData[hoveredIndex].auto}
-            </span>
-            <span style={{ color: theme.colors.accent }}>
-              User: {hourlyData[hoveredIndex].user}
-            </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center justify-between gap-3">
+              <span style={{ color: theme.colors.warning }}>Auto</span>
+              <span className="font-bold" style={{ color: theme.colors.warning }}>{hourlyData[hoveredIndex].auto}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span style={{ color: theme.colors.accent }}>User</span>
+              <span className="font-bold" style={{ color: theme.colors.accent }}>{hourlyData[hoveredIndex].user}</span>
+            </div>
           </div>
         </div>
       )}
