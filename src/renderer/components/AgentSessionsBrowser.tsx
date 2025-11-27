@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign } from 'lucide-react';
+import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign, Star } from 'lucide-react';
 import type { Theme, Session, LogEntry } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -65,6 +65,7 @@ export function AgentSessionsBrowser({
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
   const [messagesOffset, setMessagesOffset] = useState(0);
+  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
@@ -178,6 +179,13 @@ export function AgentSessionsBrowser({
       }
 
       try {
+        // Load starred sessions for this project
+        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
+        const savedStarred = await window.maestro.settings.get(starredKey);
+        if (savedStarred && Array.isArray(savedStarred)) {
+          setStarredSessions(new Set(savedStarred));
+        }
+
         const result = await window.maestro.claude.listSessions(activeSession.cwd);
         setSessions(result);
       } catch (error) {
@@ -189,6 +197,25 @@ export function AgentSessionsBrowser({
 
     loadSessions();
   }, [activeSession?.cwd]);
+
+  // Toggle star status for a session
+  const toggleStar = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger session view
+
+    const newStarred = new Set(starredSessions);
+    if (newStarred.has(sessionId)) {
+      newStarred.delete(sessionId);
+    } else {
+      newStarred.add(sessionId);
+    }
+    setStarredSessions(newStarred);
+
+    // Persist to settings
+    if (activeSession?.cwd) {
+      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
+      await window.maestro.settings.set(starredKey, Array.from(newStarred));
+    }
+  }, [starredSessions, activeSession?.cwd]);
 
   // Auto-view session when activeClaudeSessionId is provided (e.g., from history panel click)
   useEffect(() => {
@@ -319,28 +346,42 @@ export function AgentSessionsBrowser({
     // First filter by showAllSessions
     const visibleSessions = sessions.filter(isSessionVisible);
 
+    // Sort starred sessions to the top, then by modified date
+    const sortWithStarred = (sessionList: ClaudeSession[]) => {
+      return [...sessionList].sort((a, b) => {
+        const aStarred = starredSessions.has(a.sessionId);
+        const bStarred = starredSessions.has(b.sessionId);
+        if (aStarred && !bStarred) return -1;
+        if (!aStarred && bStarred) return 1;
+        // Within same starred status, sort by most recent
+        return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+      });
+    };
+
     if (!search.trim()) {
-      return visibleSessions;
+      return sortWithStarred(visibleSessions);
     }
 
     // For title search, filter locally (fast)
     if (searchMode === 'title') {
       const searchLower = search.toLowerCase();
-      return visibleSessions.filter(s =>
+      const filtered = visibleSessions.filter(s =>
         s.firstMessage.toLowerCase().includes(searchLower) ||
         s.sessionId.toLowerCase().includes(searchLower)
       );
+      return sortWithStarred(filtered);
     }
 
     // For content searches, use backend results to filter sessions
     if (searchResults.length > 0) {
       const matchingIds = new Set(searchResults.map(r => r.sessionId));
-      return visibleSessions.filter(s => matchingIds.has(s.sessionId));
+      const filtered = visibleSessions.filter(s => matchingIds.has(s.sessionId));
+      return sortWithStarred(filtered);
     }
 
     // If searching but no results yet, return empty (or all if still loading)
-    return isSearching ? visibleSessions : [];
-  }, [sessions, search, searchMode, searchResults, isSearching, isSessionVisible]);
+    return isSearching ? sortWithStarred(visibleSessions) : [];
+  }, [sessions, search, searchMode, searchResults, isSearching, isSessionVisible, starredSessions]);
 
   // Get search result info for a session (for display purposes)
   const getSearchResultInfo = useCallback((sessionId: string): SearchResult | undefined => {
@@ -716,17 +757,32 @@ export function AgentSessionsBrowser({
               <div className="py-2">
                 {filteredSessions.map((session, i) => {
                   const searchResultInfo = getSearchResultInfo(session.sessionId);
+                  const isStarred = starredSessions.has(session.sessionId);
                   return (
                     <button
                       key={session.sessionId}
                       ref={i === selectedIndex ? selectedItemRef : null}
                       onClick={() => handleViewSession(session)}
-                      className="w-full text-left px-6 py-4 flex items-start gap-4 hover:bg-white/5 transition-colors border-b"
+                      className="w-full text-left px-6 py-4 flex items-start gap-4 hover:bg-white/5 transition-colors border-b group"
                       style={{
                         backgroundColor: i === selectedIndex ? theme.colors.accent + '15' : 'transparent',
                         borderColor: theme.colors.border + '50',
                       }}
                     >
+                      {/* Star button */}
+                      <button
+                        onClick={(e) => toggleStar(session.sessionId, e)}
+                        className="p-1 -ml-1 rounded hover:bg-white/10 transition-colors shrink-0"
+                        title={isStarred ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Star
+                          className="w-4 h-4"
+                          style={{
+                            color: isStarred ? theme.colors.warning : theme.colors.textDim,
+                            fill: isStarred ? theme.colors.warning : 'transparent',
+                          }}
+                        />
+                      </button>
                       <div className="flex-1 min-w-0">
                         {/* Line 1: Title/first message */}
                         <div
