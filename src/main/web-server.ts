@@ -98,6 +98,10 @@ export type GetSessionDetailCallback = (sessionId: string) => SessionDetail | nu
 // Returns true if successful, false if session not found or write failed
 export type WriteToSessionCallback = (sessionId: string, data: string) => boolean;
 
+// Callback type for interrupting a session (sending SIGINT/Ctrl+C)
+// Returns true if successful, false if session not found or interrupt failed
+export type InterruptSessionCallback = (sessionId: string) => boolean;
+
 // Theme type for web clients (matches renderer/types/index.ts)
 export interface WebTheme {
   id: string;
@@ -142,6 +146,7 @@ export class WebServer {
   private getSessionDetailCallback: GetSessionDetailCallback | null = null;
   private getThemeCallback: GetThemeCallback | null = null;
   private writeToSessionCallback: WriteToSessionCallback | null = null;
+  private interruptSessionCallback: InterruptSessionCallback | null = null;
 
   constructor(port: number = 8000) {
     this.port = port;
@@ -185,6 +190,14 @@ export class WebServer {
    */
   setWriteToSessionCallback(callback: WriteToSessionCallback) {
     this.writeToSessionCallback = callback;
+  }
+
+  /**
+   * Set the callback function for interrupting a session
+   * This is called by the /api/session/:id/interrupt endpoint
+   */
+  setInterruptSessionCallback(callback: InterruptSessionCallback) {
+    this.interruptSessionCallback = callback;
   }
 
   /**
@@ -472,6 +485,62 @@ export class WebServer {
       return {
         success: true,
         message: 'Command sent successfully',
+        sessionId: id,
+        timestamp: Date.now(),
+      };
+    });
+
+    // Interrupt session endpoint - sends SIGINT/Ctrl+C to a specific session
+    // Rate limited using POST rate limit config (more restrictive)
+    this.server.post('/api/session/:id/interrupt', {
+      preHandler: this.authenticateRequest.bind(this),
+      config: {
+        rateLimit: {
+          max: this.rateLimitConfig.maxPost,
+          timeWindow: this.rateLimitConfig.timeWindow,
+        },
+      },
+    }, async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      // Check if interrupt callback is configured
+      if (!this.interruptSessionCallback) {
+        reply.code(503).send({
+          error: 'Service Unavailable',
+          message: 'Session interrupt service not configured',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Check if session exists first
+      if (this.getSessionDetailCallback) {
+        const session = this.getSessionDetailCallback(id);
+        if (!session) {
+          reply.code(404).send({
+            error: 'Not Found',
+            message: `Session with id '${id}' not found`,
+            timestamp: Date.now(),
+          });
+          return;
+        }
+      }
+
+      // Send interrupt signal to the session
+      const success = this.interruptSessionCallback(id);
+
+      if (!success) {
+        reply.code(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to interrupt session',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      return {
+        success: true,
+        message: 'Interrupt signal sent successfully',
         sessionId: id,
         timestamp: Date.now(),
       };

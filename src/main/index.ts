@@ -339,6 +339,12 @@ app.whenReady().then(() => {
     return processManager.write(sessionId, data);
   });
 
+  // Set up callback for web server to interrupt sessions
+  webServer.setInterruptSessionCallback((sessionId: string) => {
+    if (!processManager) return false;
+    return processManager.interrupt(sessionId);
+  });
+
   // Initialize session web server manager with callbacks
   sessionWebServerManager = new SessionWebServerManager(
     // getSessionData callback - fetch session from store
