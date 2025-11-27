@@ -10,13 +10,17 @@
  * - Color-coded status indicators (green=idle, yellow=busy, red=error, orange=connecting)
  * - Mode indicator (AI vs Terminal)
  * - Active session highlighting
+ * - Long-press to show session info popover
  */
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
 import type { Session } from '../hooks/useSessions';
 import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+
+/** Duration in ms to trigger long-press */
+const LONG_PRESS_DURATION = 500;
 
 /**
  * Props for individual session pill
@@ -25,13 +29,17 @@ interface SessionPillProps {
   session: Session;
   isActive: boolean;
   onSelect: (sessionId: string) => void;
+  onLongPress: (session: Session, rect: DOMRect) => void;
 }
 
 /**
  * Individual session pill component
  */
-function SessionPill({ session, isActive, onSelect }: SessionPillProps) {
+function SessionPill({ session, isActive, onSelect, onLongPress }: SessionPillProps) {
   const colors = useThemeColors();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressTriggeredRef = useRef(false);
 
   // Map session state to status for StatusDot
   const getStatus = (): SessionStatus => {
@@ -42,11 +50,55 @@ function SessionPill({ session, isActive, onSelect }: SessionPillProps) {
     return 'error';
   };
 
-  // Handle tap with haptic feedback
-  const handleTap = useCallback(() => {
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-    onSelect(session.id);
-  }, [session.id, onSelect]);
+  // Clear long-press timer
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  // Start long-press timer
+  const startLongPressTimer = useCallback(() => {
+    isLongPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      triggerHaptic(HAPTIC_PATTERNS.success);
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        onLongPress(session, rect);
+      }
+    }, LONG_PRESS_DURATION);
+  }, [session, onLongPress]);
+
+  // Handle touch/mouse start
+  const handlePressStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    // Prevent context menu on long press
+    e.preventDefault();
+    startLongPressTimer();
+  }, [startLongPressTimer]);
+
+  // Handle touch/mouse end
+  const handlePressEnd = useCallback(() => {
+    clearLongPressTimer();
+    // Only trigger tap if long press wasn't triggered
+    if (!isLongPressTriggeredRef.current) {
+      triggerHaptic(HAPTIC_PATTERNS.tap);
+      onSelect(session.id);
+    }
+    isLongPressTriggeredRef.current = false;
+  }, [clearLongPressTimer, onSelect, session.id]);
+
+  // Handle touch/mouse move (cancel long press if moved too far)
+  const handlePressMove = useCallback(() => {
+    // Cancel long press on move
+    clearLongPressTimer();
+  }, [clearLongPressTimer]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => clearLongPressTimer();
+  }, [clearLongPressTimer]);
 
   // Mode icon based on input mode
   const renderModeIcon = () => {
@@ -70,7 +122,15 @@ function SessionPill({ session, isActive, onSelect }: SessionPillProps) {
 
   return (
     <button
-      onClick={handleTap}
+      ref={buttonRef}
+      onTouchStart={handlePressStart}
+      onTouchEnd={handlePressEnd}
+      onTouchMove={handlePressMove}
+      onTouchCancel={handlePressEnd}
+      onMouseDown={handlePressStart}
+      onMouseUp={handlePressEnd}
+      onMouseLeave={handlePressEnd}
+      onContextMenu={(e) => e.preventDefault()}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -90,9 +150,11 @@ function SessionPill({ session, isActive, onSelect }: SessionPillProps) {
         touchAction: 'manipulation',
         WebkitTapHighlightColor: 'transparent',
         outline: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
       aria-pressed={isActive}
-      aria-label={`${session.name} session, ${getStatus()}, ${session.inputMode} mode${isActive ? ', active' : ''}`}
+      aria-label={`${session.name} session, ${getStatus()}, ${session.inputMode} mode${isActive ? ', active' : ''}. Long press for details.`}
     >
       {/* Status dot */}
       <StatusDot status={getStatus()} size="sm" />
@@ -115,6 +177,328 @@ function SessionPill({ session, isActive, onSelect }: SessionPillProps) {
 }
 
 /**
+ * Props for the session info popover
+ */
+interface SessionInfoPopoverProps {
+  session: Session;
+  anchorRect: DOMRect;
+  onClose: () => void;
+}
+
+/**
+ * Popover component displaying detailed session information
+ */
+function SessionInfoPopover({ session, anchorRect, onClose }: SessionInfoPopoverProps) {
+  const colors = useThemeColors();
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Get status label based on session state
+  const getStatusLabel = (): string => {
+    const state = session.state as string;
+    if (state === 'idle') return 'Ready';
+    if (state === 'busy') return 'Thinking...';
+    if (state === 'connecting') return 'Connecting...';
+    return 'Error';
+  };
+
+  // Get status color based on session state
+  const getStatusColor = (): string => {
+    const state = session.state as string;
+    if (state === 'idle') return '#22c55e'; // green
+    if (state === 'busy') return '#eab308'; // yellow
+    if (state === 'connecting') return '#f97316'; // orange
+    return '#ef4444'; // red
+  };
+
+  // Get tool type display name
+  const getToolTypeLabel = (): string => {
+    const toolTypeMap: Record<string, string> = {
+      'claude-code': 'Claude Code',
+      'aider-gemini': 'Aider (Gemini)',
+      'qwen-coder': 'Qwen Coder',
+      'terminal': 'Terminal',
+    };
+    return toolTypeMap[session.toolType] || session.toolType;
+  };
+
+  // Calculate position - show below the pill, centered
+  const calculatePosition = (): React.CSSProperties => {
+    const popoverWidth = 280;
+    const viewportWidth = window.innerWidth;
+    const padding = 12;
+
+    // Center horizontally on the anchor
+    let left = anchorRect.left + (anchorRect.width / 2) - (popoverWidth / 2);
+
+    // Keep within viewport bounds
+    if (left < padding) {
+      left = padding;
+    } else if (left + popoverWidth > viewportWidth - padding) {
+      left = viewportWidth - popoverWidth - padding;
+    }
+
+    return {
+      position: 'fixed',
+      top: `${anchorRect.bottom + 8}px`,
+      left: `${left}px`,
+      width: `${popoverWidth}px`,
+      zIndex: 1000,
+    };
+  };
+
+  // Close on outside click/touch
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    // Use a short delay to prevent immediate closing from the same event
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [onClose]);
+
+  // Close on escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Truncate path for display
+  const truncatePath = (path: string, maxLength: number = 35): string => {
+    if (path.length <= maxLength) return path;
+    const parts = path.split('/');
+    if (parts.length <= 2) return `...${path.slice(-maxLength + 3)}`;
+    return `.../${parts.slice(-2).join('/')}`;
+  };
+
+  return (
+    <>
+      {/* Backdrop for dimming */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          zIndex: 999,
+        }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Popover card */}
+      <div
+        ref={popoverRef}
+        role="dialog"
+        aria-label={`Session info for ${session.name}`}
+        style={{
+          ...calculatePosition(),
+          backgroundColor: colors.bgSidebar,
+          borderRadius: '12px',
+          border: `1px solid ${colors.border}`,
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          overflow: 'hidden',
+          animation: 'popoverFadeIn 0.15s ease-out',
+        }}
+      >
+        {/* Header with session name and close button */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 14px',
+            borderBottom: `1px solid ${colors.border}`,
+            backgroundColor: `${colors.accent}10`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <StatusDot status={session.state as SessionStatus} size="md" />
+            <h3
+              style={{
+                margin: 0,
+                fontSize: '15px',
+                fontWeight: 600,
+                color: colors.textMain,
+              }}
+            >
+              {session.name}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close popover"
+            style={{
+              padding: '4px 8px',
+              fontSize: '18px',
+              color: colors.textDim,
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              borderRadius: '4px',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Session details */}
+        <div style={{ padding: '12px 14px' }}>
+          {/* Status row */}
+          <div style={{ marginBottom: '10px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: colors.textDim,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Status
+            </span>
+            <div
+              style={{
+                marginTop: '2px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: getStatusColor(),
+              }}
+            >
+              {getStatusLabel()}
+            </div>
+          </div>
+
+          {/* Tool type row */}
+          <div style={{ marginBottom: '10px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: colors.textDim,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Tool
+            </span>
+            <div
+              style={{
+                marginTop: '2px',
+                fontSize: '14px',
+                color: colors.textMain,
+              }}
+            >
+              {getToolTypeLabel()}
+            </div>
+          </div>
+
+          {/* Mode row */}
+          <div style={{ marginBottom: '10px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: colors.textDim,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Mode
+            </span>
+            <div
+              style={{
+                marginTop: '2px',
+                fontSize: '14px',
+                color: colors.textMain,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: session.inputMode === 'ai' ? colors.accent : colors.textDim,
+                  backgroundColor:
+                    session.inputMode === 'ai' ? `${colors.accent}20` : `${colors.textDim}20`,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
+              >
+                {session.inputMode === 'ai' ? 'AI' : 'Terminal'}
+              </span>
+              {session.inputMode === 'ai' ? 'AI Assistant' : 'Command Terminal'}
+            </div>
+          </div>
+
+          {/* Working directory row */}
+          <div>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: colors.textDim,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Working Directory
+            </span>
+            <div
+              style={{
+                marginTop: '2px',
+                fontSize: '13px',
+                color: colors.textMain,
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+              }}
+              title={session.cwd}
+            >
+              {truncatePath(session.cwd)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Animation keyframes */}
+      <style>{`
+        @keyframes popoverFadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </>
+  );
+}
+
+/**
  * Props for the SessionPillBar component
  */
 export interface SessionPillBarProps {
@@ -131,9 +515,18 @@ export interface SessionPillBarProps {
 }
 
 /**
+ * Popover state interface
+ */
+interface PopoverState {
+  session: Session;
+  anchorRect: DOMRect;
+}
+
+/**
  * SessionPillBar component
  *
  * Renders a horizontally scrollable bar of session pills for the mobile interface.
+ * Supports long-press on pills to show session info popover.
  *
  * @example
  * ```tsx
@@ -153,6 +546,17 @@ export function SessionPillBar({
 }: SessionPillBarProps) {
   const colors = useThemeColors();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [popoverState, setPopoverState] = useState<PopoverState | null>(null);
+
+  // Handle long-press on a session pill
+  const handleLongPress = useCallback((session: Session, rect: DOMRect) => {
+    setPopoverState({ session, anchorRect: rect });
+  }, []);
+
+  // Close the popover
+  const handleClosePopover = useCallback(() => {
+    setPopoverState(null);
+  }, []);
 
   // Scroll active session into view when it changes
   useEffect(() => {
@@ -202,57 +606,69 @@ export function SessionPillBar({
   }
 
   return (
-    <div
-      style={{
-        borderBottom: `1px solid ${colors.border}`,
-        backgroundColor: colors.bgSidebar,
-        ...style,
-      }}
-      className={className}
-    >
-      {/* Scrollable container */}
+    <>
       <div
-        ref={scrollContainerRef}
         style={{
-          display: 'flex',
-          gap: '8px',
-          padding: '10px 16px',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          scrollSnapType: 'x proximity',
+          borderBottom: `1px solid ${colors.border}`,
+          backgroundColor: colors.bgSidebar,
+          ...style,
         }}
-        // Hide scrollbar using inline style (for webkit browsers)
-        className="hide-scrollbar"
-        role="tablist"
-        aria-label="Session selector"
+        className={className}
       >
-        {sessions.map((session) => (
-          <div
-            key={session.id}
-            style={{
-              scrollSnapAlign: 'start',
-            }}
-            role="presentation"
-          >
-            <SessionPill
-              session={session}
-              isActive={session.id === activeSessionId}
-              onSelect={onSelectSession}
-            />
-          </div>
-        ))}
+        {/* Scrollable container */}
+        <div
+          ref={scrollContainerRef}
+          style={{
+            display: 'flex',
+            gap: '8px',
+            padding: '10px 16px',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            scrollSnapType: 'x proximity',
+          }}
+          // Hide scrollbar using inline style (for webkit browsers)
+          className="hide-scrollbar"
+          role="tablist"
+          aria-label="Session selector. Long press a session for details."
+        >
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              style={{
+                scrollSnapAlign: 'start',
+              }}
+              role="presentation"
+            >
+              <SessionPill
+                session={session}
+                isActive={session.id === activeSessionId}
+                onSelect={onSelectSession}
+                onLongPress={handleLongPress}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Inline style for hiding scrollbar */}
+        <style>{`
+          .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
       </div>
 
-      {/* Inline style for hiding scrollbar */}
-      <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
-    </div>
+      {/* Session info popover */}
+      {popoverState && (
+        <SessionInfoPopover
+          session={popoverState.session}
+          anchorRect={popoverState.anchorRect}
+          onClose={handleClosePopover}
+        />
+      )}
+    </>
   );
 }
 
