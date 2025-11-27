@@ -14,11 +14,14 @@
  * - Minimum 44px touch targets per Apple HIG guidelines
  * - Mode toggle button (AI / Terminal) with visual indicator
  * - Interrupt button (red X) visible when session is busy
+ * - Recent command chips for quick access to recently sent commands
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useSwipeUp } from '../hooks/useSwipeUp';
+import { RecentCommandChips } from './RecentCommandChips';
+import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
 
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
@@ -66,6 +69,10 @@ export interface CommandInputBarProps {
   onInterrupt?: () => void;
   /** Callback when history drawer should open (swipe up) */
   onHistoryOpen?: () => void;
+  /** Recent unique commands for quick-tap chips */
+  recentCommands?: CommandHistoryEntry[];
+  /** Callback when a recent command chip is tapped */
+  onSelectRecentCommand?: (command: string) => void;
 }
 
 /**
@@ -87,6 +94,8 @@ export function CommandInputBar({
   isSessionBusy = false,
   onInterrupt,
   onHistoryOpen,
+  recentCommands,
+  onSelectRecentCommand,
 }: CommandInputBarProps) {
   const colors = useThemeColors();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -293,6 +302,16 @@ export function CommandInputBar({
           />
         </div>
       )}
+
+      {/* Recent command chips - quick-tap to reuse commands */}
+      {recentCommands && recentCommands.length > 0 && onSelectRecentCommand && (
+        <RecentCommandChips
+          commands={recentCommands}
+          onSelectCommand={onSelectRecentCommand}
+          disabled={isDisabled}
+        />
+      )}
+
       <form
         onSubmit={handleSubmit}
         style={{

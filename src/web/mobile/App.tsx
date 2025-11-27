@@ -20,6 +20,7 @@ import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
 import { CommandHistoryDrawer } from './CommandHistoryDrawer';
+import { RecentCommandChips } from './RecentCommandChips';
 import type { Session } from '../hooks/useSessions';
 
 /**
@@ -146,6 +147,7 @@ export default function MobileApp() {
     addCommand: addToHistory,
     removeCommand: removeFromHistory,
     clearHistory,
+    getUniqueCommands,
   } = useCommandHistory();
 
   const { state: connectionState, connect, send, error, reconnectAttempts } = useWebSocket({
@@ -577,7 +579,7 @@ export default function MobileApp() {
         </div>
       </main>
 
-      {/* Sticky bottom command input bar */}
+      {/* Sticky bottom command input bar with recent command chips */}
       <CommandInputBar
         isOffline={isOffline}
         isConnected={connectionState === 'connected' || connectionState === 'authenticated'}
@@ -591,6 +593,8 @@ export default function MobileApp() {
         isSessionBusy={activeSession?.state === 'busy'}
         onInterrupt={handleInterrupt}
         onHistoryOpen={handleOpenHistory}
+        recentCommands={getUniqueCommands(5)}
+        onSelectRecentCommand={handleSelectHistoryCommand}
       />
 
       {/* Command history drawer - swipe up from input area */}
