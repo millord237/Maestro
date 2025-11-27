@@ -216,22 +216,65 @@ export function SessionList(props: SessionListProps) {
               >
                 <Globe className={`w-3 h-3 ${anyTunnelActive ? 'text-green-500 animate-pulse' : 'opacity-30'}`} />
                 {anyTunnelActive && globeTooltipOpen && (
-                  <div className="absolute top-full left-0 pt-2 w-56 z-50">
+                  <div className="absolute top-full left-0 pt-2 z-50" style={{ minWidth: '320px' }}>
                     <div
-                      className="rounded p-3 shadow-xl"
+                      className="rounded shadow-xl overflow-hidden"
                       style={{
                         backgroundColor: theme.colors.bgSidebar,
                         border: `1px solid ${theme.colors.border}`
                       }}
                     >
-                      <div className="text-[10px] uppercase font-bold mb-2" style={{ color: theme.colors.textDim }}>Maestro Index</div>
-                      <div className="flex items-center gap-1 text-xs text-green-400 font-mono mb-1">
-                        <Globe className="w-3 h-3" />
-                        https://maestro-index.ngrok.io
+                      <div className="px-3 py-2 border-b" style={{ borderColor: theme.colors.border }}>
+                        <div className="text-[10px] uppercase font-bold" style={{ color: theme.colors.textDim }}>Live Agents</div>
                       </div>
-                      <div className="flex items-center gap-1 text-xs font-mono" style={{ color: theme.colors.textDim }}>
-                        <Network className="w-3 h-3" />
-                        http://192.168.1.42:8000
+                      <div className="max-h-64 overflow-y-auto">
+                        {sessions.filter(s => s.tunnelActive).map(session => {
+                          const group = groups.find(g => g.id === session.groupId);
+                          return (
+                            <div
+                              key={session.id}
+                              className="px-3 py-2 border-b last:border-b-0 hover:bg-white/5"
+                              style={{ borderColor: theme.colors.border }}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <button
+                                  onClick={() => {
+                                    setActiveSessionId(session.id);
+                                    setGlobeTooltipOpen(false);
+                                  }}
+                                  className="text-xs font-bold hover:underline text-left"
+                                  style={{ color: theme.colors.textMain }}
+                                >
+                                  {session.name}
+                                </button>
+                                {group && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                                    {group.name}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  onClick={() => window.maestro.shell.openExternal(`http://localhost:${session.port}`)}
+                                  className="flex items-center gap-1 text-[10px] font-mono hover:underline"
+                                  style={{ color: theme.colors.textDim }}
+                                >
+                                  <Network className="w-2.5 h-2.5" />
+                                  localhost:{session.port}
+                                </button>
+                                {session.tunnelUrl && (
+                                  <button
+                                    onClick={() => window.maestro.shell.openExternal(session.tunnelUrl!)}
+                                    className="flex items-center gap-1 text-[10px] font-mono hover:underline text-green-400"
+                                  >
+                                    <Globe className="w-2.5 h-2.5" />
+                                    {session.tunnelUrl.replace('https://', '')}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
