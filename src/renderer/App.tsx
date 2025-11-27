@@ -2345,20 +2345,14 @@ export default function MaestroConsole() {
     const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
 
     try {
-      // Attempt to send interrupt signal (Ctrl+C)
+      // Send interrupt signal (Ctrl+C)
       await window.maestro.process.interrupt(targetSessionId);
 
-      // Add a system log entry
+      // Just set state to idle, no log entry needed
       setSessions(prev => prev.map(s => {
         if (s.id !== activeSession.id) return s;
         return {
           ...s,
-          [targetLogKey]: [...s[targetLogKey], {
-            id: generateId(),
-            timestamp: Date.now(),
-            source: 'system',
-            text: '^C'
-          }],
           state: 'idle'
         };
       }));
