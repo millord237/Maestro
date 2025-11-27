@@ -32,7 +32,7 @@ Download the latest release for your platform from the [Releases](https://github
 - 🎨 **Beautiful Themes** - 12 themes including Dracula, Monokai, Nord, Tokyo Night, GitHub Light, and more
 - 🔀 **Git Integration** - Automatic git status, diff tracking, and workspace detection
 - 📁 **File Explorer** - Browse project files with syntax highlighting and markdown preview
-- 📋 **Session Management** - Group, rename, and organize your sessions
+- 📋 **Session Management** - Group, rename, bookmark, and organize your sessions
 - 📝 **Scratchpad** - Built-in markdown editor with live preview for task management
 - ⚡ **Slash Commands** - Extensible command system with autocomplete
 - 📬 **Message Queueing** - Queue messages while AI is busy; they're sent automatically when ready
@@ -45,7 +45,7 @@ Download the latest release for your platform from the [Releases](https://github
 
 Maestro features a three-panel layout:
 
-- **Left Bar** - Session list with grouping, filtering, and organization
+- **Left Bar** - Session list with grouping, filtering, bookmarks, and organization
 - **Main Window** - Center workspace with two modes:
   - **AI Terminal** - Interact with Claude Code AI assistant
   - **Command Terminal** - Execute shell commands and scripts

@@ -168,6 +168,8 @@ export interface Session {
   activeTimeMs: number;
   // Claude Code slash commands available for this session (fetched per session based on cwd)
   claudeCommands?: { command: string; description: string; }[];
+  // Bookmark flag - bookmarked sessions appear in a dedicated section at the top
+  bookmarked?: boolean;
 }
 
 export interface Group {

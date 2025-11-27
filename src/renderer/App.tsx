@@ -3085,6 +3085,7 @@ export default function MaestroConsole() {
           startRenamingSession={startRenamingSession}
           showConfirmation={showConfirmation}
           setGroups={setGroups}
+          setSessions={setSessions}
           createNewGroup={createNewGroup}
           addNewSession={addNewSession}
           activeBatchSessionIds={activeBatchSessionIds}

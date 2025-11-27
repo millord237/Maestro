@@ -157,24 +157,57 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    # Run release even if some builds failed (fail-fast: false allows partial success)
+    if: always() && startsWith(github.ref, 'refs/tags/') && needs.build.result != 'cancelled'
 
     steps:
-      - name: Download all artifacts
+      # Download each platform's artifacts separately to handle partial failures
+      - name: Download macOS artifacts
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
-          path: artifacts
+          name: maestro-macos
+          path: artifacts/maestro-macos
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: maestro-windows
+          path: artifacts/maestro-windows
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: maestro-linux
+          path: artifacts/maestro-linux
 
       - name: List downloaded artifacts
-        run: find artifacts -type f | head -50
+        run: |
+          echo "Available artifacts:"
+          find artifacts -type f 2>/dev/null || echo "No artifacts found"
+
+      - name: Check for any artifacts
+        id: check_artifacts
+        run: |
+          if find artifacts -type f 2>/dev/null | grep -q .; then
+            echo "has_artifacts=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_artifacts=false" >> $GITHUB_OUTPUT
+            echo "::error::No artifacts were built successfully"
+            exit 1
+          fi
 
       - name: Create Release
+        if: steps.check_artifacts.outputs.has_artifacts == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/maestro-macos/*
             artifacts/maestro-windows/*
             artifacts/maestro-linux/*
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
           generate_release_notes: true

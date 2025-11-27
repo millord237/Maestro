@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, Activity, X, Keyboard,
   Globe, Network, PanelLeftClose, PanelLeftOpen, Folder, Info, FileText, GitBranch, Bot, Clock,
-  ScrollText, Cpu, Menu
+  ScrollText, Cpu, Menu, Bookmark
 } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
 import { getStatusColor, getContextColor, formatActiveTime } from '../utils/theme';
@@ -47,6 +47,7 @@ interface SessionListProps {
   startRenamingSession: (sessId: string) => void;
   showConfirmation: (message: string, onConfirm: () => void) => void;
   setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
+  setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
   createNewGroup: () => void;
   addNewSession: () => void;
 
@@ -63,17 +64,25 @@ export function SessionList(props: SessionListProps) {
     setShortcutsHelpOpen, setSettingsModalOpen, setSettingsTab, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen, toggleGroup,
     handleDragStart, handleDragOver, handleDropOnGroup, handleDropOnUngrouped,
     finishRenamingGroup, finishRenamingSession, startRenamingGroup,
-    startRenamingSession, showConfirmation, setGroups, createNewGroup, addNewSession,
+    startRenamingSession, showConfirmation, setGroups, setSessions, createNewGroup, addNewSession,
     activeBatchSessionIds = []
   } = props;
 
   const [sessionFilter, setSessionFilter] = useState('');
   const [sessionFilterOpen, setSessionFilterOpen] = useState(false);
   const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
+  const [bookmarksCollapsed, setBookmarksCollapsed] = useState(false);
   const [preFilterGroupStates, setPreFilterGroupStates] = useState<Map<string, boolean>>(new Map());
   const [menuOpen, setMenuOpen] = useState(false);
   const [globeTooltipOpen, setGlobeTooltipOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Toggle bookmark for a session
+  const toggleBookmark = (sessionId: string) => {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, bookmarked: !s.bookmarked } : s
+    ));
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -394,6 +403,120 @@ export function SessionList(props: SessionListProps) {
             </div>
           )}
 
+          {/* BOOKMARKS SECTION - only show if there are bookmarked sessions */}
+          {filteredSessions.some(s => s.bookmarked) && (
+            <div className="mb-1">
+              <div
+                className="px-3 py-1.5 flex items-center justify-between cursor-pointer hover:bg-opacity-50 group"
+                onClick={() => setBookmarksCollapsed(!bookmarksCollapsed)}
+              >
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider flex-1" style={{ color: theme.colors.accent }}>
+                  {bookmarksCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  <Bookmark className="w-3.5 h-3.5" fill={theme.colors.accent} />
+                  <span>Bookmarks</span>
+                </div>
+              </div>
+
+              {!bookmarksCollapsed && (
+                <div className="flex flex-col border-l ml-4" style={{ borderColor: theme.colors.accent }}>
+                  {[...filteredSessions.filter(s => s.bookmarked)].sort((a, b) => a.name.localeCompare(b.name)).map(session => {
+                    const globalIdx = sortedSessions.findIndex(s => s.id === session.id);
+                    const isKeyboardSelected = activeFocus === 'sidebar' && globalIdx === selectedSidebarIndex;
+                    const group = groups.find(g => g.id === session.groupId);
+                    return (
+                      <div
+                        key={session.id}
+                        draggable
+                        onDragStart={() => handleDragStart(session.id)}
+                        onClick={() => setActiveSessionId(session.id)}
+                        className={`px-4 py-2 cursor-move flex items-center justify-between group border-l-2 transition-all hover:bg-opacity-50 ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
+                        style={{
+                          borderColor: (activeSessionId === session.id || isKeyboardSelected) ? theme.colors.accent : 'transparent',
+                          backgroundColor: activeSessionId === session.id ? theme.colors.bgActivity : (isKeyboardSelected ? theme.colors.bgActivity + '40' : 'transparent')
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          {editingSessionId === session.id ? (
+                            <input
+                              autoFocus
+                              className="bg-transparent text-sm font-medium outline-none w-full border-b border-indigo-500"
+                              defaultValue={session.name}
+                              onClick={e => e.stopPropagation()}
+                              onBlur={e => finishRenamingSession(session.id, e.target.value)}
+                              onKeyDown={e => {
+                                e.stopPropagation();
+                                if (e.key === 'Enter') finishRenamingSession(session.id, e.currentTarget.value);
+                              }}
+                            />
+                          ) : (
+                            <div
+                              className="text-sm font-medium truncate"
+                              style={{ color: activeSessionId === session.id ? theme.colors.textMain : theme.colors.textDim }}
+                              onDoubleClick={() => startRenamingSession(session.id)}
+                            >
+                              {session.name}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 text-[10px] mt-0.5 opacity-70">
+                            <Activity className="w-3 h-3" /> {session.toolType}
+                            {group && (
+                              <span className="text-[9px] px-1 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                                {group.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          {/* Bookmark toggle */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleBookmark(session.id);
+                            }}
+                            className="p-0.5 rounded hover:bg-white/10 transition-colors"
+                            title="Remove bookmark"
+                          >
+                            <Bookmark className="w-3 h-3" style={{ color: theme.colors.accent }} fill={theme.colors.accent} />
+                          </button>
+                          {/* Git Dirty Indicator */}
+                          {leftSidebarOpen && session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
+                            <div className="flex items-center gap-0.5 text-[10px]" style={{ color: theme.colors.warning }}>
+                              <GitBranch className="w-2.5 h-2.5" />
+                              <span>{gitFileCounts.get(session.id)}</span>
+                            </div>
+                          )}
+                          {/* AUTO Mode Indicator */}
+                          {activeBatchSessionIds.includes(session.id) && (
+                            <div
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase animate-pulse"
+                              style={{ backgroundColor: theme.colors.warning + '30', color: theme.colors.warning }}
+                              title="Auto mode running"
+                            >
+                              <Bot className="w-2.5 h-2.5" />
+                              AUTO
+                            </div>
+                          )}
+                          {/* AI Status Indicator */}
+                          <div
+                            className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
+                            style={{ backgroundColor: getStatusColor(session.state, theme) }}
+                            title={
+                              session.state === 'idle' ? 'Ready and waiting' :
+                              session.state === 'busy' ? 'Agent is thinking' :
+                              session.state === 'connecting' ? 'Attempting to establish connection' :
+                              session.state === 'error' ? 'No connection with agent' :
+                              'Waiting for input'
+                            }
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* GROUPS */}
           {[...groups].sort((a, b) => a.name.localeCompare(b.name)).map(group => {
             const groupSessions = [...filteredSessions.filter(s => s.groupId === group.id)].sort((a, b) => a.name.localeCompare(b.name));
@@ -488,6 +611,21 @@ export function SessionList(props: SessionListProps) {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 ml-2">
+                            {/* Bookmark toggle */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleBookmark(session.id);
+                              }}
+                              className="p-0.5 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title={session.bookmarked ? "Remove bookmark" : "Add bookmark"}
+                            >
+                              <Bookmark
+                                className="w-3 h-3"
+                                style={{ color: session.bookmarked ? theme.colors.accent : theme.colors.textDim }}
+                                fill={session.bookmarked ? theme.colors.accent : 'none'}
+                              />
+                            </button>
                             {/* Git Dirty Indicator (only in wide mode) */}
                             {leftSidebarOpen && session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
                               <div className="flex items-center gap-0.5 text-[10px]" style={{ color: theme.colors.warning }}>
@@ -593,7 +731,7 @@ export function SessionList(props: SessionListProps) {
                   draggable
                   onDragStart={() => handleDragStart(session.id)}
                   onClick={() => setActiveSessionId(session.id)}
-                  className={`px-4 py-2 rounded cursor-move flex items-center justify-between mb-1 hover:bg-opacity-50 border-l-2 transition-all ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
+                  className={`px-4 py-2 rounded cursor-move flex items-center justify-between mb-1 hover:bg-opacity-50 border-l-2 transition-all group ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
                   style={{
                     borderColor: (activeSessionId === session.id || isKeyboardSelected) ? theme.colors.accent : 'transparent',
                     backgroundColor: activeSessionId === session.id ? theme.colors.bgActivity : (isKeyboardSelected ? theme.colors.bgActivity + '40' : 'transparent')
@@ -627,6 +765,21 @@ export function SessionList(props: SessionListProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-2">
+                    {/* Bookmark toggle */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleBookmark(session.id);
+                      }}
+                      className="p-0.5 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title={session.bookmarked ? "Remove bookmark" : "Add bookmark"}
+                    >
+                      <Bookmark
+                        className="w-3 h-3"
+                        style={{ color: session.bookmarked ? theme.colors.accent : theme.colors.textDim }}
+                        fill={session.bookmarked ? theme.colors.accent : 'none'}
+                      />
+                    </button>
                     {/* Git Dirty Indicator (only in wide mode) */}
                     {leftSidebarOpen && session.isGitRepo && gitFileCounts.has(session.id) && gitFileCounts.get(session.id)! > 0 && (
                       <div className="flex items-center gap-0.5 text-[10px]" style={{ color: theme.colors.warning }}>
