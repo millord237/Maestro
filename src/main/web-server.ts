@@ -77,6 +77,9 @@ export type GetSessionsCallback = () => Array<{
   state: string;
   inputMode: string;
   cwd: string;
+  groupId: string | null;
+  groupName: string | null;
+  groupEmoji: string | null;
 }>;
 
 // Session detail type for single session endpoint
@@ -1014,6 +1017,9 @@ export class WebServer {
     state: string;
     inputMode: string;
     cwd: string;
+    groupId?: string | null;
+    groupName?: string | null;
+    groupEmoji?: string | null;
   }) {
     this.broadcastToWebClients({
       type: 'session_added',
@@ -1044,6 +1050,9 @@ export class WebServer {
     state: string;
     inputMode: string;
     cwd: string;
+    groupId?: string | null;
+    groupName?: string | null;
+    groupEmoji?: string | null;
   }>) {
     this.broadcastToWebClients({
       type: 'sessions_list',

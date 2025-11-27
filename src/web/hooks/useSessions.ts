@@ -61,11 +61,21 @@ export interface UseSessionsOptions extends Omit<UseWebSocketOptions, 'handlers'
 /**
  * Return type for the useSessions hook
  */
+/**
+ * Group info containing group metadata and sessions
+ */
+export interface GroupInfo {
+  id: string | null;
+  name: string;
+  emoji: string | null;
+  sessions: Session[];
+}
+
 export interface UseSessionsReturn {
   /** All sessions */
   sessions: Session[];
-  /** Sessions organized by group */
-  sessionsByGroup: Record<string, Session[]>;
+  /** Sessions organized by group (keyed by groupId or 'ungrouped') */
+  sessionsByGroup: Record<string, GroupInfo>;
   /** Currently active/selected session */
   activeSession: Session | null;
   /** Set the active session by ID */
@@ -305,17 +315,26 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
   );
 
   /**
-   * Sessions organized by group (tool type as a simple grouping)
+   * Sessions organized by group (using actual group data from server)
+   * Groups are keyed by groupId (or 'ungrouped' for sessions without a group)
    */
-  const sessionsByGroup = useMemo(() => {
-    const groups: Record<string, Session[]> = {};
+  const sessionsByGroup = useMemo((): Record<string, GroupInfo> => {
+    const groups: Record<string, GroupInfo> = {};
+
     for (const session of sessions) {
-      const group = session.toolType || 'other';
-      if (!groups[group]) {
-        groups[group] = [];
+      const groupKey = session.groupId || 'ungrouped';
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          id: session.groupId || null,
+          name: session.groupName || 'Ungrouped',
+          emoji: session.groupEmoji || null,
+          sessions: [],
+        };
       }
-      groups[group].push(session);
+      groups[groupKey].sessions.push(session);
     }
+
     return groups;
   }, [sessions]);
 

@@ -23,6 +23,9 @@ export interface SessionData {
   state: string;
   inputMode: string;
   cwd: string;
+  groupId?: string | null;
+  groupName?: string | null;
+  groupEmoji?: string | null;
 }
 
 /**

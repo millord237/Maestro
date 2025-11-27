@@ -11,12 +11,13 @@
  * - Mode indicator (AI vs Terminal)
  * - Active session highlighting
  * - Long-press to show session info popover
+ * - Group name display above session pills with collapsible groups
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
-import type { Session } from '../hooks/useSessions';
+import type { Session, GroupInfo } from '../hooks/useSessions';
 import { triggerHaptic, HAPTIC_PATTERNS } from './index';
 
 /** Duration in ms to trigger long-press */
@@ -499,6 +500,101 @@ function SessionInfoPopover({ session, anchorRect, onClose }: SessionInfoPopover
 }
 
 /**
+ * Props for the group header component
+ */
+interface GroupHeaderProps {
+  groupId: string;
+  name: string;
+  emoji: string | null;
+  sessionCount: number;
+  isCollapsed: boolean;
+  onToggleCollapse: (groupId: string) => void;
+}
+
+/**
+ * Group header component that displays group name with collapse/expand toggle
+ */
+function GroupHeader({
+  groupId,
+  name,
+  emoji,
+  sessionCount,
+  isCollapsed,
+  onToggleCollapse,
+}: GroupHeaderProps) {
+  const colors = useThemeColors();
+
+  const handleClick = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+    onToggleCollapse(groupId);
+  }, [groupId, onToggleCollapse]);
+
+  return (
+    <button
+      onClick={handleClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 12px',
+        backgroundColor: `${colors.accent}10`,
+        border: `1px solid ${colors.border}`,
+        borderRadius: '16px',
+        color: colors.textMain,
+        fontSize: '12px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        touchAction: 'manipulation',
+        WebkitTapHighlightColor: 'transparent',
+        outline: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        transition: 'all 0.15s ease',
+      }}
+      aria-expanded={!isCollapsed}
+      aria-label={`${name} group with ${sessionCount} sessions. ${isCollapsed ? 'Tap to expand' : 'Tap to collapse'}`}
+    >
+      {/* Collapse/expand indicator */}
+      <span
+        style={{
+          fontSize: '10px',
+          color: colors.textDim,
+          transition: 'transform 0.2s ease',
+          transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+        }}
+      >
+        ▼
+      </span>
+
+      {/* Group emoji (if available) */}
+      {emoji && (
+        <span style={{ fontSize: '14px' }}>{emoji}</span>
+      )}
+
+      {/* Group name */}
+      <span>{name}</span>
+
+      {/* Session count badge */}
+      <span
+        style={{
+          fontSize: '10px',
+          color: colors.textDim,
+          backgroundColor: `${colors.textDim}20`,
+          padding: '2px 6px',
+          borderRadius: '8px',
+          minWidth: '18px',
+          textAlign: 'center',
+        }}
+      >
+        {sessionCount}
+      </span>
+    </button>
+  );
+}
+
+/**
  * Props for the SessionPillBar component
  */
 export interface SessionPillBarProps {
@@ -526,6 +622,7 @@ interface PopoverState {
  * SessionPillBar component
  *
  * Renders a horizontally scrollable bar of session pills for the mobile interface.
+ * Sessions are organized by groups with collapsible group headers.
  * Supports long-press on pills to show session info popover.
  *
  * @example
@@ -547,6 +644,44 @@ export function SessionPillBar({
   const colors = useThemeColors();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [popoverState, setPopoverState] = useState<PopoverState | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Organize sessions by group
+  const sessionsByGroup = useMemo((): Record<string, GroupInfo> => {
+    const groups: Record<string, GroupInfo> = {};
+
+    for (const session of sessions) {
+      const groupKey = session.groupId || 'ungrouped';
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          id: session.groupId || null,
+          name: session.groupName || 'Ungrouped',
+          emoji: session.groupEmoji || null,
+          sessions: [],
+        };
+      }
+      groups[groupKey].sessions.push(session);
+    }
+
+    return groups;
+  }, [sessions]);
+
+  // Get sorted group keys (ungrouped last)
+  const sortedGroupKeys = useMemo(() => {
+    const keys = Object.keys(sessionsByGroup);
+    return keys.sort((a, b) => {
+      // Put 'ungrouped' at the end
+      if (a === 'ungrouped') return 1;
+      if (b === 'ungrouped') return -1;
+      // Sort others alphabetically by group name
+      return sessionsByGroup[a].name.localeCompare(sessionsByGroup[b].name);
+    });
+  }, [sessionsByGroup]);
+
+  // Check if there are multiple groups (to decide whether to show group headers)
+  const hasMultipleGroups = sortedGroupKeys.length > 1 ||
+    (sortedGroupKeys.length === 1 && sortedGroupKeys[0] !== 'ungrouped');
 
   // Handle long-press on a session pill
   const handleLongPress = useCallback((session: Session, rect: DOMRect) => {
@@ -556,6 +691,19 @@ export function SessionPillBar({
   // Close the popover
   const handleClosePopover = useCallback(() => {
     setPopoverState(null);
+  }, []);
+
+  // Toggle group collapsed state
+  const handleToggleCollapse = useCallback((groupId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
   }, []);
 
   // Scroll active session into view when it changes
@@ -632,24 +780,54 @@ export function SessionPillBar({
           // Hide scrollbar using inline style (for webkit browsers)
           className="hide-scrollbar"
           role="tablist"
-          aria-label="Session selector. Long press a session for details."
+          aria-label="Session selector organized by groups. Long press a session for details."
         >
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              style={{
-                scrollSnapAlign: 'start',
-              }}
-              role="presentation"
-            >
-              <SessionPill
-                session={session}
-                isActive={session.id === activeSessionId}
-                onSelect={onSelectSession}
-                onLongPress={handleLongPress}
-              />
-            </div>
-          ))}
+          {sortedGroupKeys.map((groupKey) => {
+            const group = sessionsByGroup[groupKey];
+            const isCollapsed = collapsedGroups.has(groupKey);
+            const showGroupHeader = hasMultipleGroups;
+
+            return (
+              <React.Fragment key={groupKey}>
+                {/* Group header (only show if multiple groups exist) */}
+                {showGroupHeader && (
+                  <div
+                    style={{
+                      scrollSnapAlign: 'start',
+                    }}
+                    role="presentation"
+                  >
+                    <GroupHeader
+                      groupId={groupKey}
+                      name={group.name}
+                      emoji={group.emoji}
+                      sessionCount={group.sessions.length}
+                      isCollapsed={isCollapsed}
+                      onToggleCollapse={handleToggleCollapse}
+                    />
+                  </div>
+                )}
+
+                {/* Session pills (hidden when collapsed) */}
+                {!isCollapsed && group.sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    style={{
+                      scrollSnapAlign: 'start',
+                    }}
+                    role="presentation"
+                  >
+                    <SessionPill
+                      session={session}
+                      isActive={session.id === activeSessionId}
+                      onSelect={onSelectSession}
+                      onLongPress={handleLongPress}
+                    />
+                  </div>
+                ))}
+              </React.Fragment>
+            );
+          })}
         </div>
 
         {/* Inline style for hiding scrollbar */}

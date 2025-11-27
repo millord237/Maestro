@@ -297,14 +297,22 @@ app.whenReady().then(() => {
   // Set up callback for web server to fetch sessions list
   webServer.setGetSessionsCallback(() => {
     const sessions = sessionsStore.get('sessions', []);
-    return sessions.map((s: any) => ({
-      id: s.id,
-      name: s.name,
-      toolType: s.toolType,
-      state: s.state,
-      inputMode: s.inputMode,
-      cwd: s.cwd,
-    }));
+    const groups = groupsStore.get('groups', []);
+    return sessions.map((s: any) => {
+      // Find the group for this session
+      const group = s.groupId ? groups.find((g: any) => g.id === s.groupId) : null;
+      return {
+        id: s.id,
+        name: s.name,
+        toolType: s.toolType,
+        state: s.state,
+        inputMode: s.inputMode,
+        cwd: s.cwd,
+        groupId: s.groupId || null,
+        groupName: group?.name || null,
+        groupEmoji: group?.emoji || null,
+      };
+    });
   });
 
   // Set up callback for web server to fetch single session details
