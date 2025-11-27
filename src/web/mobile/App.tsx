@@ -10,6 +10,7 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useWebSocket, type WebSocketState } from '../hooks/useWebSocket';
+import { useCommandHistory } from '../hooks/useCommandHistory';
 import { Badge, type BadgeVariant } from '../components/Badge';
 import { PullToRefreshIndicator } from '../components/PullToRefresh';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -18,6 +19,7 @@ import { triggerHaptic, HAPTIC_PATTERNS } from './index';
 import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
+import { CommandHistoryDrawer } from './CommandHistoryDrawer';
 import type { Session } from '../hooks/useSessions';
 
 /**
@@ -136,6 +138,15 @@ export default function MobileApp() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [commandInput, setCommandInput] = useState('');
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+
+  // Command history hook
+  const {
+    history: commandHistory,
+    addCommand: addToHistory,
+    removeCommand: removeFromHistory,
+    clearHistory,
+  } = useCommandHistory();
 
   const { state: connectionState, connect, send, error, reconnectAttempts } = useWebSocket({
     autoReconnect: true,
@@ -243,8 +254,14 @@ export default function MobileApp() {
   const handleCommandSubmit = useCallback((command: string) => {
     if (!activeSessionId) return;
 
+    // Get the current input mode for history tracking
+    const currentMode = (activeSession?.inputMode as InputMode) || 'ai';
+
     // Provide haptic feedback on send
     triggerHaptic(HAPTIC_PATTERNS.send);
+
+    // Add to command history
+    addToHistory(command, activeSessionId, currentMode);
 
     // Send the command to the active session
     send({
@@ -257,7 +274,7 @@ export default function MobileApp() {
     setCommandInput('');
 
     console.log('[Mobile] Command sent:', command, 'to session:', activeSessionId);
-  }, [activeSessionId, send]);
+  }, [activeSessionId, activeSession?.inputMode, send, addToHistory]);
 
   // Handle command input change
   const handleCommandChange = useCallback((value: string) => {
@@ -317,6 +334,23 @@ export default function MobileApp() {
       console.error('[Mobile] Error interrupting session:', error);
     }
   }, [activeSessionId]);
+
+  // Handle opening history drawer
+  const handleOpenHistory = useCallback(() => {
+    setShowHistoryDrawer(true);
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+  }, []);
+
+  // Handle closing history drawer
+  const handleCloseHistory = useCallback(() => {
+    setShowHistoryDrawer(false);
+  }, []);
+
+  // Handle selecting a command from history
+  const handleSelectHistoryCommand = useCallback((command: string) => {
+    setCommandInput(command);
+    // Haptic feedback is provided by the drawer
+  }, []);
 
   // Get active session for input mode
   const activeSession = sessions.find(s => s.id === activeSessionId);
@@ -556,6 +590,17 @@ export default function MobileApp() {
         onModeToggle={handleModeToggle}
         isSessionBusy={activeSession?.state === 'busy'}
         onInterrupt={handleInterrupt}
+        onHistoryOpen={handleOpenHistory}
+      />
+
+      {/* Command history drawer - swipe up from input area */}
+      <CommandHistoryDrawer
+        isOpen={showHistoryDrawer}
+        onClose={handleCloseHistory}
+        history={commandHistory}
+        onSelectCommand={handleSelectHistoryCommand}
+        onDeleteCommand={removeFromHistory}
+        onClearHistory={clearHistory}
       />
     </div>
   );

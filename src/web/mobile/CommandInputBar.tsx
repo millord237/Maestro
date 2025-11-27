@@ -18,6 +18,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
+import { useSwipeUp } from '../hooks/useSwipeUp';
 
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
@@ -63,6 +64,8 @@ export interface CommandInputBarProps {
   isSessionBusy?: boolean;
   /** Callback when interrupt button is pressed */
   onInterrupt?: () => void;
+  /** Callback when history drawer should open (swipe up) */
+  onHistoryOpen?: () => void;
 }
 
 /**
@@ -83,10 +86,17 @@ export function CommandInputBar({
   onModeToggle,
   isSessionBusy = false,
   onInterrupt,
+  onHistoryOpen,
 }: CommandInputBarProps) {
   const colors = useThemeColors();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Swipe up gesture detection for opening history drawer
+  const { handlers: swipeUpHandlers } = useSwipeUp({
+    onSwipeUp: () => onHistoryOpen?.(),
+    enabled: !!onHistoryOpen,
+  });
 
   // Track keyboard visibility for positioning
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -242,6 +252,7 @@ export function CommandInputBar({
   return (
     <div
       ref={containerRef}
+      {...swipeUpHandlers}
       style={{
         position: 'fixed',
         left: 0,
@@ -252,13 +263,36 @@ export function CommandInputBar({
         paddingBottom: isKeyboardVisible ? '0' : 'max(12px, env(safe-area-inset-bottom))',
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
-        paddingTop: '12px',
+        paddingTop: onHistoryOpen ? '4px' : '12px', // Reduced top padding when swipe handle is shown
         backgroundColor: colors.bgSidebar,
         borderTop: `1px solid ${colors.border}`,
         // Smooth transition when keyboard appears/disappears
         transition: isKeyboardVisible ? 'none' : 'bottom 0.15s ease-out',
       }}
     >
+      {/* Swipe up handle indicator - visual hint for opening history */}
+      {onHistoryOpen && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            paddingBottom: '8px',
+            cursor: 'pointer',
+          }}
+          onClick={onHistoryOpen}
+          aria-label="Open command history"
+        >
+          <div
+            style={{
+              width: '36px',
+              height: '4px',
+              backgroundColor: colors.border,
+              borderRadius: '2px',
+              opacity: 0.6,
+            }}
+          />
+        </div>
+      )}
       <form
         onSubmit={handleSubmit}
         style={{

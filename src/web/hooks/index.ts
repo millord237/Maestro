@@ -53,3 +53,24 @@ export type {
   UsePullToRefreshOptions,
   UsePullToRefreshReturn,
 } from './usePullToRefresh';
+
+export {
+  useCommandHistory,
+  default as useCommandHistoryDefault,
+} from './useCommandHistory';
+
+export type {
+  CommandHistoryEntry,
+  UseCommandHistoryOptions,
+  UseCommandHistoryReturn,
+} from './useCommandHistory';
+
+export {
+  useSwipeUp,
+  default as useSwipeUpDefault,
+} from './useSwipeUp';
+
+export type {
+  UseSwipeUpOptions,
+  UseSwipeUpReturn,
+} from './useSwipeUp';
