@@ -260,6 +260,28 @@ function createWebServer(): WebServer {
     return customCommands;
   });
 
+  // Set up callback for web server to fetch history entries
+  server.setGetHistoryCallback((projectPath?: string, sessionId?: string) => {
+    const allEntries = historyStore.get('entries', []);
+    let filteredEntries = allEntries;
+
+    // Filter by project path if provided
+    if (projectPath) {
+      filteredEntries = filteredEntries.filter(
+        (entry: HistoryEntry) => entry.projectPath === projectPath
+      );
+    }
+
+    // Filter by session ID if provided (excludes entries from other sessions)
+    if (sessionId) {
+      filteredEntries = filteredEntries.filter(
+        (entry: HistoryEntry) => !entry.sessionId || entry.sessionId === sessionId
+      );
+    }
+
+    return filteredEntries;
+  });
+
   // Set up callback for web server to write commands to sessions
   // Note: Process IDs have -ai or -terminal suffix based on session's inputMode
   server.setWriteToSessionCallback((sessionId: string, data: string) => {

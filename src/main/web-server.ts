@@ -168,6 +168,32 @@ export interface CustomAICommand {
 // Callback type for fetching custom AI commands
 export type GetCustomCommandsCallback = () => CustomAICommand[];
 
+// History entry type for the history API
+export interface HistoryEntryData {
+  id: string;
+  type: 'AUTO' | 'USER';
+  timestamp: number;
+  summary: string;
+  fullResponse?: string;
+  claudeSessionId?: string;
+  projectPath: string;
+  sessionId?: string;
+  contextUsage?: number;
+  usageStats?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    totalCostUsd: number;
+    contextWindow: number;
+  };
+  success?: boolean;
+  elapsedTimeMs?: number;
+}
+
+// Callback type for fetching history entries
+export type GetHistoryCallback = (projectPath?: string, sessionId?: string) => HistoryEntryData[];
+
 // Default rate limit configuration
 const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
   max: 100,           // 100 requests per minute for GET endpoints
@@ -191,6 +217,7 @@ export class WebServer {
   private executeCommandCallback: ExecuteCommandCallback | null = null;
   private interruptSessionCallback: InterruptSessionCallback | null = null;
   private switchModeCallback: SwitchModeCallback | null = null;
+  private getHistoryCallback: GetHistoryCallback | null = null;
   private webAssetsPath: string | null = null;
 
   // Security token - regenerated on each app startup
@@ -446,6 +473,14 @@ export class WebServer {
    */
   setSwitchModeCallback(callback: SwitchModeCallback) {
     this.switchModeCallback = callback;
+  }
+
+  /**
+   * Set the callback function for fetching history entries
+   * This is called by the /api/history endpoint
+   */
+  setGetHistoryCallback(callback: GetHistoryCallback) {
+    this.getHistoryCallback = callback;
   }
 
   /**
@@ -788,6 +823,45 @@ export class WebServer {
         return reply.code(500).send({
           error: 'Internal Server Error',
           message: `Failed to interrupt session: ${error.message}`,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    // History endpoint - returns history entries filtered by project/session
+    this.server.get(`/${token}/api/history`, {
+      config: {
+        rateLimit: {
+          max: this.rateLimitConfig.max,
+          timeWindow: this.rateLimitConfig.timeWindow,
+        },
+      },
+    }, async (request, reply) => {
+      if (!this.getHistoryCallback) {
+        return reply.code(503).send({
+          error: 'Service Unavailable',
+          message: 'History service not configured',
+          timestamp: Date.now(),
+        });
+      }
+
+      // Extract optional projectPath and sessionId from query params
+      const { projectPath, sessionId } = request.query as {
+        projectPath?: string;
+        sessionId?: string;
+      };
+
+      try {
+        const entries = this.getHistoryCallback(projectPath, sessionId);
+        return {
+          entries,
+          count: entries.length,
+          timestamp: Date.now(),
+        };
+      } catch (error: any) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: `Failed to fetch history: ${error.message}`,
           timestamp: Date.now(),
         });
       }

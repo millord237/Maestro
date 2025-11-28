@@ -20,6 +20,7 @@ import { webLogger } from '../utils/logger';
 import type { Theme } from '../../shared/theme-types';
 import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
+import { MobileHistoryPanel } from './MobileHistoryPanel';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
 import { DEFAULT_SLASH_COMMANDS, type SlashCommand } from './SlashCommandAutocomplete';
 import { CommandHistoryDrawer } from './CommandHistoryDrawer';
@@ -331,6 +332,7 @@ export default function MobileApp() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [commandInput, setCommandInput] = useState('');
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [showResponseViewer, setShowResponseViewer] = useState(false);
@@ -768,6 +770,17 @@ export default function MobileApp() {
     setShowAllSessions(false);
   }, []);
 
+  // Handle opening History panel (separate from command history drawer)
+  const handleOpenHistoryPanel = useCallback(() => {
+    setShowHistoryPanel(true);
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+  }, []);
+
+  // Handle closing History panel
+  const handleCloseHistoryPanel = useCallback(() => {
+    setShowHistoryPanel(false);
+  }, []);
+
   // Handle command submission
   const handleCommandSubmit = useCallback((command: string) => {
     if (!activeSessionId) return;
@@ -1175,6 +1188,7 @@ export default function MobileApp() {
           activeSessionId={activeSessionId}
           onSelectSession={handleSelectSession}
           onOpenAllSessions={handleOpenAllSessions}
+          onOpenHistory={handleOpenHistoryPanel}
         />
       )}
 
@@ -1206,6 +1220,15 @@ export default function MobileApp() {
           activeSessionId={activeSessionId}
           onSelectSession={handleSelectSession}
           onClose={handleCloseAllSessions}
+        />
+      )}
+
+      {/* History panel - full-screen modal with history entries */}
+      {showHistoryPanel && (
+        <MobileHistoryPanel
+          onClose={handleCloseHistoryPanel}
+          projectPath={activeSession?.cwd}
+          sessionId={activeSessionId || undefined}
         />
       )}
 
