@@ -265,6 +265,8 @@ export function Scratchpad({
   const isAgentBusy = sessionState === 'busy' || sessionState === 'connecting';
   const isStopping = batchRunState?.isStopping || false;
   const [mode, setMode] = useState<'edit' | 'preview'>(initialMode);
+  // Track mode before auto-run to restore when it ends
+  const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [attachmentsList, setAttachmentsList] = useState<string[]>([]);
@@ -299,6 +301,21 @@ export function Scratchpad({
       });
     }
   }, [sessionId]);
+
+  // Auto-switch to preview mode when auto-run starts, restore when it ends
+  useEffect(() => {
+    if (isLocked) {
+      // Auto-run started: save current mode and switch to preview
+      modeBeforeAutoRunRef.current = mode;
+      if (mode !== 'preview') {
+        setMode('preview');
+      }
+    } else if (modeBeforeAutoRunRef.current !== null) {
+      // Auto-run ended: restore previous mode
+      setMode(modeBeforeAutoRunRef.current);
+      modeBeforeAutoRunRef.current = null;
+    }
+  }, [isLocked]);
 
   // Restore cursor and scroll positions when component mounts
   useEffect(() => {
