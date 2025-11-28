@@ -877,19 +877,27 @@ export default function MaestroConsole() {
   // Handle remote commands from web interface
   // This allows web commands to go through the exact same code path as desktop commands
   useEffect(() => {
+    console.log('[Remote] Setting up onRemoteCommand listener...');
     const unsubscribeRemote = window.maestro.process.onRemoteCommand((sessionId: string, command: string) => {
-      console.log('[Remote] Received command from web interface:', { sessionId, command: command.substring(0, 50) });
-
       // Verify the session exists
       const targetSession = sessionsRef.current.find(s => s.id === sessionId);
+
+      console.log('[Remote] Received command from web interface:', {
+        maestroSessionId: sessionId,
+        claudeSessionId: targetSession?.claudeSessionId || 'none',
+        state: targetSession?.state || 'NOT_FOUND',
+        inputMode: targetSession?.inputMode || 'unknown',
+        command: command.substring(0, 100)
+      });
+
       if (!targetSession) {
-        console.log('[Remote] Session not found:', sessionId);
+        console.log('[Remote] ERROR: Session not found:', sessionId);
         return;
       }
 
       // Check if session is busy (should have been checked by web server, but double-check)
       if (targetSession.state === 'busy') {
-        console.log('[Remote] Session is busy, rejecting command:', sessionId);
+        console.log('[Remote] REJECTED: Session is busy:', sessionId);
         return;
       }
 
@@ -898,6 +906,7 @@ export default function MaestroConsole() {
 
       // Switch to the target session and set the input
       // The input change will trigger processInput via the pendingRemoteCommandRef
+      console.log('[Remote] Setting active session and input value...');
       setActiveSessionId(sessionId);
       setInputValue(command);
 
@@ -905,12 +914,15 @@ export default function MaestroConsole() {
       // This ensures processInput sees the correct activeSession and inputValue
       setTimeout(() => {
         if (pendingRemoteCommandRef.current?.sessionId === sessionId) {
+          console.log('[Remote] Dispatching maestro:remoteCommand event');
           // Trigger a custom event that the input handler can respond to
           // This is cleaner than trying to call processInput directly
           window.dispatchEvent(new CustomEvent('maestro:remoteCommand', {
             detail: { sessionId, command }
           }));
           pendingRemoteCommandRef.current = null;
+        } else {
+          console.log('[Remote] WARNING: Pending command was cleared before dispatch');
         }
       }, 50);
     });
@@ -2113,7 +2125,17 @@ export default function MaestroConsole() {
   };
 
   const processInput = () => {
-    if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) return;
+    console.log('[processInput] Called with:', {
+      hasActiveSession: !!activeSession,
+      activeSessionId: activeSession?.id,
+      inputValue: inputValue?.substring(0, 50),
+      inputValueLength: inputValue?.length,
+      stagedImagesCount: stagedImages.length
+    });
+    if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) {
+      console.log('[processInput] EARLY RETURN - missing activeSession or empty input');
+      return;
+    }
 
     // Block slash commands when agent is busy (in AI mode)
     if (inputValue.trim().startsWith('/') && activeSession.state === 'busy' && activeSession.inputMode === 'ai') {
@@ -2372,6 +2394,9 @@ export default function MaestroConsole() {
     const capturedInputValue = inputValue;
     const capturedImages = [...stagedImages];
 
+    // Broadcast user input to web clients so they stay in sync
+    window.maestro.web.broadcastUserInput(activeSession.id, capturedInputValue, currentMode);
+
     setInputValue('');
     setStagedImages([]);
 
@@ -2412,7 +2437,15 @@ export default function MaestroConsole() {
           // If images are present, they will be passed via stream-json input format
           // Use agent.path (full path) if available, otherwise fall back to agent.command
           const commandToUse = agent.path || agent.command;
-          console.log('[processInput] Spawning Claude:', { command: commandToUse, path: agent.path, fallback: agent.command });
+          console.log('[processInput] Spawning Claude:', {
+            maestroSessionId: activeSession.id,
+            targetSessionId,
+            claudeSessionId: activeSession.claudeSessionId || 'NEW SESSION',
+            isResume: !!activeSession.claudeSessionId,
+            command: commandToUse,
+            args: spawnArgs,
+            prompt: capturedInputValue.substring(0, 100)
+          });
           await window.maestro.process.spawn({
             sessionId: targetSessionId,
             toolType: 'claude-code',
@@ -2491,15 +2524,140 @@ export default function MaestroConsole() {
   };
 
   // Listen for remote commands from web interface
-  // This event is triggered by the remote command handler after setting input state
+  // This event is triggered by the remote command handler with command data in detail
   useEffect(() => {
-    const handleRemoteCommand = () => {
-      console.log('[Remote] Processing remote command via event');
-      processInput();
+    const handleRemoteCommand = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ sessionId: string; command: string }>;
+      const { sessionId, command } = customEvent.detail;
+
+      console.log('[Remote] Processing remote command via event:', { sessionId, command: command.substring(0, 50) });
+
+      // Find the session directly from sessionsRef (not from React state which may be stale)
+      const session = sessionsRef.current.find(s => s.id === sessionId);
+      if (!session) {
+        console.log('[Remote] ERROR: Session not found in sessionsRef:', sessionId);
+        return;
+      }
+
+      console.log('[Remote] Found session:', {
+        id: session.id,
+        claudeSessionId: session.claudeSessionId || 'none',
+        state: session.state,
+        inputMode: session.inputMode,
+        toolType: session.toolType
+      });
+
+      // Handle terminal mode commands
+      if (session.inputMode === 'terminal') {
+        console.log('[Remote] Terminal mode - writing command to terminal');
+
+        // Add user message to shell logs
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+          return {
+            ...s,
+            shellLogs: [...s.shellLogs, {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'user',
+              text: command
+            }]
+          };
+        }));
+
+        // Write command to terminal (with newline to execute)
+        const terminalSessionId = `${sessionId}-terminal`;
+        await window.maestro.process.write(terminalSessionId, command + '\n');
+        console.log('[Remote] Terminal command sent successfully');
+        return;
+      }
+
+      // Handle AI mode for Claude Code
+      if (session.toolType !== 'claude' && session.toolType !== 'claude-code') {
+        console.log('[Remote] Not Claude Code, skipping');
+        return;
+      }
+
+      // Check if session is busy
+      if (session.state === 'busy') {
+        console.log('[Remote] Session is busy, cannot process command');
+        return;
+      }
+
+      try {
+        // Get agent configuration
+        const agent = await window.maestro.agents.get('claude-code');
+        if (!agent) {
+          console.log('[Remote] ERROR: Claude Code agent not found');
+          return;
+        }
+
+        // Build spawn args with resume if we have a Claude session ID
+        const spawnArgs = [...agent.args];
+        if (session.claudeSessionId) {
+          spawnArgs.push('--resume', session.claudeSessionId);
+        }
+
+        const targetSessionId = `${sessionId}-ai`;
+        const commandToUse = agent.path || agent.command;
+
+        console.log('[Remote] Spawning Claude directly:', {
+          maestroSessionId: sessionId,
+          targetSessionId,
+          claudeSessionId: session.claudeSessionId || 'NEW SESSION',
+          isResume: !!session.claudeSessionId,
+          command: commandToUse,
+          args: spawnArgs,
+          prompt: command.substring(0, 100)
+        });
+
+        // Add user message to logs and set state to busy
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+          return {
+            ...s,
+            state: 'busy' as SessionState,
+            thinkingStartTime: Date.now(),
+            aiLogs: [...s.aiLogs, {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'user',
+              text: command
+            }]
+          };
+        }));
+
+        // Spawn Claude with the command
+        await window.maestro.process.spawn({
+          sessionId: targetSessionId,
+          toolType: 'claude-code',
+          cwd: session.cwd,
+          command: commandToUse,
+          args: spawnArgs,
+          prompt: command
+        });
+
+        console.log('[Remote] Claude spawn initiated successfully');
+      } catch (error) {
+        console.error('[Remote] Failed to spawn Claude:', error);
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+          return {
+            ...s,
+            state: 'idle' as SessionState,
+            aiLogs: [...s.aiLogs, {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'system',
+              text: `Error: Failed to process remote command - ${error.message}`
+            }]
+          };
+        }));
+      }
     };
     window.addEventListener('maestro:remoteCommand', handleRemoteCommand);
     return () => window.removeEventListener('maestro:remoteCommand', handleRemoteCommand);
-  }, [processInput]);
+  }, []);
 
   // Process a queued message (called from onExit when queue has items)
   const processQueuedMessage = async (sessionId: string, entry: LogEntry) => {

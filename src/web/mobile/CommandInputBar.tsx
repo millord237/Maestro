@@ -28,6 +28,7 @@ import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
 import { QuickActionsMenu, type QuickAction } from './QuickActionsMenu';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
+import { webLogger } from '../utils/logger';
 
 /**
  * Web Speech API type declarations
@@ -191,12 +192,10 @@ export interface CommandInputBarProps {
   onSelectRecentCommand?: (command: string) => void;
   /** Available slash commands (uses defaults if not provided) */
   slashCommands?: SlashCommand[];
-  /** Callback when clear session is requested (from quick actions) */
-  onClearSession?: () => void;
-  /** Callback when new session is requested (from quick actions) */
-  onNewSession?: () => void;
   /** Whether a session is currently active (for quick actions menu) */
   hasActiveSession?: boolean;
+  /** Current working directory (shown in terminal mode) */
+  cwd?: string;
 }
 
 /**
@@ -221,9 +220,8 @@ export function CommandInputBar({
   recentCommands,
   onSelectRecentCommand,
   slashCommands = DEFAULT_SLASH_COMMANDS,
-  onClearSession,
-  onNewSession,
   hasActiveSession = false,
+  cwd,
 }: CommandInputBarProps) {
   const colors = useThemeColors();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -262,12 +260,14 @@ export function CommandInputBar({
   const sendButtonRef = useRef<HTMLButtonElement>(null);
 
   // Determine if input should be disabled
-  const isDisabled = externalDisabled || isOffline || !isConnected;
+  // Disable when: externally disabled, offline, not connected, OR session is busy (no queuing on mobile)
+  const isDisabled = externalDisabled || isOffline || !isConnected || isSessionBusy;
 
   // Get placeholder text based on state
   const getPlaceholder = () => {
     if (isOffline) return 'Offline...';
     if (!isConnected) return 'Connecting...';
+    if (isSessionBusy) return 'Waiting for response...';
     return placeholder || 'Enter command...';
   };
 
@@ -503,7 +503,7 @@ export function CommandInputBar({
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.warn('Speech recognition error:', event.error);
+      webLogger.warn('Speech recognition error', 'VoiceInput', event.error);
       setIsListening(false);
       recognitionRef.current = null;
 
@@ -525,7 +525,7 @@ export function CommandInputBar({
     try {
       recognition.start();
     } catch (err) {
-      console.warn('Failed to start speech recognition:', err);
+      webLogger.warn('Failed to start speech recognition', 'VoiceInput', err);
       setIsListening(false);
       recognitionRef.current = null;
     }
@@ -631,20 +631,12 @@ export function CommandInputBar({
     // Trigger haptic feedback
     triggerHapticFeedback('medium');
 
-    switch (action) {
-      case 'clear':
-        onClearSession?.();
-        break;
-      case 'new':
-        onNewSession?.();
-        break;
-      case 'switch_mode':
-        // Toggle to the opposite mode
-        const newMode = inputMode === 'ai' ? 'terminal' : 'ai';
-        onModeToggle?.(newMode);
-        break;
+    if (action === 'switch_mode') {
+      // Toggle to the opposite mode
+      const newMode = inputMode === 'ai' ? 'terminal' : 'ai';
+      onModeToggle?.(newMode);
     }
-  }, [inputMode, onModeToggle, onClearSession, onNewSession]);
+  }, [inputMode, onModeToggle]);
 
   /**
    * Close quick actions menu
@@ -904,17 +896,89 @@ export function CommandInputBar({
           `}
         </style>
 
-        {/* Large touch-friendly command textarea with auto-expansion */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={getPlaceholder()}
-          disabled={isDisabled}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
+        {/* Terminal mode: $ prefix + textarea in a container */}
+        {inputMode === 'terminal' ? (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'flex-start',
+              borderRadius: '12px',
+              backgroundColor: colors.bgMain,
+              border: `2px solid ${colors.border}`,
+              padding: '14px 18px',
+              gap: '8px',
+              opacity: isDisabled ? 0.5 : 1,
+            }}
+          >
+            {/* $ prompt */}
+            <span
+              style={{
+                color: colors.accent,
+                fontSize: '17px',
+                fontFamily: 'ui-monospace, monospace',
+                fontWeight: 600,
+                lineHeight: `${LINE_HEIGHT}px`,
+                flexShrink: 0,
+              }}
+            >
+              $
+            </span>
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              placeholder={getPlaceholder()}
+              disabled={isDisabled}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="send"
+              rows={1}
+              style={{
+                flex: 1,
+                padding: 0,
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: isDisabled ? colors.textDim : colors.textMain,
+                fontSize: '17px',
+                fontFamily: 'ui-monospace, monospace',
+                lineHeight: `${LINE_HEIGHT}px`,
+                outline: 'none',
+                height: `${Math.max(textareaHeight - 28, LINE_HEIGHT)}px`,
+                minHeight: `${LINE_HEIGHT}px`,
+                maxHeight: `${MAX_TEXTAREA_HEIGHT - 28}px`,
+                resize: 'none',
+                overflowY: textareaHeight >= MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden',
+                overflowX: 'hidden',
+                wordWrap: 'break-word',
+              }}
+              onFocus={(e) => {
+                const container = e.currentTarget.parentElement;
+                if (container) container.style.borderColor = colors.accent;
+              }}
+              onBlur={(e) => {
+                const container = e.currentTarget.parentElement;
+                if (container) container.style.borderColor = colors.border;
+              }}
+              aria-label={inputMode === 'terminal' ? 'Shell command input' : 'AI prompt input'}
+              aria-multiline="true"
+            />
+          </div>
+        ) : (
+          /* AI mode: regular textarea */
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder={getPlaceholder()}
+            disabled={isDisabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
           spellCheck={false}
           enterKeyHint="send"
           rows={1}
@@ -967,6 +1031,7 @@ export function CommandInputBar({
           aria-disabled={isDisabled}
           aria-multiline="true"
         />
+        )}
 
         {/* Interrupt button - visible when session is busy (red X) */}
         {isSessionBusy && (
@@ -1077,6 +1142,26 @@ export function CommandInputBar({
           </svg>
         </button>
       </form>
+
+      {/* Current working directory display - shown in terminal mode */}
+      {inputMode === 'terminal' && cwd && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '12px',
+            fontFamily: 'ui-monospace, monospace',
+            color: colors.textDim,
+            paddingLeft: '4px',
+            marginTop: '4px',
+          }}
+        >
+          <span style={{ opacity: 0.7 }}>
+            {cwd.replace(/^\/Users\/[^/]+/, '~')}
+          </span>
+        </div>
+      )}
 
       {/* Quick actions menu - shown on long-press of send button */}
       <QuickActionsMenu

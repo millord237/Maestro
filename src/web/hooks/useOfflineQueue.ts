@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { webLogger } from '../utils/logger';
 
 /** Storage key for persisting offline queue */
 const STORAGE_KEY = 'maestro-offline-queue';
@@ -116,7 +117,7 @@ function loadQueue(): QueuedCommand[] {
       }
     }
   } catch (error) {
-    console.warn('[OfflineQueue] Failed to load queue from storage:', error);
+    webLogger.warn('Failed to load queue from storage', 'OfflineQueue', error);
   }
   return [];
 }
@@ -128,7 +129,7 @@ function saveQueue(queue: QueuedCommand[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
   } catch (error) {
-    console.warn('[OfflineQueue] Failed to save queue to storage:', error);
+    webLogger.warn('Failed to save queue to storage', 'OfflineQueue', error);
   }
 }
 
@@ -209,7 +210,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     (sessionId: string, command: string, inputMode: 'ai' | 'terminal'): QueuedCommand | null => {
       // Check if we're at capacity
       if (queue.length >= MAX_QUEUE_SIZE) {
-        console.warn('[OfflineQueue] Queue at maximum capacity, cannot add more commands');
+        webLogger.warn('Queue at maximum capacity, cannot add more commands', 'OfflineQueue');
         return null;
       }
 
@@ -223,7 +224,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
       };
 
       setQueue(prev => [...prev, newCommand]);
-      console.log('[OfflineQueue] Command queued:', command.substring(0, 50));
+      webLogger.debug(`Command queued: ${command.substring(0, 50)}`, 'OfflineQueue');
 
       return newCommand;
     },
@@ -235,7 +236,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
    */
   const removeCommand = useCallback((commandId: string) => {
     setQueue(prev => prev.filter(cmd => cmd.id !== commandId));
-    console.log('[OfflineQueue] Command removed:', commandId);
+    webLogger.debug(`Command removed: ${commandId}`, 'OfflineQueue');
   }, []);
 
   /**
@@ -243,7 +244,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
    */
   const clearQueue = useCallback(() => {
     setQueue([]);
-    console.log('[OfflineQueue] Queue cleared');
+    webLogger.debug('Queue cleared', 'OfflineQueue');
   }, []);
 
   /**
@@ -257,7 +258,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
 
     // Don't process if not connected
     if (!isOnline || !isConnected) {
-      console.log('[OfflineQueue] Cannot process queue - not connected');
+      webLogger.debug('Cannot process queue - not connected', 'OfflineQueue');
       return;
     }
 
@@ -270,7 +271,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     setStatus('processing');
     onProcessingStart?.();
 
-    console.log('[OfflineQueue] Starting queue processing, items:', queue.length);
+    webLogger.debug(`Starting queue processing, items: ${queue.length}`, 'OfflineQueue');
 
     let successCount = 0;
     let failCount = 0;
@@ -280,14 +281,14 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     for (const cmd of queue) {
       // Check if processing was paused
       if (isPausedRef.current) {
-        console.log('[OfflineQueue] Processing paused');
+        webLogger.debug('Processing paused', 'OfflineQueue');
         failedCommands.push(cmd);
         continue;
       }
 
       // Check if still connected
       if (!isOnline || !isConnected) {
-        console.log('[OfflineQueue] Lost connection during processing');
+        webLogger.debug('Lost connection during processing', 'OfflineQueue');
         failedCommands.push(cmd);
         continue;
       }
@@ -300,7 +301,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
 
         if (success) {
           successCount++;
-          console.log('[OfflineQueue] Command sent successfully:', cmd.command.substring(0, 50));
+          webLogger.debug(`Command sent successfully: ${cmd.command.substring(0, 50)}`, 'OfflineQueue');
           onCommandSent?.(updatedCmd);
         } else {
           // Send returned false - likely disconnected
@@ -335,7 +336,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     isProcessingRef.current = false;
     setStatus(isPausedRef.current ? 'paused' : 'idle');
 
-    console.log('[OfflineQueue] Processing complete. Success:', successCount, 'Failed:', failCount);
+    webLogger.debug(`Processing complete. Success: ${successCount}, Failed: ${failCount}`, 'OfflineQueue');
     onProcessingComplete?.(successCount, failCount);
   }, [isOnline, isConnected, queue, maxRetries, onCommandSent, onCommandFailed, onProcessingStart, onProcessingComplete]);
 
@@ -345,7 +346,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
   const pauseProcessing = useCallback(() => {
     isPausedRef.current = true;
     setStatus('paused');
-    console.log('[OfflineQueue] Processing paused');
+    webLogger.debug('Processing paused', 'OfflineQueue');
   }, []);
 
   /**
@@ -356,7 +357,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     if (!isProcessingRef.current) {
       setStatus('idle');
     }
-    console.log('[OfflineQueue] Processing resumed');
+    webLogger.debug('Processing resumed', 'OfflineQueue');
     // Trigger processing if there are queued items
     if (queue.length > 0 && isOnline && isConnected) {
       processQueue();

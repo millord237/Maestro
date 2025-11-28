@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { webLogger } from '../utils/logger';
 
 /**
  * Storage key for persisting unread response IDs
@@ -71,7 +72,7 @@ function loadUnreadIds(): Set<string> {
       }
     }
   } catch (error) {
-    console.error('[UnreadBadge] Error loading unread IDs:', error);
+    webLogger.error('Error loading unread IDs', 'UnreadBadge', error);
   }
   return new Set();
 }
@@ -84,7 +85,7 @@ function saveUnreadIds(ids: Set<string>): void {
   try {
     localStorage.setItem(UNREAD_RESPONSES_KEY, JSON.stringify([...ids]));
   } catch (error) {
-    console.error('[UnreadBadge] Error saving unread IDs:', error);
+    webLogger.error('Error saving unread IDs', 'UnreadBadge', error);
   }
 }
 
@@ -116,14 +117,14 @@ export function useUnreadBadge(
     try {
       if (count > 0) {
         await navigator.setAppBadge(count);
-        console.log('[UnreadBadge] Badge set to:', count);
+        webLogger.debug(`Badge set to: ${count}`, 'UnreadBadge');
       } else {
         await navigator.clearAppBadge();
-        console.log('[UnreadBadge] Badge cleared');
+        webLogger.debug('Badge cleared', 'UnreadBadge');
       }
     } catch (error) {
       // Badge API may fail if not running as PWA
-      console.log('[UnreadBadge] Badge API unavailable:', error);
+      webLogger.debug('Badge API unavailable', 'UnreadBadge', error);
     }
   }, [isSupported]);
 

@@ -5,7 +5,7 @@
  * Shows messages in a scrollable container with user/AI differentiation.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 
 export interface LogEntry {
@@ -51,13 +51,34 @@ export function MessageHistory({
   const colors = useThemeColors();
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [hasInitiallyScrolled, setHasInitiallyScrolled] = useState(false);
+  const prevLogsLengthRef = useRef(0);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Initial scroll - jump to bottom immediately without animation
   useEffect(() => {
-    if (autoScroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (!hasInitiallyScrolled && logs.length > 0 && bottomRef.current) {
+      // Use instant scroll for initial load
+      bottomRef.current.scrollIntoView({ behavior: 'instant' });
+      setHasInitiallyScrolled(true);
+      prevLogsLengthRef.current = logs.length;
     }
-  }, [logs, autoScroll]);
+  }, [logs, hasInitiallyScrolled]);
+
+  // Auto-scroll to bottom when new messages arrive (after initial load)
+  useEffect(() => {
+    if (hasInitiallyScrolled && autoScroll && bottomRef.current && logs.length > prevLogsLengthRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      prevLogsLengthRef.current = logs.length;
+    }
+  }, [logs, autoScroll, hasInitiallyScrolled]);
+
+  // Reset scroll state when logs are cleared (e.g., session change)
+  useEffect(() => {
+    if (logs.length === 0) {
+      setHasInitiallyScrolled(false);
+      prevLogsLengthRef.current = 0;
+    }
+  }, [logs.length]);
 
   if (!logs || logs.length === 0) {
     return (
@@ -162,6 +183,7 @@ export function MessageHistory({
                 fontFamily: inputMode === 'terminal' || isUser ? 'ui-monospace, monospace' : 'inherit',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
+                textAlign: 'left',
                 // Limit very long messages
                 maxHeight: '200px',
                 overflow: 'hidden',

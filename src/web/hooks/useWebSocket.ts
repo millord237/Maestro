@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Theme } from '../../shared/theme-types';
 import { buildWebSocketUrl as buildWsUrl, getCurrentSessionId } from '../utils/config';
+import { webLogger } from '../utils/logger';
 
 /**
  * WebSocket connection states
@@ -71,6 +72,8 @@ export type ServerMessageType =
   | 'session_added'
   | 'session_removed'
   | 'active_session_changed'
+  | 'session_output'
+  | 'session_exit'
   | 'theme'
   | 'pong'
   | 'subscribed'
@@ -169,6 +172,35 @@ export interface ActiveSessionChangedMessage extends ServerMessage {
 }
 
 /**
+ * Session output message from server (real-time AI/terminal output)
+ */
+export interface SessionOutputMessage extends ServerMessage {
+  type: 'session_output';
+  sessionId: string;
+  data: string;
+  source: 'ai' | 'terminal';
+}
+
+/**
+ * Session exit message from server (process completed)
+ */
+export interface SessionExitMessage extends ServerMessage {
+  type: 'session_exit';
+  sessionId: string;
+  exitCode: number;
+}
+
+/**
+ * User input message from server (message sent from desktop app)
+ */
+export interface UserInputMessage extends ServerMessage {
+  type: 'user_input';
+  sessionId: string;
+  command: string;
+  inputMode: 'ai' | 'terminal';
+}
+
+/**
  * Theme message from server
  */
 export interface ThemeMessage extends ServerMessage {
@@ -197,6 +229,9 @@ export type TypedServerMessage =
   | SessionAddedMessage
   | SessionRemovedMessage
   | ActiveSessionChangedMessage
+  | SessionOutputMessage
+  | SessionExitMessage
+  | UserInputMessage
   | ThemeMessage
   | ErrorMessage
   | ServerMessage;
@@ -215,6 +250,12 @@ export interface WebSocketEventHandlers {
   onSessionRemoved?: (sessionId: string) => void;
   /** Called when the active session changes on the desktop */
   onActiveSessionChanged?: (sessionId: string) => void;
+  /** Called when session output is received (real-time AI/terminal output) */
+  onSessionOutput?: (sessionId: string, data: string, source: 'ai' | 'terminal') => void;
+  /** Called when a session process exits */
+  onSessionExit?: (sessionId: string, exitCode: number) => void;
+  /** Called when user input is received (message sent from desktop app) */
+  onUserInput?: (sessionId: string, command: string, inputMode: 'ai' | 'terminal') => void;
   /** Called when theme is received or updated */
   onThemeUpdate?: (theme: Theme) => void;
   /** Called when connection state changes */
@@ -386,6 +427,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     try {
       const message = JSON.parse(event.data) as TypedServerMessage;
 
+      // Debug: Log all incoming messages
+      if (message.type === 'session_output') {
+        console.log(`[WebSocket] RAW message received:`, message);
+      }
+
       // Call the generic message handler
       handlersRef.current?.onMessage?.(message);
 
@@ -469,6 +515,25 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           break;
         }
 
+        case 'session_output': {
+          const outputMsg = message as SessionOutputMessage;
+          console.log(`[WebSocket] Received session_output: session=${outputMsg.sessionId}, source=${outputMsg.source}, dataLen=${outputMsg.data?.length || 0}, hasHandler=${!!handlersRef.current?.onSessionOutput}`);
+          handlersRef.current?.onSessionOutput?.(outputMsg.sessionId, outputMsg.data, outputMsg.source);
+          break;
+        }
+
+        case 'session_exit': {
+          const exitMsg = message as SessionExitMessage;
+          handlersRef.current?.onSessionExit?.(exitMsg.sessionId, exitMsg.exitCode);
+          break;
+        }
+
+        case 'user_input': {
+          const inputMsg = message as UserInputMessage;
+          handlersRef.current?.onUserInput?.(inputMsg.sessionId, inputMsg.command, inputMsg.inputMode);
+          break;
+        }
+
         case 'theme': {
           const themeMsg = message as ThemeMessage;
           handlersRef.current?.onThemeUpdate?.(themeMsg.theme);
@@ -491,7 +556,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           break;
       }
     } catch (err) {
-      console.error('Failed to parse WebSocket message:', err);
+      webLogger.error('Failed to parse WebSocket message', 'WebSocket', err);
     }
   }, [startPingInterval]);
 
@@ -546,7 +611,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       ws.onmessage = handleMessage;
 
       ws.onerror = (event) => {
-        console.error('WebSocket error:', event);
+        webLogger.error('WebSocket connection error', 'WebSocket', event);
         setError('WebSocket connection error');
         handlersRef.current?.onError?.('WebSocket connection error');
       };
@@ -563,7 +628,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         }
       };
     } catch (err) {
-      console.error('Failed to create WebSocket:', err);
+      webLogger.error('Failed to create WebSocket', 'WebSocket', err);
       setError('Failed to create WebSocket connection');
       handlersRef.current?.onError?.('Failed to create WebSocket connection');
       setState('disconnected');

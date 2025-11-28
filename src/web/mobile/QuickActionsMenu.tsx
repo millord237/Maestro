@@ -1,9 +1,7 @@
 /**
  * QuickActionsMenu - Popup menu shown on long-press of send button
  *
- * Displays quick actions for session management:
- * - Clear session (reset conversation)
- * - New session (create new)
+ * Displays quick action for mode switching:
  * - Switch to terminal/AI mode
  *
  * Features:
@@ -21,7 +19,7 @@ import { useThemeColors } from '../components/ThemeProvider';
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
 
-export type QuickAction = 'clear' | 'new' | 'switch_mode';
+export type QuickAction = 'switch_mode';
 
 export interface QuickActionsMenuProps {
   /** Whether the menu is visible */
@@ -135,33 +133,6 @@ export function QuickActionsMenu({
         </svg>
       ),
       disabled: !hasActiveSession,
-    },
-    {
-      action: 'clear',
-      label: 'Clear Session',
-      icon: (
-        // Trash/clear icon
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 6h18" />
-          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-          <line x1="10" y1="11" x2="10" y2="17" />
-          <line x1="14" y1="11" x2="14" y2="17" />
-        </svg>
-      ),
-      disabled: !hasActiveSession,
-    },
-    {
-      action: 'new',
-      label: 'New Session',
-      icon: (
-        // Plus icon
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      ),
-      disabled: false, // Always allow creating new session
     },
   ];
 

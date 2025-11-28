@@ -17,6 +17,7 @@ import {
   getDashboardUrl,
   getSessionUrl,
 } from './utils/config';
+import { webLogger } from './utils/logger';
 import './index.css';
 
 /**
@@ -163,14 +164,14 @@ function App() {
   useEffect(() => {
     registerServiceWorker({
       onSuccess: (registration) => {
-        console.log('[App] Service worker ready:', registration.scope);
+        webLogger.debug(`Service worker ready: ${registration.scope}`, 'App');
       },
-      onUpdate: (registration) => {
-        console.log('[App] New content available, refresh recommended');
+      onUpdate: () => {
+        webLogger.info('New content available, refresh recommended', 'App');
         // Could show a toast/notification here prompting user to refresh
       },
       onOfflineChange: (newOfflineStatus) => {
-        console.log('[App] Offline status changed:', newOfflineStatus);
+        webLogger.debug(`Offline status changed: ${newOfflineStatus}`, 'App');
         setOffline(newOfflineStatus);
       },
     });
@@ -178,7 +179,7 @@ function App() {
 
   // Log mode info on mount
   useEffect(() => {
-    console.log('[App] Mode:', modeContextValue.isDashboard ? 'dashboard' : `session:${modeContextValue.sessionId}`);
+    webLogger.debug(`Mode: ${modeContextValue.isDashboard ? 'dashboard' : `session:${modeContextValue.sessionId}`}`, 'App');
   }, []);
 
   return (
@@ -210,5 +211,5 @@ if (container) {
     </StrictMode>
   );
 } else {
-  console.error('Root element not found');
+  webLogger.error('Root element not found', 'App');
 }

@@ -24,6 +24,7 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useThemeColors, useTheme } from '../components/ThemeProvider';
 import type { LastResponsePreview } from '../hooks/useSessions';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
+import { webLogger } from '../utils/logger';
 
 /**
  * Represents a response item that can be navigated to
@@ -284,7 +285,7 @@ export function ResponseViewer({
         setCopiedIndex((current) => (current === index ? null : current));
       }, 2000);
     } catch (err) {
-      console.error('Failed to copy code:', err);
+      webLogger.error('Failed to copy code', 'ResponseViewer', err);
       triggerHaptic(HAPTIC_PATTERNS.error);
     }
   }, []);

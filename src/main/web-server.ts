@@ -10,6 +10,10 @@ import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import type { Theme } from '../shared/theme-types';
 import { getLocalIpAddressSync } from './utils/networkUtils';
+import { logger } from './utils/logger';
+
+// Logger context for all web server logs
+const LOG_CONTEXT = 'WebServer';
 
 const GITHUB_REDIRECT_URL = 'https://github.com/pedramamini/Maestro';
 
@@ -196,7 +200,7 @@ export class WebServer {
 
     // Generate a new security token (UUID v4)
     this.securityToken = randomUUID();
-    console.log(`Web server security token generated: ${this.securityToken}`);
+    logger.debug('Security token generated', LOG_CONTEXT);
 
     // Determine web assets path (production vs development)
     this.webAssetsPath = this.resolveWebAssetsPath();
@@ -222,12 +226,12 @@ export class WebServer {
 
     for (const p of possiblePaths) {
       if (existsSync(path.join(p, 'index.html'))) {
-        console.log(`Web assets found at: ${p}`);
+        logger.debug(`Web assets found at: ${p}`, LOG_CONTEXT);
         return p;
       }
     }
 
-    console.warn('Web assets not found. Web interface will not be served. Run "npm run build:web" to build web assets.');
+    logger.warn('Web assets not found. Web interface will not be served. Run "npm run build:web" to build web assets.', LOG_CONTEXT);
     return null;
   }
 
@@ -276,7 +280,7 @@ export class WebServer {
 
       reply.type('text/html').send(html);
     } catch (err) {
-      console.error('Error serving index.html:', err);
+      logger.error('Error serving index.html', LOG_CONTEXT, err);
       reply.code(500).send({
         error: 'Internal Server Error',
         message: 'Failed to serve web interface.',
@@ -295,7 +299,7 @@ export class WebServer {
       claudeSessionId,
       enabledAt: Date.now(),
     });
-    console.log(`Session ${sessionId} marked as live (total: ${this.liveSessions.size})`);
+    logger.info(`Session ${sessionId} marked as live (total: ${this.liveSessions.size})`, LOG_CONTEXT);
 
     // Broadcast to all connected clients
     this.broadcastToWebClients({
@@ -312,7 +316,7 @@ export class WebServer {
   setSessionOffline(sessionId: string): void {
     const wasLive = this.liveSessions.delete(sessionId);
     if (wasLive) {
-      console.log(`Session ${sessionId} marked as offline (remaining: ${this.liveSessions.size})`);
+      logger.info(`Session ${sessionId} marked as offline (remaining: ${this.liveSessions.size})`, LOG_CONTEXT);
 
       // Broadcast to all connected clients
       this.broadcastToWebClients({
@@ -428,7 +432,7 @@ export class WebServer {
    */
   setRateLimitConfig(config: Partial<RateLimitConfig>) {
     this.rateLimitConfig = { ...this.rateLimitConfig, ...config };
-    console.log(`Web server rate limiting ${this.rateLimitConfig.enabled ? 'enabled' : 'disabled'} (max: ${this.rateLimitConfig.max}/min, maxPost: ${this.rateLimitConfig.maxPost}/min)`);
+    logger.info(`Rate limiting ${this.rateLimitConfig.enabled ? 'enabled' : 'disabled'} (max: ${this.rateLimitConfig.max}/min, maxPost: ${this.rateLimitConfig.maxPost}/min)`, LOG_CONTEXT);
   }
 
   /**
@@ -790,7 +794,7 @@ export class WebServer {
       };
 
       this.webClients.set(clientId, client);
-      console.log(`Web client connected: ${clientId} (session: ${sessionId || 'dashboard'}, total: ${this.webClients.size})`);
+      logger.info(`Client connected: ${clientId} (session: ${sessionId || 'dashboard'}, total: ${this.webClients.size})`, LOG_CONTEXT);
 
       // Send connection confirmation
       connection.socket.send(JSON.stringify({
@@ -848,12 +852,12 @@ export class WebServer {
       // Handle disconnection
       connection.socket.on('close', () => {
         this.webClients.delete(clientId);
-        console.log(`Web client disconnected: ${clientId} (total: ${this.webClients.size})`);
+        logger.info(`Client disconnected: ${clientId} (total: ${this.webClients.size})`, LOG_CONTEXT);
       });
 
       // Handle errors
       connection.socket.on('error', (error) => {
-        console.error(`Web client error (${clientId}):`, error);
+        logger.error(`Client error (${clientId})`, LOG_CONTEXT, error);
         this.webClients.delete(clientId);
       });
     });
@@ -920,17 +924,20 @@ export class WebServer {
             sessionId,
             timestamp: Date.now(),
           }));
-          console.log(`[WebSocket] Command rejected - session ${sessionId} is busy`);
+          logger.debug(`Command rejected - session ${sessionId} is busy`, LOG_CONTEXT);
           return;
         }
 
         const isAiMode = sessionDetail.inputMode === 'ai';
+        const mode = isAiMode ? 'AI' : 'CLI';
+        const claudeId = sessionDetail.claudeSessionId || 'none';
 
-        if (isAiMode && this.executeCommandCallback) {
-          // AI mode: forward to desktop's command execution logic
-          // This ensures single source of truth - desktop handles spawn, state, and broadcasts
-          console.log(`[WebSocket] Forwarding AI command to desktop for session ${sessionId}`);
+        // Log all web interface commands prominently
+        logger.info(`[Web Command] Mode: ${mode} | Session: ${sessionId}${isAiMode ? ` | Claude: ${claudeId}` : ''} | Message: ${command}`, LOG_CONTEXT);
 
+        // Route ALL commands through the renderer for consistent handling
+        // The renderer handles both AI and terminal modes, updating UI and state
+        if (this.executeCommandCallback) {
           this.executeCommandCallback(sessionId, command)
             .then((success) => {
               client.socket.send(JSON.stringify({
@@ -939,25 +946,18 @@ export class WebServer {
                 sessionId,
                 timestamp: Date.now(),
               }));
-              console.log(`[WebSocket] Command forwarded to desktop for session ${sessionId}: ${success ? 'accepted' : 'rejected'}`);
+              if (!success) {
+                logger.warn(`[Web Command] ${mode} command rejected for session ${sessionId}`, LOG_CONTEXT);
+              }
             })
             .catch((error) => {
+              logger.error(`[Web Command] ${mode} command failed for session ${sessionId}: ${error.message}`, LOG_CONTEXT);
               client.socket.send(JSON.stringify({
                 type: 'error',
                 message: `Failed to execute command: ${error.message}`,
                 timestamp: Date.now(),
               }));
             });
-        } else if (this.writeToSessionCallback) {
-          // Terminal mode: write directly to process
-          const success = this.writeToSessionCallback(sessionId, command + '\n');
-          client.socket.send(JSON.stringify({
-            type: 'command_result',
-            success,
-            sessionId,
-            timestamp: Date.now(),
-          }));
-          console.log(`[WebSocket] Terminal command sent to session ${sessionId}: ${success ? 'success' : 'failed'}`);
         } else {
           client.socket.send(JSON.stringify({
             type: 'error',
@@ -993,7 +993,7 @@ export class WebServer {
 
         // Forward to desktop's mode switching logic
         // This ensures single source of truth - desktop handles state updates and broadcasts
-        console.log(`[WebSocket] Forwarding mode switch to desktop for session ${sessionId}: ${mode}`);
+        logger.debug(`Forwarding mode switch to desktop for session ${sessionId}: ${mode}`, LOG_CONTEXT);
         this.switchModeCallback(sessionId, mode)
           .then((success) => {
             client.socket.send(JSON.stringify({
@@ -1003,7 +1003,7 @@ export class WebServer {
               mode,
               timestamp: Date.now(),
             }));
-            console.log(`[WebSocket] Mode switch for session ${sessionId} to ${mode}: ${success ? 'success' : 'failed'}`);
+            logger.debug(`Mode switch for session ${sessionId} to ${mode}: ${success ? 'success' : 'failed'}`, LOG_CONTEXT);
           })
           .catch((error) => {
             client.socket.send(JSON.stringify({
@@ -1041,7 +1041,7 @@ export class WebServer {
 
       default:
         // Echo unknown message types for debugging
-        console.log(`[WebSocket] Unknown message type: ${message.type}`);
+        logger.debug(`Unknown message type: ${message.type}`, LOG_CONTEXT);
         client.socket.send(JSON.stringify({
           type: 'echo',
           originalType: message.type,
@@ -1067,11 +1067,27 @@ export class WebServer {
    */
   broadcastToSessionClients(sessionId: string, message: object) {
     const data = JSON.stringify(message);
+    let sentCount = 0;
+    const msgType = (message as any).type || 'unknown';
+
     for (const client of this.webClients.values()) {
-      if (client.socket.readyState === WebSocket.OPEN &&
-          (client.subscribedSessionId === sessionId || !client.subscribedSessionId)) {
-        client.socket.send(data);
+      const isOpen = client.socket.readyState === WebSocket.OPEN;
+      const matchesSession = client.subscribedSessionId === sessionId || !client.subscribedSessionId;
+      const shouldSend = isOpen && matchesSession;
+
+      if (msgType === 'session_output') {
+        console.log(`[WebBroadcast] Client ${client.id}: isOpen=${isOpen}, subscribedTo=${client.subscribedSessionId || 'none'}, matchesSession=${matchesSession}, shouldSend=${shouldSend}`);
       }
+
+      if (shouldSend) {
+        client.socket.send(data);
+        sentCount++;
+      }
+    }
+
+    // Log summary for session_output
+    if (msgType === 'session_output') {
+      console.log(`[WebBroadcast] Sent session_output to ${sentCount}/${this.webClients.size} clients for session ${sessionId}`);
     }
   }
 
@@ -1173,6 +1189,20 @@ export class WebServer {
   }
 
   /**
+   * Broadcast user input to web clients subscribed to a session
+   * Called when a command is sent from the desktop app so web clients stay in sync
+   */
+  broadcastUserInput(sessionId: string, command: string, inputMode: 'ai' | 'terminal') {
+    this.broadcastToSessionClients(sessionId, {
+      type: 'user_input',
+      sessionId,
+      command,
+      inputMode,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * Get the number of connected web clients
    */
   getWebClientCount(): number {
@@ -1191,7 +1221,7 @@ export class WebServer {
     try {
       // Detect local IP address for LAN accessibility (sync - no network delay)
       this.localIpAddress = getLocalIpAddressSync();
-      console.log(`Web server using IP address: ${this.localIpAddress}`);
+      logger.info(`Using IP address: ${this.localIpAddress}`, LOG_CONTEXT);
 
       // Setup middleware and routes (must be done before listen)
       await this.setupMiddleware();
@@ -1213,7 +1243,7 @@ export class WebServer {
         url: this.getSecureUrl(),
       };
     } catch (error) {
-      console.error('Failed to start web server:', error);
+      logger.error('Failed to start server', LOG_CONTEXT, error);
       throw error;
     }
   }
@@ -1231,9 +1261,9 @@ export class WebServer {
     try {
       await this.server.close();
       this.isRunning = false;
-      console.log('Web server stopped');
+      logger.info('Server stopped', LOG_CONTEXT);
     } catch (error) {
-      console.error('Failed to stop web server:', error);
+      logger.error('Failed to stop server', LOG_CONTEXT, error);
     }
   }
 

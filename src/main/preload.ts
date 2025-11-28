@@ -86,7 +86,11 @@ contextBridge.exposeInMainWorld('maestro', {
     // Remote command execution from web interface
     // This allows web commands to go through the same code path as desktop commands
     onRemoteCommand: (callback: (sessionId: string, command: string) => void) => {
-      const handler = (_: any, sessionId: string, command: string) => callback(sessionId, command);
+      console.log('[Preload] Registering onRemoteCommand listener');
+      const handler = (_: any, sessionId: string, command: string) => {
+        console.log('[Preload] Received remote:executeCommand IPC:', { sessionId, command: command?.substring(0, 50) });
+        callback(sessionId, command);
+      };
       ipcRenderer.on('remote:executeCommand', handler);
       return () => ipcRenderer.removeListener('remote:executeCommand', handler);
     },
@@ -127,6 +131,13 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('process:usage', handler);
       return () => ipcRenderer.removeListener('process:usage', handler);
     },
+  },
+
+  // Web interface API
+  web: {
+    // Broadcast user input to web clients (for keeping web interface in sync)
+    broadcastUserInput: (sessionId: string, command: string, inputMode: 'ai' | 'terminal') =>
+      ipcRenderer.invoke('web:broadcastUserInput', sessionId, command, inputMode),
   },
 
   // Git API
@@ -345,16 +356,14 @@ export interface MaestroAPI {
   };
   webserver: {
     getUrl: () => Promise<string>;
-    getAuthConfig: () => Promise<{ enabled: boolean; token: string | null }>;
-    setAuthEnabled: (enabled: boolean) => Promise<{ enabled: boolean; token: string | null }>;
-    generateNewToken: () => Promise<string>;
-    setAuthToken: (token: string | null) => Promise<boolean>;
     getConnectedClients: () => Promise<number>;
   };
-  tunnel: {
-    start: (sessionId: string) => Promise<{ port: number; uuid: string; url: string }>;
-    stop: (sessionId: string) => Promise<boolean>;
-    getStatus: (sessionId: string) => Promise<{ active: boolean; port?: number; uuid?: string; url?: string }>;
+  live: {
+    toggle: (sessionId: string, claudeSessionId?: string) => Promise<{ live: boolean; url: string | null }>;
+    getStatus: (sessionId: string) => Promise<{ live: boolean; url: string | null }>;
+    getDashboardUrl: () => Promise<string | null>;
+    getLiveSessions: () => Promise<Array<{ sessionId: string; claudeSessionId?: string; enabledAt: number }>>;
+    broadcastActiveSession: (sessionId: string) => Promise<void>;
   };
   agents: {
     detect: () => Promise<AgentConfig[]>;

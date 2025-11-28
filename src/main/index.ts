@@ -329,6 +329,7 @@ app.whenReady().then(() => {
         groupEmoji: group?.emoji || null,
         usageStats: s.usageStats || null,
         lastResponse,
+        claudeSessionId: s.claudeSessionId || null,
       };
     });
   });
@@ -363,7 +364,7 @@ app.whenReady().then(() => {
   // Note: Process IDs have -ai or -terminal suffix based on session's inputMode
   webServer.setWriteToSessionCallback((sessionId: string, data: string) => {
     if (!processManager) {
-      console.log('[writeToSession] processManager is null');
+      logger.warn('processManager is null for writeToSession', 'WebServer');
       return false;
     }
 
@@ -371,16 +372,16 @@ app.whenReady().then(() => {
     const sessions = sessionsStore.get('sessions', []);
     const session = sessions.find((s: any) => s.id === sessionId);
     if (!session) {
-      console.log(`[writeToSession] Session ${sessionId} not found`);
+      logger.warn(`Session ${sessionId} not found for writeToSession`, 'WebServer');
       return false;
     }
 
     // Append -ai or -terminal suffix based on inputMode
     const targetSessionId = session.inputMode === 'ai' ? `${sessionId}-ai` : `${sessionId}-terminal`;
-    console.log(`[writeToSession] Writing to ${targetSessionId} (inputMode=${session.inputMode})`);
+    logger.debug(`Writing to ${targetSessionId} (inputMode=${session.inputMode})`, 'WebServer');
 
     const result = processManager.write(targetSessionId, data);
-    console.log(`[writeToSession] Write result: ${result}`);
+    logger.debug(`Write result: ${result}`, 'WebServer');
     return result;
   });
 
@@ -389,13 +390,18 @@ app.whenReady().then(() => {
   // The renderer handles all spawn logic, state management, and broadcasts
   webServer.setExecuteCommandCallback(async (sessionId: string, command: string) => {
     if (!mainWindow) {
-      console.log('[executeCommand] mainWindow is null');
+      logger.warn('mainWindow is null for executeCommand', 'WebServer');
       return false;
     }
 
+    // Look up the session to get Claude session ID for logging
+    const sessions = sessionsStore.get('sessions', []);
+    const session = sessions.find((s: any) => s.id === sessionId);
+    const claudeSessionId = session?.claudeSessionId || 'none';
+
     // Forward to renderer - it will handle spawn, state, and everything else
     // This ensures web commands go through exact same code path as desktop commands
-    console.log(`[executeCommand] Forwarding command to renderer for session ${sessionId}`);
+    logger.info(`[Web → Renderer] Forwarding command | Maestro: ${sessionId} | Claude: ${claudeSessionId} | Command: ${command.substring(0, 100)}`, 'WebServer');
     mainWindow.webContents.send('remote:executeCommand', sessionId, command);
     return true;
   });
@@ -404,13 +410,13 @@ app.whenReady().then(() => {
   // This forwards to the renderer which handles state updates and broadcasts
   webServer.setInterruptSessionCallback(async (sessionId: string) => {
     if (!mainWindow) {
-      console.log('[interrupt] mainWindow is null');
+      logger.warn('mainWindow is null for interrupt', 'WebServer');
       return false;
     }
 
     // Forward to renderer - it will handle interrupt, state update, and broadcasts
     // This ensures web interrupts go through exact same code path as desktop interrupts
-    console.log(`[interrupt] Forwarding interrupt to renderer for session ${sessionId}`);
+    logger.debug(`Forwarding interrupt to renderer for session ${sessionId}`, 'WebServer');
     mainWindow.webContents.send('remote:interrupt', sessionId);
     return true;
   });
@@ -419,13 +425,13 @@ app.whenReady().then(() => {
   // This forwards to the renderer which handles state updates and broadcasts
   webServer.setSwitchModeCallback(async (sessionId: string, mode: 'ai' | 'terminal') => {
     if (!mainWindow) {
-      console.log('[switchMode] mainWindow is null');
+      logger.warn('mainWindow is null for switchMode', 'WebServer');
       return false;
     }
 
     // Forward to renderer - it will handle mode switch and broadcasts
     // This ensures web mode switches go through exact same code path as desktop
-    console.log(`[switchMode] Forwarding mode switch to renderer for session ${sessionId}: ${mode}`);
+    logger.debug(`Forwarding mode switch to renderer for session ${sessionId}: ${mode}`, 'WebServer');
     mainWindow.webContents.send('remote:switchMode', sessionId, mode);
     return true;
   });
@@ -566,6 +572,15 @@ function setupIpcHandlers() {
   ipcMain.handle('groups:setAll', async (_, groups: any[]) => {
     groupsStore.set('groups', groups);
     return true;
+  });
+
+  // Broadcast user input to web clients (called when desktop sends a message)
+  ipcMain.handle('web:broadcastUserInput', async (_, sessionId: string, command: string, inputMode: 'ai' | 'terminal') => {
+    if (webServer && webServer.getWebClientCount() > 0) {
+      webServer.broadcastUserInput(sessionId, command, inputMode);
+      return true;
+    }
+    return false;
   });
 
   // Session/Process management
@@ -1876,10 +1891,35 @@ function setupProcessListeners() {
     processManager.on('data', (sessionId: string, data: string) => {
       console.log('[IPC] Forwarding process:data to renderer:', { sessionId, dataLength: data.length, hasMainWindow: !!mainWindow });
       mainWindow?.webContents.send('process:data', sessionId, data);
+
+      // Broadcast to web clients - extract base session ID (remove -ai or -terminal suffix)
+      if (webServer) {
+        const baseSessionId = sessionId.replace(/-ai$|-terminal$|-batch-\d+$|-synopsis-\d+$/, '');
+        const isAiOutput = sessionId.endsWith('-ai') || sessionId.includes('-batch-') || sessionId.includes('-synopsis-');
+        console.log(`[WebBroadcast] Broadcasting session_output: session=${baseSessionId}, source=${isAiOutput ? 'ai' : 'terminal'}, dataLen=${data.length}`);
+        webServer.broadcastToSessionClients(baseSessionId, {
+          type: 'session_output',
+          sessionId: baseSessionId,
+          data,
+          source: isAiOutput ? 'ai' : 'terminal',
+          timestamp: Date.now(),
+        });
+      }
     });
 
     processManager.on('exit', (sessionId: string, code: number) => {
       mainWindow?.webContents.send('process:exit', sessionId, code);
+
+      // Broadcast exit to web clients
+      if (webServer) {
+        const baseSessionId = sessionId.replace(/-ai$|-terminal$|-batch-\d+$|-synopsis-\d+$/, '');
+        webServer.broadcastToSessionClients(baseSessionId, {
+          type: 'session_exit',
+          sessionId: baseSessionId,
+          exitCode: code,
+          timestamp: Date.now(),
+        });
+      }
     });
 
     processManager.on('session-id', (sessionId: string, claudeSessionId: string) => {

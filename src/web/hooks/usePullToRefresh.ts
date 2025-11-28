@@ -8,6 +8,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 // Import from constants directly to avoid circular dependency with mobile/index.tsx
 import { GESTURE_THRESHOLDS } from '../mobile/constants';
+import { webLogger } from '../utils/logger';
 
 export interface UsePullToRefreshOptions {
   /** Called when pull-to-refresh is triggered */
@@ -169,7 +170,7 @@ export function usePullToRefresh(options: UsePullToRefreshOptions): UsePullToRef
         try {
           await onRefreshRef.current();
         } catch (error) {
-          console.error('[PullToRefresh] Refresh error:', error);
+          webLogger.error('Refresh error', 'PullToRefresh', error);
         } finally {
           setIsRefreshing(false);
           setPullDistance(0);

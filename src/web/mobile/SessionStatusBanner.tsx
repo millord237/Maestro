@@ -21,6 +21,7 @@ import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
 import type { Session, UsageStats, LastResponsePreview } from '../hooks/useSessions';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
+import { webLogger } from '../utils/logger';
 
 /**
  * Props for SessionStatusBanner component
@@ -352,7 +353,7 @@ function LastResponsePreviewSection({
       // Error feedback
       setCopyState('error');
       triggerHaptic(HAPTIC_PATTERNS.error);
-      console.error('Failed to copy to clipboard:', err);
+      webLogger.error('Failed to copy to clipboard', 'SessionStatusBanner', err);
 
       // Reset state after 2 seconds
       setTimeout(() => setCopyState('idle'), 2000);

@@ -4,6 +4,7 @@
  * Handles registration and lifecycle management of the Maestro
  * mobile web service worker for offline capability.
  */
+import { webLogger } from './logger';
 
 /**
  * Configuration for service worker registration
@@ -36,7 +37,7 @@ export async function registerServiceWorker(
   config: ServiceWorkerConfig = {}
 ): Promise<ServiceWorkerRegistration | undefined> {
   if (!isServiceWorkerSupported()) {
-    console.log('[SW] Service workers not supported');
+    webLogger.info('Service workers not supported', 'ServiceWorker');
     return undefined;
   }
 
@@ -75,7 +76,7 @@ export async function registerServiceWorker(
       scope: swScope,
     });
 
-    console.log('[SW] Service worker registered:', registration.scope);
+    webLogger.debug('Service worker registered', 'ServiceWorker', { scope: registration.scope });
 
     // Handle updates
     registration.addEventListener('updatefound', () => {
@@ -86,11 +87,11 @@ export async function registerServiceWorker(
         if (newWorker.state === 'installed') {
           if (navigator.serviceWorker.controller) {
             // New update available
-            console.log('[SW] New content available, refresh to update');
+            webLogger.info('New content available, refresh to update', 'ServiceWorker');
             onUpdate?.(registration);
           } else {
             // First install - content cached
-            console.log('[SW] Content cached for offline use');
+            webLogger.info('Content cached for offline use', 'ServiceWorker');
             onSuccess?.(registration);
           }
         }
@@ -104,7 +105,7 @@ export async function registerServiceWorker(
 
     return registration;
   } catch (error) {
-    console.error('[SW] Service worker registration failed:', error);
+    webLogger.error('Service worker registration failed', 'ServiceWorker', error);
     return undefined;
   }
 }
@@ -122,10 +123,10 @@ export async function unregisterServiceWorker(): Promise<boolean> {
   try {
     const registration = await navigator.serviceWorker.ready;
     const success = await registration.unregister();
-    console.log('[SW] Service worker unregistered:', success);
+    webLogger.debug('Service worker unregistered', 'ServiceWorker', { success });
     return success;
   } catch (error) {
-    console.error('[SW] Service worker unregistration failed:', error);
+    webLogger.error('Service worker unregistration failed', 'ServiceWorker', error);
     return false;
   }
 }

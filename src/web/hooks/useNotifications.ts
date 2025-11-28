@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { webLogger } from '../utils/logger';
 
 /**
  * Notification permission states
@@ -118,7 +119,7 @@ export function useNotifications(
    */
   const requestPermission = useCallback(async (): Promise<NotificationPermission> => {
     if (!isSupported) {
-      console.log('[Notifications] Not supported in this browser');
+      webLogger.debug('Notifications not supported in this browser', 'Notifications');
       return 'denied';
     }
 
@@ -134,16 +135,16 @@ export function useNotifications(
       onPermissionChange?.(newPermission);
 
       if (newPermission === 'granted') {
-        console.log('[Notifications] Permission granted');
+        webLogger.debug('Permission granted', 'Notifications');
         onGranted?.();
       } else if (newPermission === 'denied') {
-        console.log('[Notifications] Permission denied');
+        webLogger.debug('Permission denied', 'Notifications');
         onDenied?.();
       }
 
       return newPermission;
     } catch (error) {
-      console.error('[Notifications] Error requesting permission:', error);
+      webLogger.error('Error requesting permission', 'Notifications', error);
       return 'denied';
     }
   }, [isSupported, onGranted, onDenied, onPermissionChange]);
@@ -156,7 +157,7 @@ export function useNotifications(
     setHasPrompted(true);
     localStorage.setItem(NOTIFICATION_DECLINED_KEY, 'true');
     localStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
-    console.log('[Notifications] User declined via UI');
+    webLogger.debug('User declined via UI', 'Notifications');
   }, []);
 
   /**
@@ -167,7 +168,7 @@ export function useNotifications(
     setHasDeclined(false);
     localStorage.removeItem(NOTIFICATION_PROMPT_KEY);
     localStorage.removeItem(NOTIFICATION_DECLINED_KEY);
-    console.log('[Notifications] Prompt state reset');
+    webLogger.debug('Prompt state reset', 'Notifications');
   }, []);
 
   /**
@@ -176,7 +177,7 @@ export function useNotifications(
   const showNotification = useCallback(
     (title: string, options?: NotificationOptions): Notification | null => {
       if (!isSupported || permission !== 'granted') {
-        console.log('[Notifications] Cannot show notification, permission:', permission);
+        webLogger.debug(`Cannot show notification, permission: ${permission}`, 'Notifications');
         return null;
       }
 
@@ -189,7 +190,7 @@ export function useNotifications(
 
         return notification;
       } catch (error) {
-        console.error('[Notifications] Error showing notification:', error);
+        webLogger.error('Error showing notification', 'Notifications', error);
         return null;
       }
     },
@@ -208,7 +209,7 @@ export function useNotifications(
 
     // Wait for the specified delay before prompting
     const timer = setTimeout(() => {
-      console.log('[Notifications] Auto-requesting permission after delay');
+      webLogger.debug('Auto-requesting permission after delay', 'Notifications');
       requestPermission();
     }, requestDelay);
 

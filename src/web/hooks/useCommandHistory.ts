@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { webLogger } from '../utils/logger';
 
 /** Maximum number of commands to store in history */
 const MAX_HISTORY_SIZE = 50;
@@ -133,7 +134,7 @@ export function useCommandHistory(
         setHistory(validEntries);
       }
     } catch (error) {
-      console.error('[CommandHistory] Failed to load from localStorage:', error);
+      webLogger.error('Failed to load from localStorage', 'CommandHistory', error);
     }
     initialLoadDone.current = true;
   }, [persist, storageKey, maxSize]);
@@ -147,7 +148,7 @@ export function useCommandHistory(
     try {
       localStorage.setItem(storageKey, JSON.stringify(history));
     } catch (error) {
-      console.error('[CommandHistory] Failed to save to localStorage:', error);
+      webLogger.error('Failed to save to localStorage', 'CommandHistory', error);
     }
   }, [history, persist, storageKey]);
 

@@ -18,12 +18,14 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useOfflineStatus, useMaestroMode } from '../main';
 import { buildApiUrl } from '../utils/config';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
+import { webLogger } from '../utils/logger';
+import { injectCSSProperties } from '../utils/cssCustomProperties';
+import type { Theme } from '../../shared/theme-types';
 import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
 import { CommandHistoryDrawer } from './CommandHistoryDrawer';
 import { RecentCommandChips } from './RecentCommandChips';
-import { SessionStatusBanner } from './SessionStatusBanner';
 import { ResponseViewer, type ResponseItem } from './ResponseViewer';
 import { OfflineQueueBanner } from './OfflineQueueBanner';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
@@ -73,8 +75,29 @@ const CONNECTION_STATUS_CONFIG: Record<WebSocketState | 'offline', ConnectionSta
 };
 
 /**
+ * Format cost in USD for display
+ */
+function formatCost(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  if (cost < 1.0) return `$${cost.toFixed(3)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+/**
+ * Calculate context usage percentage from usage stats
+ */
+function calculateContextUsage(usageStats?: Session['usageStats'] | null): number | null {
+  if (!usageStats) return null;
+  const { inputTokens, outputTokens, contextWindow } = usageStats;
+  if (inputTokens == null || outputTokens == null || contextWindow == null || contextWindow === 0) {
+    return null;
+  }
+  return Math.min(Math.round(((inputTokens + outputTokens) / contextWindow) * 100), 100);
+}
+
+/**
  * Header component for the mobile app
- * Compact single-line header showing: Maestro | Session Name | Claude ID | Status
+ * Compact single-line header showing: Maestro | Session Name | Claude ID | Status | Cost | Context
  */
 interface MobileHeaderProps {
   connectionState: WebSocketState;
@@ -90,6 +113,20 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
   // Show offline status if device is offline, otherwise show connection state
   const effectiveState = isOffline ? 'offline' : connectionState;
   const statusConfig = CONNECTION_STATUS_CONFIG[effectiveState];
+
+  // Session status and usage
+  const sessionState = activeSession?.state || 'idle';
+  const isThinking = sessionState === 'busy';
+  const cost = activeSession?.usageStats?.totalCostUsd;
+  const contextUsage = calculateContextUsage(activeSession?.usageStats);
+
+  // Get status dot color
+  const getStatusDotColor = () => {
+    if (sessionState === 'busy') return colors.warning;
+    if (sessionState === 'error') return colors.error;
+    if (sessionState === 'connecting') return colors.warning;
+    return colors.success; // idle
+  };
 
   return (
     <header
@@ -121,7 +158,7 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
         Maestro
       </h1>
 
-      {/* Center: Session info (name + Claude session ID) */}
+      {/* Center: Session info (name + Claude session ID + status + usage) */}
       {activeSession && (
         <div
           style={{
@@ -134,6 +171,20 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
             overflow: 'hidden',
           }}
         >
+          {/* Session status dot */}
+          <span
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: getStatusDotColor(),
+              flexShrink: 0,
+              animation: isThinking ? 'pulse 1.5s ease-in-out infinite' : 'none',
+            }}
+            title={`Session ${sessionState}`}
+          />
+
+          {/* Session name */}
           <span
             style={{
               fontSize: '13px',
@@ -146,6 +197,8 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
           >
             {activeSession.name}
           </span>
+
+          {/* Claude Session ID pill */}
           {activeSession.claudeSessionId && (
             <span
               style={{
@@ -161,6 +214,56 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
             >
               {activeSession.claudeSessionId.slice(0, 8)}...
             </span>
+          )}
+
+          {/* Cost */}
+          {cost != null && cost > 0 && (
+            <span
+              style={{
+                fontSize: '10px',
+                color: colors.textDim,
+                backgroundColor: `${colors.textDim}15`,
+                padding: '2px 4px',
+                borderRadius: '3px',
+                flexShrink: 0,
+              }}
+              title={`Session cost: ${formatCost(cost)}`}
+            >
+              {formatCost(cost)}
+            </span>
+          )}
+
+          {/* Context usage bar */}
+          {contextUsage != null && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                flexShrink: 0,
+              }}
+              title={`Context: ${contextUsage}%`}
+            >
+              <div
+                style={{
+                  width: '30px',
+                  height: '4px',
+                  backgroundColor: `${colors.textDim}20`,
+                  borderRadius: '2px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${contextUsage}%`,
+                    height: '100%',
+                    backgroundColor: contextUsage >= 90 ? colors.error : contextUsage >= 70 ? colors.warning : colors.success,
+                    borderRadius: '2px',
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: '9px', color: colors.textDim }}>{contextUsage}%</span>
+            </div>
           )}
         </div>
       )}
@@ -179,6 +282,14 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
       >
         {statusConfig.label}
       </Badge>
+
+      {/* Pulse animation for thinking state */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </header>
   );
 }
@@ -223,11 +334,11 @@ export default function MobileApp() {
     autoRequest: true,
     requestDelay: 3000, // Wait 3 seconds before prompting
     onGranted: () => {
-      console.log('[Mobile] Notification permission granted');
+      webLogger.debug('Notification permission granted', 'Mobile');
       triggerHaptic(HAPTIC_PATTERNS.success);
     },
     onDenied: () => {
-      console.log('[Mobile] Notification permission denied');
+      webLogger.debug('Notification permission denied', 'Mobile');
     },
   });
 
@@ -239,7 +350,7 @@ export default function MobileApp() {
   } = useUnreadBadge({
     autoClearOnVisible: true, // Clear badge when user opens the app
     onCountChange: (count) => {
-      console.log('[Mobile] Unread response count:', count);
+      webLogger.debug(`Unread response count: ${count}`, 'Mobile');
     },
   });
 
@@ -291,7 +402,7 @@ export default function MobileApp() {
 
     // Add to unread badge count (works even without notification permission)
     addUnreadResponse(responseId);
-    console.log('[Mobile] Added unread response:', responseId);
+    webLogger.debug(`Added unread response: ${responseId}`, 'Mobile');
 
     // Only show notification if permission is granted
     if (notificationPermission !== 'granted') {
@@ -312,7 +423,7 @@ export default function MobileApp() {
     });
 
     if (notification) {
-      console.log('[Mobile] Notification shown for session:', session.name);
+      webLogger.debug(`Notification shown for session: ${session.name}`, 'Mobile');
 
       // Handle notification click - focus the app
       notification.onclick = () => {
@@ -328,13 +439,13 @@ export default function MobileApp() {
   // Memoize handlers to prevent unnecessary re-renders
   const wsHandlers = useMemo(() => ({
     onConnectionChange: (newState: WebSocketState) => {
-      console.log('[Mobile] Connection state:', newState);
+      webLogger.debug(`Connection state: ${newState}`, 'Mobile');
     },
     onError: (err: string) => {
-      console.error('[Mobile] WebSocket error:', err);
+      webLogger.error(`WebSocket error: ${err}`, 'Mobile');
     },
     onSessionsUpdate: (newSessions: Session[]) => {
-      console.log('[Mobile] Sessions updated:', newSessions.length);
+      webLogger.debug(`Sessions updated: ${newSessions.length}`, 'Mobile');
 
       // Update previous states map for all sessions
       newSessions.forEach(s => {
@@ -396,8 +507,83 @@ export default function MobileApp() {
     },
     onActiveSessionChanged: (sessionId: string) => {
       // Desktop app switched to a different session - sync with web
-      console.log('[Mobile] Desktop active session changed:', sessionId);
+      webLogger.debug(`Desktop active session changed: ${sessionId}`, 'Mobile');
       setActiveSessionId(sessionId);
+    },
+    onSessionOutput: (sessionId: string, data: string, source: 'ai' | 'terminal') => {
+      // Real-time output from AI or terminal - append to session logs
+      console.log(`[MobileApp] onSessionOutput called: session=${sessionId}, source=${source}, dataLen=${data?.length || 0}`);
+      webLogger.debug(`Session output: ${sessionId} (${source}) ${data.length} chars`, 'Mobile');
+
+      // Only update if this is the active session
+      setActiveSessionId(currentActiveId => {
+        console.log(`[MobileApp] Checking activeSession: currentActiveId=${currentActiveId}, incomingSession=${sessionId}, match=${currentActiveId === sessionId}`);
+        if (currentActiveId === sessionId) {
+          setSessionLogs(prev => {
+            const logKey = source === 'ai' ? 'aiLogs' : 'shellLogs';
+            const existingLogs = prev[logKey] || [];
+
+            // Check if the last entry is a streaming entry we should append to
+            const lastLog = existingLogs[existingLogs.length - 1];
+            const isStreamingAppend = lastLog &&
+              lastLog.source === 'stdout' &&
+              Date.now() - lastLog.timestamp < 5000; // Within 5 seconds
+
+            if (isStreamingAppend) {
+              // Append to existing entry
+              const updatedLogs = [...existingLogs];
+              updatedLogs[updatedLogs.length - 1] = {
+                ...lastLog,
+                text: lastLog.text + data,
+              };
+              return { ...prev, [logKey]: updatedLogs };
+            } else {
+              // Create new entry
+              const newEntry = {
+                id: `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                timestamp: Date.now(),
+                source: 'stdout' as const,
+                text: data,
+              };
+              return { ...prev, [logKey]: [...existingLogs, newEntry] };
+            }
+          });
+        }
+        return currentActiveId;
+      });
+    },
+    onSessionExit: (sessionId: string, exitCode: number) => {
+      webLogger.debug(`Session exit: ${sessionId} code=${exitCode}`, 'Mobile');
+      // Update session state to idle when process exits
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, state: 'idle' } : s
+      ));
+    },
+    onUserInput: (sessionId: string, command: string, inputMode: 'ai' | 'terminal') => {
+      // User input from desktop app - add to session logs so web interface stays in sync
+      webLogger.debug(`User input from desktop: ${sessionId} (${inputMode}) ${command.substring(0, 50)}`, 'Mobile');
+
+      // Only add if this is the active session
+      setActiveSessionId(currentActiveId => {
+        if (currentActiveId === sessionId) {
+          const userLogEntry: LogEntry = {
+            id: `user-desktop-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: Date.now(),
+            text: command,
+            source: 'user',
+          };
+          setSessionLogs(prev => {
+            const logKey = inputMode === 'ai' ? 'aiLogs' : 'shellLogs';
+            return { ...prev, [logKey]: [...prev[logKey], userLogEntry] };
+          });
+        }
+        return currentActiveId;
+      });
+    },
+    onThemeUpdate: (theme: Theme) => {
+      // Sync theme from desktop app by injecting CSS custom properties
+      webLogger.debug(`Theme update received: ${theme.name} (${theme.mode})`, 'Mobile');
+      injectCSSProperties(theme);
     },
   }), [showResponseNotification]);
 
@@ -432,13 +618,13 @@ export default function MobileApp() {
             aiLogs: session?.aiLogs || [],
             shellLogs: session?.shellLogs || [],
           });
-          console.log('[Mobile] Fetched session logs:', {
+          webLogger.debug('Fetched session logs:', 'Mobile', {
             aiLogs: session?.aiLogs?.length || 0,
             shellLogs: session?.shellLogs?.length || 0,
           });
         }
       } catch (err) {
-        console.error('[Mobile] Failed to fetch session logs:', err);
+        webLogger.error('Failed to fetch session logs', 'Mobile', err);
       } finally {
         setIsLoadingLogs(false);
       }
@@ -480,17 +666,17 @@ export default function MobileApp() {
       return false;
     },
     onCommandSent: (cmd) => {
-      console.log('[Mobile] Queued command sent:', cmd.command.substring(0, 50));
+      webLogger.debug(`Queued command sent: ${cmd.command.substring(0, 50)}`, 'Mobile');
       triggerHaptic(HAPTIC_PATTERNS.success);
     },
     onCommandFailed: (cmd, error) => {
-      console.error('[Mobile] Queued command failed:', cmd.command.substring(0, 50), error);
+      webLogger.error(`Queued command failed: ${cmd.command.substring(0, 50)}`, 'Mobile', error);
     },
     onProcessingStart: () => {
-      console.log('[Mobile] Processing offline queue...');
+      webLogger.debug('Processing offline queue...', 'Mobile');
     },
     onProcessingComplete: (successCount, failCount) => {
-      console.log('[Mobile] Offline queue processed. Success:', successCount, 'Failed:', failCount);
+      webLogger.debug(`Offline queue processed. Success: ${successCount}, Failed: ${failCount}`, 'Mobile');
       if (successCount > 0) {
         triggerHaptic(HAPTIC_PATTERNS.success);
       }
@@ -499,7 +685,7 @@ export default function MobileApp() {
 
   // Handle refresh - request updated session list
   const handleRefresh = useCallback(async () => {
-    console.log('[Mobile] Pull-to-refresh triggered');
+    webLogger.debug('Pull-to-refresh triggered', 'Mobile');
 
     // Provide haptic feedback
     triggerHaptic(HAPTIC_PATTERNS.tap);
@@ -567,15 +753,27 @@ export default function MobileApp() {
     // Add to command history
     addToHistory(command, activeSessionId, currentMode);
 
+    // Add user message to session logs immediately for display
+    const userLogEntry: LogEntry = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: Date.now(),
+      text: command,
+      source: 'user',
+    };
+    setSessionLogs(prev => {
+      const logKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
+      return { ...prev, [logKey]: [...prev[logKey], userLogEntry] };
+    });
+
     // If offline or not connected, queue the command for later
     if (isOffline || !isActuallyConnected) {
       const queued = queueCommand(activeSessionId, command, currentMode);
       if (queued) {
-        console.log('[Mobile] Command queued for later:', command.substring(0, 50));
+        webLogger.debug(`Command queued for later: ${command.substring(0, 50)}`, 'Mobile');
         // Provide different haptic feedback for queued commands
         triggerHaptic(HAPTIC_PATTERNS.tap);
       } else {
-        console.warn('[Mobile] Failed to queue command - queue may be full');
+        webLogger.warn('Failed to queue command - queue may be full', 'Mobile');
       }
     } else {
       // Send the command to the active session immediately
@@ -584,7 +782,7 @@ export default function MobileApp() {
         sessionId: activeSessionId,
         command,
       });
-      console.log('[Mobile] Command sent:', command, 'to session:', activeSessionId);
+      webLogger.debug(`Command sent: ${command} to session: ${activeSessionId}`, 'Mobile');
     }
 
     // Clear the input
@@ -617,7 +815,7 @@ export default function MobileApp() {
         : s
     ));
 
-    console.log('[Mobile] Mode switched to:', mode, 'for session:', activeSessionId);
+    webLogger.debug(`Mode switched to: ${mode} for session: ${activeSessionId}`, 'Mobile');
   }, [activeSessionId, send]);
 
   // Handle interrupt request
@@ -640,44 +838,15 @@ export default function MobileApp() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        console.log('[Mobile] Session interrupted:', activeSessionId);
+        webLogger.debug(`Session interrupted: ${activeSessionId}`, 'Mobile');
         triggerHaptic(HAPTIC_PATTERNS.success);
       } else {
-        console.error('[Mobile] Failed to interrupt session:', result.error);
+        webLogger.error(`Failed to interrupt session: ${result.error}`, 'Mobile');
       }
     } catch (error) {
-      console.error('[Mobile] Error interrupting session:', error);
+      webLogger.error('Error interrupting session', 'Mobile', error);
     }
   }, [activeSessionId]);
-
-  // Handle clear session request (from quick actions menu)
-  const handleClearSession = useCallback(() => {
-    if (!activeSessionId) return;
-
-    // Provide haptic feedback
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-
-    // Send clear command via WebSocket
-    send({
-      type: 'clear_session',
-      sessionId: activeSessionId,
-    });
-
-    console.log('[Mobile] Clear session requested:', activeSessionId);
-  }, [activeSessionId, send]);
-
-  // Handle new session request (from quick actions menu)
-  const handleNewSession = useCallback(() => {
-    // Provide haptic feedback
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-
-    // Send new session command via WebSocket
-    send({
-      type: 'new_session',
-    });
-
-    console.log('[Mobile] New session requested');
-  }, [send]);
 
   // Handle opening history drawer
   const handleOpenHistory = useCallback(() => {
@@ -721,7 +890,7 @@ export default function MobileApp() {
 
     setShowResponseViewer(true);
     triggerHaptic(HAPTIC_PATTERNS.tap);
-    console.log('[Mobile] Opening response viewer at index:', index);
+    webLogger.debug(`Opening response viewer at index: ${index}`, 'Mobile');
   }, [allResponses]);
 
   // Handle navigating between responses in the viewer
@@ -729,7 +898,7 @@ export default function MobileApp() {
     if (index >= 0 && index < allResponses.length) {
       setResponseIndex(index);
       setSelectedResponse(allResponses[index].response);
-      console.log('[Mobile] Navigating to response index:', index);
+      webLogger.debug(`Navigating to response index: ${index}`, 'Mobile');
     }
   }, [allResponses]);
 
@@ -896,7 +1065,7 @@ export default function MobileApp() {
             logs={currentLogs}
             inputMode={activeSession.inputMode as 'ai' | 'terminal'}
             autoScroll={true}
-            maxHeight="calc(100vh - 350px)"
+            maxHeight="calc(100vh - 280px)"
           />
         )}
       </div>
@@ -947,14 +1116,6 @@ export default function MobileApp() {
           activeSessionId={activeSessionId}
           onSelectSession={handleSelectSession}
           onOpenAllSessions={handleOpenAllSessions}
-        />
-      )}
-
-      {/* Session status banner - shown when connected and a session is selected */}
-      {showSessionPillBar && activeSession && (
-        <SessionStatusBanner
-          session={activeSession}
-          onExpandResponse={handleExpandResponse}
         />
       )}
 
@@ -1009,11 +1170,9 @@ export default function MobileApp() {
           style={{
             position: 'fixed',
             // Adjust top position based on what's shown above
-            // Header: ~56px, Session pill bar: ~52px, Status banner: ~44px when active session
+            // Header: ~56px, Session pill bar: ~52px
             top: showSessionPillBar
-              ? activeSession
-                ? 'max(152px, calc(152px + env(safe-area-inset-top)))' // Header + pill bar + status banner
-                : 'max(108px, calc(108px + env(safe-area-inset-top)))' // Header + pill bar
+              ? 'max(108px, calc(108px + env(safe-area-inset-top)))' // Header + pill bar
               : 'max(56px, calc(56px + env(safe-area-inset-top)))', // Just header
             left: 0,
             right: 0,
@@ -1059,7 +1218,7 @@ export default function MobileApp() {
             ? 'Select a session first...'
             : activeSession?.inputMode === 'ai'
               ? `Ask ${activeSession?.toolType === 'claude-code' ? 'Claude' : activeSession?.toolType || 'AI'} about ${activeSession?.name || 'this session'}...`
-              : '$ Run shell command...'
+              : 'Run shell command...'
         }
         disabled={!activeSessionId}
         inputMode={(activeSession?.inputMode as InputMode) || 'ai'}
@@ -1073,9 +1232,8 @@ export default function MobileApp() {
             .slice(0, 5)
         }
         onSelectRecentCommand={handleSelectHistoryCommand}
-        onClearSession={handleClearSession}
-        onNewSession={handleNewSession}
         hasActiveSession={!!activeSessionId}
+        cwd={activeSession?.cwd}
       />
 
       {/* Command history drawer - swipe up from input area */}

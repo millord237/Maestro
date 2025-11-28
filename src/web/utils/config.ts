@@ -4,6 +4,7 @@
  * Configuration injected by the server into window.__MAESTRO_CONFIG__
  * This tells the React app about the security token and current context.
  */
+import { webLogger } from './logger';
 
 /**
  * Configuration injected by the server
@@ -37,7 +38,7 @@ export function getMaestroConfig(): MaestroConfig {
 
   // Development fallback - use current URL structure
   // In dev mode, you'd need to manually set the token
-  console.warn('[config] No __MAESTRO_CONFIG__ found, using development defaults');
+  webLogger.warn('No __MAESTRO_CONFIG__ found, using development defaults', 'Config');
 
   // Try to extract token from URL path (e.g., /abc123-def456/...)
   const pathParts = window.location.pathname.split('/').filter(Boolean);
