@@ -1118,8 +1118,8 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                 </div>
               )}
 
-              {/* Queued messages section */}
-              {session.messageQueue && session.messageQueue.length > 0 && (
+              {/* Queued messages section - only show in AI mode */}
+              {session.inputMode === 'ai' && session.messageQueue && session.messageQueue.length > 0 && (
                 <>
                   {/* QUEUED separator */}
                   <div className="mx-6 my-3 flex items-center gap-3">
