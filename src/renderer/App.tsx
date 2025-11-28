@@ -186,6 +186,10 @@ export default function MaestroConsole() {
   // Images Staging (only for AI mode - terminal doesn't support images)
   const [aiStagedImages, setAiStagedImages] = useState<string[]>([]);
 
+  // Global Live Mode State (web interface for all sessions)
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [webInterfaceUrl, setWebInterfaceUrl] = useState<string | null>(null);
+
   // Restore focus when LogViewer closes to ensure global hotkeys work
   useEffect(() => {
     // When LogViewer closes, restore focus to main container or input
@@ -858,7 +862,6 @@ export default function MaestroConsole() {
     [sessions, activeSessionId]
   );
   const theme = THEMES[activeThemeId];
-  const anyLive = sessions.some(s => s.isLive);
 
   // Combine built-in slash commands with custom AI commands for autocomplete
   const allSlashCommands = useMemo(() => {
@@ -1823,27 +1826,27 @@ export default function MaestroConsole() {
     }));
   };
 
-  const toggleLive = async (sessId: string) => {
-    const session = sessions.find(s => s.id === sessId);
-    if (!session) return;
-
-    console.log('[toggleLive] Session ID:', sessId);
-    console.log('[toggleLive] Claude Session ID:', session.claudeSessionId);
-
+  // Toggle global live mode (enables web interface for all sessions)
+  const toggleGlobalLive = async () => {
     try {
-      // Toggle live mode - the API handles both enabling and disabling
-      const result = await window.maestro.live.toggle(sessId, session.claudeSessionId);
-      console.log('[toggleLive] Result:', result);
-      setSessions(prev => prev.map(s => {
-        if (s.id !== sessId) return s;
-        return {
-          ...s,
-          isLive: result.live,
-          liveUrl: result.url || undefined
-        };
-      }));
+      if (isLiveMode) {
+        // Turn off - clear state
+        setIsLiveMode(false);
+        setWebInterfaceUrl(null);
+        console.log('[toggleGlobalLive] Disabled web interface');
+      } else {
+        // Turn on - get the dashboard URL
+        const url = await window.maestro.live.getDashboardUrl();
+        if (url) {
+          setIsLiveMode(true);
+          setWebInterfaceUrl(url);
+          console.log('[toggleGlobalLive] Enabled web interface:', url);
+        } else {
+          console.error('[toggleGlobalLive] Failed to get dashboard URL');
+        }
+      }
     } catch (error) {
-      console.error('Failed to toggle live mode:', error);
+      console.error('[toggleGlobalLive] Error:', error);
     }
   };
 
@@ -3141,8 +3144,10 @@ export default function MaestroConsole() {
           editingGroupId={editingGroupId}
           editingSessionId={editingSessionId}
           draggingSessionId={draggingSessionId}
-          anyLive={anyLive}
           shortcuts={shortcuts}
+          isLiveMode={isLiveMode}
+          webInterfaceUrl={webInterfaceUrl}
+          toggleGlobalLive={toggleGlobalLive}
           setActiveFocus={setActiveFocus}
           setActiveSessionId={setActiveSessionId}
           setLeftSidebarOpen={setLeftSidebarOpen}
@@ -3281,7 +3286,6 @@ export default function MaestroConsole() {
         terminalOutputRef={terminalOutputRef}
         fileTreeContainerRef={fileTreeContainerRef}
         fileTreeFilterInputRef={fileTreeFilterInputRef}
-        toggleLive={toggleLive}
         toggleInputMode={toggleInputMode}
         processInput={processInput}
         handleInterrupt={handleInterrupt}

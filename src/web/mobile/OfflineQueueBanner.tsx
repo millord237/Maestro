@@ -16,7 +16,7 @@ import { useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { Badge } from '../components/Badge';
 import type { QueuedCommand, QueueStatus } from '../hooks/useOfflineQueue';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 
 export interface OfflineQueueBannerProps {
   /** Queued commands */

@@ -23,7 +23,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useThemeColors, useTheme } from '../components/ThemeProvider';
 import type { LastResponsePreview } from '../hooks/useSessions';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 
 /**
  * Represents a response item that can be navigated to

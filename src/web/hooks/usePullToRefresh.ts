@@ -6,7 +6,8 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { GESTURE_THRESHOLDS } from '../mobile';
+// Import from constants directly to avoid circular dependency with mobile/index.tsx
+import { GESTURE_THRESHOLDS } from '../mobile/constants';
 
 export interface UsePullToRefreshOptions {
   /** Called when pull-to-refresh is triggered */

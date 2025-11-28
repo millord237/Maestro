@@ -20,7 +20,7 @@ import React, { useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
 import type { Session, UsageStats, LastResponsePreview } from '../hooks/useSessions';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 
 /**
  * Props for SessionStatusBanner component

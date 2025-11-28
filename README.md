@@ -238,9 +238,9 @@ Settings are stored in:
 
 Maestro includes a built-in web server for mobile remote control:
 
-1. **Automatic Security**: Web server runs on a random port with an auto-generated security token
-2. **QR Code Access**: Scan a QR code from the session to connect instantly from your phone
-3. **Live Sessions**: Toggle individual sessions as "live" to make them accessible from the web interface
+1. **Automatic Security**: Web server runs on a random port with an auto-generated security token embedded in the URL
+2. **QR Code Access**: Scan a QR code to connect instantly from your phone
+3. **Global Access**: All sessions are accessible when the web interface is enabled - the security token protects access
 
 ### Mobile Web Interface
 
@@ -252,10 +252,11 @@ The mobile web interface provides:
 - Swipe gestures for common actions
 - Quick actions menu for the send button
 
-To access a session from your phone:
-1. Click the "Go Live" button on a session to enable remote access
-2. Scan the QR code that appears, or copy the secure URL
-3. The web interface will connect via WebSocket for real-time updates
+To access sessions from your phone:
+1. Click the "OFFLINE" button in the header (next to the MAESTRO logo) to enable the web interface
+2. The button changes to "LIVE" and shows a QR code overlay
+3. Scan the QR code or copy the secure URL to access all your sessions remotely
+4. Click "LIVE" again to view the QR code, or toggle off to disable remote access
 
 ## Contributing
 

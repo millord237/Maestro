@@ -19,7 +19,8 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
-import { GESTURE_THRESHOLDS } from '../mobile';
+// Import from constants directly to avoid circular dependency with mobile/index.tsx
+import { GESTURE_THRESHOLDS } from '../mobile/constants';
 
 /**
  * Swipe direction enum

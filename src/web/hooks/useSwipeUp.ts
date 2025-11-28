@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useRef } from 'react';
-import { GESTURE_THRESHOLDS } from '../mobile';
+// Import from constants directly to avoid circular dependency with mobile/index.tsx
+import { GESTURE_THRESHOLDS } from '../mobile/constants';
 
 export interface UseSwipeUpOptions {
   /** Called when swipe up is detected */

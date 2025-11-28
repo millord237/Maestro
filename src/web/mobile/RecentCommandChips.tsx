@@ -15,7 +15,7 @@
 
 import React, { useCallback, useRef, useEffect } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
 
 /** Maximum characters to show in a chip before truncating */

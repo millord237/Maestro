@@ -87,7 +87,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // API requests - network only, no caching (requires live connection)
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) {
+  // Note: URLs include security token in path, e.g., /{TOKEN}/api/... or /{TOKEN}/ws/...
+  if (url.pathname.includes('/api/') || url.pathname.includes('/ws/')) {
     event.respondWith(
       fetch(request).catch(() => {
         // Return a JSON error response for API requests when offline

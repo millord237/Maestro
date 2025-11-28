@@ -41,27 +41,43 @@ export async function getLocalIpAddress(): Promise<string> {
 function getIpViaUdp(): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = dgram.createSocket('udp4');
+    let settled = false;
+
+    const cleanup = () => {
+      if (!settled) {
+        settled = true;
+        socket.removeAllListeners();
+        try {
+          socket.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+    };
 
     socket.on('error', (err) => {
-      socket.close();
+      if (settled) return;
+      cleanup();
       reject(err);
     });
 
     // Connect to Google DNS - doesn't actually send data
     socket.connect(53, '8.8.8.8', () => {
+      if (settled) return;
       try {
         const address = socket.address();
-        socket.close();
+        cleanup();
         resolve(address.address);
       } catch (err) {
-        socket.close();
+        cleanup();
         reject(err);
       }
     });
 
     // Timeout after 1 second
     setTimeout(() => {
-      socket.close();
+      if (settled) return;
+      cleanup();
       reject(new Error('Timeout'));
     }, 1000);
   });

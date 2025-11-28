@@ -16,7 +16,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { type WebSocketState } from '../hooks/useWebSocket';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 
 /**
  * Props for ConnectionStatusIndicator
@@ -140,6 +140,25 @@ export function ConnectionStatusIndicator({
     }
   }, [connectionState, isOffline]);
 
+  // Handle retry button click
+  // NOTE: All hooks must be called before any early returns (React rules of hooks)
+  const handleRetry = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+    onRetry();
+  }, [onRetry]);
+
+  // Handle dismiss button click
+  const handleDismiss = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+    setIsDismissed(true);
+  }, []);
+
+  // Toggle details expansion
+  const handleToggleDetails = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.tap);
+    setShowDetails(prev => !prev);
+  }, []);
+
   // Don't render if connected/authenticated or dismissed
   const isConnected = connectionState === 'connected' || connectionState === 'authenticated';
   if (isConnected || (isDismissed && connectionState !== 'connecting' && connectionState !== 'authenticating')) {
@@ -215,24 +234,6 @@ export function ConnectionStatusIndicator({
         return <DisconnectIcon />;
     }
   };
-
-  // Handle retry button click
-  const handleRetry = useCallback(() => {
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-    onRetry();
-  }, [onRetry]);
-
-  // Handle dismiss button click
-  const handleDismiss = useCallback(() => {
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-    setIsDismissed(true);
-  }, []);
-
-  // Toggle details expansion
-  const handleToggleDetails = useCallback(() => {
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-    setShowDetails(prev => !prev);
-  }, []);
 
   return (
     <div

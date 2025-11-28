@@ -98,6 +98,7 @@ export type GetSessionsCallback = () => Array<{
   groupEmoji: string | null;
   usageStats?: SessionUsageStats | null;
   lastResponse?: LastResponsePreview | null;
+  claudeSessionId?: string | null;
 }>;
 
 // Session detail type for single session endpoint
@@ -506,18 +507,10 @@ export class WebServer {
       this.serveIndexHtml(reply);
     });
 
-    // Single session view
+    // Single session view - works for any valid session (security token protects access)
     this.server.get(`/${token}/session/:sessionId`, async (request, reply) => {
       const { sessionId } = request.params as { sessionId: string };
-
-      // Check if session is live
-      if (!this.isSessionLive(sessionId)) {
-        return reply.code(404).send({
-          error: 'Session not found',
-          message: 'This session is not currently live. Enable "Live" mode in the desktop app.',
-        });
-      }
-
+      // Note: Session validation happens in the frontend via the sessions list
       this.serveIndexHtml(reply, sessionId);
     });
 
@@ -544,7 +537,7 @@ export class WebServer {
   private setupApiRoutes() {
     const token = this.securityToken;
 
-    // Get all live sessions
+    // Get all sessions (not just "live" ones - security token protects access)
     this.server.get(`/${token}/api/sessions`, {
       config: {
         rateLimit: {
@@ -553,27 +546,27 @@ export class WebServer {
         },
       },
     }, async () => {
-      // Only return live sessions with their details
       const sessions = this.getSessionsCallback ? this.getSessionsCallback() : [];
 
-      // Filter to only live sessions and enrich with live info
-      const liveSessionData = sessions.filter(s => this.isSessionLive(s.id)).map(s => {
+      // Enrich all sessions with live info if available
+      const sessionData = sessions.map(s => {
         const liveInfo = this.liveSessions.get(s.id);
         return {
           ...s,
-          claudeSessionId: liveInfo?.claudeSessionId,
+          claudeSessionId: liveInfo?.claudeSessionId || s.claudeSessionId,
           liveEnabledAt: liveInfo?.enabledAt,
+          isLive: this.isSessionLive(s.id),
         };
       });
 
       return {
-        sessions: liveSessionData,
-        count: liveSessionData.length,
+        sessions: sessionData,
+        count: sessionData.length,
         timestamp: Date.now(),
       };
     });
 
-    // Session detail endpoint
+    // Session detail endpoint - works for any valid session (security token protects access)
     this.server.get(`/${token}/api/session/:id`, {
       config: {
         rateLimit: {
@@ -583,15 +576,6 @@ export class WebServer {
       },
     }, async (request, reply) => {
       const { id } = request.params as { id: string };
-
-      // Must be a live session
-      if (!this.isSessionLive(id)) {
-        return reply.code(404).send({
-          error: 'Not Found',
-          message: 'Session not live',
-          timestamp: Date.now(),
-        });
-      }
 
       if (!this.getSessionDetailCallback) {
         return reply.code(503).send({
@@ -614,14 +598,15 @@ export class WebServer {
       return {
         session: {
           ...session,
-          claudeSessionId: liveInfo?.claudeSessionId,
+          claudeSessionId: liveInfo?.claudeSessionId || session.claudeSessionId,
           liveEnabledAt: liveInfo?.enabledAt,
+          isLive: this.isSessionLive(id),
         },
         timestamp: Date.now(),
       };
     });
 
-    // Send command to session
+    // Send command to session - works for any valid session (security token protects access)
     this.server.post(`/${token}/api/session/:id/send`, {
       config: {
         rateLimit: {
@@ -634,13 +619,8 @@ export class WebServer {
       const body = request.body as { command?: string } | undefined;
       const command = body?.command;
 
-      if (!this.isSessionLive(id)) {
-        return reply.code(404).send({
-          error: 'Not Found',
-          message: 'Session not live',
-          timestamp: Date.now(),
-        });
-      }
+      // Note: We don't check isSessionLive() here - the callback validates the session
+      // exists and the security token already protects access.
 
       if (!command || typeof command !== 'string') {
         return reply.code(400).send({
@@ -707,7 +687,7 @@ export class WebServer {
       };
     });
 
-    // Interrupt session
+    // Interrupt session - works for any valid session (security token protects access)
     this.server.post(`/${token}/api/session/:id/interrupt`, {
       config: {
         rateLimit: {
@@ -718,13 +698,8 @@ export class WebServer {
     }, async (request, reply) => {
       const { id } = request.params as { id: string };
 
-      if (!this.isSessionLive(id)) {
-        return reply.code(404).send({
-          error: 'Not Found',
-          message: 'Session not live',
-          timestamp: Date.now(),
-        });
-      }
+      // Note: We don't check isSessionLive() here - the callback validates the session
+      // exists and the security token already protects access.
 
       if (!this.interruptSessionCallback) {
         return reply.code(503).send({
@@ -785,20 +760,21 @@ export class WebServer {
         timestamp: Date.now(),
       }));
 
-      // Send initial live sessions list
+      // Send initial sessions list (all sessions, not just "live" ones)
       if (this.getSessionsCallback) {
         const allSessions = this.getSessionsCallback();
-        const liveSessions = allSessions.filter(s => this.isSessionLive(s.id)).map(s => {
+        const sessionsWithLiveInfo = allSessions.map(s => {
           const liveInfo = this.liveSessions.get(s.id);
           return {
             ...s,
-            claudeSessionId: liveInfo?.claudeSessionId,
+            claudeSessionId: liveInfo?.claudeSessionId || s.claudeSessionId,
             liveEnabledAt: liveInfo?.enabledAt,
+            isLive: this.isSessionLive(s.id),
           };
         });
         connection.socket.send(JSON.stringify({
           type: 'sessions_list',
-          sessions: liveSessions,
+          sessions: sessionsWithLiveInfo,
           timestamp: Date.now(),
         }));
       }
@@ -884,16 +860,9 @@ export class WebServer {
           return;
         }
 
-        // Check if session is live
-        if (!this.isSessionLive(sessionId)) {
-          client.socket.send(JSON.stringify({
-            type: 'error',
-            message: 'Session is not live',
-            sessionId,
-            timestamp: Date.now(),
-          }));
-          return;
-        }
+        // Note: We don't check isSessionLive() here because the web interface
+        // should be able to send commands to any valid session. The callback
+        // validates the session exists and the security token protects access.
 
         // Write command to session
         if (this.writeToSessionCallback) {
@@ -942,20 +911,23 @@ export class WebServer {
       }
 
       case 'get_sessions': {
-        // Request updated sessions list
+        // Request updated sessions list - returns all sessions (not just "live" ones)
+        // The security token already protects access to this endpoint
         if (this.getSessionsCallback) {
           const allSessions = this.getSessionsCallback();
-          const liveSessions = allSessions.filter(s => this.isSessionLive(s.id)).map(s => {
+          // Enrich sessions with live info if available
+          const sessionsWithLiveInfo = allSessions.map(s => {
             const liveInfo = this.liveSessions.get(s.id);
             return {
               ...s,
-              claudeSessionId: liveInfo?.claudeSessionId,
+              claudeSessionId: liveInfo?.claudeSessionId || s.claudeSessionId,
               liveEnabledAt: liveInfo?.enabledAt,
+              isLive: this.isSessionLive(s.id),
             };
           });
           client.socket.send(JSON.stringify({
             type: 'sessions_list',
-            sessions: liveSessions,
+            sessions: sessionsWithLiveInfo,
             timestamp: Date.now(),
           }));
         }

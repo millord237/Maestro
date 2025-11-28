@@ -18,7 +18,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useThemeColors } from '../components/ThemeProvider';
 import { StatusDot, type SessionStatus } from '../components/Badge';
 import type { Session, GroupInfo } from '../hooks/useSessions';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 
 /** Duration in ms to trigger long-press */
 const LONG_PRESS_DURATION = 500;

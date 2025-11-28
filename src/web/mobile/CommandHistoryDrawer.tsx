@@ -17,7 +17,7 @@
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
-import { triggerHaptic, HAPTIC_PATTERNS, GESTURE_THRESHOLDS } from './index';
+import { triggerHaptic, HAPTIC_PATTERNS, GESTURE_THRESHOLDS } from './constants';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
 

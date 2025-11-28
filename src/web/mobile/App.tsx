@@ -16,7 +16,8 @@ import { Badge, type BadgeVariant } from '../components/Badge';
 import { PullToRefreshIndicator } from '../components/PullToRefresh';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useOfflineStatus, useMaestroMode } from '../main';
-import { triggerHaptic, HAPTIC_PATTERNS } from './index';
+import { buildApiUrl } from '../utils/config';
+import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 import { SessionPillBar } from './SessionPillBar';
 import { AllSessionsView } from './AllSessionsView';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
@@ -72,17 +73,18 @@ const CONNECTION_STATUS_CONFIG: Record<WebSocketState | 'offline', ConnectionSta
 
 /**
  * Header component for the mobile app
- * Displays app title (clickable to go to dashboard) and connection status indicator
+ * Compact single-line header showing: Maestro | Session Name | Claude ID | Status
  */
 interface MobileHeaderProps {
   connectionState: WebSocketState;
   isOffline: boolean;
   onRetry?: () => void;
+  activeSession?: Session | null;
 }
 
-function MobileHeader({ connectionState, isOffline, onRetry }: MobileHeaderProps) {
+function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: MobileHeaderProps) {
   const colors = useThemeColors();
-  const { isDashboard, isSession, sessionId, goToDashboard } = useMaestroMode();
+  const { isSession, goToDashboard } = useMaestroMode();
 
   // Show offline status if device is offline, otherwise show connection state
   const effectiveState = isOffline ? 'offline' : connectionState;
@@ -94,73 +96,88 @@ function MobileHeader({ connectionState, isOffline, onRetry }: MobileHeaderProps
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '12px 16px',
-        paddingTop: 'max(12px, env(safe-area-inset-top))',
+        padding: '8px 12px',
+        paddingTop: 'max(8px, env(safe-area-inset-top))',
         borderBottom: `1px solid ${colors.border}`,
         backgroundColor: colors.bgSidebar,
-        minHeight: '56px',
+        minHeight: '44px',
+        gap: '8px',
       }}
     >
-      <div
+      {/* Left: Maestro logo */}
+      <h1
+        onClick={isSession ? goToDashboard : undefined}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
+          fontSize: '16px',
+          fontWeight: 600,
+          margin: 0,
+          color: colors.textMain,
+          cursor: isSession ? 'pointer' : 'default',
+          flexShrink: 0,
         }}
+        title={isSession ? 'Go to dashboard' : undefined}
       >
-        {/* Maestro logo/title - clickable to go to dashboard */}
-        <h1
-          onClick={isSession ? goToDashboard : undefined}
-          style={{
-            fontSize: '18px',
-            fontWeight: 600,
-            margin: 0,
-            color: colors.textMain,
-            cursor: isSession ? 'pointer' : 'default',
-          }}
-          title={isSession ? 'Go to dashboard' : undefined}
-        >
-          Maestro
-        </h1>
+        Maestro
+      </h1>
 
-        {/* Show back arrow when in session mode */}
-        {isSession && (
+      {/* Center: Session info (name + Claude session ID) */}
+      {activeSession && (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: 0,
+            overflow: 'hidden',
+          }}
+        >
           <span
-            onClick={goToDashboard}
             style={{
-              fontSize: '12px',
-              color: colors.textDim,
-              cursor: 'pointer',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              backgroundColor: colors.bgMain,
+              fontSize: '13px',
+              fontWeight: 500,
+              color: colors.textMain,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            ← All Sessions
+            {activeSession.name}
           </span>
-        )}
-      </div>
+          {activeSession.claudeSessionId && (
+            <span
+              style={{
+                fontSize: '10px',
+                color: colors.textDim,
+                fontFamily: 'monospace',
+                backgroundColor: colors.bgMain,
+                padding: '2px 4px',
+                borderRadius: '3px',
+                flexShrink: 0,
+              }}
+              title={`Claude Session: ${activeSession.claudeSessionId}`}
+            >
+              {activeSession.claudeSessionId.slice(0, 8)}...
+            </span>
+          )}
+        </div>
+      )}
 
-      <div
+      {/* Right: Connection status */}
+      <Badge
+        variant={statusConfig.variant}
+        badgeStyle="subtle"
+        size="sm"
+        pulse={statusConfig.pulse}
+        onClick={!isOffline && connectionState === 'disconnected' ? onRetry : undefined}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
+          cursor: !isOffline && connectionState === 'disconnected' ? 'pointer' : 'default',
+          flexShrink: 0,
         }}
       >
-        <Badge
-          variant={statusConfig.variant}
-          badgeStyle="subtle"
-          size="sm"
-          pulse={statusConfig.pulse}
-          onClick={!isOffline && connectionState === 'disconnected' ? onRetry : undefined}
-          style={{
-            cursor: !isOffline && connectionState === 'disconnected' ? 'pointer' : 'default',
-          }}
-        >
-          {statusConfig.label}
-        </Badge>
-      </div>
+        {statusConfig.label}
+      </Badge>
     </header>
   );
 }
@@ -564,9 +581,9 @@ export default function MobileApp() {
     triggerHaptic(HAPTIC_PATTERNS.tap);
 
     try {
-      // Get the base URL for API requests
-      const baseUrl = `${window.location.protocol}//${window.location.host}`;
-      const response = await fetch(`${baseUrl}/api/session/${activeSessionId}/interrupt`, {
+      // Build the API URL with security token in path
+      const apiUrl = buildApiUrl(`/session/${activeSessionId}/interrupt`);
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -771,25 +788,115 @@ export default function MobileApp() {
       );
     }
 
-    // Connected or authenticated state
+    // Connected or authenticated state - show conversation or prompt to select session
+    if (!activeSession) {
+      return (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: '14px', color: colors.textDim }}>
+            Select a session above to get started
+          </p>
+        </div>
+      );
+    }
+
+    // Get the last response for the active session
+    const sessionLastResponse = (activeSession as any).lastResponse as LastResponsePreview | null;
+
+    if (!sessionLastResponse) {
+      return (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: '14px', color: colors.textDim }}>
+            {activeSession.inputMode === 'ai'
+              ? 'Ask your AI assistant anything'
+              : 'Run shell commands'}
+          </p>
+        </div>
+      );
+    }
+
+    // Show last response in a cell format
     return (
       <div
         style={{
-          marginBottom: '24px',
-          padding: '16px',
-          borderRadius: '12px',
-          backgroundColor: colors.bgSidebar,
-          border: `1px solid ${colors.border}`,
-          maxWidth: '300px',
+          width: '100%',
+          maxWidth: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          alignItems: 'stretch',
         }}
       >
-        <h2 style={{ fontSize: '16px', marginBottom: '8px', color: colors.textMain }}>
-          Mobile Remote Control
-        </h2>
-        <p style={{ fontSize: '14px', color: colors.textDim }}>
-          Send commands to your AI assistants from anywhere. Session selector
-          and command input will be added next.
-        </p>
+        {/* Response cell */}
+        <div
+          onClick={() => handleExpandResponse(sessionLastResponse)}
+          style={{
+            backgroundColor: colors.bgSidebar,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            padding: '12px',
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '10px',
+              color: colors.textDim,
+              marginBottom: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}
+          >
+            {sessionLastResponse.source === 'stdout' ? 'AI Response' : sessionLastResponse.source}
+          </div>
+          <div
+            style={{
+              fontSize: '13px',
+              color: colors.textMain,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontFamily: 'monospace',
+              lineHeight: 1.4,
+              maxHeight: '200px',
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            {sessionLastResponse.text}
+            {sessionLastResponse.fullLength > sessionLastResponse.text.length && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '40px',
+                  background: `linear-gradient(transparent, ${colors.bgSidebar})`,
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  justifyContent: 'center',
+                  paddingBottom: '4px',
+                }}
+              >
+                <span style={{ fontSize: '11px', color: colors.accent }}>
+                  Tap to see full response
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -813,11 +920,12 @@ export default function MobileApp() {
 
   return (
     <div style={containerStyle}>
-      {/* Header with connection status */}
+      {/* Header with connection status and session info */}
       <MobileHeader
         connectionState={connectionState}
         isOffline={isOffline}
         onRetry={handleRetry}
+        activeSession={activeSession}
       />
 
       {/* Connection status indicator with retry button - shows when disconnected or reconnecting */}
@@ -911,21 +1019,24 @@ export default function MobileApp() {
           }}
         />
 
-        {/* Content wrapper to center items when not scrolling */}
+        {/* Content wrapper */}
         <div
           style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: connectionState === 'connected' || connectionState === 'authenticated' ? 'flex-start' : 'center',
             width: '100%',
           }}
         >
           {renderContent()}
-          <p style={{ fontSize: '12px', color: colors.textDim }}>
-            Make sure Maestro desktop app is running
-          </p>
+          {/* Show help text only when disconnected/connecting */}
+          {connectionState !== 'connected' && connectionState !== 'authenticated' && (
+            <p style={{ fontSize: '12px', color: colors.textDim }}>
+              Make sure Maestro desktop app is running
+            </p>
+          )}
           {lastRefreshTime && (connectionState === 'connected' || connectionState === 'authenticated') && (
             <p style={{ fontSize: '11px', color: colors.textDim, marginTop: '8px' }}>
               Last updated: {lastRefreshTime.toLocaleTimeString()}
@@ -941,14 +1052,24 @@ export default function MobileApp() {
         value={commandInput}
         onChange={handleCommandChange}
         onSubmit={handleCommandSubmit}
-        placeholder={activeSessionId ? 'Enter command...' : 'Select a session first...'}
+        placeholder={
+          !activeSessionId
+            ? 'Select a session first...'
+            : activeSession?.inputMode === 'ai'
+              ? `Ask ${activeSession?.toolType === 'claude-code' ? 'Claude' : activeSession?.toolType || 'AI'} about ${activeSession?.name || 'this session'}...`
+              : '$ Run shell command...'
+        }
         disabled={!activeSessionId}
         inputMode={(activeSession?.inputMode as InputMode) || 'ai'}
         onModeToggle={handleModeToggle}
         isSessionBusy={activeSession?.state === 'busy'}
         onInterrupt={handleInterrupt}
         onHistoryOpen={handleOpenHistory}
-        recentCommands={getUniqueCommands(5)}
+        recentCommands={
+          getUniqueCommands(10)
+            .filter(entry => entry.mode === activeSession?.inputMode)
+            .slice(0, 5)
+        }
         onSelectRecentCommand={handleSelectHistoryCommand}
         onClearSession={handleClearSession}
         onNewSession={handleNewSession}
