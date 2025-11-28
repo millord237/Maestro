@@ -174,14 +174,6 @@ export default function MaestroConsole() {
   const [agentSessionsOpen, setAgentSessionsOpen] = useState(false);
   const [activeClaudeSessionId, setActiveClaudeSessionId] = useState<string | null>(null);
 
-  // Recent Claude sessions for quick access (breadcrumbs when session hopping)
-  const [recentClaudeSessions, setRecentClaudeSessions] = useState<Array<{
-    sessionId: string;
-    firstMessage: string;
-    timestamp: string;
-    sessionName?: string;
-  }>>([]);
-
   // Batch Runner Modal State
   const [batchRunnerModalOpen, setBatchRunnerModalOpen] = useState(false);
   const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
@@ -3787,28 +3779,30 @@ export default function MaestroConsole() {
           // Switch to AI mode since we're resuming an AI session
           console.log('[onResumeClaudeSession] Resuming session:', claudeSessionId, 'activeSession:', activeSession?.id, activeSession?.claudeSessionId);
           if (activeSession) {
+            // Track this session in recent sessions list
+            const firstMessage = messages.find(m => m.source === 'user')?.text || '';
+            const newRecentSession = {
+              sessionId: claudeSessionId,
+              firstMessage: firstMessage.slice(0, 100),
+              timestamp: new Date().toISOString(),
+              sessionName
+            };
+
             setSessions(prev => {
               console.log('[onResumeClaudeSession] Updating sessions, looking for id:', activeSession.id);
-              const updated = prev.map(s =>
-                s.id === activeSession.id ? { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai' } : s
-              );
+              const updated = prev.map(s => {
+                if (s.id !== activeSession.id) return s;
+                // Update recent sessions: remove if exists, add to front, keep max 10
+                const existingRecent = s.recentClaudeSessions || [];
+                const filtered = existingRecent.filter(r => r.sessionId !== claudeSessionId);
+                const updatedRecent = [newRecentSession, ...filtered].slice(0, 10);
+                return { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', recentClaudeSessions: updatedRecent };
+              });
               const updatedSession = updated.find(s => s.id === activeSession.id);
               console.log('[onResumeClaudeSession] Updated session claudeSessionId:', updatedSession?.claudeSessionId);
               return updated;
             });
             setActiveClaudeSessionId(claudeSessionId);
-
-            // Track this session in recent sessions list
-            const firstMessage = messages.find(m => m.source === 'user')?.text || '';
-            setRecentClaudeSessions(prev => {
-              // Remove if already exists
-              const filtered = prev.filter(s => s.sessionId !== claudeSessionId);
-              // Add to front
-              return [
-                { sessionId: claudeSessionId, firstMessage: firstMessage.slice(0, 100), timestamp: new Date().toISOString(), sessionName },
-                ...filtered
-              ].slice(0, 10); // Keep only last 10
-            });
           }
         }}
         onNewClaudeSession={() => {
@@ -3983,7 +3977,7 @@ export default function MaestroConsole() {
           }));
         }}
         audioFeedbackCommand={audioFeedbackCommand}
-        recentClaudeSessions={recentClaudeSessions}
+        recentClaudeSessions={activeSession?.recentClaudeSessions || []}
         onResumeRecentSession={async (sessionId: string) => {
           // Resume a session from the recent sessions list
           if (!activeSession?.cwd) return;
@@ -4004,19 +3998,21 @@ export default function MaestroConsole() {
               text: msg.content || ''
             }));
 
-            // Update the session
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id ? { ...s, claudeSessionId: sessionId, aiLogs: messages, state: 'idle', inputMode: 'ai' } : s
-            ));
+            // Update the session and move to front of recent list
+            setSessions(prev => prev.map(s => {
+              if (s.id !== activeSession.id) return s;
+              // Move the session to front of recent list
+              const existingRecent = s.recentClaudeSessions || [];
+              const recentSession = existingRecent.find(r => r.sessionId === sessionId);
+              if (!recentSession) {
+                // Session not in recent list, just update the session
+                return { ...s, claudeSessionId: sessionId, aiLogs: messages, state: 'idle', inputMode: 'ai' };
+              }
+              const filtered = existingRecent.filter(r => r.sessionId !== sessionId);
+              const updatedRecent = [{ ...recentSession, timestamp: new Date().toISOString() }, ...filtered];
+              return { ...s, claudeSessionId: sessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', recentClaudeSessions: updatedRecent };
+            }));
             setActiveClaudeSessionId(sessionId);
-
-            // Move to front of recent list
-            setRecentClaudeSessions(prev => {
-              const session = prev.find(s => s.sessionId === sessionId);
-              if (!session) return prev;
-              const filtered = prev.filter(s => s.sessionId !== sessionId);
-              return [{ ...session, timestamp: new Date().toISOString() }, ...filtered];
-            });
           } catch (error) {
             console.error('Failed to resume session:', error);
           }

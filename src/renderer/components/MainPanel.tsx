@@ -9,15 +9,7 @@ import { GitStatusWidget } from './GitStatusWidget';
 import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { gitService } from '../services/git';
 import { formatActiveTime } from '../utils/theme';
-import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
-
-// Recent Claude session for quick access
-interface RecentClaudeSession {
-  sessionId: string;
-  firstMessage: string;
-  timestamp: string;
-  sessionName?: string; // User-defined session name
-}
+import type { Session, Theme, Shortcut, FocusArea, BatchRunState, RecentClaudeSession } from '../types';
 
 interface SlashCommand {
   command: string;

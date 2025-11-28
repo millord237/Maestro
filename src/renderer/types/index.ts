@@ -102,6 +102,14 @@ export interface GlobalStats {
   totalActiveTimeMs: number;
 }
 
+// Recent Claude session for quick access breadcrumbs (per Maestro session)
+export interface RecentClaudeSession {
+  sessionId: string;
+  firstMessage: string;
+  timestamp: string;
+  sessionName?: string;
+}
+
 export interface Session {
   id: string;
   groupId?: string;
@@ -158,6 +166,8 @@ export interface Session {
   claudeCommands?: { command: string; description: string; }[];
   // Bookmark flag - bookmarked sessions appear in a dedicated section at the top
   bookmarked?: boolean;
+  // Recent Claude sessions breadcrumbs for quick access (persisted per Maestro session)
+  recentClaudeSessions?: RecentClaudeSession[];
 }
 
 export interface Group {
