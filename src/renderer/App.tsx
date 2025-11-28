@@ -570,6 +570,8 @@ export default function MaestroConsole() {
       // React 18 StrictMode may call state updater functions multiple times
       let toastData: { title: string; summary: string; groupName: string; projectName: string; duration: number } | null = null;
       let queuedMessageToProcess: { sessionId: string; message: LogEntry } | null = null;
+      // Track if we need to run synopsis after completion (for /commit and other AI commands)
+      let synopsisData: { sessionId: string; cwd: string; claudeSessionId: string; command: string; groupName: string; projectName: string } | null = null;
 
       if (isFromAi) {
         const currentSession = sessionsRef.current.find(s => s.id === actualSessionId);
@@ -612,6 +614,18 @@ export default function MaestroConsole() {
             }
 
             toastData = { title, summary, groupName, projectName, duration };
+
+            // Check if this was a custom AI command that should trigger synopsis
+            if (currentSession.pendingAICommandForSynopsis && currentSession.claudeSessionId) {
+              synopsisData = {
+                sessionId: actualSessionId,
+                cwd: currentSession.cwd,
+                claudeSessionId: currentSession.claudeSessionId,
+                command: currentSession.pendingAICommandForSynopsis,
+                groupName,
+                projectName
+              };
+            }
           }
         }
       }
@@ -633,11 +647,12 @@ export default function MaestroConsole() {
             };
           }
 
-          // Task complete
+          // Task complete - also clear pending AI command flag
           return {
             ...s,
             state: 'idle' as SessionState,
-            thinkingStartTime: undefined
+            thinkingStartTime: undefined,
+            pendingAICommandForSynopsis: undefined
           };
         }
 
@@ -672,6 +687,46 @@ export default function MaestroConsole() {
             taskDuration: toastData!.duration,
           });
         }, 0);
+      }
+
+      // Run synopsis in parallel if this was a custom AI command (like /commit)
+      // This creates a USER history entry to track the work
+      if (synopsisData && spawnBackgroundSynopsisRef.current && addHistoryEntryRef.current) {
+        const SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
+        const startTime = Date.now();
+
+        spawnBackgroundSynopsisRef.current(
+          synopsisData.sessionId,
+          synopsisData.cwd,
+          synopsisData.claudeSessionId,
+          SYNOPSIS_PROMPT
+        ).then(result => {
+          const duration = Date.now() - startTime;
+          if (result.success && result.response && addHistoryEntryRef.current) {
+            addHistoryEntryRef.current({
+              type: 'USER',
+              summary: result.response,
+              claudeSessionId: synopsisData!.claudeSessionId
+            });
+
+            // Show toast for synopsis completion
+            addToastRef.current({
+              type: 'info',
+              title: `Synopsis (${synopsisData!.command})`,
+              message: result.response,
+              group: synopsisData!.groupName,
+              project: synopsisData!.projectName,
+              taskDuration: duration,
+            });
+
+            // Refresh history panel if available
+            if (rightPanelRef.current) {
+              rightPanelRef.current.refreshHistoryPanel();
+            }
+          }
+        }).catch(err => {
+          console.error('[onProcessExit] Synopsis failed:', err);
+        });
       }
     });
 
@@ -2374,6 +2429,7 @@ export default function MaestroConsole() {
             );
 
             // Add user log showing the command with its interpolated prompt
+            // Also track this command for automatic synopsis on completion
             setSessions(prev => prev.map(s => {
               if (s.id !== activeSessionId) return s;
               return {
@@ -2388,7 +2444,9 @@ export default function MaestroConsole() {
                     description: matchingCustomCommand.description
                   }
                 }],
-                aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), commandText])).slice(-50)
+                aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), commandText])).slice(-50),
+                // Track this command so we can run synopsis on completion
+                pendingAICommandForSynopsis: matchingCustomCommand.command
               };
             }));
 

@@ -168,6 +168,8 @@ export interface Session {
   bookmarked?: boolean;
   // Recent Claude sessions breadcrumbs for quick access (persisted per Maestro session)
   recentClaudeSessions?: RecentClaudeSession[];
+  // Pending AI command that will trigger a synopsis on completion (e.g., '/commit')
+  pendingAICommandForSynopsis?: string;
 }
 
 export interface Group {
