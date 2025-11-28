@@ -220,6 +220,14 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
       setQuickActionOpen(false);
     } }] : []),
     ...(activeSession?.isGitRepo ? [{ id: 'gitLog', label: 'View Git Log', shortcut: shortcuts.viewGitLog, action: () => { setGitLogOpen(true); setQuickActionOpen(false); } }] : []),
+    ...(activeSession?.isGitRepo ? [{ id: 'openRepo', label: 'Open Repository in Browser', action: async () => {
+      const cwd = activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd;
+      const browserUrl = await gitService.getRemoteBrowserUrl(cwd);
+      if (browserUrl) {
+        window.maestro.shell.openExternal(browserUrl);
+      }
+      setQuickActionOpen(false);
+    } }] : []),
     { id: 'devtools', label: 'Toggle JavaScript Console', action: () => { window.maestro.devtools.toggle(); setQuickActionOpen(false); } },
     { id: 'about', label: 'About Maestro', action: () => { setAboutModalOpen(true); setQuickActionOpen(false); } },
     { id: 'goToFiles', label: 'Go to Files Tab', action: () => { setRightPanelOpen(true); setActiveRightTab('files'); setQuickActionOpen(false); } },
