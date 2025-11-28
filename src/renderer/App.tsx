@@ -3743,7 +3743,6 @@ export default function MaestroConsole() {
         <AboutModal
           theme={theme}
           sessions={sessions}
-          persistedStats={globalStats}
           onClose={() => setAboutModalOpen(false)}
         />
       )}

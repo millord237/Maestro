@@ -1076,8 +1076,11 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           <LogItem key={log.id} index={index} log={log} />
         ))}
 
-        {/* Busy indicator */}
+        {/* Busy indicator - only show when busy source matches current input mode */}
         {session.state === 'busy' && (
+          (session.inputMode === 'ai' && session.busySource === 'ai') ||
+          (session.inputMode === 'terminal' && session.busySource === 'terminal')
+        ) && (
           <div
             className="flex flex-col items-center justify-center gap-2 py-6 mx-6 my-4 rounded-xl border"
             style={{

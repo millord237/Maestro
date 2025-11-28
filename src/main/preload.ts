@@ -253,6 +253,23 @@ contextBridge.exposeInMainWorld('maestro', {
   claude: {
     listSessions: (projectPath: string) =>
       ipcRenderer.invoke('claude:listSessions', projectPath),
+    getGlobalStats: () =>
+      ipcRenderer.invoke('claude:getGlobalStats'),
+    onGlobalStatsUpdate: (callback: (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      totalSizeBytes: number;
+      isComplete: boolean;
+    }) => void) => {
+      const handler = (_: any, stats: any) => callback(stats);
+      ipcRenderer.on('claude:globalStatsUpdate', handler);
+      return () => ipcRenderer.removeListener('claude:globalStatsUpdate', handler);
+    },
     readSessionMessages: (projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) =>
       ipcRenderer.invoke('claude:readSessionMessages', projectPath, sessionId, options),
     searchSessions: (projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') =>
@@ -463,6 +480,17 @@ export interface MaestroAPI {
       origin?: 'user' | 'auto'; // Maestro session origin, undefined for CLI sessions
       sessionName?: string; // User-defined session name from Maestro
     }>>;
+    onGlobalStatsUpdate: (callback: (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      totalSizeBytes: number;
+      isComplete: boolean;
+    }) => void) => () => void;
     readSessionMessages: (projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => Promise<{
       messages: Array<{
         type: string;

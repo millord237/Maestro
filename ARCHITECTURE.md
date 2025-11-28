@@ -524,6 +524,18 @@ const results = await window.maestro.claude.searchSessions(
   'query',
   'all'  // 'title' | 'user' | 'assistant' | 'all'
 );
+
+// Get global stats across all Claude projects (with streaming updates)
+const stats = await window.maestro.claude.getGlobalStats();
+// Returns: { totalSessions, totalMessages, totalInputTokens, totalOutputTokens,
+//            totalCacheReadTokens, totalCacheCreationTokens, totalCostUsd, totalSizeBytes }
+
+// Subscribe to streaming updates during stats calculation
+const unsubscribe = window.maestro.claude.onGlobalStatsUpdate((stats) => {
+  console.log(`Progress: ${stats.totalSessions} sessions, $${stats.totalCostUsd.toFixed(2)}`);
+  if (stats.isComplete) console.log('Stats calculation complete');
+});
+// Call unsubscribe() to stop listening
 ```
 
 ### UI Access

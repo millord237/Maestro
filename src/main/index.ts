@@ -1494,6 +1494,175 @@ function setupIpcHandlers() {
     }
   });
 
+  // Get global stats across ALL Claude projects (streams updates as it processes)
+  ipcMain.handle('claude:getGlobalStats', async () => {
+    // Helper to calculate cost from tokens
+    const calculateCost = (input: number, output: number, cacheRead: number, cacheCreation: number) => {
+      const inputCost = (input / 1_000_000) * 3;
+      const outputCost = (output / 1_000_000) * 15;
+      const cacheReadCost = (cacheRead / 1_000_000) * 0.30;
+      const cacheCreationCost = (cacheCreation / 1_000_000) * 3.75;
+      return inputCost + outputCost + cacheReadCost + cacheCreationCost;
+    };
+
+    // Helper to send update to renderer
+    const sendUpdate = (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      totalSizeBytes: number;
+      isComplete: boolean;
+    }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('claude:globalStatsUpdate', stats);
+      }
+    };
+
+    try {
+      const os = await import('os');
+      const homeDir = os.default.homedir();
+      const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
+
+      // Check if the projects directory exists
+      try {
+        await fs.access(claudeProjectsDir);
+      } catch {
+        logger.info('No Claude projects directory found', 'ClaudeSessions');
+        const emptyStats = {
+          totalSessions: 0,
+          totalMessages: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalCacheReadTokens: 0,
+          totalCacheCreationTokens: 0,
+          totalCostUsd: 0,
+          totalSizeBytes: 0,
+          isComplete: true,
+        };
+        sendUpdate(emptyStats);
+        return emptyStats;
+      }
+
+      // List all project directories
+      const projectDirs = await fs.readdir(claudeProjectsDir);
+
+      let totalSessions = 0;
+      let totalMessages = 0;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let totalCacheReadTokens = 0;
+      let totalCacheCreationTokens = 0;
+      let totalSizeBytes = 0;
+      let processedProjects = 0;
+
+      // Process each project directory
+      for (const projectDir of projectDirs) {
+        const projectPath = path.join(claudeProjectsDir, projectDir);
+
+        try {
+          const stat = await fs.stat(projectPath);
+          if (!stat.isDirectory()) continue;
+
+          // List all .jsonl files in this project
+          const files = await fs.readdir(projectPath);
+          const sessionFiles = files.filter(f => f.endsWith('.jsonl'));
+          totalSessions += sessionFiles.length;
+
+          // Process each session file
+          for (const filename of sessionFiles) {
+            const filePath = path.join(projectPath, filename);
+
+            try {
+              const fileStat = await fs.stat(filePath);
+              totalSizeBytes += fileStat.size;
+
+              const content = await fs.readFile(filePath, 'utf-8');
+
+              // Count messages
+              const userMessageCount = (content.match(/"type"\s*:\s*"user"/g) || []).length;
+              const assistantMessageCount = (content.match(/"type"\s*:\s*"assistant"/g) || []).length;
+              totalMessages += userMessageCount + assistantMessageCount;
+
+              // Extract tokens
+              const inputMatches = content.matchAll(/"input_tokens"\s*:\s*(\d+)/g);
+              for (const m of inputMatches) totalInputTokens += parseInt(m[1], 10);
+
+              const outputMatches = content.matchAll(/"output_tokens"\s*:\s*(\d+)/g);
+              for (const m of outputMatches) totalOutputTokens += parseInt(m[1], 10);
+
+              const cacheReadMatches = content.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g);
+              for (const m of cacheReadMatches) totalCacheReadTokens += parseInt(m[1], 10);
+
+              const cacheCreationMatches = content.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g);
+              for (const m of cacheCreationMatches) totalCacheCreationTokens += parseInt(m[1], 10);
+            } catch (err) {
+              // Skip files we can't read
+            }
+          }
+        } catch (err) {
+          // Skip directories we can't read
+        }
+
+        processedProjects++;
+
+        // Send update after each project (stream progress)
+        const currentCost = calculateCost(totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens);
+        sendUpdate({
+          totalSessions,
+          totalMessages,
+          totalInputTokens,
+          totalOutputTokens,
+          totalCacheReadTokens,
+          totalCacheCreationTokens,
+          totalCostUsd: currentCost,
+          totalSizeBytes,
+          isComplete: false,
+        });
+      }
+
+      // Calculate final cost
+      const totalCostUsd = calculateCost(totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens);
+
+      logger.info(`Global Claude stats: ${totalSessions} sessions, ${totalMessages} messages, $${totalCostUsd.toFixed(2)}`, 'ClaudeSessions');
+
+      const finalStats = {
+        totalSessions,
+        totalMessages,
+        totalInputTokens,
+        totalOutputTokens,
+        totalCacheReadTokens,
+        totalCacheCreationTokens,
+        totalCostUsd,
+        totalSizeBytes,
+        isComplete: true,
+      };
+
+      // Send final update with isComplete flag
+      sendUpdate(finalStats);
+
+      return finalStats;
+    } catch (error) {
+      logger.error('Error getting global Claude stats', 'ClaudeSessions', error);
+      const errorStats = {
+        totalSessions: 0,
+        totalMessages: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheCreationTokens: 0,
+        totalCostUsd: 0,
+        totalSizeBytes: 0,
+        isComplete: true,
+      };
+      sendUpdate(errorStats);
+      return errorStats;
+    }
+  });
+
   ipcMain.handle('claude:readSessionMessages', async (_event, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => {
     try {
       const os = await import('os');

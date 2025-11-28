@@ -195,7 +195,7 @@ The `window.maestro` API exposes:
 - `git` - Status, diff, isRepo, numstat
 - `fs` - readDir, readFile
 - `agents` - Detect, get, config
-- `claude` - List/read/search Claude Code sessions
+- `claude` - List/read/search Claude Code sessions, global stats
 - `logger` - System logging
 - `dialog` - Folder selection
 - `shells` - Detect available shells
