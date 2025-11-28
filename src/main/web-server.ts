@@ -103,6 +103,7 @@ export type GetSessionsCallback = () => Array<{
   usageStats?: SessionUsageStats | null;
   lastResponse?: LastResponsePreview | null;
   claudeSessionId?: string | null;
+  thinkingStartTime?: number | null; // Timestamp when AI started thinking (for elapsed time display)
 }>;
 
 // Session detail type for single session endpoint

@@ -57,6 +57,7 @@ export interface SessionData {
   usageStats?: UsageStats | null;
   lastResponse?: LastResponsePreview | null;
   claudeSessionId?: string | null;
+  thinkingStartTime?: number | null; // Timestamp when AI started thinking (for elapsed time display)
 }
 
 /**

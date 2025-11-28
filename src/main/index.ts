@@ -218,6 +218,7 @@ function createWebServer(): WebServer {
         usageStats: s.usageStats || null,
         lastResponse,
         claudeSessionId: s.claudeSessionId || null,
+        thinkingStartTime: s.thinkingStartTime || null,
       };
     });
   });
