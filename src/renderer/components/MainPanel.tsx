@@ -262,9 +262,11 @@ export function MainPanel(props: MainPanelProps) {
 
   // Rename current session
   const saveSessionName = useCallback(async () => {
-    if (!activeSession?.claudeSessionId) return;
+    if (!activeSession?.claudeSessionId || !activeSession?.cwd) return;
     const sessionId = activeSession.claudeSessionId;
     const name = sessionPillRenameValue.trim();
+
+    // Update local state for immediate UI feedback
     const newNamed = { ...namedSessions };
     if (name) {
       newNamed[sessionId] = name;
@@ -274,12 +276,20 @@ export function MainPanel(props: MainPanelProps) {
     setNamedSessions(newNamed);
     setSessionPillRenaming(false);
     setSessionPillRenameValue('');
+
     try {
+      // Save to backend storage so it shows in Claude session list view
+      await window.maestro.claude.updateSessionName(
+        activeSession.cwd,
+        sessionId,
+        name
+      );
+      // Also save to local settings for quick lookup in main panel
       await window.maestro.settings.set('namedClaudeSessions', newNamed);
     } catch (error) {
       console.error('Failed to save session name:', error);
     }
-  }, [activeSession?.claudeSessionId, sessionPillRenameValue, namedSessions]);
+  }, [activeSession?.claudeSessionId, activeSession?.cwd, sessionPillRenameValue, namedSessions]);
 
   // Close session pill overlay when clicking outside (mainly for rename mode)
   useEffect(() => {
