@@ -116,6 +116,9 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Queue removal confirmation state
   const [queueRemoveConfirmId, setQueueRemoveConfirmId] = useState<string | null>(null);
 
+  // Track which queued messages are expanded (for viewing full content)
+  const [expandedQueuedMessages, setExpandedQueuedMessages] = useState<Set<string>>(new Set());
+
   // Copy to clipboard notification state
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
 
@@ -1134,44 +1137,85 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                   </div>
 
                   {/* Queued messages */}
-                  {session.messageQueue.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className="mx-6 mb-2 p-3 rounded-lg opacity-60 relative group"
-                      style={{
-                        backgroundColor: theme.colors.accent + '20',
-                        borderLeft: `3px solid ${theme.colors.accent}`
-                      }}
-                    >
-                      {/* Remove button */}
-                      <button
-                        onClick={() => setQueueRemoveConfirmId(msg.id)}
-                        className="absolute top-2 right-2 p-1 rounded hover:bg-black/20 transition-colors"
-                        style={{ color: theme.colors.textDim }}
-                        title="Remove from queue"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                  {session.messageQueue.map((msg) => {
+                    const isLongMessage = msg.text.length > 200;
+                    const isExpanded = expandedQueuedMessages.has(msg.id);
 
-                      {/* Message content */}
+                    return (
                       <div
-                        className="text-sm pr-8 whitespace-pre-wrap break-words"
-                        style={{ color: theme.colors.textMain }}
+                        key={msg.id}
+                        className="mx-6 mb-2 p-3 rounded-lg opacity-60 relative group"
+                        style={{
+                          backgroundColor: theme.colors.accent + '20',
+                          borderLeft: `3px solid ${theme.colors.accent}`
+                        }}
                       >
-                        {msg.text.length > 200 ? msg.text.substring(0, 200) + '...' : msg.text}
-                      </div>
-
-                      {/* Images indicator */}
-                      {msg.images && msg.images.length > 0 && (
-                        <div
-                          className="mt-1 text-xs"
+                        {/* Remove button */}
+                        <button
+                          onClick={() => setQueueRemoveConfirmId(msg.id)}
+                          className="absolute top-2 right-2 p-1 rounded hover:bg-black/20 transition-colors"
                           style={{ color: theme.colors.textDim }}
+                          title="Remove from queue"
                         >
-                          {msg.images.length} image{msg.images.length > 1 ? 's' : ''} attached
+                          <X className="w-4 h-4" />
+                        </button>
+
+                        {/* Message content */}
+                        <div
+                          className="text-sm pr-8 whitespace-pre-wrap break-words"
+                          style={{ color: theme.colors.textMain }}
+                        >
+                          {isLongMessage && !isExpanded
+                            ? msg.text.substring(0, 200) + '...'
+                            : msg.text}
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* Show more/less toggle for long messages */}
+                        {isLongMessage && (
+                          <button
+                            onClick={() => {
+                              setExpandedQueuedMessages(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(msg.id)) {
+                                  newSet.delete(msg.id);
+                                } else {
+                                  newSet.add(msg.id);
+                                }
+                                return newSet;
+                              });
+                            }}
+                            className="flex items-center gap-1 mt-2 text-xs px-2 py-1 rounded hover:opacity-70 transition-opacity"
+                            style={{
+                              color: theme.colors.accent,
+                              backgroundColor: theme.colors.bgActivity
+                            }}
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="w-3 h-3" />
+                                Show less
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3 h-3" />
+                                Show all ({msg.text.split('\n').length} lines)
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Images indicator */}
+                        {msg.images && msg.images.length > 0 && (
+                          <div
+                            className="mt-1 text-xs"
+                            style={{ color: theme.colors.textDim }}
+                          >
+                            {msg.images.length} image{msg.images.length > 1 ? 's' : ''} attached
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Queue removal confirmation modal */}
                   {queueRemoveConfirmId && (
