@@ -1949,6 +1949,14 @@ function setupIpcHandlers() {
   // Audio feedback using system TTS command (non-blocking)
   ipcMain.handle('notification:speak', async (_event, text: string, command?: string) => {
     console.log('[TTS Main] notification:speak called, text length:', text?.length, 'command:', command);
+
+    // Log the incoming request with full details for debugging
+    logger.info('TTS speak request received', 'TTS', {
+      command: command || '(default: say)',
+      textLength: text?.length || 0,
+      textPreview: text ? (text.length > 200 ? text.substring(0, 200) + '...' : text) : '(no text)',
+    });
+
     try {
       const { spawn } = await import('child_process');
       const fullCommand = command || 'say'; // Default to macOS 'say' command
@@ -1965,6 +1973,17 @@ function setupIpcHandlers() {
 
       console.log('[TTS Main] Spawning:', ttsCommand, 'with args count:', ttsArgs.length);
 
+      // Log the full command being executed
+      logger.info('TTS executing command', 'TTS', {
+        executable: ttsCommand,
+        argsCount: ttsArgs.length,
+        fullArgs: ttsArgs.map((arg, i) =>
+          i === ttsArgs.length - 1
+            ? (arg.length > 100 ? arg.substring(0, 100) + '...' : arg)
+            : arg
+        ),
+      });
+
       // Spawn the TTS process without waiting for it to complete (non-blocking)
       // This runs in the background and won't block the main process
       const child = spawn(ttsCommand, ttsArgs, {
@@ -1974,17 +1993,30 @@ function setupIpcHandlers() {
 
       child.on('error', (err) => {
         console.error('[TTS Main] Spawn error:', err);
+        logger.error('TTS spawn error', 'TTS', {
+          error: String(err),
+          command: ttsCommand,
+          textPreview: text ? (text.length > 100 ? text.substring(0, 100) + '...' : text) : '(no text)',
+        });
       });
 
       // Unref to allow the parent to exit independently
       child.unref();
 
       console.log('[TTS Main] Process spawned successfully');
-      logger.debug('Started audio feedback', 'Notification', { command: ttsCommand, args: ttsArgs.length, textLength: text.length });
+      logger.info('TTS process spawned successfully', 'TTS', {
+        command: ttsCommand,
+        argsCount: ttsArgs.length,
+        textLength: text?.length || 0,
+      });
       return { success: true };
     } catch (error) {
       console.error('[TTS Main] Error starting audio feedback:', error);
-      logger.error('Error starting audio feedback', 'Notification', error);
+      logger.error('TTS error starting audio feedback', 'TTS', {
+        error: String(error),
+        command: command || '(default: say)',
+        textPreview: text ? (text.length > 100 ? text.substring(0, 100) + '...' : text) : '(no text)',
+      });
       return { success: false, error: String(error) };
     }
   });
