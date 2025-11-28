@@ -16,6 +16,7 @@ interface RecentClaudeSession {
   sessionId: string;
   firstMessage: string;
   timestamp: string;
+  sessionName?: string; // User-defined session name
 }
 
 interface SlashCommand {
@@ -61,7 +62,7 @@ interface MainPanelProps {
   setLogViewerOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveClaudeSessionId: (id: string | null) => void;
-  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[]) => void;
+  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[], sessionName?: string) => void;
   onNewClaudeSession: () => void;
   setActiveFocus: (focus: FocusArea) => void;
   setOutputSearchOpen: (open: boolean) => void;
@@ -860,9 +861,20 @@ export function MainPanel(props: MainPanelProps) {
                         >
                           <Play className="w-3 h-3 shrink-0" style={{ color: theme.colors.accent }} />
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs truncate" style={{ color: theme.colors.textMain }}>
-                              {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
-                            </div>
+                            {session.sessionName ? (
+                              <>
+                                <div className="text-xs font-medium truncate" style={{ color: theme.colors.textMain }}>
+                                  {session.sessionName}
+                                </div>
+                                <div className="text-[10px] truncate" style={{ color: theme.colors.textDim }}>
+                                  {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-xs truncate" style={{ color: theme.colors.textMain }}>
+                                {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
+                              </div>
+                            )}
                             <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
                               {(() => {
                                 const date = new Date(session.timestamp);

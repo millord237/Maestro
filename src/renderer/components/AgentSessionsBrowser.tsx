@@ -45,7 +45,7 @@ interface AgentSessionsBrowserProps {
   activeSession: Session | undefined;
   activeClaudeSessionId: string | null;
   onClose: () => void;
-  onResumeSession: (claudeSessionId: string, messages: LogEntry[]) => void;
+  onResumeSession: (claudeSessionId: string, messages: LogEntry[], sessionName?: string) => void;
   onNewSession: () => void;
 }
 
@@ -520,7 +520,7 @@ export function AgentSessionsBrowser({
         source: msg.type === 'user' ? 'user' as const : 'stdout' as const,
         text: msg.content || (msg.toolUse ? `[Tool: ${msg.toolUse[0]?.name || 'unknown'}]` : '[No content]'),
       }));
-      onResumeSession(viewingSession.sessionId, logEntries);
+      onResumeSession(viewingSession.sessionId, logEntries, viewingSession.sessionName);
       onClose();
     }
   }, [viewingSession, messages, onResumeSession, onClose]);

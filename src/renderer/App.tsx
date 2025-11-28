@@ -178,6 +178,7 @@ export default function MaestroConsole() {
     sessionId: string;
     firstMessage: string;
     timestamp: string;
+    sessionName?: string;
   }>>([]);
 
   // Batch Runner Modal State
@@ -3755,7 +3756,7 @@ export default function MaestroConsole() {
         setLogViewerOpen={setLogViewerOpen}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveClaudeSessionId={setActiveClaudeSessionId}
-        onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[]) => {
+        onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[], sessionName?: string) => {
           // Update the active session with the selected Claude session ID and load messages
           // Also reset state to 'idle' since we're just loading historical messages
           // Switch to AI mode since we're resuming an AI session
@@ -3779,7 +3780,7 @@ export default function MaestroConsole() {
               const filtered = prev.filter(s => s.sessionId !== claudeSessionId);
               // Add to front
               return [
-                { sessionId: claudeSessionId, firstMessage: firstMessage.slice(0, 100), timestamp: new Date().toISOString() },
+                { sessionId: claudeSessionId, firstMessage: firstMessage.slice(0, 100), timestamp: new Date().toISOString(), sessionName },
                 ...filtered
               ].slice(0, 10); // Keep only last 10
             });
