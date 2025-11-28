@@ -234,6 +234,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
             batchRunState={batchRunState}
             onOpenBatchRunner={onOpenBatchRunner}
             onStopBatchRun={onStopBatchRun}
+            sessionState={session.state}
           />
         )}
       </div>

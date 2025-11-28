@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Eye, Edit, Play, Square, HelpCircle, Loader2 } from 'lucide-react';
-import type { BatchRunState } from '../types';
+import type { BatchRunState, SessionState } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
 
@@ -26,6 +26,8 @@ interface ScratchpadProps {
   batchRunState?: BatchRunState;
   onOpenBatchRunner?: () => void;
   onStopBatchRun?: () => void;
+  // Session state for disabling Run when agent is busy
+  sessionState?: SessionState;
 }
 
 export function Scratchpad({
@@ -39,9 +41,11 @@ export function Scratchpad({
   onStateChange,
   batchRunState,
   onOpenBatchRunner,
-  onStopBatchRun
+  onStopBatchRun,
+  sessionState
 }: ScratchpadProps) {
   const isLocked = batchRunState?.isRunning || false;
+  const isAgentBusy = sessionState === 'busy' || sessionState === 'connecting';
   const isStopping = batchRunState?.isStopping || false;
   const [mode, setMode] = useState<'edit' | 'preview'>(initialMode);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -283,13 +287,14 @@ export function Scratchpad({
         ) : (
           <button
             onClick={onOpenBatchRunner}
-            className="flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors hover:opacity-90"
+            disabled={isAgentBusy}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors ${isAgentBusy ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
             style={{
               backgroundColor: theme.colors.accent,
               color: 'white',
               border: `1px solid ${theme.colors.accent}`
             }}
-            title="Run batch processing on scratchpad tasks"
+            title={isAgentBusy ? "Cannot run while agent is thinking" : "Run batch processing on scratchpad tasks"}
           >
             <Play className="w-3.5 h-3.5" />
             Run
