@@ -930,6 +930,20 @@ function setupIpcHandlers() {
     }
   });
 
+  // Disable all live sessions (marks all sessions as offline without stopping server)
+  ipcMain.handle('live:disableAll', async () => {
+    if (!webServer) {
+      return { success: true, count: 0 };
+    }
+    const liveSessions = webServer.getLiveSessions();
+    const count = liveSessions.length;
+    for (const session of liveSessions) {
+      webServer.setSessionOffline(session.sessionId);
+    }
+    logger.info(`Disabled ${count} live sessions`, 'Live');
+    return { success: true, count };
+  });
+
   // Web server management
   ipcMain.handle('webserver:getUrl', async () => {
     return webServer?.getSecureUrl();

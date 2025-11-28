@@ -175,6 +175,7 @@ contextBridge.exposeInMainWorld('maestro', {
     getLiveSessions: () => ipcRenderer.invoke('live:getLiveSessions'),
     broadcastActiveSession: (sessionId: string) =>
       ipcRenderer.invoke('live:broadcastActiveSession', sessionId),
+    disableAll: () => ipcRenderer.invoke('live:disableAll'),
   },
 
   // Agent API
@@ -364,6 +365,7 @@ export interface MaestroAPI {
     getDashboardUrl: () => Promise<string | null>;
     getLiveSessions: () => Promise<Array<{ sessionId: string; claudeSessionId?: string; enabledAt: number }>>;
     broadcastActiveSession: (sessionId: string) => Promise<void>;
+    disableAll: () => Promise<{ success: boolean; count: number }>;
   };
   agents: {
     detect: () => Promise<AgentConfig[]>;

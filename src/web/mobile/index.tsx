@@ -21,7 +21,7 @@
  */
 
 import MobileApp from './App';
-import { SessionPillBar, type SessionPillBarProps, ALL_SESSIONS_THRESHOLD } from './SessionPillBar';
+import { SessionPillBar, type SessionPillBarProps } from './SessionPillBar';
 import { AllSessionsView, type AllSessionsViewProps } from './AllSessionsView';
 import { CommandInputBar, type CommandInputBarProps } from './CommandInputBar';
 import { CommandHistoryDrawer, type CommandHistoryDrawerProps } from './CommandHistoryDrawer';
@@ -45,7 +45,7 @@ export { MobileApp };
 export default MobileApp;
 
 // Re-export session pill bar component
-export { SessionPillBar, type SessionPillBarProps, ALL_SESSIONS_THRESHOLD };
+export { SessionPillBar, type SessionPillBarProps };
 
 // Re-export All Sessions view component
 export { AllSessionsView, type AllSessionsViewProps };

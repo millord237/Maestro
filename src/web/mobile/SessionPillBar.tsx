@@ -594,9 +594,6 @@ function GroupHeader({
   );
 }
 
-/** Threshold for showing "All Sessions" button (when session count exceeds this) */
-export const ALL_SESSIONS_THRESHOLD = 5;
-
 /**
  * Props for the SessionPillBar component
  */
@@ -609,8 +606,6 @@ export interface SessionPillBarProps {
   onSelectSession: (sessionId: string) => void;
   /** Callback to open the All Sessions view */
   onOpenAllSessions?: () => void;
-  /** Whether to show the All Sessions button (shows automatically if sessions > threshold) */
-  showAllSessionsButton?: boolean;
   /** Optional className for additional styling */
   className?: string;
   /** Optional inline styles */
@@ -646,7 +641,6 @@ export function SessionPillBar({
   activeSessionId,
   onSelectSession,
   onOpenAllSessions,
-  showAllSessionsButton,
   className = '',
   style,
 }: SessionPillBarProps) {
@@ -691,17 +685,6 @@ export function SessionPillBar({
   // Check if there are multiple groups (to decide whether to show group headers)
   const hasMultipleGroups = sortedGroupKeys.length > 1 ||
     (sortedGroupKeys.length === 1 && sortedGroupKeys[0] !== 'ungrouped');
-
-  // Determine if we should show the "All Sessions" button
-  const shouldShowAllSessionsButton = showAllSessionsButton !== undefined
-    ? showAllSessionsButton
-    : sessions.length > ALL_SESSIONS_THRESHOLD;
-
-  // Handle "All Sessions" button click
-  const handleOpenAllSessions = useCallback(() => {
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-    onOpenAllSessions?.();
-  }, [onOpenAllSessions]);
 
   // Handle long-press on a session pill
   const handleLongPress = useCallback((session: Session, rect: DOMRect) => {
@@ -802,6 +785,59 @@ export function SessionPillBar({
           role="tablist"
           aria-label="Session selector organized by groups. Long press a session for details."
         >
+          {/* Hamburger menu button - always first */}
+          {onOpenAllSessions && (
+            <div
+              style={{
+                scrollSnapAlign: 'start',
+                flexShrink: 0,
+              }}
+              role="presentation"
+            >
+              <button
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.tap);
+                  onOpenAllSessions();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '18px',
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.bgMain,
+                  color: colors.textMain,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  padding: 0,
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
+                  outline: 'none',
+                }}
+                aria-label={`View all ${sessions.length} sessions`}
+                title="All Sessions"
+              >
+                {/* Hamburger icon */}
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {sortedGroupKeys.map((groupKey) => {
             const group = sessionsByGroup[groupKey];
             const isCollapsed = collapsedGroups.has(groupKey);
@@ -849,46 +885,6 @@ export function SessionPillBar({
             );
           })}
 
-          {/* "All Sessions" button - shown when many sessions or explicitly enabled */}
-          {shouldShowAllSessionsButton && onOpenAllSessions && (
-            <div
-              style={{
-                scrollSnapAlign: 'start',
-                flexShrink: 0,
-              }}
-              role="presentation"
-            >
-              <button
-                onClick={handleOpenAllSessions}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '20px',
-                  border: `1px solid ${colors.accent}`,
-                  backgroundColor: `${colors.accent}15`,
-                  color: colors.accent,
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  whiteSpace: 'nowrap',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  flexShrink: 0,
-                  minWidth: 'fit-content',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  outline: 'none',
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                }}
-                aria-label={`View all ${sessions.length} sessions`}
-              >
-                <span style={{ fontSize: '12px' }}>📋</span>
-                <span>All ({sessions.length})</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Inline style for hiding scrollbar */}

@@ -200,6 +200,10 @@ export interface CommandInputBarProps {
   onSlashCommandToggle?: () => void;
   /** Whether slash command autocomplete is currently open */
   isSlashCommandOpen?: boolean;
+  /** Callback when input receives focus */
+  onInputFocus?: () => void;
+  /** Callback when input loses focus */
+  onInputBlur?: () => void;
 }
 
 /**
@@ -228,6 +232,8 @@ export function CommandInputBar({
   cwd,
   onSlashCommandToggle,
   isSlashCommandOpen = false,
+  onInputFocus,
+  onInputBlur,
 }: CommandInputBarProps) {
   const colors = useThemeColors();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1024,10 +1030,12 @@ export function CommandInputBar({
               onFocus={(e) => {
                 const container = e.currentTarget.parentElement;
                 if (container) container.style.borderColor = colors.accent;
+                onInputFocus?.();
               }}
               onBlur={(e) => {
                 const container = e.currentTarget.parentElement;
                 if (container) container.style.borderColor = colors.border;
+                onInputBlur?.();
               }}
               aria-label={inputMode === 'terminal' ? 'Shell command input' : 'AI prompt input'}
               aria-multiline="true"
@@ -1087,11 +1095,13 @@ export function CommandInputBar({
             // Add focus ring for accessibility
             e.currentTarget.style.borderColor = colors.accent;
             e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.accent}33`;
+            onInputFocus?.();
           }}
           onBlur={(e) => {
             // Remove focus ring
             e.currentTarget.style.borderColor = colors.border;
             e.currentTarget.style.boxShadow = 'none';
+            onInputBlur?.();
           }}
           aria-label="Command input"
           aria-disabled={isDisabled}

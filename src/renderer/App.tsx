@@ -1987,10 +1987,11 @@ export default function MaestroConsole() {
   const toggleGlobalLive = async () => {
     try {
       if (isLiveMode) {
-        // Turn off - clear state
+        // Turn off - disable all live sessions on the server and clear state
+        const result = await window.maestro.live.disableAll();
         setIsLiveMode(false);
         setWebInterfaceUrl(null);
-        console.log('[toggleGlobalLive] Disabled web interface');
+        console.log('[toggleGlobalLive] Disabled web interface, disconnected', result.count, 'sessions');
       } else {
         // Turn on - get the dashboard URL
         const url = await window.maestro.live.getDashboardUrl();

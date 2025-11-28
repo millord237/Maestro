@@ -13,8 +13,6 @@ import { useNotifications } from '../hooks/useNotifications';
 import { useUnreadBadge } from '../hooks/useUnreadBadge';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { Badge, type BadgeVariant } from '../components/Badge';
-import { PullToRefreshIndicator } from '../components/PullToRefresh';
-import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useOfflineStatus, useMaestroMode, useDesktopTheme } from '../main';
 import { buildApiUrl } from '../utils/config';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
@@ -347,6 +345,24 @@ export default function MobileApp() {
 
   // Custom slash commands from desktop
   const [customCommands, setCustomCommands] = useState<CustomCommand[]>([]);
+
+  // Input expansion state for small screens (drawer-like behavior)
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
+
+  // Detect if on a small screen (phone vs tablet/iPad)
+  // Use 768px as breakpoint - below this is considered "small"
+  const [isSmallScreen, setIsSmallScreen] = useState(
+    typeof window !== 'undefined' ? window.innerHeight < 700 : false
+  );
+
+  // Track screen size changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSmallScreen(window.innerHeight < 700);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Command history hook
   const {
@@ -720,40 +736,6 @@ export default function MobileApp() {
     },
   });
 
-  // Handle refresh - request updated session list
-  const handleRefresh = useCallback(async () => {
-    webLogger.debug('Pull-to-refresh triggered', 'Mobile');
-
-    // Provide haptic feedback
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-
-    // Send request to get updated sessions
-    const isConnected = connectionState === 'connected' || connectionState === 'authenticated';
-    if (isConnected) {
-      send({ type: 'get_sessions' });
-    }
-
-    // Simulate a minimum refresh time for better UX
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    setLastRefreshTime(new Date());
-
-    // Provide success haptic feedback
-    triggerHaptic(HAPTIC_PATTERNS.success);
-  }, [connectionState, send]);
-
-  // Pull-to-refresh hook
-  const {
-    pullDistance,
-    progress,
-    isRefreshing,
-    isThresholdReached,
-    containerProps,
-  } = usePullToRefresh({
-    onRefresh: handleRefresh,
-    enabled: !isOffline && (connectionState === 'connected' || connectionState === 'authenticated'),
-  });
-
   // Retry connection handler
   const handleRetry = useCallback(() => {
     connect();
@@ -824,11 +806,29 @@ export default function MobileApp() {
 
     // Clear the input
     setCommandInput('');
-  }, [activeSessionId, sessions, send, addToHistory, isOffline, isActuallyConnected, queueCommand]);
+
+    // Collapse input on small screens after sending
+    if (isSmallScreen) {
+      setIsInputExpanded(false);
+    }
+  }, [activeSessionId, sessions, send, addToHistory, isOffline, isActuallyConnected, queueCommand, isSmallScreen]);
 
   // Handle command input change
   const handleCommandChange = useCallback((value: string) => {
     setCommandInput(value);
+  }, []);
+
+  // Handle input focus - expand on small screens
+  const handleInputFocus = useCallback(() => {
+    if (isSmallScreen) {
+      setIsInputExpanded(true);
+    }
+  }, [isSmallScreen]);
+
+  // Handle input blur - collapse on small screens (with small delay to allow for submit)
+  const handleInputBlur = useCallback(() => {
+    // Don't immediately collapse - let submit handler do it if needed
+    // This prevents collapse when tapping submit button
   }, []);
 
   // Handle mode toggle between AI and Terminal
@@ -1191,44 +1191,29 @@ export default function MobileApp() {
         />
       )}
 
-      {/* Main content area with pull-to-refresh */}
+      {/* Main content area - shrinks when input expanded on small screens */}
       <main
-        {...containerProps}
+        onClick={() => {
+          // Collapse input when tapping message history on small screens
+          if (isSmallScreen && isInputExpanded) {
+            setIsInputExpanded(false);
+          }
+        }}
         style={{
-          flex: 1,
+          flex: isSmallScreen && isInputExpanded ? '0 0 30%' : 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'flex-start',
           padding: '20px',
-          paddingTop: `${20 + pullDistance}px`,
           textAlign: 'center',
           overflow: 'auto',
           overscrollBehavior: 'contain',
           position: 'relative',
-          touchAction: pullDistance > 0 ? 'none' : 'pan-y',
-          transition: isRefreshing ? 'padding-top 0.3s ease' : 'none',
+          transition: 'flex 0.2s ease-out',
+          minHeight: isSmallScreen && isInputExpanded ? '100px' : undefined,
         }}
       >
-        {/* Pull-to-refresh indicator */}
-        <PullToRefreshIndicator
-          pullDistance={pullDistance}
-          progress={progress}
-          isRefreshing={isRefreshing}
-          isThresholdReached={isThresholdReached}
-          style={{
-            position: 'fixed',
-            // Adjust top position based on what's shown above
-            // Header: ~56px, Session pill bar: ~52px
-            top: showSessionPillBar
-              ? 'max(108px, calc(108px + env(safe-area-inset-top)))' // Header + pill bar
-              : 'max(56px, calc(56px + env(safe-area-inset-top)))', // Just header
-            left: 0,
-            right: 0,
-            zIndex: 10,
-          }}
-        />
-
         {/* Content wrapper */}
         <div
           style={{
@@ -1284,6 +1269,8 @@ export default function MobileApp() {
         hasActiveSession={!!activeSessionId}
         cwd={activeSession?.cwd}
         slashCommands={allSlashCommands}
+        onInputFocus={handleInputFocus}
+        onInputBlur={handleInputBlur}
       />
 
       {/* Command history drawer - swipe up from input area */}
