@@ -726,10 +726,11 @@ export default function MaestroConsole() {
             };
           }
 
-          // Task complete - set active tab's state to 'idle' for write-mode tracking
+          // Task complete - set ALL busy tabs to 'idle' for write-mode tracking
+          // (not just active tab - the user may have switched tabs while AI was running)
           const updatedAiTabs = s.aiTabs?.length > 0
             ? s.aiTabs.map(tab =>
-                tab.id === s.activeTabId ? { ...tab, state: 'idle' as const } : tab
+                tab.state === 'busy' ? { ...tab, state: 'idle' as const } : tab
               )
             : s.aiTabs;
 
@@ -1369,10 +1370,11 @@ export default function MaestroConsole() {
               }
 
               // No queued messages - set to idle
-              // Also update active tab's state to 'idle' for write-mode tracking
+              // Set ALL busy tabs to 'idle' for write-mode tracking
+              // (not just active tab - the user may have switched tabs while AI was running)
               const updatedAiTabs = s.aiTabs?.length > 0
                 ? s.aiTabs.map(tab =>
-                    tab.id === s.activeTabId ? { ...tab, state: 'idle' as const } : tab
+                    tab.state === 'busy' ? { ...tab, state: 'idle' as const } : tab
                   )
                 : s.aiTabs;
 
