@@ -107,7 +107,16 @@ export default function MaestroConsole() {
   // Track if initial data has been loaded to prevent overwriting on mount
   const initialLoadComplete = useRef(false);
 
-  const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0]?.id || 's1');
+  const [activeSessionId, setActiveSessionIdInternal] = useState<string>(sessions[0]?.id || 's1');
+
+  // Track current position in visual order for cycling (allows same session to appear twice)
+  const cyclePositionRef = useRef<number>(-1);
+
+  // Wrapper that resets cycle position when session is changed via click (not cycling)
+  const setActiveSessionId = useCallback((id: string) => {
+    cyclePositionRef.current = -1; // Reset so next cycle finds first occurrence
+    setActiveSessionIdInternal(id);
+  }, []);
 
   // Input State - separate for AI and terminal modes
   const [aiInputValue, setAiInputValue] = useState('');
@@ -2017,48 +2026,78 @@ export default function MaestroConsole() {
 
   // --- ACTIONS ---
   const cycleSession = (dir: 'next' | 'prev') => {
-    // Check if we should cycle within the bookmarks folder
-    // This happens when: sidebar is open, bookmarks folder is open, and current session is bookmarked
-    const activeSession = sessions.find(s => s.id === activeSessionId);
-    const bookmarkedSessions = sortedSessions.filter(s => s.bookmarked);
-    const shouldCycleInBookmarks = leftSidebarOpen &&
-      !bookmarksCollapsed &&
-      activeSession?.bookmarked &&
-      bookmarkedSessions.length > 0;
+    // Build the visual order of sessions as they appear in the sidebar.
+    // This matches the actual rendering order in SessionList.tsx:
+    // 1. Bookmarks section (if open) - sorted alphabetically
+    // 2. Groups (sorted alphabetically) - each with sessions sorted alphabetically
+    // 3. Ungrouped sessions - sorted alphabetically
+    //
+    // A bookmarked session visually appears in BOTH the bookmarks section AND its
+    // regular location (group or ungrouped). The same session can appear twice in
+    // the visual order. We track the current position with cyclePositionRef to
+    // allow cycling through duplicate occurrences correctly.
 
-    if (shouldCycleInBookmarks) {
-      // Cycle only through bookmarked sessions
-      const currentIndex = bookmarkedSessions.findIndex(s => s.id === activeSessionId);
-      let nextIndex;
-      if (dir === 'next') {
-        nextIndex = currentIndex === bookmarkedSessions.length - 1 ? 0 : currentIndex + 1;
-      } else {
-        nextIndex = currentIndex === 0 ? bookmarkedSessions.length - 1 : currentIndex - 1;
+    const visualOrder: Session[] = [];
+
+    if (leftSidebarOpen) {
+      // Bookmarks section (if expanded and has bookmarked sessions)
+      if (!bookmarksCollapsed) {
+        const bookmarkedSessions = sessions
+          .filter(s => s.bookmarked)
+          .sort((a, b) => compareNamesIgnoringEmojis(a.name, b.name));
+        visualOrder.push(...bookmarkedSessions);
       }
-      setActiveSessionId(bookmarkedSessions[nextIndex].id);
+
+      // Groups (sorted alphabetically), with each group's sessions
+      const sortedGroups = [...groups].sort((a, b) => compareNamesIgnoringEmojis(a.name, b.name));
+      for (const group of sortedGroups) {
+        if (!group.collapsed) {
+          const groupSessions = sessions
+            .filter(s => s.groupId === group.id)
+            .sort((a, b) => compareNamesIgnoringEmojis(a.name, b.name));
+          visualOrder.push(...groupSessions);
+        }
+      }
+
+      // Ungrouped sessions (sorted alphabetically)
+      const ungroupedSessions = sessions
+        .filter(s => !s.groupId)
+        .sort((a, b) => compareNamesIgnoringEmojis(a.name, b.name));
+      visualOrder.push(...ungroupedSessions);
+    } else {
+      // Sidebar collapsed: cycle through all sessions in their sorted order
+      visualOrder.push(...sortedSessions);
+    }
+
+    if (visualOrder.length === 0) return;
+
+    // Determine current position in visual order
+    // If cyclePositionRef is valid and points to our current session, use it
+    // Otherwise, find the first occurrence of our current session
+    let currentIndex = cyclePositionRef.current;
+    if (currentIndex < 0 || currentIndex >= visualOrder.length ||
+        visualOrder[currentIndex].id !== activeSessionId) {
+      // Position is invalid or doesn't match current session - find first occurrence
+      currentIndex = visualOrder.findIndex(s => s.id === activeSessionId);
+    }
+
+    if (currentIndex === -1) {
+      // Current session not visible, select first visible session
+      cyclePositionRef.current = 0;
+      setActiveSessionIdInternal(visualOrder[0].id);
       return;
     }
 
-    // When left sidebar is collapsed, cycle through ALL sessions (groups not visible)
-    // When left sidebar is open, only cycle through visible sessions (not in collapsed groups)
-    const visibleSessions = leftSidebarOpen
-      ? sortedSessions.filter(session => {
-          if (!session.groupId) return true; // Ungrouped sessions are always visible
-          const group = groups.find(g => g.id === session.groupId);
-          return group && !group.collapsed; // Only include if group is not collapsed
-        })
-      : sortedSessions; // All sessions when sidebar is collapsed
-
-    if (visibleSessions.length === 0) return;
-
-    const currentIndex = visibleSessions.findIndex(s => s.id === activeSessionId);
+    // Move to next/prev in visual order
     let nextIndex;
     if (dir === 'next') {
-      nextIndex = currentIndex === visibleSessions.length - 1 ? 0 : currentIndex + 1;
+      nextIndex = currentIndex === visualOrder.length - 1 ? 0 : currentIndex + 1;
     } else {
-      nextIndex = currentIndex === 0 ? visibleSessions.length - 1 : currentIndex - 1;
+      nextIndex = currentIndex === 0 ? visualOrder.length - 1 : currentIndex - 1;
     }
-    setActiveSessionId(visibleSessions[nextIndex].id);
+
+    cyclePositionRef.current = nextIndex;
+    setActiveSessionIdInternal(visualOrder[nextIndex].id);
   };
 
   const showConfirmation = (message: string, onConfirm: () => void) => {
