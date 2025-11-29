@@ -7,6 +7,7 @@ import { FilePreview } from './FilePreview';
 import { ErrorBoundary } from './ErrorBoundary';
 import { GitStatusWidget } from './GitStatusWidget';
 import { AgentSessionsBrowser } from './AgentSessionsBrowser';
+import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { formatActiveTime } from '../utils/theme';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState, RecentClaudeSession } from '../types';
@@ -111,6 +112,14 @@ interface MainPanelProps {
   // Recent Claude sessions for quick access
   recentClaudeSessions: RecentClaudeSession[];
   onResumeRecentSession: (sessionId: string) => void;
+
+  // Tab management for AI sessions
+  onTabSelect?: (tabId: string) => void;
+  onTabClose?: (tabId: string) => void;
+  onNewTab?: () => void;
+  onTabRename?: (tabId: string, newName: string) => void;
+  onTabReorder?: (fromIndex: number, toIndex: number) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -160,8 +169,8 @@ export function MainPanel(props: MainPanelProps) {
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // Extract recent sessions from props
-  const { recentClaudeSessions, onResumeRecentSession } = props;
+  // Extract recent sessions and tab handlers from props
+  const { recentClaudeSessions, onResumeRecentSession, onTabSelect, onTabClose, onNewTab, onTabRename, onTabReorder, onCloseOtherTabs } = props;
 
   // Track panel width for responsive widget hiding
   useEffect(() => {
@@ -1075,6 +1084,21 @@ export function MainPanel(props: MainPanelProps) {
               )}
             </div>
           </div>
+          )}
+
+          {/* Tab Bar - only shown in AI mode when we have tabs */}
+          {activeSession.inputMode === 'ai' && activeSession.aiTabs && activeSession.aiTabs.length > 0 && onTabSelect && onTabClose && onNewTab && (
+            <TabBar
+              tabs={activeSession.aiTabs}
+              activeTabId={activeSession.activeTabId}
+              theme={theme}
+              onTabSelect={onTabSelect}
+              onTabClose={onTabClose}
+              onNewTab={onNewTab}
+              onTabRename={onTabRename}
+              onTabReorder={onTabReorder}
+              onCloseOthers={onCloseOtherTabs}
+            />
           )}
 
           {/* Show File Preview in main area when open, otherwise show terminal output and input */}
