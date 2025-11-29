@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign, Star, Zap, Timer, Hash, ArrowDownToLine, ArrowUpFromLine, Tag, Edit3 } from 'lucide-react';
+import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign, Star, Zap, Timer, Hash, ArrowDownToLine, ArrowUpFromLine, Edit3 } from 'lucide-react';
 import type { Theme, Session, LogEntry } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -586,11 +586,24 @@ export function AgentSessionsBrowser({
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
+              {/* Star button for detail view */}
+              <button
+                onClick={(e) => toggleStar(viewingSession.sessionId, e)}
+                className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                title={starredSessions.has(viewingSession.sessionId) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Star
+                  className="w-5 h-5"
+                  style={{
+                    color: starredSessions.has(viewingSession.sessionId) ? theme.colors.warning : theme.colors.textDim,
+                    fill: starredSessions.has(viewingSession.sessionId) ? theme.colors.warning : 'transparent',
+                  }}
+                />
+              </button>
               <div className="flex flex-col min-w-0">
                 {/* Session name with edit button */}
                 {renamingSessionId === viewingSession.sessionId ? (
                   <div className="flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 flex-shrink-0" style={{ color: theme.colors.accent }} />
                     <input
                       ref={renameInputRef}
                       type="text"
@@ -619,7 +632,6 @@ export function AgentSessionsBrowser({
                   </div>
                 ) : viewingSession.sessionName ? (
                   <div className="flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 flex-shrink-0" style={{ color: theme.colors.accent }} />
                     <span
                       className="text-sm font-semibold truncate max-w-md"
                       style={{ color: theme.colors.accent }}
@@ -1092,10 +1104,9 @@ export function AgentSessionsBrowser({
                         />
                       </button>
                       <div className="flex-1 min-w-0">
-                        {/* Line 1: Session name (if available) with tag icon - or inline rename input */}
+                        {/* Line 1: Session name (if available) - or inline rename input */}
                         {renamingSessionId === session.sessionId ? (
                           <div className="flex items-center gap-1.5 mb-1">
-                            <Tag className="w-3.5 h-3.5 flex-shrink-0" style={{ color: theme.colors.accent }} />
                             <input
                               ref={renameInputRef}
                               type="text"
@@ -1124,7 +1135,6 @@ export function AgentSessionsBrowser({
                           </div>
                         ) : session.sessionName ? (
                           <div className="flex items-center gap-1.5 mb-1 group/name">
-                            <Tag className="w-3.5 h-3.5 flex-shrink-0" style={{ color: theme.colors.accent }} />
                             <span
                               className="font-semibold text-sm truncate"
                               style={{ color: theme.colors.accent }}
