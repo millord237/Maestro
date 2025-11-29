@@ -41,6 +41,7 @@ import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
+import { setActiveTab, createTab, closeTab } from './utils/tabHelpers';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
 
@@ -4384,6 +4385,63 @@ export default function MaestroConsole() {
           } catch (error) {
             console.error('Failed to resume session:', error);
           }
+        }}
+        // Tab management handlers
+        onTabSelect={(tabId: string) => {
+          if (!activeSession) return;
+          const result = setActiveTab(activeSession, tabId);
+          if (result) {
+            setSessions(prev => prev.map(s =>
+              s.id === activeSession.id ? result.session : s
+            ));
+          }
+        }}
+        onTabClose={(tabId: string) => {
+          if (!activeSession) return;
+          const result = closeTab(activeSession, tabId);
+          if (result) {
+            setSessions(prev => prev.map(s =>
+              s.id === activeSession.id ? result.session : s
+            ));
+          }
+        }}
+        onNewTab={() => {
+          if (!activeSession) return;
+          const result = createTab(activeSession);
+          setSessions(prev => prev.map(s =>
+            s.id === activeSession.id ? result.session : s
+          ));
+        }}
+        onTabRename={(tabId: string, newName: string) => {
+          if (!activeSession) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(tab =>
+                tab.id === tabId ? { ...tab, name: newName || null } : tab
+              )
+            };
+          }));
+        }}
+        onTabReorder={(fromIndex: number, toIndex: number) => {
+          if (!activeSession || !activeSession.aiTabs) return;
+          const tabs = [...activeSession.aiTabs];
+          const [movedTab] = tabs.splice(fromIndex, 1);
+          tabs.splice(toIndex, 0, movedTab);
+          setSessions(prev => prev.map(s =>
+            s.id === activeSession.id ? { ...s, aiTabs: tabs } : s
+          ));
+        }}
+        onCloseOtherTabs={(tabId: string) => {
+          if (!activeSession || !activeSession.aiTabs) return;
+          const tabToKeep = activeSession.aiTabs.find(t => t.id === tabId);
+          if (!tabToKeep) return;
+          setSessions(prev => prev.map(s =>
+            s.id === activeSession.id
+              ? { ...s, aiTabs: [tabToKeep], activeTabId: tabId }
+              : s
+          ));
         }}
       />
 
