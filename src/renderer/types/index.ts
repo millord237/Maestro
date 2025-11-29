@@ -102,14 +102,6 @@ export interface GlobalStats {
   totalActiveTimeMs: number;
 }
 
-// Recent Claude session for quick access breadcrumbs (per Maestro session)
-export interface RecentClaudeSession {
-  sessionId: string;
-  firstMessage: string;
-  timestamp: string;
-  sessionName?: string;
-}
-
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate Claude Code conversation
 export interface AITab {
@@ -198,9 +190,6 @@ export interface Session {
   claudeCommands?: { command: string; description: string; }[];
   // Bookmark flag - bookmarked sessions appear in a dedicated section at the top
   bookmarked?: boolean;
-  // Recent Claude sessions breadcrumbs for quick access (persisted per Maestro session)
-  // DEPRECATED: Tab bar replaces this functionality - will be removed in future version
-  recentClaudeSessions?: RecentClaudeSession[];
   // Pending AI command that will trigger a synopsis on completion (e.g., '/commit')
   pendingAICommandForSynopsis?: string;
   // Custom batch runner prompt (persisted per session)

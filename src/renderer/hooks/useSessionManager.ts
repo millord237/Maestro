@@ -257,8 +257,7 @@ export function useSessionManager(): UseSessionManagerReturn {
         shellCwd: workingDir,
         aiCommandHistory: [],
         shellCommandHistory: [],
-        messageQueue: [],
-        recentClaudeSessions: []
+        messageQueue: []
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);

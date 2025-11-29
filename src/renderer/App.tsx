@@ -1627,18 +1627,7 @@ export default function MaestroConsole() {
       // Update the session
       setSessions(prev => prev.map(s => {
         if (s.id !== activeSession.id) return s;
-        // Move the session to front of recent list if it exists
-        const existingRecent = s.recentClaudeSessions || [];
-        const recentSession = existingRecent.find(r => r.sessionId === claudeSessionId);
-        const firstMessage = messages.find(m => m.source === 'user')?.text || '';
-        const newRecentEntry = {
-          sessionId: claudeSessionId,
-          firstMessage: firstMessage.slice(0, 100),
-          timestamp: new Date().toISOString()
-        };
-        const filtered = existingRecent.filter(r => r.sessionId !== claudeSessionId);
-        const updatedRecent = [recentSession ? { ...recentSession, timestamp: new Date().toISOString() } : newRecentEntry, ...filtered].slice(0, 10);
-        return { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', recentClaudeSessions: updatedRecent, usageStats: undefined, contextUsage: 0, activeTimeMs: 0 };
+        return { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', usageStats: undefined, contextUsage: 0, activeTimeMs: 0 };
       }));
       setActiveClaudeSessionId(claudeSessionId);
     } catch (error) {
@@ -4166,30 +4155,17 @@ export default function MaestroConsole() {
         setLogViewerOpen={setLogViewerOpen}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveClaudeSessionId={setActiveClaudeSessionId}
-        onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[], sessionName?: string) => {
+        onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[]) => {
           // Update the active session with the selected Claude session ID and load messages
           // Also reset state to 'idle' since we're just loading historical messages
           // Switch to AI mode since we're resuming an AI session
           console.log('[onResumeClaudeSession] Resuming session:', claudeSessionId, 'activeSession:', activeSession?.id, activeSession?.claudeSessionId);
           if (activeSession) {
-            // Track this session in recent sessions list
-            const firstMessage = messages.find(m => m.source === 'user')?.text || '';
-            const newRecentSession = {
-              sessionId: claudeSessionId,
-              firstMessage: firstMessage.slice(0, 100),
-              timestamp: new Date().toISOString(),
-              sessionName
-            };
-
             setSessions(prev => {
               console.log('[onResumeClaudeSession] Updating sessions, looking for id:', activeSession.id);
               const updated = prev.map(s => {
                 if (s.id !== activeSession.id) return s;
-                // Update recent sessions: remove if exists, add to front, keep max 10
-                const existingRecent = s.recentClaudeSessions || [];
-                const filtered = existingRecent.filter(r => r.sessionId !== claudeSessionId);
-                const updatedRecent = [newRecentSession, ...filtered].slice(0, 10);
-                return { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', recentClaudeSessions: updatedRecent, usageStats: undefined, contextUsage: 0, activeTimeMs: 0 };
+                return { ...s, claudeSessionId, aiLogs: messages, state: 'idle', inputMode: 'ai', usageStats: undefined, contextUsage: 0, activeTimeMs: 0 };
               });
               const updatedSession = updated.find(s => s.id === activeSession.id);
               console.log('[onResumeClaudeSession] Updated session claudeSessionId:', updatedSession?.claudeSessionId);

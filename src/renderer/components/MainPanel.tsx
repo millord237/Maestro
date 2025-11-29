@@ -58,7 +58,7 @@ interface MainPanelProps {
   setLogViewerOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveClaudeSessionId: (id: string | null) => void;
-  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[], sessionName?: string) => void;
+  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[]) => void;
   onNewClaudeSession: () => void;
   setActiveFocus: (focus: FocusArea) => void;
   setOutputSearchOpen: (open: boolean) => void;
