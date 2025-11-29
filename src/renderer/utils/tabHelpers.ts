@@ -175,3 +175,93 @@ export function closeTab(session: Session, tabId: string): CloseTabResult | null
     session: updatedSession
   };
 }
+
+/**
+ * Result of reopening a closed tab.
+ */
+export interface ReopenTabResult {
+  tab: AITab;                       // The reopened tab (either restored or existing duplicate)
+  session: Session;                 // Updated session with tab restored/selected
+  wasDuplicate: boolean;            // True if we switched to an existing tab instead of restoring
+}
+
+/**
+ * Reopen the most recently closed tab from the closed tab history.
+ * Includes duplicate detection: if a tab with the same claudeSessionId already exists,
+ * switch to that existing tab instead of creating a duplicate.
+ *
+ * The tab is restored at its original index position if possible, otherwise appended to the end.
+ * The reopened tab becomes the active tab.
+ *
+ * @param session - The Maestro session
+ * @returns Object containing the reopened tab and updated session, or null if no closed tabs exist
+ *
+ * @example
+ * const result = reopenClosedTab(session);
+ * if (result) {
+ *   const { tab, session: updatedSession, wasDuplicate } = result;
+ *   if (wasDuplicate) {
+ *     console.log(`Switched to existing tab ${tab.id}`);
+ *   } else {
+ *     console.log(`Restored tab ${tab.id} from history`);
+ *   }
+ * }
+ */
+export function reopenClosedTab(session: Session): ReopenTabResult | null {
+  // Check if there's anything in the history
+  if (!session.closedTabHistory || session.closedTabHistory.length === 0) {
+    return null;
+  }
+
+  // Pop the most recently closed tab from history
+  const [closedTabEntry, ...remainingHistory] = session.closedTabHistory;
+  const tabToRestore = closedTabEntry.tab;
+
+  // Check for duplicate: does a tab with the same claudeSessionId already exist?
+  // Note: null claudeSessionId (new/empty tabs) are never considered duplicates
+  if (tabToRestore.claudeSessionId !== null) {
+    const existingTab = session.aiTabs.find(
+      tab => tab.claudeSessionId === tabToRestore.claudeSessionId
+    );
+
+    if (existingTab) {
+      // Duplicate found - switch to existing tab instead of restoring
+      // Still remove from history since user "used" their undo
+      return {
+        tab: existingTab,
+        session: {
+          ...session,
+          activeTabId: existingTab.id,
+          closedTabHistory: remainingHistory
+        },
+        wasDuplicate: true
+      };
+    }
+  }
+
+  // No duplicate - restore the tab
+  // Generate a new ID to avoid any ID conflicts
+  const restoredTab: AITab = {
+    ...tabToRestore,
+    id: generateId()
+  };
+
+  // Insert at original index if possible, otherwise append
+  const insertIndex = Math.min(closedTabEntry.index, session.aiTabs.length);
+  const updatedTabs = [
+    ...session.aiTabs.slice(0, insertIndex),
+    restoredTab,
+    ...session.aiTabs.slice(insertIndex)
+  ];
+
+  return {
+    tab: restoredTab,
+    session: {
+      ...session,
+      aiTabs: updatedTabs,
+      activeTabId: restoredTab.id,
+      closedTabHistory: remainingHistory
+    },
+    wasDuplicate: false
+  };
+}
