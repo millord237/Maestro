@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { Session, Group, ToolType, LogEntry } from '../types';
+import type { Session, Group, ToolType, LogEntry, AITab } from '../types';
 import { generateId } from '../utils/ids';
 import { gitService } from '../services/git';
+
+// Maximum number of log entries to persist per AI tab
+const MAX_PERSISTED_LOGS_PER_TAB = 100;
 
 // Strip leading emojis from a string for alphabetical sorting
 const stripLeadingEmojis = (str: string): string => {
@@ -12,6 +15,74 @@ const stripLeadingEmojis = (str: string): string => {
 // Compare two names, ignoring leading emojis for alphabetization
 const compareNamesIgnoringEmojis = (a: string, b: string): number => {
   return stripLeadingEmojis(a).localeCompare(stripLeadingEmojis(b));
+};
+
+/**
+ * Migrate a session from old format (without aiTabs) to new format.
+ * Creates a single tab from the legacy claudeSessionId, aiLogs, etc.
+ * This is a basic migration; starred/named status can be looked up later in restoreSession.
+ */
+const migrateSessionToTabFormat = (session: Session): Session => {
+  // If session already has aiTabs, just ensure closedTabHistory is initialized
+  if (session.aiTabs && session.aiTabs.length > 0) {
+    return {
+      ...session,
+      // closedTabHistory is runtime-only and should not be persisted
+      // Always reset to empty array on load
+      closedTabHistory: []
+    };
+  }
+
+  // Create initial tab from legacy data
+  const initialTab: AITab = {
+    id: generateId(),
+    claudeSessionId: session.claudeSessionId || null,
+    name: null, // Name will be looked up in restoreSession if needed
+    starred: false, // Starred will be looked up in restoreSession if needed
+    logs: session.aiLogs || [],
+    messageQueue: session.messageQueue || [],
+    inputValue: '',
+    usageStats: session.usageStats,
+    createdAt: Date.now(),
+    state: 'idle'
+  };
+
+  return {
+    ...session,
+    aiTabs: [initialTab],
+    activeTabId: initialTab.id,
+    closedTabHistory: [] // Runtime-only, always empty on load
+  };
+};
+
+/**
+ * Prepare a session for persistence by:
+ * 1. Truncating logs in each AI tab to MAX_PERSISTED_LOGS_PER_TAB entries
+ * 2. Excluding closedTabHistory (runtime-only, not persisted)
+ */
+const prepareSessionForPersistence = (session: Session): Session => {
+  // If no aiTabs, return as-is (shouldn't happen after migration)
+  if (!session.aiTabs || session.aiTabs.length === 0) {
+    return session;
+  }
+
+  // Truncate logs in each tab to the last MAX_PERSISTED_LOGS_PER_TAB entries
+  const truncatedTabs = session.aiTabs.map(tab => {
+    if (tab.logs.length > MAX_PERSISTED_LOGS_PER_TAB) {
+      return {
+        ...tab,
+        logs: tab.logs.slice(-MAX_PERSISTED_LOGS_PER_TAB)
+      };
+    }
+    return tab;
+  });
+
+  return {
+    ...session,
+    aiTabs: truncatedTabs,
+    // Explicitly exclude closedTabHistory - it's runtime-only
+    closedTabHistory: []
+  };
 };
 
 export interface UseSessionManagerReturn {
@@ -71,11 +142,13 @@ export function useSessionManager(): UseSessionManagerReturn {
 
         // Handle sessions
         if (savedSessions && savedSessions.length > 0) {
-          // Check Git repository status for all loaded sessions
+          // Check Git repository status and migrate to aiTabs format for all loaded sessions
           const sessionsWithGitStatus = await Promise.all(
             savedSessions.map(async (session) => {
               const isGitRepo = await gitService.isRepo(session.cwd);
-              return { ...session, isGitRepo };
+              // Migrate to aiTabs format and ensure closedTabHistory is reset
+              const migratedSession = migrateSessionToTabFormat({ ...session, isGitRepo });
+              return migratedSession;
             })
           );
           setSessions(sessionsWithGitStatus);
@@ -89,11 +162,13 @@ export function useSessionManager(): UseSessionManagerReturn {
             const localStorageSessions = localStorage.getItem('maestro_sessions');
             if (localStorageSessions) {
               const parsed = JSON.parse(localStorageSessions);
-              // Check Git repository status for migrated sessions
+              // Check Git repository status and migrate to aiTabs format for migrated sessions
               const sessionsWithGitStatus = await Promise.all(
                 parsed.map(async (session: Session) => {
                   const isGitRepo = await gitService.isRepo(session.cwd);
-                  return { ...session, isGitRepo };
+                  // Migrate to aiTabs format and ensure closedTabHistory is reset
+                  const migratedSession = migrateSessionToTabFormat({ ...session, isGitRepo });
+                  return migratedSession;
                 })
               );
               setSessions(sessionsWithGitStatus);
@@ -143,8 +218,11 @@ export function useSessionManager(): UseSessionManagerReturn {
   }, []);
 
   // Persist sessions and groups to electron-store whenever they change
+  // Apply log truncation and exclude runtime-only fields before saving
   useEffect(() => {
-    window.maestro.sessions.setAll(sessions);
+    // Prepare sessions for persistence (truncate logs, exclude closedTabHistory)
+    const sessionsForPersistence = sessions.map(prepareSessionForPersistence);
+    window.maestro.sessions.setAll(sessionsForPersistence);
   }, [sessions]);
 
   useEffect(() => {
