@@ -74,20 +74,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Scroll container ref for native scrolling
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Track if user is at the bottom of the scroll - only auto-scroll if true
-  // Initialize to true so new sessions auto-scroll, but once user scrolls up, we respect that
-  const isAtBottomRef = useRef(true);
-
-  // Track scroll position to detect if user scrolled away from bottom
-  const handleScroll = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    // Check if user is near the bottom (within 50px)
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
-    isAtBottomRef.current = isNearBottom;
-  }, []);
-
   // Track which log entries are expanded (by log ID)
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   // Use a ref to access current value without recreating LogItem callback
@@ -95,9 +81,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   expandedLogsRef.current = expandedLogs;
   // Counter to force re-render of LogItem when expanded state changes
   const [expandedTrigger, setExpandedTrigger] = useState(0);
-
-  // Track if any log is currently expanded (to disable auto-scroll during expansion)
-  const hasExpandedLogs = expandedLogs.size > 0;
 
   // Track local filters per log entry (log ID -> filter query)
   const [localFilters, setLocalFilters] = useState<Map<string, string>>(new Map());
@@ -498,71 +481,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       log.text.toLowerCase().includes(outputSearchQuery.toLowerCase())
     );
   }, [collapsedLogs, outputSearchQuery]);
-
-  // Helper to scroll to bottom of container
-  const scrollToBottom = useCallback((instant = false) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: instant ? 'instant' : 'smooth'
-    });
-  }, []);
-
-  // Auto-scroll to bottom when new logs are added (not when deleted)
-  // Initialize to 0 so that on first load with existing logs, we scroll to bottom
-  const prevLogCountRef = useRef(0);
-  useEffect(() => {
-    // Only scroll when new logs are added, not when deleted
-    if (filteredLogs.length > prevLogCountRef.current && filteredLogs.length > 0) {
-      // Use setTimeout to ensure scroll happens after render
-      // IMPORTANT: Check isAtBottomRef INSIDE the timeout to avoid race conditions
-      // where user starts scrolling between effect trigger and scroll execution
-      setTimeout(() => {
-        // Use refs to get current values at execution time, not effect run time
-        if (isAtBottomRef.current && expandedLogsRef.current.size === 0) {
-          scrollToBottom(true);
-        }
-      }, 0);
-    }
-    prevLogCountRef.current = filteredLogs.length;
-  }, [filteredLogs.length, hasExpandedLogs, scrollToBottom]);
-
-  // Auto-scroll to bottom when session becomes busy to show thinking indicator
-  const prevBusyStateRef = useRef(session.state === 'busy');
-  useEffect(() => {
-    const isBusy = session.state === 'busy';
-    // Scroll when transitioning to busy state
-    if (isBusy && !prevBusyStateRef.current) {
-      // Use setTimeout to ensure scroll happens after the Footer renders
-      // IMPORTANT: Check isAtBottomRef INSIDE the timeout to avoid race conditions
-      setTimeout(() => {
-        // Use refs to get current values at execution time, not effect run time
-        if (isAtBottomRef.current && expandedLogsRef.current.size === 0) {
-          scrollToBottom(true);
-        }
-      }, 50);
-    }
-    prevBusyStateRef.current = isBusy;
-  }, [session.state, hasExpandedLogs, scrollToBottom]);
-
-  // Auto-scroll to bottom when message queue changes
-  const prevQueueLengthRef = useRef(session.messageQueue?.length || 0);
-  useEffect(() => {
-    const queueLength = session.messageQueue?.length || 0;
-    // Scroll when new messages are added to the queue
-    if (queueLength > prevQueueLengthRef.current) {
-      // IMPORTANT: Check isAtBottomRef INSIDE the timeout to avoid race conditions
-      setTimeout(() => {
-        // Use refs to get current values at execution time, not effect run time
-        if (isAtBottomRef.current && expandedLogsRef.current.size === 0) {
-          scrollToBottom(true);
-        }
-      }, 50);
-    }
-    prevQueueLengthRef.current = queueLength;
-  }, [session.messageQueue?.length, hasExpandedLogs, scrollToBottom]);
 
   // Render a single log item - used by Virtuoso
   const LogItem = useCallback(({ index, log }: { index: number; log: LogEntry }) => {
@@ -1093,7 +1011,10 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         // Cmd+Down to jump to bottom
         if (e.key === 'ArrowDown' && (e.metaKey || e.ctrlKey) && !e.altKey) {
           e.preventDefault();
-          scrollToBottom(true);
+          const container = scrollContainerRef.current;
+          if (container) {
+            container.scrollTo({ top: container.scrollHeight });
+          }
           return;
         }
       }}
@@ -1116,7 +1037,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto scrollbar-thin"
-        onScroll={handleScroll}
       >
         {/* Log entries */}
         {filteredLogs.map((log, index) => (
