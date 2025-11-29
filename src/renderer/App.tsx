@@ -41,7 +41,7 @@ import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
-import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, navigateToNextTab, navigateToPrevTab } from './utils/tabHelpers';
+import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab } from './utils/tabHelpers';
 import { TAB_SHORTCUTS } from './constants/shortcuts';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
@@ -2148,6 +2148,29 @@ export default function MaestroConsole() {
         if (isTabShortcut(e, 'prevTab')) {
           e.preventDefault();
           const result = navigateToPrevTab(activeSession);
+          if (result) {
+            setSessions(prev => prev.map(s =>
+              s.id === activeSession.id ? result.session : s
+            ));
+          }
+        }
+        // Cmd+1 through Cmd+8: Jump to specific tab by index
+        for (let i = 1; i <= 8; i++) {
+          if (isTabShortcut(e, `goToTab${i}`)) {
+            e.preventDefault();
+            const result = navigateToTabByIndex(activeSession, i - 1);
+            if (result) {
+              setSessions(prev => prev.map(s =>
+                s.id === activeSession.id ? result.session : s
+              ));
+            }
+            break;
+          }
+        }
+        // Cmd+9: Jump to last tab
+        if (isTabShortcut(e, 'goToLastTab')) {
+          e.preventDefault();
+          const result = navigateToLastTab(activeSession);
           if (result) {
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id ? result.session : s

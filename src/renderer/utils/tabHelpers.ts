@@ -442,3 +442,69 @@ export function navigateToPrevTab(session: Session): SetActiveTabResult | null {
     }
   };
 }
+
+/**
+ * Navigate to a specific tab by its index (0-based).
+ * Used for Cmd+1 through Cmd+8 shortcuts.
+ *
+ * @param session - The Maestro session
+ * @param index - The 0-based index of the tab to navigate to
+ * @returns Object containing the new active tab and updated session, or null if index out of bounds
+ *
+ * @example
+ * // Navigate to the first tab (Cmd+1)
+ * const result = navigateToTabByIndex(session, 0);
+ * if (result) {
+ *   setSessions(prev => prev.map(s => s.id === session.id ? result.session : s));
+ * }
+ */
+export function navigateToTabByIndex(session: Session, index: number): SetActiveTabResult | null {
+  if (!session.aiTabs || session.aiTabs.length === 0) {
+    return null;
+  }
+
+  // Check if index is within bounds
+  if (index < 0 || index >= session.aiTabs.length) {
+    return null;
+  }
+
+  const targetTab = session.aiTabs[index];
+
+  // If already on this tab, return current state (no change needed)
+  if (session.activeTabId === targetTab.id) {
+    return {
+      tab: targetTab,
+      session
+    };
+  }
+
+  return {
+    tab: targetTab,
+    session: {
+      ...session,
+      activeTabId: targetTab.id
+    }
+  };
+}
+
+/**
+ * Navigate to the last tab in the session's tab list.
+ * Used for Cmd+9 shortcut.
+ *
+ * @param session - The Maestro session
+ * @returns Object containing the new active tab and updated session, or null if no tabs
+ *
+ * @example
+ * const result = navigateToLastTab(session);
+ * if (result) {
+ *   setSessions(prev => prev.map(s => s.id === session.id ? result.session : s));
+ * }
+ */
+export function navigateToLastTab(session: Session): SetActiveTabResult | null {
+  if (!session.aiTabs || session.aiTabs.length === 0) {
+    return null;
+  }
+
+  const lastIndex = session.aiTabs.length - 1;
+  return navigateToTabByIndex(session, lastIndex);
+}
