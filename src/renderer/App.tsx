@@ -41,7 +41,8 @@ import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
-import { setActiveTab, createTab, closeTab, getActiveTab } from './utils/tabHelpers';
+import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab } from './utils/tabHelpers';
+import { TAB_SHORTCUTS } from './constants/shortcuts';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
 
@@ -1780,6 +1781,32 @@ export default function MaestroConsole() {
     return key === mainKey;
   };
 
+  // Check if a key event matches a tab shortcut (AI mode only)
+  const isTabShortcut = (e: KeyboardEvent, actionId: string) => {
+    const sc = TAB_SHORTCUTS[actionId];
+    if (!sc) return false;
+    const keys = sc.keys.map(k => k.toLowerCase());
+
+    const metaPressed = e.metaKey || e.ctrlKey;
+    const shiftPressed = e.shiftKey;
+    const altPressed = e.altKey;
+    const key = e.key.toLowerCase();
+
+    const configMeta = keys.includes('meta') || keys.includes('ctrl') || keys.includes('command');
+    const configShift = keys.includes('shift');
+    const configAlt = keys.includes('alt');
+
+    if (metaPressed !== configMeta) return false;
+    if (shiftPressed !== configShift) return false;
+    if (altPressed !== configAlt) return false;
+
+    const mainKey = keys[keys.length - 1];
+    if (mainKey === '[' && key === '[') return true;
+    if (mainKey === ']' && key === ']') return true;
+
+    return key === mainKey;
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // When layers (modals/overlays) are open, we need nuanced shortcut handling:
@@ -2077,6 +2104,17 @@ export default function MaestroConsole() {
         if (activeSession?.toolType === 'claude-code') {
           setActiveClaudeSessionId(null);
           setAgentSessionsOpen(true);
+        }
+      }
+
+      // Tab shortcuts (AI mode only)
+      if (activeSession?.inputMode === 'ai' && activeSession?.aiTabs) {
+        if (isTabShortcut(e, 'newTab')) {
+          e.preventDefault();
+          const result = createTab(activeSession);
+          setSessions(prev => prev.map(s =>
+            s.id === activeSession.id ? result.session : s
+          ));
         }
       }
 
