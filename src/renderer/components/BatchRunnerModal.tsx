@@ -14,7 +14,7 @@ Your responsibilities are as follows:
     Begin by reviewing claude.md in this folder to understand the project's structure, conventions, and workflow expectations.
 
 2. Task Selection
-    Navigate to $$SCRATCHPAD$$ and select the FIRST unchecked task (- [ ]) from top to bottom.
+    Navigate to $$SCRATCHPAD$$ and select the FIRST unchecked task (- [ ]) from top to bottom. Note that there may be relevant images associated with the task, analyze them, and include in your final synopsis back how many images you analyzed in preparation for solving the task.
 
     IMPORTANT: You will only work on this single task. If it appears to have logical subtasks, treat them as one cohesive unit—but do not move on to the next top-level task.
 
@@ -41,6 +41,8 @@ Your responsibilities are as follows:
 
 7. Exit Immediately
     After completing (or skipping) the single task, EXIT. Do not proceed to additional tasks—another agent instance will handle them.
+
+NOTE: If you see a clear issue tag like a little moniker or some short form in front of the task, then your synopsis message should start with that exact token because we're clearly using it as a unique identifier.
 
 If there are no remaining open tasks, exit immediately and state that there is nothing left to do.`;
 
