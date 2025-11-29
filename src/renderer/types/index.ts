@@ -125,6 +125,14 @@ export interface AITab {
   state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
 }
 
+// Closed tab entry for undo functionality (Cmd+Shift+T)
+// Stores tab data with original position for restoration
+export interface ClosedTab {
+  tab: AITab;                      // The closed tab data
+  index: number;                   // Original position in the tab array
+  closedAt: number;                // Timestamp when closed
+}
+
 export interface Session {
   id: string;
   groupId?: string;
