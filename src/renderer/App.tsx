@@ -35,7 +35,7 @@ import { gitService } from './services/git';
 // Import types and constants
 import type {
   ToolType, SessionState, RightPanelTab,
-  ThemeId, FocusArea, LogEntry, Session, Group
+  ThemeId, FocusArea, LogEntry, Session, Group, AITab
 } from './types';
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
@@ -250,6 +250,62 @@ export default function MaestroConsole() {
   // Restore a persisted session by respawning its process
   const restoreSession = async (session: Session): Promise<Session> => {
     try {
+      // ===== Migration: Convert old session format to new aiTabs format =====
+      // If session lacks aiTabs array, migrate from legacy fields
+      if (!session.aiTabs || session.aiTabs.length === 0) {
+        // Look up starred status and session name from existing stores
+        let isStarred = false;
+        let sessionName: string | null = null;
+
+        if (session.claudeSessionId && session.cwd) {
+          try {
+            // Look up starred status
+            const starredKey = `starredClaudeSessions:${session.cwd}`;
+            const savedStarred = await window.maestro.settings.get(starredKey);
+            if (savedStarred && Array.isArray(savedStarred)) {
+              isStarred = savedStarred.includes(session.claudeSessionId);
+            }
+
+            // Look up session name from Claude session origins
+            const origins = await window.maestro.claude.getSessionOrigins(session.cwd);
+            const originData = origins[session.claudeSessionId];
+            if (originData && typeof originData === 'object' && originData.sessionName) {
+              sessionName = originData.sessionName;
+            }
+          } catch (error) {
+            console.warn('[restoreSession] Failed to lookup starred/named status during migration:', error);
+          }
+        }
+
+        // Create initial tab from legacy data
+        const initialTab: AITab = {
+          id: generateId(),
+          claudeSessionId: session.claudeSessionId || null,
+          name: sessionName,
+          starred: isStarred,
+          logs: session.aiLogs || [],
+          messageQueue: session.messageQueue || [],
+          inputValue: '',
+          usageStats: session.usageStats,
+          createdAt: Date.now(),
+          state: 'idle'
+        };
+
+        session = {
+          ...session,
+          aiTabs: [initialTab],
+          activeTabId: initialTab.id,
+          closedTabHistory: []
+        };
+
+        console.log('[restoreSession] Migrated session to aiTabs format:', session.id, {
+          claudeSessionId: initialTab.claudeSessionId,
+          name: sessionName,
+          starred: isStarred
+        });
+      }
+      // ===== End Migration =====
+
       // Detect and fix inputMode/toolType mismatch
       // The AI agent should never use 'terminal' as toolType
       let correctedSession = { ...session };
