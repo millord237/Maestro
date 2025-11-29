@@ -8,7 +8,7 @@
 import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useWebSocket, type WebSocketState, type CustomCommand, type AutoRunState } from '../hooks/useWebSocket';
-import { useCommandHistory } from '../hooks/useCommandHistory';
+// Command history is no longer used in the mobile UI
 import { useNotifications } from '../hooks/useNotifications';
 import { useUnreadBadge } from '../hooks/useUnreadBadge';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
@@ -23,8 +23,7 @@ import { AllSessionsView } from './AllSessionsView';
 import { MobileHistoryPanel } from './MobileHistoryPanel';
 import { CommandInputBar, type InputMode } from './CommandInputBar';
 import { DEFAULT_SLASH_COMMANDS, type SlashCommand } from './SlashCommandAutocomplete';
-import { CommandHistoryDrawer } from './CommandHistoryDrawer';
-import { RecentCommandChips } from './RecentCommandChips';
+// CommandHistoryDrawer and RecentCommandChips removed for simpler mobile UI
 import { ResponseViewer, type ResponseItem } from './ResponseViewer';
 import { OfflineQueueBanner } from './OfflineQueueBanner';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
@@ -328,13 +327,11 @@ export default function MobileApp() {
   const colors = useThemeColors();
   const isOffline = useOfflineStatus();
   const { setDesktopTheme } = useDesktopTheme();
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [commandInput, setCommandInput] = useState('');
-  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [showResponseViewer, setShowResponseViewer] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<LastResponsePreview | null>(null);
   const [responseIndex, setResponseIndex] = useState(0);
@@ -352,9 +349,6 @@ export default function MobileApp() {
   // AutoRun state per session (batch processing on desktop)
   const [autoRunStates, setAutoRunStates] = useState<Record<string, AutoRunState | null>>({});
 
-  // Input expansion state for small screens (drawer-like behavior)
-  const [isInputExpanded, setIsInputExpanded] = useState(false);
-
   // Detect if on a small screen (phone vs tablet/iPad)
   // Use 768px as breakpoint - below this is considered "small"
   const [isSmallScreen, setIsSmallScreen] = useState(
@@ -369,15 +363,6 @@ export default function MobileApp() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Command history hook
-  const {
-    history: commandHistory,
-    addCommand: addToHistory,
-    removeCommand: removeFromHistory,
-    clearHistory,
-    getUniqueCommands,
-  } = useCommandHistory();
 
   // Notification permission hook - requests permission on first visit
   const {
@@ -792,9 +777,6 @@ export default function MobileApp() {
     // Provide haptic feedback on send
     triggerHaptic(HAPTIC_PATTERNS.send);
 
-    // Add to command history
-    addToHistory(command, activeSessionId, currentMode);
-
     // Add user message to session logs immediately for display
     const userLogEntry: LogEntry = {
       id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -829,29 +811,11 @@ export default function MobileApp() {
 
     // Clear the input
     setCommandInput('');
-
-    // Collapse input on small screens after sending
-    if (isSmallScreen) {
-      setIsInputExpanded(false);
-    }
-  }, [activeSessionId, sessions, send, addToHistory, isOffline, isActuallyConnected, queueCommand, isSmallScreen]);
+  }, [activeSessionId, sessions, send, isOffline, isActuallyConnected, queueCommand]);
 
   // Handle command input change
   const handleCommandChange = useCallback((value: string) => {
     setCommandInput(value);
-  }, []);
-
-  // Handle input focus - expand on small screens
-  const handleInputFocus = useCallback(() => {
-    if (isSmallScreen) {
-      setIsInputExpanded(true);
-    }
-  }, [isSmallScreen]);
-
-  // Handle input blur - collapse on small screens (with small delay to allow for submit)
-  const handleInputBlur = useCallback(() => {
-    // Don't immediately collapse - let submit handler do it if needed
-    // This prevents collapse when tapping submit button
   }, []);
 
   // Handle mode toggle between AI and Terminal
@@ -907,23 +871,6 @@ export default function MobileApp() {
       webLogger.error('Error interrupting session', 'Mobile', error);
     }
   }, [activeSessionId]);
-
-  // Handle opening history drawer
-  const handleOpenHistory = useCallback(() => {
-    setShowHistoryDrawer(true);
-    triggerHaptic(HAPTIC_PATTERNS.tap);
-  }, []);
-
-  // Handle closing history drawer
-  const handleCloseHistory = useCallback(() => {
-    setShowHistoryDrawer(false);
-  }, []);
-
-  // Handle selecting a command from history
-  const handleSelectHistoryCommand = useCallback((command: string) => {
-    setCommandInput(command);
-    // Haptic feedback is provided by the drawer
-  }, []);
 
   // Combined slash commands (default + custom from desktop)
   const allSlashCommands = useMemo((): SlashCommand[] => {
@@ -1137,7 +1084,7 @@ export default function MobileApp() {
             logs={currentLogs}
             inputMode={activeSession.inputMode as 'ai' | 'terminal'}
             autoScroll={true}
-            maxHeight="calc(100dvh - 240px)"
+            maxHeight="100%"
           />
         )}
       </div>
@@ -1149,11 +1096,11 @@ export default function MobileApp() {
   const containerStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '100dvh',
+    height: '100dvh',
+    maxHeight: '100dvh',
+    overflow: 'hidden',
     backgroundColor: colors.bgMain,
     color: colors.textMain,
-    // Add padding at bottom to account for fixed input bar (~70px + safe area)
-    paddingBottom: 'calc(70px + max(12px, env(safe-area-inset-bottom)))',
   };
 
   // Determine if session pill bar should be shown
@@ -1232,27 +1179,20 @@ export default function MobileApp() {
         />
       )}
 
-      {/* Main content area - shrinks when input expanded on small screens */}
+      {/* Main content area */}
       <main
-        onClick={() => {
-          // Collapse input when tapping message history on small screens
-          if (isSmallScreen && isInputExpanded) {
-            setIsInputExpanded(false);
-          }
-        }}
         style={{
-          flex: isSmallScreen && isInputExpanded ? '0 0 30%' : 1,
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'flex-start',
-          padding: '20px',
+          padding: '12px',
+          paddingBottom: 'calc(80px + env(safe-area-inset-bottom))', // Account for fixed input bar
           textAlign: 'center',
           overflow: 'auto',
           overscrollBehavior: 'contain',
-          position: 'relative',
-          transition: 'flex 0.2s ease-out',
-          minHeight: isSmallScreen && isInputExpanded ? '100px' : undefined,
+          minHeight: 0, // Required for flex child to scroll properly
         }}
       >
         {/* Content wrapper */}
@@ -1264,6 +1204,7 @@ export default function MobileApp() {
             alignItems: 'center',
             justifyContent: connectionState === 'connected' || connectionState === 'authenticated' ? 'flex-start' : 'center',
             width: '100%',
+            minHeight: 0,
           }}
         >
           {renderContent()}
@@ -1273,15 +1214,10 @@ export default function MobileApp() {
               Make sure Maestro desktop app is running
             </p>
           )}
-          {lastRefreshTime && (connectionState === 'connected' || connectionState === 'authenticated') && (
-            <p style={{ fontSize: '11px', color: colors.textDim, marginTop: '8px' }}>
-              Last updated: {lastRefreshTime.toLocaleTimeString()}
-            </p>
-          )}
         </div>
       </main>
 
-      {/* Sticky bottom command input bar with recent command chips */}
+      {/* Sticky bottom command input bar */}
       <CommandInputBar
         isOffline={isOffline}
         isConnected={connectionState === 'connected' || connectionState === 'authenticated'}
@@ -1302,29 +1238,10 @@ export default function MobileApp() {
         onModeToggle={handleModeToggle}
         isSessionBusy={activeSession?.state === 'busy'}
         onInterrupt={handleInterrupt}
-        onHistoryOpen={handleOpenHistory}
-        recentCommands={
-          getUniqueCommands(10)
-            .filter(entry => entry.mode === activeSession?.inputMode)
-            .slice(0, 5)
-        }
-        onSelectRecentCommand={handleSelectHistoryCommand}
         hasActiveSession={!!activeSessionId}
         cwd={activeSession?.cwd}
         slashCommands={allSlashCommands}
-        onInputFocus={handleInputFocus}
-        onInputBlur={handleInputBlur}
-        showRecentCommands={!isSmallScreen}
-      />
-
-      {/* Command history drawer - swipe up from input area */}
-      <CommandHistoryDrawer
-        isOpen={showHistoryDrawer}
-        onClose={handleCloseHistory}
-        history={commandHistory}
-        onSelectCommand={handleSelectHistoryCommand}
-        onDeleteCommand={removeFromHistory}
-        onClearHistory={clearHistory}
+        showRecentCommands={false}
       />
 
       {/* Full-screen response viewer modal */}

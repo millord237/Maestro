@@ -479,8 +479,84 @@ export function SessionList(props: SessionListProps) {
             </div>
           </>
         ) : (
-          <div className="w-full flex flex-col items-center gap-2">
-            <Wand2 className="w-6 h-6" style={{ color: theme.colors.accent }} />
+          <div className="w-full flex flex-col items-center gap-2 relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="p-2 rounded hover:bg-white/10 transition-colors"
+              title="Menu"
+            >
+              <Wand2 className="w-6 h-6" style={{ color: theme.colors.accent }} />
+            </button>
+            {/* Menu Overlay for Collapsed Sidebar */}
+            {menuOpen && (
+              <div
+                className="absolute top-full left-0 mt-2 w-72 rounded-lg shadow-2xl z-50 overflow-hidden"
+                style={{
+                  backgroundColor: theme.colors.bgSidebar,
+                  border: `1px solid ${theme.colors.border}`
+                }}
+              >
+                <div className="p-1">
+                  <button
+                    onClick={() => { setShortcutsHelpOpen(true); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <Keyboard className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Keyboard Shortcuts</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>View all available shortcuts</div>
+                    </div>
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                      {shortcuts.help.keys.join('+').replace('Meta', '⌘')}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setSettingsModalOpen(true); setSettingsTab('general'); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <Settings className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Settings</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>Configure preferences</div>
+                    </div>
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                      {shortcuts.settings.keys.join('+').replace('Meta', '⌘')}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setLogViewerOpen(true); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <ScrollText className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>System Logs</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>View application logs</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setProcessMonitorOpen(true); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <Cpu className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Process Monitor</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>View running processes</div>
+                    </div>
+                  </button>
+                  <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+                  <button
+                    onClick={() => { setAboutModalOpen(true); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <Info className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>About Maestro</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>Version, Credits, Stats</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

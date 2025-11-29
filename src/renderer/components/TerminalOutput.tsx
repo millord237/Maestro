@@ -901,14 +901,6 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             className="absolute bottom-2 right-2 flex items-center gap-1"
             style={{ transition: 'opacity 0.15s ease-in-out' }}
           >
-            {/* Delivery checkmark for user messages in AI mode */}
-            {isUserMessage && isAIMode && log.delivered && (
-              <Check
-                className="w-3.5 h-3.5"
-                style={{ color: theme.colors.success, opacity: 0.6 }}
-                title="Message delivered"
-              />
-            )}
             {/* Speak Button - only show for non-user messages when TTS is configured */}
             {audioFeedbackCommand && log.source !== 'user' && (
               <button
@@ -974,6 +966,14 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )
+            )}
+            {/* Delivery checkmark for user messages in AI mode - positioned at the end */}
+            {isUserMessage && isAIMode && log.delivered && (
+              <Check
+                className="w-3.5 h-3.5"
+                style={{ color: theme.colors.success, opacity: 0.6 }}
+                title="Message delivered"
+              />
             )}
           </div>
         </div>

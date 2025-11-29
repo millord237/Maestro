@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Copy, Check, Trash2 } from 'lucide-react';
 import type { BatchRunState, SessionState } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -46,11 +46,12 @@ function AttachmentImage({
   alt?: string;
   sessionId: string;
   theme: any;
-  onImageClick?: (dataUrl: string) => void;
+  onImageClick?: (filename: string) => void;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [filename, setFilename] = useState<string | null>(null);
 
   useEffect(() => {
     if (!src) {
@@ -60,8 +61,9 @@ function AttachmentImage({
 
     // Check if this is an attachment reference (maestro-attachment://filename)
     if (src.startsWith('maestro-attachment://')) {
-      const filename = src.replace('maestro-attachment://', '');
-      const cacheKey = `${sessionId}:${filename}`;
+      const fname = src.replace('maestro-attachment://', '');
+      setFilename(fname);
+      const cacheKey = `${sessionId}:${fname}`;
 
       // Check cache first
       if (imageCache.has(cacheKey)) {
@@ -71,7 +73,7 @@ function AttachmentImage({
       }
 
       // Load from attachment storage
-      window.maestro.attachments.load(sessionId, filename).then(result => {
+      window.maestro.attachments.load(sessionId, fname).then(result => {
         if (result.success && result.dataUrl) {
           imageCache.set(cacheKey, result.dataUrl);
           setDataUrl(result.dataUrl);
@@ -83,10 +85,12 @@ function AttachmentImage({
     } else if (src.startsWith('data:')) {
       // Already a data URL
       setDataUrl(src);
+      setFilename(null);
       setLoading(false);
     } else {
       // External URL - just use it directly
       setDataUrl(src);
+      setFilename(null);
       setLoading(false);
     }
   }, [src, sessionId]);
@@ -125,7 +129,7 @@ function AttachmentImage({
       alt={alt || ''}
       className="max-w-full h-auto rounded my-2 cursor-pointer hover:opacity-90 transition-opacity"
       style={{ maxHeight: '400px', objectFit: 'contain' }}
-      onClick={() => onImageClick?.(dataUrl)}
+      onClick={() => filename && onImageClick?.(filename)}
     />
   );
 }
@@ -205,7 +209,7 @@ function ImagePreview({
   filename: string;
   theme: any;
   onRemove: () => void;
-  onImageClick: (dataUrl: string) => void;
+  onImageClick: (filename: string) => void;
 }) {
   return (
     <div
@@ -217,7 +221,7 @@ function ImagePreview({
         alt={filename}
         className="w-20 h-20 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
         style={{ border: `1px solid ${theme.colors.border}` }}
-        onClick={() => onImageClick(src)}
+        onClick={() => onImageClick(filename)}
       />
       <button
         onClick={(e) => {
@@ -268,7 +272,9 @@ export function Scratchpad({
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  // Lightbox state: stores the filename of the currently viewed image (null = closed)
+  const [lightboxFilename, setLightboxFilename] = useState<string | null>(null);
+  const [lightboxCopied, setLightboxCopied] = useState(false);
   const [attachmentsList, setAttachmentsList] = useState<string[]>([]);
   const [attachmentPreviews, setAttachmentPreviews] = useState<Map<string, string>>(new Map());
   const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
@@ -602,6 +608,90 @@ export function Scratchpad({
     imageCache.delete(`${sessionId}:${filename}`);
   }, [content, onChange, sessionId]);
 
+  // Lightbox helpers
+  const openLightboxByFilename = useCallback((filename: string) => {
+    setLightboxFilename(filename);
+    setLightboxCopied(false);
+  }, []);
+
+  const closeLightbox = useCallback(() => {
+    setLightboxFilename(null);
+    setLightboxCopied(false);
+  }, []);
+
+  const lightboxCurrentIndex = lightboxFilename ? attachmentsList.indexOf(lightboxFilename) : -1;
+  const canNavigateLightbox = attachmentsList.length > 1;
+
+  const goToPrevImage = useCallback(() => {
+    if (canNavigateLightbox && lightboxCurrentIndex > 0) {
+      setLightboxFilename(attachmentsList[lightboxCurrentIndex - 1]);
+      setLightboxCopied(false);
+    }
+  }, [canNavigateLightbox, lightboxCurrentIndex, attachmentsList]);
+
+  const goToNextImage = useCallback(() => {
+    if (canNavigateLightbox && lightboxCurrentIndex < attachmentsList.length - 1) {
+      setLightboxFilename(attachmentsList[lightboxCurrentIndex + 1]);
+      setLightboxCopied(false);
+    }
+  }, [canNavigateLightbox, lightboxCurrentIndex, attachmentsList]);
+
+  const copyLightboxImageToClipboard = useCallback(async () => {
+    if (!lightboxFilename) return;
+    const dataUrl = attachmentPreviews.get(lightboxFilename);
+    if (!dataUrl) return;
+
+    try {
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      setLightboxCopied(true);
+      setTimeout(() => setLightboxCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy image to clipboard:', err);
+    }
+  }, [lightboxFilename, attachmentPreviews]);
+
+  const deleteLightboxImage = useCallback(async () => {
+    if (!lightboxFilename || !sessionId) return;
+
+    // Store the current index before deletion
+    const currentIndex = lightboxCurrentIndex;
+    const totalImages = attachmentsList.length;
+
+    // Delete the attachment
+    await window.maestro.attachments.delete(sessionId, lightboxFilename);
+    setAttachmentsList(prev => prev.filter(f => f !== lightboxFilename));
+    setAttachmentPreviews(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(lightboxFilename);
+      return newMap;
+    });
+
+    // Remove the markdown reference from content
+    const regex = new RegExp(`!\\[${lightboxFilename}\\]\\(maestro-attachment://${lightboxFilename}\\)\\n?`, 'g');
+    onChange(content.replace(regex, ''));
+
+    // Clear from cache
+    imageCache.delete(`${sessionId}:${lightboxFilename}`);
+
+    // Navigate to next/prev image or close lightbox
+    if (totalImages <= 1) {
+      // No more images, close lightbox
+      closeLightbox();
+    } else if (currentIndex >= totalImages - 1) {
+      // Was last image, go to previous
+      const newList = attachmentsList.filter(f => f !== lightboxFilename);
+      setLightboxFilename(newList[newList.length - 1] || null);
+    } else {
+      // Go to next image (same index in new list)
+      const newList = attachmentsList.filter(f => f !== lightboxFilename);
+      setLightboxFilename(newList[currentIndex] || null);
+    }
+  }, [lightboxFilename, lightboxCurrentIndex, attachmentsList, sessionId, content, onChange, closeLightbox]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Command-E to toggle between edit and preview
     if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
@@ -855,7 +945,7 @@ export function Scratchpad({
                   filename={filename}
                   theme={theme}
                   onRemove={() => handleRemoveAttachment(filename)}
-                  onImageClick={setLightboxImage}
+                  onImageClick={openLightboxByFilename}
                 />
               ))}
             </div>
@@ -1085,7 +1175,7 @@ export function Scratchpad({
                       alt={alt}
                       sessionId={sessionId}
                       theme={theme}
-                      onImageClick={setLightboxImage}
+                      onImageClick={openLightboxByFilename}
                       {...props}
                     />
                   )
@@ -1106,25 +1196,88 @@ export function Scratchpad({
         />
       )}
 
-      {/* Lightbox for viewing images */}
-      {lightboxImage && (
+      {/* Lightbox for viewing images with navigation, copy, and delete */}
+      {lightboxFilename && attachmentPreviews.get(lightboxFilename) && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={() => setLightboxImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+          onClick={closeLightbox}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'ArrowLeft') { e.preventDefault(); goToPrevImage(); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); goToNextImage(); }
+            else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLightboxImage(); }
+          }}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
         >
-          <div className="relative max-w-[90vw] max-h-[90vh]">
-            <img
-              src={lightboxImage}
-              alt="Preview"
-              className="max-w-full max-h-[90vh] object-contain rounded-lg"
-            />
+          {/* Previous button */}
+          {canNavigateLightbox && lightboxCurrentIndex > 0 && (
             <button
-              onClick={() => setLightboxImage(null)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center bg-black/50 hover:bg-black/70 transition-colors"
-              style={{ color: 'white' }}
+              onClick={(e) => { e.stopPropagation(); goToPrevImage(); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
+              title="Previous image (←)"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Image */}
+          <img
+            src={attachmentPreviews.get(lightboxFilename)}
+            alt={lightboxFilename}
+            className="max-w-[90%] max-h-[90%] rounded shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {/* Top right buttons: Copy and Delete */}
+          <div className="absolute top-4 right-4 flex gap-2">
+            {/* Copy to clipboard */}
+            <button
+              onClick={(e) => { e.stopPropagation(); copyLightboxImageToClipboard(); }}
+              className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors flex items-center gap-2"
+              title="Copy image to clipboard"
+            >
+              {lightboxCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+              {lightboxCopied && <span className="text-sm">Copied!</span>}
+            </button>
+
+            {/* Delete image */}
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteLightboxImage(); }}
+              className="bg-red-500/80 hover:bg-red-500 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
+              title="Delete image (Delete key)"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+
+            {/* Close button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); closeLightbox(); }}
+              className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
+              title="Close (ESC)"
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+
+          {/* Next button */}
+          {canNavigateLightbox && lightboxCurrentIndex < attachmentsList.length - 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); goToNextImage(); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
+              title="Next image (→)"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Bottom info */}
+          <div className="absolute bottom-10 text-white text-sm opacity-70 text-center">
+            <div>{lightboxFilename}</div>
+            <div className="mt-1">
+              {canNavigateLightbox ? `Image ${lightboxCurrentIndex + 1} of ${attachmentsList.length} • ← → to navigate • ` : ''}
+              Delete to remove • ESC to close
+            </div>
           </div>
         </div>
       )}

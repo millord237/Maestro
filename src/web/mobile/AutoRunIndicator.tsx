@@ -1,8 +1,9 @@
 /**
  * AutoRunIndicator component for mobile web interface
  *
- * Displays a banner when AutoRun (batch processing) is active on the desktop app.
+ * Displays a PROMINENT banner when AutoRun (batch processing) is active on the desktop app.
  * Shows task progress and indicates that AI input is in read-only mode.
+ * This banner is designed to be highly visible on mobile devices.
  */
 
 import { useThemeColors } from '../components/ThemeProvider';
@@ -18,6 +19,7 @@ interface AutoRunIndicatorProps {
 /**
  * AutoRun indicator banner component
  * Shows task progress when batch processing is active
+ * PROMINENT: Uses bold colors and large text for visibility
  */
 export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) {
   const colors = useThemeColors();
@@ -34,21 +36,24 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
   return (
     <div
       style={{
-        backgroundColor: isStopping ? `${colors.warning}15` : `${colors.accent}15`,
-        borderBottom: `1px solid ${isStopping ? colors.warning : colors.accent}`,
-        padding: '8px 12px',
+        // PROMINENT: Use solid, vibrant background color
+        backgroundColor: isStopping ? colors.warning : colors.accent,
+        // PROMINENT: Add extra padding for visibility
+        padding: '12px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
+        // Add shadow to stand out
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
       }}
     >
-      {/* Animated indicator icon */}
+      {/* Animated indicator icon - white circle with icon */}
       <div
         style={{
-          width: '24px',
-          height: '24px',
+          width: '32px',
+          height: '32px',
           borderRadius: '50%',
-          backgroundColor: isStopping ? colors.warning : colors.accent,
+          backgroundColor: 'rgba(255,255,255,0.25)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -60,8 +65,8 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
         {isStopping ? (
           // Pause icon (stopping)
           <svg
-            width="12"
-            height="12"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -75,8 +80,8 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
         ) : (
           // Play/running icon
           <svg
-            width="12"
-            height="12"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="white"
             stroke="none"
@@ -99,38 +104,38 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
           <div style={{ minWidth: 0, flex: 1 }}>
             <div
               style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: colors.textMain,
+                fontSize: '15px',
+                fontWeight: 700,
+                color: 'white',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
             >
-              {isStopping ? 'Stopping after current task...' : 'AutoRun Active'}
+              {isStopping ? 'Stopping...' : 'AutoRun Active'}
             </div>
             <div
               style={{
-                fontSize: '11px',
-                color: colors.textDim,
+                fontSize: '12px',
+                color: 'rgba(255,255,255,0.85)',
                 marginTop: '2px',
               }}
             >
               {sessionName && <span>{sessionName} - </span>}
               Task {currentTask} of {totalTasks}
-              {completedTasks > 0 && ` (${completedTasks} completed)`}
+              {completedTasks > 0 && ` (${completedTasks} done)`}
             </div>
           </div>
 
-          {/* Progress badge */}
+          {/* Progress badge - white with accent text */}
           <div
             style={{
-              fontSize: '12px',
-              fontWeight: 600,
+              fontSize: '14px',
+              fontWeight: 700,
               color: isStopping ? colors.warning : colors.accent,
-              backgroundColor: isStopping ? `${colors.warning}20` : `${colors.accent}20`,
-              padding: '4px 8px',
-              borderRadius: '12px',
+              backgroundColor: 'white',
+              padding: '6px 12px',
+              borderRadius: '16px',
               flexShrink: 0,
             }}
           >
@@ -138,13 +143,13 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress bar - white background */}
         <div
           style={{
-            height: '4px',
-            backgroundColor: `${colors.textDim}20`,
-            borderRadius: '2px',
-            marginTop: '6px',
+            height: '6px',
+            backgroundColor: 'rgba(255,255,255,0.3)',
+            borderRadius: '3px',
+            marginTop: '8px',
             overflow: 'hidden',
           }}
         >
@@ -152,44 +157,12 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
             style={{
               width: `${progress}%`,
               height: '100%',
-              backgroundColor: isStopping ? colors.warning : colors.accent,
-              borderRadius: '2px',
+              backgroundColor: 'white',
+              borderRadius: '3px',
               transition: 'width 0.3s ease-out',
             }}
           />
         </div>
-      </div>
-
-      {/* Read-only indicator */}
-      <div
-        style={{
-          fontSize: '10px',
-          color: colors.textDim,
-          backgroundColor: `${colors.textDim}15`,
-          padding: '4px 6px',
-          borderRadius: '4px',
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-        }}
-        title="AI input is read-only while AutoRun is active"
-      >
-        {/* Lock icon */}
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={colors.textDim}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        READ-ONLY
       </div>
 
       {/* Pulse animation keyframes */}
@@ -200,8 +173,8 @@ export function AutoRunIndicator({ state, sessionName }: AutoRunIndicatorProps) 
             opacity: 1;
           }
           50% {
-            transform: scale(1.1);
-            opacity: 0.8;
+            transform: scale(1.15);
+            opacity: 0.85;
           }
         }
       `}</style>
