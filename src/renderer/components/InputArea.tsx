@@ -334,8 +334,8 @@ export function InputArea(props: InputAreaProps) {
           className="flex-1 relative border rounded-lg bg-opacity-50 flex flex-col"
           style={{
             borderColor: isWriteModeLocked ? theme.colors.warning : (isReadOnlyMode ? theme.colors.warning : theme.colors.border),
-            backgroundColor: isWriteModeLocked ? `${theme.colors.warning}10` : (isReadOnlyMode ? `${theme.colors.warning}15` : theme.colors.bgMain),
-            opacity: isWriteModeLocked ? 0.7 : 1
+            backgroundColor: isWriteModeLocked ? `${theme.colors.warning}10` : (isReadOnlyMode ? `${theme.colors.warning}15` : theme.colors.bgMain)
+            // Note: No opacity reduction - user can type while write-mode locked, sending is blocked in processInput
           }}
         >
           <div className="flex items-start">
@@ -351,16 +351,15 @@ export function InputArea(props: InputAreaProps) {
             <textarea
               ref={inputRef}
               className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] scrollbar-thin`}
-              style={{ color: isWriteModeLocked ? theme.colors.textDim : theme.colors.textMain, maxHeight: '7rem' }}
+              style={{ color: theme.colors.textMain, maxHeight: '7rem' }}
               placeholder={
                 isWriteModeLocked
-                  ? `Waiting for ${writeModeLocked?.lockingTabName || 'another tab'} to finish...`
+                  ? `Waiting for ${writeModeLocked?.lockingTabName || 'another tab'} to finish... (type anyway)`
                   : (isReadOnlyMode
                     ? "Auto mode active - Claude in read-only mode..."
                     : (isTerminalMode ? "Run shell command..." : `Ask Claude about ${session.name}`))
               }
               value={inputValue}
-              disabled={isWriteModeLocked}
               onFocus={onInputFocus}
               onChange={e => {
                 const value = e.target.value;

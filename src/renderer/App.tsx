@@ -41,7 +41,7 @@ import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
 import { fuzzyMatch } from './utils/search';
-import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab } from './utils/tabHelpers';
+import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab } from './utils/tabHelpers';
 import { TAB_SHORTCUTS } from './constants/shortcuts';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
@@ -2713,6 +2713,22 @@ export default function MaestroConsole() {
     if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) {
       console.log('[processInput] EARLY RETURN - missing activeSession or empty input');
       return;
+    }
+
+    // Block sending when another tab is in write mode (AI mode only)
+    // This prevents file clobbering when multiple Claude sessions write to the same project
+    if (activeSession.inputMode === 'ai' && activeSession.aiTabs && activeSession.aiTabs.length > 1) {
+      const activeTab = getActiveTab(activeSession);
+      const writeModeTab = getWriteModeTab(activeSession);
+
+      // If there's a busy tab and it's NOT the current tab, block sending
+      if (writeModeTab && activeTab && writeModeTab.id !== activeTab.id) {
+        const lockingTabName = writeModeTab.name
+          || (writeModeTab.claudeSessionId ? writeModeTab.claudeSessionId.split('-')[0].toUpperCase() : 'another tab');
+        showFlashNotification(`Waiting for ${lockingTabName} to finish...`);
+        console.log('[processInput] BLOCKED - another tab is in write mode:', lockingTabName);
+        return;
+      }
     }
 
     // Block slash commands when agent is busy (in AI mode)
