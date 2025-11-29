@@ -1364,6 +1364,34 @@ export default function MaestroConsole() {
       });
       // Refresh history panel to show the new entry
       rightPanelRef.current?.refreshHistoryPanel();
+    },
+    onComplete: (info) => {
+      // Find group name for the session
+      const sessionGroup = groups.find(g => g.sessionIds?.includes(info.sessionId));
+      const groupName = sessionGroup?.name || 'Ungrouped';
+
+      // Determine toast type and message based on completion status
+      const isSuccess = info.completedTasks > 0 && !info.wasStopped;
+      const toastType = info.wasStopped ? 'warning' : (info.completedTasks === info.totalTasks ? 'success' : 'info');
+
+      // Build message
+      let message: string;
+      if (info.wasStopped) {
+        message = `Stopped after completing ${info.completedTasks} of ${info.totalTasks} tasks`;
+      } else if (info.completedTasks === info.totalTasks) {
+        message = `All ${info.totalTasks} ${info.totalTasks === 1 ? 'task' : 'tasks'} completed successfully`;
+      } else {
+        message = `Completed ${info.completedTasks} of ${info.totalTasks} tasks`;
+      }
+
+      addToast({
+        type: toastType,
+        title: 'Auto-Run Complete',
+        message,
+        group: groupName,
+        project: info.sessionName,
+        taskDuration: info.elapsedTimeMs,
+      });
     }
   });
 
