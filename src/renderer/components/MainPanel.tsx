@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Wand2, ExternalLink, Columns, Copy, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit, Star, Edit2, Check, X } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
@@ -10,6 +10,7 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { formatActiveTime } from '../utils/theme';
+import { getWriteModeTab, getActiveTab } from '../utils/tabHelpers';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -164,6 +165,39 @@ export function MainPanel(props: MainPanelProps) {
 
   // Extract tab handlers from props
   const { onTabSelect, onTabClose, onNewTab, onTabRename, onTabReorder, onCloseOtherTabs } = props;
+
+  // Calculate write-mode lock info for InputArea
+  // This determines if another tab (not the current one) is in write mode
+  const writeModeLocked = useMemo(() => {
+    if (!activeSession?.aiTabs || activeSession.aiTabs.length <= 1) {
+      return { isLocked: false, lockingTabName: null, lockingTabId: null };
+    }
+
+    const activeTab = getActiveTab(activeSession);
+    const busyTab = getWriteModeTab(activeSession);
+
+    // If there's a busy tab and it's NOT the active tab, input is locked
+    if (busyTab && activeTab && busyTab.id !== activeTab.id) {
+      // Determine display name for the locking tab
+      const lockingTabName = busyTab.name
+        || (busyTab.claudeSessionId ? busyTab.claudeSessionId.split('-')[0].toUpperCase() : 'another tab');
+
+      return {
+        isLocked: true,
+        lockingTabName,
+        lockingTabId: busyTab.id
+      };
+    }
+
+    return { isLocked: false, lockingTabName: null, lockingTabId: null };
+  }, [activeSession?.aiTabs, activeSession?.activeTabId]);
+
+  // Handler to switch to the tab that's holding the write-mode lock
+  const handleSwitchToLockedTab = useCallback(() => {
+    if (writeModeLocked.lockingTabId && onTabSelect) {
+      onTabSelect(writeModeLocked.lockingTabId);
+    }
+  }, [writeModeLocked.lockingTabId, onTabSelect]);
 
   // Track panel width for responsive widget hiding
   useEffect(() => {
@@ -1043,6 +1077,8 @@ export function MainPanel(props: MainPanelProps) {
                 sessions={sessions}
                 namedSessions={namedSessions}
                 onSessionClick={setActiveSessionId}
+                writeModeLocked={writeModeLocked}
+                onSwitchToLockedTab={handleSwitchToLockedTab}
               />
               )}
             </>

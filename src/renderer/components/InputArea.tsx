@@ -11,6 +11,13 @@ interface SlashCommand {
   aiOnly?: boolean;
 }
 
+// Write-mode lock information for tab-based input locking
+interface WriteModeLockedInfo {
+  isLocked: boolean;                    // True if another tab is in write mode
+  lockingTabName: string | null;        // Display name of the tab holding the lock
+  lockingTabId: string | null;          // ID of the tab holding the lock (for click to switch)
+}
+
 interface InputAreaProps {
   session: Session;
   theme: Theme;
@@ -52,6 +59,9 @@ interface InputAreaProps {
   sessions?: Session[];
   namedSessions?: Record<string, string>;
   onSessionClick?: (sessionId: string) => void;
+  // Write-mode locking props
+  writeModeLocked?: WriteModeLockedInfo;
+  onSwitchToLockedTab?: () => void;
 }
 
 export function InputArea(props: InputAreaProps) {
@@ -68,11 +78,15 @@ export function InputArea(props: InputAreaProps) {
     tabCompletionOpen = false, setTabCompletionOpen,
     tabCompletionSuggestions = [], selectedTabCompletionIndex = 0,
     setSelectedTabCompletionIndex,
-    sessions = [], namedSessions, onSessionClick
+    sessions = [], namedSessions, onSessionClick,
+    writeModeLocked, onSwitchToLockedTab
   } = props;
 
   // Check if we're in read-only mode (auto mode in AI mode - user can still send but Claude will be in plan mode)
   const isReadOnlyMode = isAutoModeActive && session.inputMode === 'ai';
+
+  // Check if input is locked due to another tab being in write mode
+  const isWriteModeLocked = writeModeLocked?.isLocked && session.inputMode === 'ai';
 
   // Filter slash commands based on input and current mode
   const isTerminalMode = session.inputMode === 'terminal';
@@ -319,8 +333,9 @@ export function InputArea(props: InputAreaProps) {
         <div
           className="flex-1 relative border rounded-lg bg-opacity-50 flex flex-col"
           style={{
-            borderColor: isReadOnlyMode ? theme.colors.warning : theme.colors.border,
-            backgroundColor: isReadOnlyMode ? `${theme.colors.warning}15` : theme.colors.bgMain
+            borderColor: isWriteModeLocked ? theme.colors.warning : (isReadOnlyMode ? theme.colors.warning : theme.colors.border),
+            backgroundColor: isWriteModeLocked ? `${theme.colors.warning}10` : (isReadOnlyMode ? `${theme.colors.warning}15` : theme.colors.bgMain),
+            opacity: isWriteModeLocked ? 0.7 : 1
           }}
         >
           <div className="flex items-start">
@@ -336,9 +351,16 @@ export function InputArea(props: InputAreaProps) {
             <textarea
               ref={inputRef}
               className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] scrollbar-thin`}
-              style={{ color: theme.colors.textMain, maxHeight: '7rem' }}
-              placeholder={isReadOnlyMode ? "Auto mode active - Claude in read-only mode..." : (isTerminalMode ? "Run shell command..." : `Ask Claude about ${session.name}`)}
+              style={{ color: isWriteModeLocked ? theme.colors.textDim : theme.colors.textMain, maxHeight: '7rem' }}
+              placeholder={
+                isWriteModeLocked
+                  ? `Waiting for ${writeModeLocked?.lockingTabName || 'another tab'} to finish...`
+                  : (isReadOnlyMode
+                    ? "Auto mode active - Claude in read-only mode..."
+                    : (isTerminalMode ? "Run shell command..." : `Ask Claude about ${session.name}`))
+              }
               value={inputValue}
+              disabled={isWriteModeLocked}
               onFocus={onInputFocus}
               onChange={e => {
                 const value = e.target.value;
@@ -457,9 +479,15 @@ export function InputArea(props: InputAreaProps) {
             </button>
           ) : (
             <button
-              onClick={processInput}
-              className="p-2 rounded-md shadow-sm transition-all hover:opacity-90"
-              style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
+              onClick={isWriteModeLocked ? onSwitchToLockedTab : processInput}
+              disabled={isWriteModeLocked && !onSwitchToLockedTab}
+              className={`p-2 rounded-md shadow-sm transition-all ${isWriteModeLocked ? 'cursor-pointer' : 'hover:opacity-90'}`}
+              style={{
+                backgroundColor: isWriteModeLocked ? theme.colors.warning : theme.colors.accent,
+                color: isWriteModeLocked ? theme.colors.bgMain : theme.colors.accentForeground,
+                opacity: isWriteModeLocked ? 0.8 : 1
+              }}
+              title={isWriteModeLocked ? `Switch to ${writeModeLocked?.lockingTabName || 'busy tab'}` : undefined}
             >
               <ArrowUp className="w-4 h-4" />
             </button>
