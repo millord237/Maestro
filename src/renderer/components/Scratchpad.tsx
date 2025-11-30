@@ -760,15 +760,8 @@ function ScratchpadInner({
     }
 
     // Command-F to open search in edit mode (without Shift)
-    // Cmd+Shift+F is reserved for global "Go to Files" shortcut, so we block it here
-    // to prevent confusion - user should use Cmd+F for scratchpad search
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-      if (e.shiftKey) {
-        // Block Cmd+Shift+F from propagating to avoid switching to Files tab while editing
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
+    // Cmd+Shift+F is allowed to propagate to the global handler for "Go to Files"
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
       openSearch();
