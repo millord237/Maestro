@@ -3,6 +3,7 @@ import { Search, X, Trash2, Download, ChevronRight, ChevronDown, ChevronsDownUp,
 import type { Theme } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { ConfirmModal } from './ConfirmModal';
 
 interface SystemLogEntry {
   timestamp: number;
@@ -47,6 +48,7 @@ export function LogViewer({ theme, onClose, logLevel = 'info' }: LogViewerProps)
     new Set(['debug', 'info', 'warn', 'error', 'toast'])
   );
   const [expandedData, setExpandedData] = useState<Set<number>>(new Set());
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -321,7 +323,7 @@ export function LogViewer({ theme, onClose, logLevel = 'info' }: LogViewerProps)
             <Download className="w-4 h-4" />
           </button>
           <button
-            onClick={handleClearLogs}
+            onClick={() => setShowClearConfirm(true)}
             className="p-2 rounded hover:bg-opacity-10 transition-all"
             style={{ color: theme.colors.textDim }}
             title="Clear logs"
@@ -569,6 +571,16 @@ export function LogViewer({ theme, onClose, logLevel = 'info' }: LogViewerProps)
         >
           Press <kbd className="px-1.5 py-0.5 rounded mx-1 font-bold" style={{ backgroundColor: theme.colors.bgActivity }}>/</kbd> to search
         </div>
+      )}
+
+      {/* Clear Logs Confirmation Modal */}
+      {showClearConfirm && (
+        <ConfirmModal
+          theme={theme}
+          message="Are you sure you want to clear all Maestro system logs? This action cannot be undone."
+          onConfirm={handleClearLogs}
+          onClose={() => setShowClearConfirm(false)}
+        />
       )}
     </div>
   );
