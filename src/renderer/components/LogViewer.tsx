@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, Trash2, Download, ChevronRight, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, X, Trash2, Download, ChevronRight, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import type { Theme } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -69,6 +69,27 @@ export function LogViewer({ theme, onClose, logLevel = 'info' }: LogViewerProps)
       return newSet;
     });
   };
+
+  // Get indices of all entries that have expandable data
+  const expandableIndices = useMemo(() => {
+    return filteredLogs
+      .map((log, index) => log.data ? index : null)
+      .filter((index): index is number => index !== null);
+  }, [filteredLogs]);
+
+  // Expand all entries with data
+  const expandAll = () => {
+    setExpandedData(new Set(expandableIndices));
+  };
+
+  // Collapse all entries
+  const collapseAll = () => {
+    setExpandedData(new Set());
+  };
+
+  // Check if all are expanded or collapsed
+  const allExpanded = expandableIndices.length > 0 && expandableIndices.every(i => expandedData.has(i));
+  const allCollapsed = expandedData.size === 0;
 
   // Load logs on mount
   useEffect(() => {
@@ -267,6 +288,30 @@ export function LogViewer({ theme, onClose, logLevel = 'info' }: LogViewerProps)
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Expand/Collapse All buttons */}
+          {expandableIndices.length > 0 && (
+            <>
+              <button
+                onClick={expandAll}
+                className="p-2 rounded hover:bg-opacity-10 transition-all"
+                style={{ color: allExpanded ? theme.colors.accent : theme.colors.textDim }}
+                title="Expand all"
+                disabled={allExpanded}
+              >
+                <ChevronsUpDown className="w-4 h-4" />
+              </button>
+              <button
+                onClick={collapseAll}
+                className="p-2 rounded hover:bg-opacity-10 transition-all"
+                style={{ color: allCollapsed ? theme.colors.textDim : theme.colors.textDim }}
+                title="Collapse all"
+                disabled={allCollapsed}
+              >
+                <ChevronsDownUp className="w-4 h-4" />
+              </button>
+              <div className="w-px h-4 mx-1" style={{ backgroundColor: theme.colors.border }} />
+            </>
+          )}
           <button
             onClick={handleExportLogs}
             className="p-2 rounded hover:bg-opacity-10 transition-all"

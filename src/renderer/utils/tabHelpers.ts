@@ -83,7 +83,6 @@ export function createTab(session: Session, options: CreateTabOptions = {}): Cre
     name,
     starred,
     logs,
-    messageQueue: [],
     inputValue: '',
     stagedImages: [],
     usageStats,
@@ -116,10 +115,11 @@ export interface CloseTabResult {
  * Close an AI tab and add it to the closed tab history.
  * The closed tab is stored in closedTabHistory for potential restoration via Cmd+Shift+T.
  * If the closed tab was active, the next tab (or previous if at end) becomes active.
+ * If closing the last tab, a fresh new tab is created to replace it.
  *
  * @param session - The Maestro session containing the tab
  * @param tabId - The ID of the tab to close
- * @returns Object containing the closed tab info and updated session, or null if tab not found or is the only tab
+ * @returns Object containing the closed tab info and updated session, or null if tab not found
  *
  * @example
  * const result = closeTab(session, 'tab-123');
@@ -129,8 +129,7 @@ export interface CloseTabResult {
  * }
  */
 export function closeTab(session: Session, tabId: string): CloseTabResult | null {
-  // Don't allow closing the only tab
-  if (!session.aiTabs || session.aiTabs.length <= 1) {
+  if (!session.aiTabs || session.aiTabs.length === 0) {
     return null;
   }
 
@@ -150,11 +149,25 @@ export function closeTab(session: Session, tabId: string): CloseTabResult | null
   };
 
   // Remove tab from aiTabs
-  const updatedTabs = session.aiTabs.filter(tab => tab.id !== tabId);
+  let updatedTabs = session.aiTabs.filter(tab => tab.id !== tabId);
 
-  // Determine new active tab if the closed tab was active
+  // If we just closed the last tab, create a fresh new tab to replace it
   let newActiveTabId = session.activeTabId;
-  if (session.activeTabId === tabId) {
+  if (updatedTabs.length === 0) {
+    const freshTab: AITab = {
+      id: generateId(),
+      claudeSessionId: null,
+      name: null,
+      starred: false,
+      logs: [],
+      inputValue: '',
+      stagedImages: [],
+      createdAt: Date.now(),
+      state: 'idle'
+    };
+    updatedTabs = [freshTab];
+    newActiveTabId = freshTab.id;
+  } else if (session.activeTabId === tabId) {
     // If we closed the active tab, select the next tab or the previous one if at end
     const newIndex = Math.min(tabIndex, updatedTabs.length - 1);
     newActiveTabId = updatedTabs[newIndex].id;

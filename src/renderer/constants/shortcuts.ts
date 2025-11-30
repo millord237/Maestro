@@ -22,6 +22,8 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   viewGitDiff: { id: 'viewGitDiff', label: 'View Git Diff', keys: ['Meta', 'Shift', 'd'] },
   viewGitLog: { id: 'viewGitLog', label: 'View Git Log', keys: ['Meta', 'Shift', 'g'] },
   agentSessions: { id: 'agentSessions', label: 'View Agent Sessions', keys: ['Meta', 'Shift', 'l'] },
+  systemLogs: { id: 'systemLogs', label: 'System Log Viewer', keys: ['Alt', 'Meta', 'l'] },
+  processMonitor: { id: 'processMonitor', label: 'System Process Monitor', keys: ['Alt', 'Meta', 'p'] },
 };
 
 // Tab navigation shortcuts (AI mode only)
@@ -29,6 +31,8 @@ export const TAB_SHORTCUTS: Record<string, Shortcut> = {
   newTab: { id: 'newTab', label: 'New Tab', keys: ['Meta', 't'] },
   closeTab: { id: 'closeTab', label: 'Close Tab', keys: ['Meta', 'w'] },
   reopenClosedTab: { id: 'reopenClosedTab', label: 'Reopen Closed Tab', keys: ['Meta', 'Shift', 't'] },
+  renameTab: { id: 'renameTab', label: 'Rename Tab', keys: ['Meta', 'Shift', 'r'] },
+  toggleReadOnlyMode: { id: 'toggleReadOnlyMode', label: 'Toggle Read-Only Mode', keys: ['Meta', 'r'] },
   prevTab: { id: 'prevTab', label: 'Previous Tab', keys: ['Meta', '['] },
   nextTab: { id: 'nextTab', label: 'Next Tab', keys: ['Meta', ']'] },
   goToTab1: { id: 'goToTab1', label: 'Go to Tab 1', keys: ['Meta', '1'] },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Wand2, ExternalLink, Columns, Copy, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit, Star, Edit2, Check, X, List } from 'lucide-react';
+import { Wand2, ExternalLink, Columns, Copy, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit, List } from 'lucide-react';
 import { LogViewer } from './LogViewer';
-import { TerminalOutput, BusyTabInfo } from './TerminalOutput';
+import { TerminalOutput } from './TerminalOutput';
 import { InputArea } from './InputArea';
 import { FilePreview } from './FilePreview';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -10,7 +10,7 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { formatActiveTime } from '../utils/theme';
-import { getWriteModeTab, getActiveTab, getBusyTabs } from '../utils/tabHelpers';
+import { getActiveTab, getBusyTabs } from '../utils/tabHelpers';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -100,7 +100,8 @@ interface MainPanelProps {
   getContextColor: (usage: number, theme: Theme) => string;
   setActiveSessionId: (id: string) => void;
   onDeleteLog?: (logId: string) => void;
-  onRemoveQueuedMessage?: (messageId: string) => void;
+  onRemoveQueuedItem?: (itemId: string) => void;
+  onOpenQueueBrowser?: () => void;
 
   // Auto mode props
   batchRunState?: BatchRunState;
@@ -115,9 +116,12 @@ interface MainPanelProps {
   onTabClose?: (tabId: string) => void;
   onNewTab?: () => void;
   onTabRename?: (tabId: string, newName: string) => void;
+  onRequestTabRename?: (tabId: string) => void;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
   onCloseOtherTabs?: (tabId: string) => void;
+  onTabStar?: (tabId: string, starred: boolean) => void;
   onUpdateTabByClaudeSessionId?: (claudeSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
+  onToggleTabReadOnlyMode?: () => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -136,7 +140,7 @@ export function MainPanel(props: MainPanelProps) {
     setAboutModalOpen, setRightPanelOpen, setGitLogOpen, inputRef, logsEndRef, terminalOutputRef,
     fileTreeContainerRef, fileTreeFilterInputRef, toggleInputMode, processInput, handleInterrupt,
     handleInputKeyDown, handlePaste, handleDrop, getContextColor, setActiveSessionId,
-    batchRunState, onStopBatchRun, showConfirmation, onRemoveQueuedMessage,
+    batchRunState, onStopBatchRun, showConfirmation, onRemoveQueuedItem, onOpenQueueBrowser,
     isMobileLandscape = false
   } = props;
 
@@ -146,26 +150,15 @@ export function MainPanel(props: MainPanelProps) {
   // Context window tooltip hover state
   const [contextTooltipOpen, setContextTooltipOpen] = useState(false);
   const contextTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Session ID copied notification
-  const [showSessionIdCopied, setShowSessionIdCopied] = useState(false);
   // Git pill tooltip hover state
   const [gitTooltipOpen, setGitTooltipOpen] = useState(false);
   const gitTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Session ID pill overlay state (hover-triggered with delay for smooth UX)
-  const [sessionPillOverlayOpen, setSessionPillOverlayOpen] = useState(false);
-  const [sessionPillRenaming, setSessionPillRenaming] = useState(false);
-  const [sessionPillRenameValue, setSessionPillRenameValue] = useState('');
-  const sessionPillHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Starred and named Claude sessions (stored per project cwd)
-  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
-  const [namedSessions, setNamedSessions] = useState<Record<string, string>>({});
-  const sessionPillRef = useRef<HTMLDivElement>(null);
   // Panel width for responsive hiding of widgets
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
 
   // Extract tab handlers from props
-  const { onTabSelect, onTabClose, onNewTab, onTabRename, onTabReorder, onCloseOtherTabs } = props;
+  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar } = props;
 
   // Get the active tab for header display
   // The header should show the active tab's data (UUID, name, cost, context), not session-level data
@@ -182,54 +175,6 @@ export function MainPanel(props: MainPanelProps) {
     const contextTokens = inputTokens + outputTokens;
     return Math.min(Math.round((contextTokens / contextWindow) * 100), 100);
   }, [activeTab?.usageStats]);
-
-  // Calculate write-mode lock info for InputArea
-  // This determines if another tab (not the current one) is in write mode
-  const writeModeLocked = useMemo(() => {
-    if (!activeSession?.aiTabs || activeSession.aiTabs.length <= 1) {
-      return { isLocked: false, lockingTabName: null, lockingTabId: null };
-    }
-
-    const activeTab = getActiveTab(activeSession);
-    const busyTab = getWriteModeTab(activeSession);
-
-    // If there's a busy tab and it's NOT the active tab, input is locked
-    if (busyTab && activeTab && busyTab.id !== activeTab.id) {
-      // Determine display name for the locking tab
-      const lockingTabName = busyTab.name
-        || (busyTab.claudeSessionId ? busyTab.claudeSessionId.split('-')[0].toUpperCase() : 'another tab');
-
-      return {
-        isLocked: true,
-        lockingTabName,
-        lockingTabId: busyTab.id
-      };
-    }
-
-    return { isLocked: false, lockingTabName: null, lockingTabId: null };
-  }, [activeSession?.aiTabs, activeSession?.activeTabId]);
-
-  // Compute busy tabs info for the status indicator in TerminalOutput
-  // This shows all busy tabs in the session (for the busy tab indicator at bottom of message history)
-  const busyTabsInfo: BusyTabInfo[] = useMemo(() => {
-    if (!activeSession?.aiTabs) return [];
-
-    const busyTabs = getBusyTabs(activeSession);
-    return busyTabs.map(tab => ({
-      id: tab.id,
-      claudeSessionId: tab.claudeSessionId,
-      name: tab.name,
-      starred: tab.starred,
-      thinkingStartTime: activeSession.thinkingStartTime // Use session-level thinking time
-    }));
-  }, [activeSession?.aiTabs, activeSession?.thinkingStartTime]);
-
-  // Handler to switch to the tab that's holding the write-mode lock
-  const handleSwitchToLockedTab = useCallback(() => {
-    if (writeModeLocked.lockingTabId && onTabSelect) {
-      onTabSelect(writeModeLocked.lockingTabId);
-    }
-  }, [writeModeLocked.lockingTabId, onTabSelect]);
 
   // Track panel width for responsive widget hiding
   useEffect(() => {
@@ -262,6 +207,9 @@ export function MainPanel(props: MainPanelProps) {
     uncommittedChanges: number;
   } | null>(null);
 
+  // Copy notification state (centered flash notice)
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
+
   // Fetch git info when session changes or becomes a git repo
   useEffect(() => {
     if (!activeSession?.isGitRepo) {
@@ -286,108 +234,9 @@ export function MainPanel(props: MainPanelProps) {
     return () => clearInterval(interval);
   }, [activeSession?.id, activeSession?.isGitRepo, activeSession?.cwd, activeSession?.shellCwd, activeSession?.inputMode]);
 
-  // Load starred and named Claude sessions (per project cwd)
-  // Named sessions come from claudeSessionOriginsStore (single source of truth)
-  useEffect(() => {
-    const loadSessionMetadata = async () => {
-      if (!activeSession?.cwd) return;
-      try {
-        // Load starred sessions from settings
-        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-        const savedStarred = await window.maestro.settings.get(starredKey);
-        if (savedStarred && Array.isArray(savedStarred)) {
-          setStarredSessions(new Set(savedStarred));
-        } else {
-          setStarredSessions(new Set());
-        }
-
-        // Load named sessions from Claude session origins (single source of truth)
-        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
-        const named: Record<string, string> = {};
-        for (const [sessionId, originData] of Object.entries(origins)) {
-          if (typeof originData === 'object' && originData?.sessionName) {
-            named[sessionId] = originData.sessionName;
-          }
-        }
-        setNamedSessions(named);
-      } catch (error) {
-        console.error('Failed to load session metadata:', error);
-      }
-    };
-    loadSessionMetadata();
-  }, [activeSession?.cwd]);
-
-  // Toggle star for current session (uses active tab's session ID)
-  const toggleStar = useCallback(async () => {
-    const tabSessionId = activeTab?.claudeSessionId;
-    if (!tabSessionId || !activeSession?.cwd) return;
-    const newStarred = new Set(starredSessions);
-    const isNowStarred = !newStarred.has(tabSessionId);
-    if (isNowStarred) {
-      newStarred.add(tabSessionId);
-    } else {
-      newStarred.delete(tabSessionId);
-    }
-    setStarredSessions(newStarred);
-    try {
-      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-      await window.maestro.settings.set(starredKey, Array.from(newStarred));
-    } catch (error) {
-      console.error('Failed to save starred sessions:', error);
-    }
-    // Also update the tab's starred status via the callback
-    props.onUpdateTabByClaudeSessionId?.(tabSessionId, { starred: isNowStarred });
-  }, [activeTab?.claudeSessionId, activeSession?.cwd, starredSessions, props.onUpdateTabByClaudeSessionId]);
-
-  // Rename current session (uses active tab's session ID)
-  const saveSessionName = useCallback(async () => {
-    const tabSessionId = activeTab?.claudeSessionId;
-    if (!tabSessionId || !activeSession?.cwd) return;
-    const name = sessionPillRenameValue.trim();
-
-    // Update local state for immediate UI feedback
-    const newNamed = { ...namedSessions };
-    if (name) {
-      newNamed[tabSessionId] = name;
-    } else {
-      delete newNamed[tabSessionId];
-    }
-    setNamedSessions(newNamed);
-    setSessionPillRenaming(false);
-    setSessionPillRenameValue('');
-
-    try {
-      // Save to claudeSessionOriginsStore (single source of truth)
-      await window.maestro.claude.updateSessionName(
-        activeSession.cwd,
-        tabSessionId,
-        name
-      );
-    } catch (error) {
-      console.error('Failed to save session name:', error);
-    }
-    // Also update the tab's name via the callback
-    props.onUpdateTabByClaudeSessionId?.(tabSessionId, { name: name || null });
-  }, [activeTab?.claudeSessionId, activeSession?.cwd, sessionPillRenameValue, namedSessions, props.onUpdateTabByClaudeSessionId]);
-
-  // Close session pill overlay when clicking outside (mainly for rename mode)
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (sessionPillOverlayOpen && sessionPillRef.current && !sessionPillRef.current.contains(event.target as Node)) {
-        setSessionPillOverlayOpen(false);
-        setSessionPillRenaming(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sessionPillOverlayOpen]);
-
   // Cleanup hover timeouts on unmount
   useEffect(() => {
     return () => {
-      if (sessionPillHoverTimeout.current) {
-        clearTimeout(sessionPillHoverTimeout.current);
-      }
       if (gitTooltipTimeout.current) {
         clearTimeout(gitTooltipTimeout.current);
       }
@@ -417,25 +266,15 @@ export function MainPanel(props: MainPanelProps) {
     }
   };
 
-  // Copy to clipboard handler
-  const copyToClipboard = async (text: string) => {
+  // Copy to clipboard handler with flash notification
+  const copyToClipboard = async (text: string, message?: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      // Show centered flash notification
+      setCopyNotification(message || 'Copied to Clipboard');
+      setTimeout(() => setCopyNotification(null), 2000);
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
-    }
-  };
-
-  // Copy session ID to clipboard with notification (uses active tab's session ID)
-  const copySessionIdToClipboard = async () => {
-    const tabSessionId = activeTab?.claudeSessionId;
-    if (!tabSessionId) return;
-    try {
-      await navigator.clipboard.writeText(tabSessionId);
-      setShowSessionIdCopied(true);
-      setTimeout(() => setShowSessionIdCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy session ID to clipboard:', err);
     }
   };
 
@@ -652,178 +491,19 @@ export function MainPanel(props: MainPanelProps) {
                 onViewDiff={handleViewGitDiff}
               />
 
-              {/* Session ID Pill with Overlay (hover-triggered) - shows active tab's session */}
+              {/* Session UUID Pill - click to copy full UUID */}
               {activeSession.inputMode === 'ai' && activeTab?.claudeSessionId && (
-                <div
-                  className="relative"
-                  ref={sessionPillRef}
-                  onMouseEnter={() => {
-                    // Clear any pending close timeout
-                    if (sessionPillHoverTimeout.current) {
-                      clearTimeout(sessionPillHoverTimeout.current);
-                      sessionPillHoverTimeout.current = null;
-                    }
-                    setSessionPillOverlayOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    // Delay closing to allow mouse to reach the dropdown
-                    sessionPillHoverTimeout.current = setTimeout(() => {
-                      // Don't close if we're in rename mode
-                      if (!sessionPillRenaming) {
-                        setSessionPillOverlayOpen(false);
-                      }
-                    }, 150);
+                <button
+                  className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors hover:opacity-80"
+                  style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent, borderColor: theme.colors.accent + '30' }}
+                  title={`Click to copy: ${activeTab.claudeSessionId}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(activeTab.claudeSessionId!, 'Session ID Copied to Clipboard');
                   }}
                 >
-                  <div
-                    className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border cursor-default hover:opacity-80 transition-opacity max-w-[200px]"
-                    style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent, borderColor: theme.colors.accent + '30' }}
-                    title={activeTab.name || namedSessions[activeTab.claudeSessionId!] || activeTab.claudeSessionId!}
-                  >
-                    {(activeTab.starred || starredSessions.has(activeTab.claudeSessionId!)) && (
-                      <Star className="w-2.5 h-2.5 fill-current shrink-0" />
-                    )}
-                    <span className="truncate">
-                      {activeTab.name || namedSessions[activeTab.claudeSessionId!] || activeTab.claudeSessionId!.split('-')[0].toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Invisible bridge to prevent hover gap issues */}
-                  {sessionPillOverlayOpen && (
-                    <div
-                      className="absolute left-0 right-0 h-3 pointer-events-auto"
-                      style={{ top: '100%' }}
-                      onMouseEnter={() => {
-                        if (sessionPillHoverTimeout.current) {
-                          clearTimeout(sessionPillHoverTimeout.current);
-                          sessionPillHoverTimeout.current = null;
-                        }
-                        setSessionPillOverlayOpen(true);
-                      }}
-                    />
-                  )}
-
-                  {/* Overlay dropdown */}
-                  {sessionPillOverlayOpen && (
-                    <div
-                      className="absolute top-full left-0 mt-1 z-50 rounded-lg border shadow-xl overflow-hidden"
-                      style={{
-                        backgroundColor: theme.colors.bgSidebar,
-                        borderColor: theme.colors.border,
-                        minWidth: '280px'
-                      }}
-                    >
-                      {/* Session name display (if named) */}
-                      {(activeTab.name || namedSessions[activeTab.claudeSessionId!]) && (
-                        <div
-                          className="px-3 py-2 text-xs font-medium border-b"
-                          style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                        >
-                          {activeTab.name || namedSessions[activeTab.claudeSessionId!]}
-                        </div>
-                      )}
-                      {/* Session ID display */}
-                      <div
-                        className="px-3 py-2 text-[10px] font-mono border-b"
-                        style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
-                      >
-                        {activeTab.claudeSessionId}
-                      </div>
-
-                      {/* Rename input */}
-                      {sessionPillRenaming ? (
-                        <div className="p-2 border-b" style={{ borderColor: theme.colors.border }}>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              value={sessionPillRenameValue}
-                              onChange={(e) => setSessionPillRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  saveSessionName();
-                                } else if (e.key === 'Escape') {
-                                  setSessionPillRenaming(false);
-                                  setSessionPillRenameValue('');
-                                }
-                              }}
-                              placeholder="Enter name..."
-                              autoFocus
-                              className="flex-1 px-2 py-1 text-xs rounded border bg-transparent outline-none"
-                              style={{
-                                borderColor: theme.colors.border,
-                                color: theme.colors.textMain
-                              }}
-                            />
-                            <button
-                              onClick={saveSessionName}
-                              className="p-1 rounded hover:bg-white/10"
-                              style={{ color: theme.colors.success }}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSessionPillRenaming(false);
-                                setSessionPillRenameValue('');
-                              }}
-                              className="p-1 rounded hover:bg-white/10"
-                              style={{ color: theme.colors.error }}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* Actions */}
-                      <div className="py-1">
-                        {/* Copy */}
-                        <button
-                          onClick={() => {
-                            copySessionIdToClipboard();
-                            setSessionPillOverlayOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Copy className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-                          Copy Session ID
-                          {showSessionIdCopied && (
-                            <span className="ml-auto text-[10px]" style={{ color: theme.colors.success }}>Copied!</span>
-                          )}
-                        </button>
-
-                        {/* Star */}
-                        <button
-                          onClick={() => {
-                            toggleStar();
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Star
-                            className={`w-3.5 h-3.5 ${(activeTab.starred || starredSessions.has(activeTab.claudeSessionId!)) ? 'fill-current' : ''}`}
-                            style={{ color: (activeTab.starred || starredSessions.has(activeTab.claudeSessionId!)) ? theme.colors.warning : theme.colors.textDim }}
-                          />
-                          {(activeTab.starred || starredSessions.has(activeTab.claudeSessionId!)) ? 'Unstar Session' : 'Star Session'}
-                        </button>
-
-                        {/* Rename */}
-                        <button
-                          onClick={() => {
-                            setSessionPillRenameValue(activeTab.name || namedSessions[activeTab.claudeSessionId!] || '');
-                            setSessionPillRenaming(true);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-                          {(activeTab.name || namedSessions[activeTab.claudeSessionId!]) ? 'Rename Session' : 'Name Session'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  {activeTab.claudeSessionId.split('-')[0].toUpperCase()}
+                </button>
               )}
             </div>
 
@@ -1036,8 +716,10 @@ export function MainPanel(props: MainPanelProps) {
               onTabClose={onTabClose}
               onNewTab={onNewTab}
               onTabRename={onTabRename}
+              onRequestRename={onRequestTabRename}
               onTabReorder={onTabReorder}
               onCloseOthers={onCloseOtherTabs}
+              onTabStar={onTabStar}
             />
           )}
 
@@ -1068,6 +750,7 @@ export function MainPanel(props: MainPanelProps) {
             <>
               {/* Logs Area */}
               <TerminalOutput
+                key={`${activeSession.id}-${activeSession.activeTabId}`}
                 ref={terminalOutputRef}
                 session={activeSession}
                 theme={theme}
@@ -1083,11 +766,9 @@ export function MainPanel(props: MainPanelProps) {
                 logsEndRef={logsEndRef}
                 maxOutputLines={maxOutputLines}
                 onDeleteLog={props.onDeleteLog}
-                onRemoveQueuedMessage={onRemoveQueuedMessage}
+                onRemoveQueuedItem={onRemoveQueuedItem}
                 onInterrupt={handleInterrupt}
                 audioFeedbackCommand={props.audioFeedbackCommand}
-                busyTabs={busyTabsInfo}
-                onSwitchToTab={onTabSelect}
               />
 
               {/* Input Area (hidden in mobile landscape for focused reading) */}
@@ -1128,31 +809,31 @@ export function MainPanel(props: MainPanelProps) {
                 onInputFocus={handleInputFocus}
                 isAutoModeActive={isAutoModeActive}
                 sessions={sessions}
-                namedSessions={namedSessions}
                 onSessionClick={setActiveSessionId}
-                writeModeLocked={writeModeLocked}
-                onSwitchToLockedTab={handleSwitchToLockedTab}
+                onOpenQueueBrowser={onOpenQueueBrowser}
+                tabReadOnlyMode={activeTab?.readOnlyMode ?? false}
+                onToggleTabReadOnlyMode={props.onToggleTabReadOnlyMode}
               />
               )}
             </>
           )}
 
         </div>
-
-        {/* Session ID Copied Notification Toast */}
-        {showSessionIdCopied && (
-          <div
-            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-lg shadow-2xl text-base font-bold animate-in fade-in zoom-in-95 duration-200 z-50"
-            style={{
-              backgroundColor: theme.colors.accent,
-              color: theme.colors.accentForeground,
-              textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            Session ID Copied to Clipboard
-          </div>
-        )}
       </ErrorBoundary>
+
+      {/* Copy Notification Toast - centered flash notice */}
+      {copyNotification && (
+        <div
+          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-lg shadow-2xl text-base font-bold animate-in fade-in zoom-in-95 duration-200 z-50"
+          style={{
+            backgroundColor: theme.colors.accent,
+            color: theme.colors.accentForeground,
+            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          {copyNotification}
+        </div>
+      )}
     </>
   );
 }

@@ -1,61 +1,45 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import type { Theme, Session } from '../types';
+import type { Theme } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
-interface RenameSessionModalProps {
+interface RenameTabModalProps {
   theme: Theme;
-  value: string;
-  setValue: (value: string) => void;
+  initialName: string;
+  claudeSessionId?: string | null;
   onClose: () => void;
-  sessions: Session[];
-  setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
-  activeSessionId: string;
+  onRename: (newName: string) => void;
 }
 
-export function RenameSessionModal(props: RenameSessionModalProps) {
-  const { theme, value, setValue, onClose, sessions, setSessions, activeSessionId } = props;
+export function RenameTabModal(props: RenameTabModalProps) {
+  const { theme, initialName, claudeSessionId, onClose, onRename } = props;
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
   const modalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState(initialName);
+
+  // Generate placeholder with UUID octet if available
+  const placeholder = claudeSessionId
+    ? `Rename ${claudeSessionId.split('-')[0].toUpperCase()}...`
+    : 'Enter tab name...';
 
   const handleRename = () => {
-    if (value.trim()) {
-      const trimmedName = value.trim();
-
-      // Find the active session to check for Claude session association
-      const activeSession = sessions.find(s => s.id === activeSessionId);
-
-      // Update local state
-      setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, name: trimmedName } : s
-      ));
-
-      // Also update the Claude session name if this session has an associated Claude session
-      if (activeSession?.claudeSessionId && activeSession?.cwd) {
-        window.maestro.claude.updateSessionName(
-          activeSession.cwd,
-          activeSession.claudeSessionId,
-          trimmedName
-        ).catch(err => console.error('Failed to update Claude session name:', err));
-      }
-
-      onClose();
-    }
+    onRename(value.trim());
+    onClose();
   };
 
   // Register layer on mount
   useEffect(() => {
     const id = registerLayer({
-      id: 'rename-session-modal',
+      id: 'rename-tab-modal',
       type: 'modal',
-      priority: MODAL_PRIORITIES.RENAME_INSTANCE,
+      priority: MODAL_PRIORITIES.RENAME_TAB,
       blocksLowerLayers: true,
       capturesFocus: true,
       focusTrap: 'strict',
-      ariaLabel: 'Rename Agent',
+      ariaLabel: 'Rename Tab',
       onEscape: onClose
     });
     layerIdRef.current = id;
@@ -76,6 +60,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
 
   // Auto-focus the input on mount
   useEffect(() => {
+    // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
@@ -87,12 +72,12 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200 outline-none"
       role="dialog"
       aria-modal="true"
-      aria-label="Rename Agent"
+      aria-label="Rename Tab"
       tabIndex={-1}
     >
       <div className="w-[400px] border rounded-lg shadow-2xl overflow-hidden" style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: theme.colors.border }}>
-          <h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>Rename Agent</h2>
+          <h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>Rename Tab</h2>
           <button onClick={onClose} style={{ color: theme.colors.textDim }}>
             <X className="w-4 h-4" />
           </button>
@@ -109,7 +94,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
                 handleRename();
               }
             }}
-            placeholder="Enter agent name..."
+            placeholder={placeholder}
             className="w-full p-3 rounded border bg-transparent outline-none"
             style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
           />
@@ -123,8 +108,7 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
             </button>
             <button
               onClick={handleRename}
-              disabled={!value.trim()}
-              className="px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded"
               style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
             >
               Rename

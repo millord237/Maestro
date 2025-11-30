@@ -207,12 +207,15 @@ export function AgentSessionsBrowser({
       }
 
       try {
-        // Load starred sessions for this project
-        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-        const savedStarred = await window.maestro.settings.get(starredKey);
-        if (savedStarred && Array.isArray(savedStarred)) {
-          setStarredSessions(new Set(savedStarred));
+        // Load session metadata (starred status) from Claude session origins
+        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
+        const starredFromOrigins = new Set<string>();
+        for (const [sessionId, originData] of Object.entries(origins)) {
+          if (typeof originData === 'object' && originData?.starred) {
+            starredFromOrigins.add(sessionId);
+          }
         }
+        setStarredSessions(starredFromOrigins);
 
         const result = await window.maestro.claude.listSessions(activeSession.cwd);
         setSessions(result);
@@ -239,10 +242,13 @@ export function AgentSessionsBrowser({
     }
     setStarredSessions(newStarred);
 
-    // Persist to settings
+    // Persist to Claude session origins
     if (activeSession?.cwd) {
-      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-      await window.maestro.settings.set(starredKey, Array.from(newStarred));
+      await window.maestro.claude.updateSessionStarred(
+        activeSession.cwd,
+        sessionId,
+        isNowStarred
+      );
     }
 
     // Update the tab if this session is open as a tab

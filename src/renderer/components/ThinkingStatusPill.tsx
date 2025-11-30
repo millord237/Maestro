@@ -1,5 +1,9 @@
+/**
+ * ThinkingStatusPill - Displays status when AI is actively processing/thinking.
+ * Shows session name, bytes received, elapsed time, and Claude session ID.
+ * Appears centered above the input area when the AI is busy.
+ */
 import React, { memo, useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
 import type { Session, Theme } from '../types';
 
 interface ThinkingStatusPillProps {
@@ -69,7 +73,7 @@ function formatBytes(bytes: number): string {
   return `${bytes}B`;
 }
 
-// Single session row for the expanded dropdown
+// Single session row for the expanded dropdown (Thinking Pill dropdown)
 const SessionRow = memo(({
   session,
   theme,
@@ -91,9 +95,10 @@ const SessionRow = memo(({
       style={{ color: theme.colors.textMain }}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <Loader2
-          className="w-3 h-3 shrink-0 animate-spin"
-          style={{ color: theme.colors.warning }}
+        {/* Pulsing yellow circle indicator */}
+        <div
+          className="w-2 h-2 rounded-full shrink-0 animate-pulse"
+          style={{ backgroundColor: theme.colors.warning }}
         />
         <span className="text-xs font-mono truncate">{displayName}</span>
       </div>
@@ -114,7 +119,11 @@ const SessionRow = memo(({
 
 SessionRow.displayName = 'SessionRow';
 
-// Main component - shows primary thinking session with expandable list for multiple
+/**
+ * ThinkingStatusPill Inner Component
+ * Shows the primary thinking session with an expandable list when multiple sessions are thinking.
+ * Features: pulsing indicator, session name, bytes/tokens, elapsed time, Claude session UUID.
+ */
 function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSessions }: ThinkingStatusPillProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -149,18 +158,20 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
   const fullTooltip = tooltipParts.join(' | ');
 
   return (
-    <div className="relative mb-2">
+    // Thinking Pill - centered container (pb-2 only, no top padding)
+    <div className="relative flex justify-center pb-2">
+      {/* Thinking Pill - shrinks to fit content */}
       <div
-        className="flex items-center justify-center gap-2 px-4 py-2 rounded-full mx-auto max-w-full overflow-hidden"
+        className="flex items-center gap-2 px-4 py-1.5 rounded-full"
         style={{
           backgroundColor: theme.colors.warning + '20',
           border: `1px solid ${theme.colors.border}`
         }}
       >
-        {/* Pulsing indicator */}
-        <Loader2
-          className="w-4 h-4 shrink-0 animate-spin"
-          style={{ color: theme.colors.warning }}
+        {/* Thinking Pill - Pulsing yellow circle indicator */}
+        <div
+          className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse"
+          style={{ backgroundColor: theme.colors.warning }}
         />
 
         {/* Maestro session name - always visible, not clickable */}
@@ -220,7 +231,7 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
           </>
         )}
 
-        {/* Claude session ID - clickable to navigate to session */}
+        {/* Thinking Pill - Claude session ID (first 8 chars, uppercase) */}
         {claudeSessionId && (
           <>
             <div
@@ -233,7 +244,7 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
               style={{ color: theme.colors.accent }}
               title={`Claude Session: ${claudeSessionId}`}
             >
-              {customName || claudeSessionId.substring(0, 8)}
+              {customName || claudeSessionId.substring(0, 8).toUpperCase()}
             </button>
           </>
         )}
@@ -290,6 +301,7 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
           </div>
         )}
       </div>
+      {/* End Thinking Pill */}
     </div>
   );
 }

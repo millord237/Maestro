@@ -1304,11 +1304,8 @@ export function SettingsModal(props: SettingsModalProps) {
             const filteredCount = filteredShortcuts.length;
 
             return (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1.5 rounded font-medium" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
-                    {shortcutsFilter ? `${filteredCount} / ${totalShortcuts}` : totalShortcuts}
-                  </span>
+              <div className="flex flex-col" style={{ minHeight: '450px' }}>
+                <div className="flex items-center gap-2 mb-3">
                   <input
                     ref={shortcutsFilterRef}
                     type="text"
@@ -1318,8 +1315,11 @@ export function SettingsModal(props: SettingsModalProps) {
                     className="flex-1 px-3 py-2 rounded border bg-transparent outline-none text-sm"
                     style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
                   />
+                  <span className="text-xs px-2 py-1.5 rounded font-medium" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                    {shortcutsFilter ? `${filteredCount} / ${totalShortcuts}` : totalShortcuts}
+                  </span>
                 </div>
-                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 scrollbar-thin">
+                <div className="space-y-2 flex-1 overflow-y-auto pr-2 scrollbar-thin">
                   {filteredShortcuts.map((sc: Shortcut) => (
                     <div key={sc.id} className="flex items-center justify-between p-3 rounded border" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}>
                       <span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>{sc.label}</span>

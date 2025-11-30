@@ -41,6 +41,25 @@ export interface LogEntry {
   delivered?: boolean;
 }
 
+// Queued item for the session-level execution queue
+// Supports both messages and slash commands, processed sequentially
+export type QueuedItemType = 'message' | 'command';
+
+export interface QueuedItem {
+  id: string;                        // Unique item ID
+  timestamp: number;                 // When it was queued (for ordering)
+  tabId: string;                     // Target tab for this item
+  type: QueuedItemType;              // 'message' or 'command'
+  // For messages
+  text?: string;                     // Message text
+  images?: string[];                 // Attached images (base64)
+  // For commands
+  command?: string;                  // Slash command (e.g., '/commit')
+  commandDescription?: string;       // Command description for display
+  // Display metadata
+  tabName?: string;                  // Tab name at time of queuing (for display)
+}
+
 export interface WorkLogItem {
   id: string;
   title: string;
@@ -110,12 +129,13 @@ export interface AITab {
   name: string | null;             // User-defined name (null = show UUID octet)
   starred: boolean;                // Whether session is starred (for pill display)
   logs: LogEntry[];                // Conversation history
-  messageQueue: LogEntry[];        // Pending messages while busy
   inputValue: string;              // Pending input text for this tab
   stagedImages: string[];          // Staged images (base64) for this tab
   usageStats?: UsageStats;         // Token usage for this tab
   createdAt: number;               // Timestamp for ordering
   state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
+  readOnlyMode?: boolean;          // When true, Claude operates in plan/read-only mode
+  awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
 }
 
 // Closed tab entry for undo functionality (Cmd+Shift+T)
@@ -182,9 +202,9 @@ export interface Session {
   // Tracks which mode (ai/terminal) triggered the busy state
   // Used to show the correct busy indicator message when user switches modes
   busySource?: 'ai' | 'terminal';
-  // Message queue for AI mode - messages sent while busy are queued here
-  // DEPRECATED: Use aiTabs[activeIndex].messageQueue instead
-  messageQueue: LogEntry[];
+  // Execution queue for sequential processing within this session
+  // All messages and commands are queued here and processed one at a time
+  executionQueue: QueuedItem[];
   // Active time tracking - cumulative milliseconds of active use
   activeTimeMs: number;
   // Claude Code slash commands available for this session (fetched per session based on cwd)

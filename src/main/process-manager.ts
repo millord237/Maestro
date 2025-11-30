@@ -27,6 +27,7 @@ interface ManagedProcess {
   isStreamJsonMode?: boolean; // True when using stream-json input/output (for images)
   jsonBuffer?: string; // Buffer for accumulating JSON output in batch mode
   lastCommand?: string; // Last command sent to terminal (for filtering command echoes)
+  sessionIdEmitted?: boolean; // True after session_id has been emitted (prevents duplicate emissions)
 }
 
 /**
@@ -309,8 +310,10 @@ export class ProcessManager extends EventEmitter {
                 } else if (msg.type === 'result' && msg.result) {
                   this.emit('data', sessionId, msg.result);
                 }
-                // Capture session_id from any message type
-                if (msg.session_id) {
+                // Capture session_id from the first message only (prevents duplicate emissions)
+                // Claude includes session_id in every message, but we only want to emit once
+                if (msg.session_id && !managedProcess.sessionIdEmitted) {
+                  managedProcess.sessionIdEmitted = true;
                   this.emit('session-id', sessionId, msg.session_id);
                 }
                 // Extract usage statistics from stream-json messages (typically in 'result' type)
@@ -409,8 +412,9 @@ export class ProcessManager extends EventEmitter {
                 this.emit('data', sessionId, jsonResponse.result);
               }
 
-              // Emit session_id if present
-              if (jsonResponse.session_id) {
+              // Emit session_id if present (only once per process)
+              if (jsonResponse.session_id && !managedProcess.sessionIdEmitted) {
+                managedProcess.sessionIdEmitted = true;
                 this.emit('session-id', sessionId, jsonResponse.session_id);
               }
 

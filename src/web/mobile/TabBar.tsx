@@ -2,10 +2,10 @@
  * TabBar component for web interface
  *
  * Displays Claude Code session tabs within a Maestro session.
- * Syncs bidirectionally with the desktop app.
+ * Styled like browser tabs (Safari/Chrome) where active tab connects to content.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import type { AITabData } from '../hooks/useWebSocket';
 
@@ -15,6 +15,117 @@ interface TabBarProps {
   onSelectTab: (tabId: string) => void;
   onNewTab: () => void;
   onCloseTab: (tabId: string) => void;
+}
+
+interface TabProps {
+  tab: AITabData;
+  isActive: boolean;
+  canClose: boolean;
+  colors: ReturnType<typeof useThemeColors>;
+  onSelect: () => void;
+  onClose: () => void;
+}
+
+function Tab({ tab, isActive, canClose, colors, onSelect, onClose }: TabProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const displayName = tab.name
+    || (tab.claudeSessionId ? tab.claudeSessionId.split('-')[0].toUpperCase() : 'New');
+
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 10px',
+        // Browser-style tab with rounded top corners
+        borderTopLeftRadius: '6px',
+        borderTopRightRadius: '6px',
+        // Active tab has visible borders, inactive tabs have no borders
+        borderTop: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        borderLeft: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        borderRight: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        // Active tab connects to content (no bottom border)
+        borderBottom: isActive ? `1px solid ${colors.bgMain}` : '1px solid transparent',
+        // Active tab has bright background matching content, inactive are transparent
+        backgroundColor: isActive
+          ? colors.bgMain
+          : (isHovered ? 'rgba(255, 255, 255, 0.08)' : 'transparent'),
+        color: isActive ? colors.textMain : colors.textDim,
+        fontSize: '12px',
+        fontWeight: isActive ? 600 : 400,
+        fontFamily: 'monospace',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        minWidth: 0,
+        transition: 'all 0.15s ease',
+        // Active tab sits on top of the bar's bottom border
+        marginBottom: isActive ? '-1px' : '0',
+        zIndex: isActive ? 1 : 0,
+        position: 'relative',
+      }}
+    >
+      {/* Pulsing dot for busy tabs */}
+      {tab.state === 'busy' && (
+        <span
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: colors.warning,
+            animation: 'pulse 1.5s infinite',
+            flexShrink: 0,
+          }}
+        />
+      )}
+
+      {/* Star indicator */}
+      {tab.starred && (
+        <span style={{ fontSize: '10px', flexShrink: 0, color: colors.warning }}>★</span>
+      )}
+
+      {/* Tab name */}
+      <span
+        style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '80px',
+        }}
+      >
+        {displayName}
+      </span>
+
+      {/* Close button - visible on hover or when active */}
+      {canClose && (isHovered || isActive) && (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '14px',
+            height: '14px',
+            borderRadius: '50%',
+            fontSize: '10px',
+            color: colors.textDim,
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            marginLeft: '2px',
+            flexShrink: 0,
+          }}
+        >
+          ×
+        </span>
+      )}
+    </button>
+  );
 }
 
 export function TabBar({
@@ -31,13 +142,15 @@ export function TabBar({
     return null;
   }
 
+  const canClose = tabs.length > 1;
+
   return (
     <div
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        padding: '6px 8px',
+        alignItems: 'flex-end',
+        gap: '2px',
+        padding: '8px 8px 0 8px',
         backgroundColor: colors.bgSidebar,
         borderBottom: `1px solid ${colors.border}`,
         overflowX: 'auto',
@@ -46,103 +159,19 @@ export function TabBar({
         msOverflowStyle: 'none',
       }}
     >
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
-        const displayName = tab.name
-          || (tab.claudeSessionId ? tab.claudeSessionId.split('-')[0].toUpperCase() : 'New');
+      {tabs.map((tab) => (
+        <Tab
+          key={tab.id}
+          tab={tab}
+          isActive={tab.id === activeTabId}
+          canClose={canClose}
+          colors={colors}
+          onSelect={() => onSelectTab(tab.id)}
+          onClose={() => onCloseTab(tab.id)}
+        />
+      ))}
 
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onSelectTab(tab.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: isActive ? colors.accent + '20' : 'transparent',
-              color: isActive ? colors.accent : colors.textDim,
-              fontSize: '12px',
-              fontWeight: isActive ? 600 : 400,
-              fontFamily: 'monospace',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {/* Pulsing dot for busy tabs */}
-            {tab.state === 'busy' && (
-              <span
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: colors.warning,
-                  animation: 'pulse 1.5s infinite',
-                  flexShrink: 0,
-                }}
-              />
-            )}
-
-            {/* Star indicator */}
-            {tab.starred && (
-              <span style={{ fontSize: '10px', flexShrink: 0 }}>★</span>
-            )}
-
-            {/* Tab name */}
-            <span
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                maxWidth: '80px',
-              }}
-            >
-              {displayName}
-            </span>
-
-            {/* Close button (don't show for active tab or if only one tab) */}
-            {tabs.length > 1 && (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCloseTab(tab.id);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  fontSize: '10px',
-                  color: colors.textDim,
-                  backgroundColor: 'transparent',
-                  cursor: 'pointer',
-                  opacity: 0.6,
-                  transition: 'opacity 0.15s ease',
-                  marginLeft: '2px',
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.opacity = '1';
-                  (e.target as HTMLElement).style.backgroundColor = colors.border;
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.opacity = '0.6';
-                  (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                }}
-              >
-                ×
-              </span>
-            )}
-          </button>
-        );
-      })}
-
-      {/* New tab button */}
+      {/* New tab button - simple plus icon, not in a tab shape */}
       <button
         onClick={onNewTab}
         style={{
@@ -152,26 +181,19 @@ export function TabBar({
           width: '24px',
           height: '24px',
           borderRadius: '4px',
-          border: `1px dashed ${colors.border}`,
+          border: 'none',
           backgroundColor: 'transparent',
           color: colors.textDim,
-          fontSize: '14px',
+          fontSize: '16px',
           cursor: 'pointer',
           opacity: 0.7,
           transition: 'all 0.15s ease',
           flexShrink: 0,
+          marginLeft: '4px',
+          marginBottom: '4px',
+          alignSelf: 'center',
         }}
         title="New Tab"
-        onMouseEnter={(e) => {
-          (e.target as HTMLElement).style.opacity = '1';
-          (e.target as HTMLElement).style.borderColor = colors.accent;
-          (e.target as HTMLElement).style.color = colors.accent;
-        }}
-        onMouseLeave={(e) => {
-          (e.target as HTMLElement).style.opacity = '0.7';
-          (e.target as HTMLElement).style.borderColor = colors.border;
-          (e.target as HTMLElement).style.color = colors.textDim;
-        }}
       >
         +
       </button>

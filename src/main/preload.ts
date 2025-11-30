@@ -330,6 +330,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('claude:registerSessionOrigin', projectPath, claudeSessionId, origin, sessionName),
     updateSessionName: (projectPath: string, claudeSessionId: string, sessionName: string) =>
       ipcRenderer.invoke('claude:updateSessionName', projectPath, claudeSessionId, sessionName),
+    updateSessionStarred: (projectPath: string, claudeSessionId: string, starred: boolean) =>
+      ipcRenderer.invoke('claude:updateSessionStarred', projectPath, claudeSessionId, starred),
     getSessionOrigins: (projectPath: string) =>
       ipcRenderer.invoke('claude:getSessionOrigins', projectPath),
     deleteMessagePair: (projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) =>
@@ -567,7 +569,8 @@ export interface MaestroAPI {
     }>>;
     registerSessionOrigin: (projectPath: string, claudeSessionId: string, origin: 'user' | 'auto', sessionName?: string) => Promise<boolean>;
     updateSessionName: (projectPath: string, claudeSessionId: string, sessionName: string) => Promise<boolean>;
-    getSessionOrigins: (projectPath: string) => Promise<Record<string, 'user' | 'auto' | { origin: 'user' | 'auto'; sessionName?: string }>>;
+    updateSessionStarred: (projectPath: string, claudeSessionId: string, starred: boolean) => Promise<boolean>;
+    getSessionOrigins: (projectPath: string) => Promise<Record<string, 'user' | 'auto' | { origin: 'user' | 'auto'; sessionName?: string; starred?: boolean }>>;
     deleteMessagePair: (projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{ success: boolean; linesRemoved?: number; error?: string }>;
   };
   tempfile: {

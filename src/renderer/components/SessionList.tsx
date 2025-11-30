@@ -451,6 +451,9 @@ export function SessionList(props: SessionListProps) {
                         <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>System Logs</div>
                         <div className="text-xs" style={{ color: theme.colors.textDim }}>View application logs</div>
                       </div>
+                      <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                        {shortcuts.systemLogs.keys.join('+').replace('Meta', '⌘').replace('Alt', '⌥')}
+                      </span>
                     </button>
                     <button
                       onClick={() => { setProcessMonitorOpen(true); setMenuOpen(false); }}
@@ -461,6 +464,9 @@ export function SessionList(props: SessionListProps) {
                         <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Process Monitor</div>
                         <div className="text-xs" style={{ color: theme.colors.textDim }}>View running processes</div>
                       </div>
+                      <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                        {shortcuts.processMonitor.keys.join('+').replace('Meta', '⌘').replace('Alt', '⌥')}
+                      </span>
                     </button>
                     <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
                     <button
@@ -532,6 +538,9 @@ export function SessionList(props: SessionListProps) {
                       <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>System Logs</div>
                       <div className="text-xs" style={{ color: theme.colors.textDim }}>View application logs</div>
                     </div>
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                      {shortcuts.systemLogs.keys.join('+').replace('Meta', '⌘').replace('Alt', '⌥')}
+                    </span>
                   </button>
                   <button
                     onClick={() => { setProcessMonitorOpen(true); setMenuOpen(false); }}
@@ -542,6 +551,9 @@ export function SessionList(props: SessionListProps) {
                       <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Process Monitor</div>
                       <div className="text-xs" style={{ color: theme.colors.textDim }}>View running processes</div>
                     </div>
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+                      {shortcuts.processMonitor.keys.join('+').replace('Meta', '⌘').replace('Alt', '⌥')}
+                    </span>
                   </button>
                   <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
                   <button
@@ -1092,7 +1104,8 @@ export function SessionList(props: SessionListProps) {
             );
           })}
 
-          {/* UNGROUPED SESSIONS (as collapsible group) */}
+          {/* UNGROUPED SESSIONS (as collapsible group) - only show when sessions exist */}
+          {sessions.length > 0 && (
           <div className="mb-1 mt-4">
             <div
               className="px-3 py-1.5 flex items-center justify-between cursor-pointer hover:bg-opacity-50 group"
@@ -1110,11 +1123,16 @@ export function SessionList(props: SessionListProps) {
                   e.stopPropagation();
                   createNewGroup();
                 }}
-                className="p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: theme.colors.textDim }}
+                className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
+                style={{
+                  backgroundColor: theme.colors.accent + '20',
+                  color: theme.colors.accent,
+                  border: `1px solid ${theme.colors.accent}40`
+                }}
                 title="Create new group"
               >
                 <Plus className="w-3 h-3" />
+                <span>New Group</span>
               </button>
             </div>
 
@@ -1226,6 +1244,7 @@ export function SessionList(props: SessionListProps) {
               </div>
             )}
           </div>
+          )}
         </div>
       ) : (
         /* SIDEBAR CONTENT: SKINNY MODE */

@@ -146,6 +146,7 @@ type ClaudeSessionOrigin = 'user' | 'auto';
 interface ClaudeSessionOriginInfo {
   origin: ClaudeSessionOrigin;
   sessionName?: string; // User-defined session name from Maestro
+  starred?: boolean;    // Whether the session is starred
 }
 interface ClaudeSessionOriginsData {
   // Map of projectPath -> { claudeSessionId -> origin info }
@@ -764,6 +765,10 @@ function setupIpcHandlers() {
     // If no shell is specified and this is a terminal session, use the default shell from settings
     const shellToUse = config.shell || (config.toolType === 'terminal' ? store.get('defaultShell', 'zsh') : undefined);
 
+    // Extract Claude session ID from --resume arg if present
+    const resumeArgIndex = finalArgs.indexOf('--resume');
+    const claudeSessionId = resumeArgIndex !== -1 ? finalArgs[resumeArgIndex + 1] : undefined;
+
     logger.info(`Spawning process: ${config.command}`, 'ProcessManager', {
       sessionId: config.sessionId,
       toolType: config.toolType,
@@ -771,7 +776,9 @@ function setupIpcHandlers() {
       command: config.command,
       args: finalArgs,
       requiresPty: agent?.requiresPty || false,
-      shell: shellToUse
+      shell: shellToUse,
+      ...(claudeSessionId && { claudeSessionId }),
+      ...(config.prompt && { prompt: config.prompt.length > 500 ? config.prompt.substring(0, 500) + '...' : config.prompt })
     });
 
     const result = processManager.spawn({
@@ -2313,6 +2320,27 @@ function setupIpcHandlers() {
     }
     claudeSessionOriginsStore.set('origins', origins);
     logger.debug(`Updated Claude session name: ${claudeSessionId} = ${sessionName}`, 'ClaudeSessionOrigins', { projectPath });
+    return true;
+  });
+
+  // Update starred status for an existing Claude session
+  ipcMain.handle('claude:updateSessionStarred', async (_event, projectPath: string, claudeSessionId: string, starred: boolean) => {
+    const origins = claudeSessionOriginsStore.get('origins', {});
+    if (!origins[projectPath]) {
+      origins[projectPath] = {};
+    }
+    const existing = origins[projectPath][claudeSessionId];
+    // Convert string origin to object format, or update existing object
+    if (typeof existing === 'string') {
+      origins[projectPath][claudeSessionId] = { origin: existing, starred };
+    } else if (existing) {
+      origins[projectPath][claudeSessionId] = { ...existing, starred };
+    } else {
+      // No existing origin, default to 'user' since they're starring it
+      origins[projectPath][claudeSessionId] = { origin: 'user', starred };
+    }
+    claudeSessionOriginsStore.set('origins', origins);
+    logger.debug(`Updated Claude session starred: ${claudeSessionId} = ${starred}`, 'ClaudeSessionOrigins', { projectPath });
     return true;
   });
 

@@ -40,8 +40,8 @@ const migrateSessionToTabFormat = (session: Session): Session => {
     name: null, // Name will be looked up in restoreSession if needed
     starred: false, // Starred will be looked up in restoreSession if needed
     logs: session.aiLogs || [],
-    messageQueue: session.messageQueue || [],
     inputValue: '',
+    stagedImages: [],
     usageStats: session.usageStats,
     createdAt: Date.now(),
     state: 'idle'
@@ -335,7 +335,10 @@ export function useSessionManager(): UseSessionManagerReturn {
         shellCwd: workingDir,
         aiCommandHistory: [],
         shellCommandHistory: [],
-        messageQueue: []
+        executionQueue: [],
+        aiTabs: [],
+        activeTabId: '',
+        closedTabHistory: []
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);

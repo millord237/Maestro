@@ -9,6 +9,7 @@ export interface Toast {
   project?: string;
   duration?: number;
   taskDuration?: number; // How long the task took in ms
+  claudeSessionId?: string; // Claude Code session UUID for traceability
   timestamp: number;
 }
 
@@ -55,7 +56,8 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
       message: toast.message,
       group: toast.group,
       project: toast.project,
-      taskDuration: toast.taskDuration
+      taskDuration: toast.taskDuration,
+      claudeSessionId: toast.claudeSessionId
     });
 
     // Auto-remove after duration (only if duration > 0)
