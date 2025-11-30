@@ -885,6 +885,19 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     setActiveTtsId(null);
   }, [activeTtsId]);
 
+  // Listen for TTS completion events from main process
+  useEffect(() => {
+    const cleanup = window.maestro.notification.onTtsCompleted((completedTtsId: number) => {
+      console.log('[TTS] TTS completed event received for ID:', completedTtsId);
+      // Only clear if this is the currently active TTS
+      if (completedTtsId === activeTtsId) {
+        setSpeakingLogId(null);
+        setActiveTtsId(null);
+      }
+    });
+    return cleanup;
+  }, [activeTtsId]);
+
   // Layer stack integration for search overlay
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();

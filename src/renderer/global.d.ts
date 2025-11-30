@@ -301,6 +301,7 @@ interface MaestroAPI {
     show: (title: string, body: string) => Promise<{ success: boolean; error?: string }>;
     speak: (text: string, command?: string) => Promise<{ success: boolean; ttsId?: number; error?: string }>;
     stopSpeak: (ttsId: number) => Promise<{ success: boolean; error?: string }>;
+    onTtsCompleted: (handler: (ttsId: number) => void) => () => void;
   };
   attachments: {
     save: (sessionId: string, base64Data: string, filename: string) => Promise<{ success: boolean; path?: string; filename?: string; error?: string }>;

@@ -2477,6 +2477,10 @@ function setupIpcHandlers() {
           });
         }
         activeTtsProcesses.delete(ttsId);
+        // Notify renderer that TTS has completed
+        BrowserWindow.getAllWindows().forEach((win) => {
+          win.webContents.send('tts:completed', ttsId);
+        });
       });
 
       console.log('[TTS Main] Process spawned successfully with ID:', ttsId);
