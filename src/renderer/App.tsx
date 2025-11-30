@@ -1292,11 +1292,13 @@ export default function MaestroConsole() {
   const sessionsRef = useRef(sessions);
   const updateGlobalStatsRef = useRef(updateGlobalStats);
   const customAICommandsRef = useRef(customAICommands);
+  const activeSessionIdRef = useRef(activeSessionId);
   groupsRef.current = groups;
   addToastRef.current = addToast;
   sessionsRef.current = sessions;
   updateGlobalStatsRef.current = updateGlobalStats;
   customAICommandsRef.current = customAICommands;
+  activeSessionIdRef.current = activeSessionId;
 
   // Refs for slash command functions (to access latest values in remote command handler)
   const spawnBackgroundSynopsisRef = useRef<typeof spawnBackgroundSynopsis | null>(null);
@@ -1587,13 +1589,16 @@ export default function MaestroConsole() {
   }, [sessions]);
 
   // Combine built-in slash commands with custom AI commands for autocomplete
+  // Filter out isSystemCommand entries since those are already in slashCommands with execute functions
   const allSlashCommands = useMemo(() => {
-    const customCommandsAsSlash = customAICommands.map(cmd => ({
-      command: cmd.command,
-      description: cmd.description,
-      aiOnly: true, // Custom AI commands are only available in AI mode
-      prompt: cmd.prompt, // Include prompt for execution
-    }));
+    const customCommandsAsSlash = customAICommands
+      .filter(cmd => !cmd.isSystemCommand) // System commands are in slashCommands.ts
+      .map(cmd => ({
+        command: cmd.command,
+        description: cmd.description,
+        aiOnly: true, // Custom AI commands are only available in AI mode
+        prompt: cmd.prompt, // Include prompt for execution
+      }));
     return [...slashCommands, ...customCommandsAsSlash];
   }, [customAICommands]);
 
@@ -3386,16 +3391,15 @@ export default function MaestroConsole() {
               return;
             }
 
-            // Get the active tab for proper targeting
-            const commandActiveTab = getActiveTab(activeSession);
-            if (!commandActiveTab) {
+            // activeTab already defined above for queue check - reuse it
+            if (!activeTab) {
               console.error('[processInput] No active tab for slash command');
               return;
             }
 
             // Build target session ID using tab ID (same pattern as regular messages)
-            const commandTargetSessionId = `${activeSessionId}-ai-${commandActiveTab.id}`;
-            const isNewSession = !commandActiveTab.claudeSessionId;
+            const targetSessionId = `${activeSessionId}-ai-${activeTab.id}`;
+            const isNewSession = !activeTab.claudeSessionId;
 
             // Add user log showing the command with its interpolated prompt to the active tab
             const newEntry: LogEntry = {
@@ -3415,7 +3419,7 @@ export default function MaestroConsole() {
 
               // Update the active tab's logs and state
               const updatedAiTabs = s.aiTabs.map(tab =>
-                tab.id === commandActiveTab.id
+                tab.id === activeTab.id
                   ? {
                       ...tab,
                       logs: [...tab.logs, newEntry],
@@ -3466,12 +3470,12 @@ export default function MaestroConsole() {
                 const commandToUse = agent.path || agent.command;
                 console.log('[processInput] Spawning Claude for slash command:', {
                   command: matchingCustomCommand.command,
-                  targetSessionId: commandTargetSessionId,
+                  targetSessionId,
                   claudeSessionId: tabClaudeSessionId || 'NEW SESSION'
                 });
 
                 await window.maestro.process.spawn({
-                  sessionId: commandTargetSessionId,
+                  sessionId: targetSessionId,
                   toolType: 'claude-code',
                   cwd: freshSession.cwd,
                   command: commandToUse,
@@ -3489,7 +3493,7 @@ export default function MaestroConsole() {
                     text: `Error: Failed to run ${matchingCustomCommand.command} - ${error.message}`
                   };
                   const updatedAiTabs = s.aiTabs.map(tab =>
-                    tab.id === commandActiveTab.id
+                    tab.id === activeTab.id
                       ? { ...tab, state: 'idle' as const, logs: [...tab.logs, errorEntry] }
                       : tab
                   );
@@ -4468,6 +4472,7 @@ export default function MaestroConsole() {
           // Check if this is a custom AI command (has prompt but no execute)
           if ('prompt' in selectedCommand && selectedCommand.prompt && !('execute' in selectedCommand)) {
             // Substitute template variables and send to the AI agent
+            // Use the same spawn logic as processInput for proper tab-based session ID tracking
             (async () => {
               let gitBranch: string | undefined;
               if (activeSession.isGitRepo) {
@@ -4483,26 +4488,120 @@ export default function MaestroConsole() {
                 { session: activeSession, gitBranch }
               );
 
+              // Get the active tab for proper targeting
+              const activeTab = getActiveTab(activeSession);
+              if (!activeTab) {
+                console.error('[handleInputKeyDown] No active tab for slash command');
+                return;
+              }
+
+              // Build target session ID using tab ID (same pattern as processInput)
+              const targetSessionId = `${activeSessionId}-ai-${activeTab.id}`;
+              const isNewSession = !activeTab.claudeSessionId;
+
               // Add user log showing the command with its interpolated prompt to active tab
-              addLogToActiveTab(activeSessionId, {
+              const newEntry: LogEntry = {
+                id: generateId(),
+                timestamp: Date.now(),
                 source: 'user',
                 text: substitutedPrompt,
                 aiCommand: {
                   command: selectedCommand.command,
                   description: selectedCommand.description
                 }
-              });
+              };
 
-              // Track AI command usage
+              // Update session state: add log, set busy, set awaitingSessionId for new sessions
               setSessions(prev => prev.map(s => {
                 if (s.id !== activeSessionId) return s;
+
+                // Update the active tab's logs and state
+                const updatedAiTabs = s.aiTabs.map(tab =>
+                  tab.id === activeTab.id
+                    ? {
+                        ...tab,
+                        logs: [...tab.logs, newEntry],
+                        state: 'busy' as const,
+                        thinkingStartTime: Date.now(),
+                        awaitingSessionId: isNewSession ? true : tab.awaitingSessionId
+                      }
+                    : tab
+                );
+
                 return {
                   ...s,
-                  aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), selectedCommand.command])).slice(-50)
+                  state: 'busy' as SessionState,
+                  busySource: 'ai',
+                  thinkingStartTime: Date.now(),
+                  currentCycleTokens: 0,
+                  currentCycleBytes: 0,
+                  aiCommandHistory: Array.from(new Set([...(s.aiCommandHistory || []), selectedCommand.command])).slice(-50),
+                  pendingAICommandForSynopsis: selectedCommand.command,
+                  aiTabs: updatedAiTabs
                 };
               }));
 
-              spawnAgentWithPrompt(substitutedPrompt);
+              // Spawn the agent with proper session ID format (same as processInput)
+              try {
+                const agent = await window.maestro.agents.get('claude-code');
+                if (!agent) throw new Error('Claude Code agent not found');
+
+                // Get fresh session state to avoid stale closure
+                const freshSession = sessionsRef.current.find(s => s.id === activeSessionId);
+                if (!freshSession) throw new Error('Session not found');
+
+                const freshActiveTab = getActiveTab(freshSession);
+                const tabClaudeSessionId = freshActiveTab?.claudeSessionId;
+
+                // Build spawn args with resume if we have a session ID
+                const spawnArgs = [...(agent.args || [])];
+                if (tabClaudeSessionId) {
+                  spawnArgs.push('--resume', tabClaudeSessionId);
+                }
+
+                // Add read-only mode if tab has it enabled
+                if (freshActiveTab?.readOnlyMode) {
+                  spawnArgs.push('--permission-mode', 'plan');
+                }
+
+                const commandToUse = agent.path || agent.command;
+                console.log('[handleInputKeyDown] Spawning Claude for slash command:', {
+                  command: selectedCommand.command,
+                  targetSessionId,
+                  claudeSessionId: tabClaudeSessionId || 'NEW SESSION'
+                });
+
+                await window.maestro.process.spawn({
+                  sessionId: targetSessionId,
+                  toolType: 'claude-code',
+                  cwd: freshSession.cwd,
+                  command: commandToUse,
+                  args: spawnArgs,
+                  prompt: substitutedPrompt
+                });
+              } catch (error: any) {
+                console.error('[handleInputKeyDown] Failed to spawn Claude for slash command:', error);
+                setSessions(prev => prev.map(s => {
+                  if (s.id !== activeSessionId) return s;
+                  const errorEntry: LogEntry = {
+                    id: generateId(),
+                    timestamp: Date.now(),
+                    source: 'system',
+                    text: `Error: Failed to run ${selectedCommand.command} - ${error.message}`
+                  };
+                  const updatedAiTabs = s.aiTabs.map(tab =>
+                    tab.id === activeTab.id
+                      ? { ...tab, state: 'idle' as const, logs: [...tab.logs, errorEntry] }
+                      : tab
+                  );
+                  return {
+                    ...s,
+                    state: 'idle' as SessionState,
+                    busySource: undefined,
+                    aiTabs: updatedAiTabs
+                  };
+                }));
+              }
             })();
           } else if ('execute' in selectedCommand && selectedCommand.execute) {
             // Execute the built-in command directly
