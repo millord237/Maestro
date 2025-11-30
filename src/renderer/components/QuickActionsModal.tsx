@@ -50,6 +50,10 @@ interface QuickActionsModalProps {
   setGitDiffPreview: (diff: string | null) => void;
   setGitLogOpen: (open: boolean) => void;
   startFreshSession: () => void;
+  onRenameTab?: () => void;
+  onToggleReadOnlyMode?: () => void;
+  tabShortcuts?: Record<string, Shortcut>;
+  isAiMode?: boolean;
 }
 
 export function QuickActionsModal(props: QuickActionsModalProps) {
@@ -62,7 +66,8 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setLeftSidebarOpen, setRightPanelOpen, setActiveRightTab, toggleInputMode,
     deleteSession, addNewSession, setSettingsModalOpen, setSettingsTab,
     setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
-    setAgentSessionsOpen, setActiveClaudeSessionId, setGitDiffPreview, setGitLogOpen, startFreshSession
+    setAgentSessionsOpen, setActiveClaudeSessionId, setGitDiffPreview, setGitLogOpen, startFreshSession,
+    onRenameTab, onToggleReadOnlyMode, tabShortcuts, isAiMode
   } = props;
 
   const [search, setSearch] = useState('');
@@ -178,9 +183,9 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
 
   const mainActions: QuickAction[] = [
     ...sessionActions,
-    { id: 'new', label: 'New Agent', shortcut: shortcuts.newInstance, action: addNewSession },
+    { id: 'new', label: 'Create New Agent', shortcut: shortcuts.newInstance, action: addNewSession },
     ...(activeSession ? [{ id: 'freshSession', label: 'Fresh Agent Session', action: () => { startFreshSession(); setQuickActionOpen(false); }, subtext: 'Clear AI history and start fresh' }] : []),
-    ...(activeSession ? [{ id: 'rename', label: 'Rename Current Agent', action: () => {
+    ...(activeSession ? [{ id: 'rename', label: 'Rename Agent', action: () => {
       setRenameInstanceValue(activeSession.name);
       setRenameInstanceModalOpen(true);
       setQuickActionOpen(false);
@@ -204,12 +209,14 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'toggleSidebar', label: 'Toggle Sidebar', shortcut: shortcuts.toggleSidebar, action: () => setLeftSidebarOpen(p => !p) },
     { id: 'toggleRight', label: 'Toggle Right Panel', shortcut: shortcuts.toggleRightPanel, action: () => setRightPanelOpen(p => !p) },
     ...(activeSession ? [{ id: 'switchMode', label: 'Switch AI/Shell Mode', shortcut: shortcuts.toggleMode, action: toggleInputMode }] : []),
+    ...(isAiMode && onRenameTab ? [{ id: 'renameTab', label: 'Rename Tab', shortcut: tabShortcuts?.renameTab, action: () => { onRenameTab(); setQuickActionOpen(false); } }] : []),
+    ...(isAiMode && onToggleReadOnlyMode ? [{ id: 'toggleReadOnly', label: 'Toggle Read-Only Mode', shortcut: tabShortcuts?.toggleReadOnlyMode, action: () => { onToggleReadOnlyMode(); setQuickActionOpen(false); } }] : []),
     ...(activeSession ? [{ id: 'kill', label: 'Kill Current Agent', shortcut: shortcuts.killInstance, action: () => deleteSession(activeSessionId) }] : []),
     { id: 'settings', label: 'Settings', shortcut: shortcuts.settings, action: () => { setSettingsModalOpen(true); setQuickActionOpen(false); } },
     { id: 'theme', label: 'Change Theme', action: () => { setSettingsModalOpen(true); setSettingsTab('theme'); setQuickActionOpen(false); } },
     { id: 'shortcuts', label: 'View Shortcuts', shortcut: shortcuts.help, action: () => { setShortcutsHelpOpen(true); setQuickActionOpen(false); } },
-    { id: 'logs', label: 'View System Logs', action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
-    { id: 'processes', label: 'View System Processes', action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
+    { id: 'logs', label: 'View System Logs', shortcut: shortcuts.systemLogs, action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
+    { id: 'processes', label: 'View System Processes', shortcut: shortcuts.processMonitor, action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
     ...(activeSession ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveClaudeSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
     ...(activeSession?.isGitRepo ? [{ id: 'gitDiff', label: 'View Git Diff', shortcut: shortcuts.viewGitDiff, action: async () => {
       const cwd = activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd;
@@ -247,7 +254,9 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   ];
 
   const actions = mode === 'main' ? mainActions : groupActions;
-  const filtered = actions.filter(a => a.label.toLowerCase().includes(search.toLowerCase()));
+  const filtered = actions
+    .filter(a => a.label.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -291,10 +300,14 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
           setQuickActionOpen(false);
         }
       }
-    } else if (e.metaKey && ['1', '2', '3', '4', '5', '6', '7', '8'].includes(e.key)) {
+    } else if (e.metaKey && ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].includes(e.key)) {
       e.preventDefault();
-      const number = parseInt(e.key);
-      const targetIndex = firstVisibleIndex + number - 1;
+      // 1-9 map to positions 1-9, 0 maps to position 10
+      const number = e.key === '0' ? 10 : parseInt(e.key);
+      // Cap firstVisibleIndex so hotkeys always work for the last 10 items
+      const maxFirstIndex = Math.max(0, filtered.length - 10);
+      const effectiveFirstIndex = Math.min(firstVisibleIndex, maxFirstIndex);
+      const targetIndex = effectiveFirstIndex + number - 1;
       if (filtered[targetIndex]) {
         filtered[targetIndex].action();
         if (!renamingSession && mode === 'main') {
@@ -343,10 +356,14 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
         {!renamingSession && (
           <div className="overflow-y-auto py-2 scrollbar-thin" ref={scrollContainerRef} onScroll={handleScroll}>
             {filtered.map((a, i) => {
-              // Calculate dynamic number badge (1-8) based on first visible item
-              const distanceFromFirstVisible = i - firstVisibleIndex;
-              const showNumber = distanceFromFirstVisible >= 0 && distanceFromFirstVisible < 8;
-              const numberBadge = distanceFromFirstVisible + 1;
+              // Calculate dynamic number badge (1-9, 0) based on first visible item
+              // Cap firstVisibleIndex so we always show 10 numbered items when near the end
+              const maxFirstIndex = Math.max(0, filtered.length - 10);
+              const effectiveFirstIndex = Math.min(firstVisibleIndex, maxFirstIndex);
+              const distanceFromFirstVisible = i - effectiveFirstIndex;
+              const showNumber = distanceFromFirstVisible >= 0 && distanceFromFirstVisible < 10;
+              // 1-9 for positions 1-9, 0 for position 10
+              const numberBadge = distanceFromFirstVisible === 9 ? 0 : distanceFromFirstVisible + 1;
 
               return (
                 <button

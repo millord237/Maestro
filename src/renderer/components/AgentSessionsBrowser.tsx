@@ -45,8 +45,9 @@ interface AgentSessionsBrowserProps {
   activeSession: Session | undefined;
   activeClaudeSessionId: string | null;
   onClose: () => void;
-  onResumeSession: (claudeSessionId: string, messages: LogEntry[], sessionName?: string) => void;
+  onResumeSession: (claudeSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean) => void;
   onNewSession: () => void;
+  onUpdateTab?: (claudeSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
 }
 
 export function AgentSessionsBrowser({
@@ -56,6 +57,7 @@ export function AgentSessionsBrowser({
   onClose,
   onResumeSession,
   onNewSession,
+  onUpdateTab,
 }: AgentSessionsBrowserProps) {
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,12 +207,15 @@ export function AgentSessionsBrowser({
       }
 
       try {
-        // Load starred sessions for this project
-        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-        const savedStarred = await window.maestro.settings.get(starredKey);
-        if (savedStarred && Array.isArray(savedStarred)) {
-          setStarredSessions(new Set(savedStarred));
+        // Load session metadata (starred status) from Claude session origins
+        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
+        const starredFromOrigins = new Set<string>();
+        for (const [sessionId, originData] of Object.entries(origins)) {
+          if (typeof originData === 'object' && originData?.starred) {
+            starredFromOrigins.add(sessionId);
+          }
         }
+        setStarredSessions(starredFromOrigins);
 
         const result = await window.maestro.claude.listSessions(activeSession.cwd);
         setSessions(result);
@@ -229,19 +234,26 @@ export function AgentSessionsBrowser({
     e.stopPropagation(); // Don't trigger session view
 
     const newStarred = new Set(starredSessions);
-    if (newStarred.has(sessionId)) {
-      newStarred.delete(sessionId);
-    } else {
+    const isNowStarred = !newStarred.has(sessionId);
+    if (isNowStarred) {
       newStarred.add(sessionId);
+    } else {
+      newStarred.delete(sessionId);
     }
     setStarredSessions(newStarred);
 
-    // Persist to settings
+    // Persist to Claude session origins
     if (activeSession?.cwd) {
-      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-      await window.maestro.settings.set(starredKey, Array.from(newStarred));
+      await window.maestro.claude.updateSessionStarred(
+        activeSession.cwd,
+        sessionId,
+        isNowStarred
+      );
     }
-  }, [starredSessions, activeSession?.cwd]);
+
+    // Update the tab if this session is open as a tab
+    onUpdateTab?.(sessionId, { starred: isNowStarred });
+  }, [starredSessions, activeSession?.cwd, onUpdateTab]);
 
   // Start renaming a session
   const startRename = useCallback((session: ClaudeSession, e: React.MouseEvent) => {
@@ -282,12 +294,15 @@ export function AgentSessionsBrowser({
       if (viewingSession?.sessionId === sessionId) {
         setViewingSession(prev => prev ? { ...prev, sessionName: trimmedName || undefined } : null);
       }
+
+      // Update the tab if this session is open as a tab
+      onUpdateTab?.(sessionId, { name: trimmedName || null });
     } catch (error) {
       console.error('Failed to rename session:', error);
     }
 
     cancelRename();
-  }, [activeSession?.cwd, renameValue, viewingSession?.sessionId, cancelRename]);
+  }, [activeSession?.cwd, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab]);
 
   // Auto-view session when activeClaudeSessionId is provided (e.g., from history panel click)
   useEffect(() => {
@@ -538,10 +553,21 @@ export function AgentSessionsBrowser({
         source: msg.type === 'user' ? 'user' as const : 'stdout' as const,
         text: msg.content || (msg.toolUse ? `[Tool: ${msg.toolUse[0]?.name || 'unknown'}]` : '[No content]'),
       }));
-      onResumeSession(viewingSession.sessionId, logEntries, viewingSession.sessionName);
+      // Pass session name and starred status for the new tab
+      const isStarred = starredSessions.has(viewingSession.sessionId);
+      onResumeSession(viewingSession.sessionId, logEntries, viewingSession.sessionName, isStarred);
       onClose();
     }
-  }, [viewingSession, messages, onResumeSession, onClose]);
+  }, [viewingSession, messages, onResumeSession, onClose, starredSessions]);
+
+  // Handle quick resume from the list view (without going to detail view)
+  const handleQuickResume = useCallback((session: ClaudeSession, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger session view
+    const isStarred = starredSessions.has(session.sessionId);
+    // Pass empty messages array - the history will be loaded when the session is resumed
+    onResumeSession(session.sessionId, [], session.sessionName, isStarred);
+    onClose();
+  }, [starredSessions, onResumeSession, onClose]);
 
   // Format file size
   const formatSize = (bytes: number) => {
@@ -1101,6 +1127,17 @@ export function AgentSessionsBrowser({
                             color: isStarred ? theme.colors.warning : theme.colors.textDim,
                             fill: isStarred ? theme.colors.warning : 'transparent',
                           }}
+                        />
+                      </button>
+                      {/* Quick Resume button */}
+                      <button
+                        onClick={(e) => handleQuickResume(session, e)}
+                        className="p-1 rounded hover:bg-white/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                        title="Resume session in new tab"
+                      >
+                        <Play
+                          className="w-4 h-4"
+                          style={{ color: theme.colors.success }}
                         />
                       </button>
                       <div className="flex-1 min-w-0">

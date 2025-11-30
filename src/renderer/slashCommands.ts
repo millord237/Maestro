@@ -143,6 +143,7 @@ export const slashCommands: SlashCommand[] = [
                   group: groupName,
                   project: projectName,
                   taskDuration: duration,
+                  claudeSessionId: oldClaudeSessionId,
                 });
               }
             }

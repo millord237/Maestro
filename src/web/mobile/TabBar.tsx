@@ -1,0 +1,213 @@
+/**
+ * TabBar component for web interface
+ *
+ * Displays Claude Code session tabs within a Maestro session.
+ * Styled like browser tabs (Safari/Chrome) where active tab connects to content.
+ */
+
+import React, { useState } from 'react';
+import { useThemeColors } from '../components/ThemeProvider';
+import type { AITabData } from '../hooks/useWebSocket';
+
+interface TabBarProps {
+  tabs: AITabData[];
+  activeTabId: string;
+  onSelectTab: (tabId: string) => void;
+  onNewTab: () => void;
+  onCloseTab: (tabId: string) => void;
+}
+
+interface TabProps {
+  tab: AITabData;
+  isActive: boolean;
+  canClose: boolean;
+  colors: ReturnType<typeof useThemeColors>;
+  onSelect: () => void;
+  onClose: () => void;
+}
+
+function Tab({ tab, isActive, canClose, colors, onSelect, onClose }: TabProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const displayName = tab.name
+    || (tab.claudeSessionId ? tab.claudeSessionId.split('-')[0].toUpperCase() : 'New');
+
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 10px',
+        // Browser-style tab with rounded top corners
+        borderTopLeftRadius: '6px',
+        borderTopRightRadius: '6px',
+        // Active tab has visible borders, inactive tabs have no borders
+        borderTop: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        borderLeft: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        borderRight: isActive ? `1px solid ${colors.border}` : '1px solid transparent',
+        // Active tab connects to content (no bottom border)
+        borderBottom: isActive ? `1px solid ${colors.bgMain}` : '1px solid transparent',
+        // Active tab has bright background matching content, inactive are transparent
+        backgroundColor: isActive
+          ? colors.bgMain
+          : (isHovered ? 'rgba(255, 255, 255, 0.08)' : 'transparent'),
+        color: isActive ? colors.textMain : colors.textDim,
+        fontSize: '12px',
+        fontWeight: isActive ? 600 : 400,
+        fontFamily: 'monospace',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0, // Prevent tabs from shrinking - allow horizontal scroll instead
+        transition: 'all 0.15s ease',
+        // Active tab sits on top of the bar's bottom border
+        marginBottom: isActive ? '-1px' : '0',
+        zIndex: isActive ? 1 : 0,
+        position: 'relative',
+      }}
+    >
+      {/* Pulsing dot for busy tabs */}
+      {tab.state === 'busy' && (
+        <span
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: colors.warning,
+            animation: 'pulse 1.5s infinite',
+            flexShrink: 0,
+          }}
+        />
+      )}
+
+      {/* Star indicator */}
+      {tab.starred && (
+        <span style={{ fontSize: '10px', flexShrink: 0, color: colors.warning }}>★</span>
+      )}
+
+      {/* Tab name - minimum 8 characters visible */}
+      <span
+        style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minWidth: '48px', // ~8 characters at 12px monospace (6px per char)
+          maxWidth: '80px',
+        }}
+      >
+        {displayName}
+      </span>
+
+      {/* Close button - visible on hover or when active */}
+      {canClose && (isHovered || isActive) && (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '14px',
+            height: '14px',
+            borderRadius: '50%',
+            fontSize: '10px',
+            color: colors.textDim,
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            marginLeft: '2px',
+            flexShrink: 0,
+          }}
+        >
+          ×
+        </span>
+      )}
+    </button>
+  );
+}
+
+export function TabBar({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onNewTab,
+  onCloseTab,
+}: TabBarProps) {
+  const colors = useThemeColors();
+
+  // Don't render if there's only one tab
+  if (tabs.length <= 1) {
+    return null;
+  }
+
+  const canClose = tabs.length > 1;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: '2px',
+        padding: '8px 8px 0 8px',
+        backgroundColor: colors.bgSidebar,
+        borderBottom: `1px solid ${colors.border}`,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+      }}
+    >
+      {tabs.map((tab) => (
+        <Tab
+          key={tab.id}
+          tab={tab}
+          isActive={tab.id === activeTabId}
+          canClose={canClose}
+          colors={colors}
+          onSelect={() => onSelectTab(tab.id)}
+          onClose={() => onCloseTab(tab.id)}
+        />
+      ))}
+
+      {/* New tab button - simple plus icon, not in a tab shape */}
+      <button
+        onClick={onNewTab}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '24px',
+          height: '24px',
+          borderRadius: '4px',
+          border: 'none',
+          backgroundColor: 'transparent',
+          color: colors.textDim,
+          fontSize: '16px',
+          cursor: 'pointer',
+          opacity: 0.7,
+          transition: 'all 0.15s ease',
+          flexShrink: 0,
+          marginLeft: '4px',
+          marginBottom: '4px',
+          alignSelf: 'center',
+        }}
+        title="New Tab"
+      >
+        +
+      </button>
+
+      {/* CSS for pulse animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default TabBar;

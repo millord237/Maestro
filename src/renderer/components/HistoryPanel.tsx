@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { Bot, User, ExternalLink, Check, X } from 'lucide-react';
+import { Bot, User, ExternalLink, Check, X, Clock } from 'lucide-react';
 import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
+
+// Format elapsed time in human-readable format
+const formatElapsedTime = (ms: number): string => {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+};
 
 // 24-hour activity bar graph component with sliding time window
 interface ActivityGraphProps {
@@ -229,6 +242,7 @@ interface HistoryPanelProps {
   theme: Theme;
   onJumpToClaudeSession?: (claudeSessionId: string) => void;
   onResumeSession?: (claudeSessionId: string) => void;
+  onOpenSessionAsTab?: (claudeSessionId: string) => void;
 }
 
 export interface HistoryPanelHandle {
@@ -241,7 +255,7 @@ const MAX_HISTORY_IN_MEMORY = 500;  // Maximum entries to keep in memory
 const INITIAL_DISPLAY_COUNT = 50;   // Initial entries to render
 const LOAD_MORE_COUNT = 50;         // Entries to add when scrolling
 
-export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPanelProps>(function HistoryPanel({ session, theme, onJumpToClaudeSession, onResumeSession }, ref) {
+export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPanelProps>(function HistoryPanel({ session, theme, onJumpToClaudeSession, onResumeSession, onOpenSessionAsTab }, ref) {
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<HistoryEntryType>>(new Set(['AUTO', 'USER']));
   const [isLoading, setIsLoading] = useState(true);
@@ -628,12 +642,12 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
                       {entry.type}
                     </span>
 
-                    {/* Session ID Octet (clickable) */}
+                    {/* Session ID Octet (clickable) - opens session as new tab */}
                     {entry.claudeSessionId && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onJumpToClaudeSession?.(entry.claudeSessionId!);
+                          onOpenSessionAsTab?.(entry.claudeSessionId!);
                         }}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase transition-colors hover:opacity-80"
                         style={{
@@ -641,7 +655,7 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
                           color: theme.colors.accent,
                           border: `1px solid ${theme.colors.accent}40`
                         }}
-                        title={`Jump to session ${entry.claudeSessionId}`}
+                        title={`Open session ${entry.claudeSessionId.split('-')[0]} as new tab`}
                       >
                         {entry.claudeSessionId.split('-')[0].toUpperCase()}
                         <ExternalLink className="w-2.5 h-2.5" />
@@ -667,6 +681,34 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
                 >
                   {entry.summary || 'No summary available'}
                 </p>
+
+                {/* Footer Row - Time and Cost */}
+                {(entry.elapsedTimeMs !== undefined || (entry.usageStats && entry.usageStats.totalCostUsd > 0)) && (
+                  <div className="flex items-center gap-3 mt-2 pt-2 border-t" style={{ borderColor: theme.colors.border }}>
+                    {/* Elapsed Time */}
+                    {entry.elapsedTimeMs !== undefined && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" style={{ color: theme.colors.textDim }} />
+                        <span className="text-[10px] font-mono" style={{ color: theme.colors.textDim }}>
+                          {formatElapsedTime(entry.elapsedTimeMs)}
+                        </span>
+                      </div>
+                    )}
+                    {/* Cost */}
+                    {entry.usageStats && entry.usageStats.totalCostUsd > 0 && (
+                      <span
+                        className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: theme.colors.success + '15',
+                          color: theme.colors.success,
+                          border: `1px solid ${theme.colors.success}30`
+                        }}
+                      >
+                        ${entry.usageStats.totalCostUsd.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

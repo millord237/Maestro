@@ -3,7 +3,7 @@
 // Re-export theme types from shared location
 export { Theme, ThemeId, ThemeMode, ThemeColors, isValidThemeId } from '../../shared/theme-types';
 
-export type ToolType = 'claude' | 'aider' | 'opencode' | 'terminal';
+export type ToolType = 'claude' | 'claude-code' | 'aider' | 'opencode' | 'terminal';
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 export type RightPanelTab = 'files' | 'history' | 'scratchpad';
@@ -27,7 +27,7 @@ export interface FileArtifact {
 export interface LogEntry {
   id: string;
   timestamp: number;
-  source: 'stdout' | 'stderr' | 'system' | 'user';
+  source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai';
   text: string;
   interactive?: boolean;
   options?: string[];
@@ -39,6 +39,25 @@ export interface LogEntry {
   };
   // For user messages - tracks if message was successfully delivered to the agent
   delivered?: boolean;
+}
+
+// Queued item for the session-level execution queue
+// Supports both messages and slash commands, processed sequentially
+export type QueuedItemType = 'message' | 'command';
+
+export interface QueuedItem {
+  id: string;                        // Unique item ID
+  timestamp: number;                 // When it was queued (for ordering)
+  tabId: string;                     // Target tab for this item
+  type: QueuedItemType;              // 'message' or 'command'
+  // For messages
+  text?: string;                     // Message text
+  images?: string[];                 // Attached images (base64)
+  // For commands
+  command?: string;                  // Slash command (e.g., '/commit')
+  commandDescription?: string;       // Command description for display
+  // Display metadata
+  tabName?: string;                  // Tab name at time of queuing (for display)
 }
 
 export interface WorkLogItem {
@@ -102,12 +121,30 @@ export interface GlobalStats {
   totalActiveTimeMs: number;
 }
 
-// Recent Claude session for quick access breadcrumbs (per Maestro session)
-export interface RecentClaudeSession {
-  sessionId: string;
-  firstMessage: string;
-  timestamp: string;
-  sessionName?: string;
+// AI Tab for multi-tab support within a Maestro session
+// Each tab represents a separate Claude Code conversation
+export interface AITab {
+  id: string;                      // Unique tab ID (generated UUID)
+  claudeSessionId: string | null;  // Claude Code session UUID (null for new tabs)
+  name: string | null;             // User-defined name (null = show UUID octet)
+  starred: boolean;                // Whether session is starred (for pill display)
+  logs: LogEntry[];                // Conversation history
+  inputValue: string;              // Pending input text for this tab
+  stagedImages: string[];          // Staged images (base64) for this tab
+  usageStats?: UsageStats;         // Token usage for this tab
+  createdAt: number;               // Timestamp for ordering
+  state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
+  readOnlyMode?: boolean;          // When true, Claude operates in plan/read-only mode
+  awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
+  thinkingStartTime?: number;      // Timestamp when tab started thinking (for elapsed time display)
+}
+
+// Closed tab entry for undo functionality (Cmd+Shift+T)
+// Stores tab data with original position for restoration
+export interface ClosedTab {
+  tab: AITab;                      // The closed tab data
+  index: number;                   // Original position in the tab array
+  closedAt: number;                // Timestamp when closed
 }
 
 export interface Session {
@@ -151,6 +188,7 @@ export interface Session {
   scratchPadPreviewScrollPos?: number;
   scratchPadMode?: 'edit' | 'preview';
   // Claude Code session ID for conversation continuity
+  // DEPRECATED: Use aiTabs[activeIndex].claudeSessionId instead
   claudeSessionId?: string;
   // Pending jump path for /jump command (relative path within file tree)
   pendingJumpPath?: string;
@@ -165,22 +203,29 @@ export interface Session {
   // Tracks which mode (ai/terminal) triggered the busy state
   // Used to show the correct busy indicator message when user switches modes
   busySource?: 'ai' | 'terminal';
-  // Message queue for AI mode - messages sent while busy are queued here
-  messageQueue: LogEntry[];
+  // Execution queue for sequential processing within this session
+  // All messages and commands are queued here and processed one at a time
+  executionQueue: QueuedItem[];
   // Active time tracking - cumulative milliseconds of active use
   activeTimeMs: number;
   // Claude Code slash commands available for this session (fetched per session based on cwd)
   claudeCommands?: { command: string; description: string; }[];
   // Bookmark flag - bookmarked sessions appear in a dedicated section at the top
   bookmarked?: boolean;
-  // Recent Claude sessions breadcrumbs for quick access (persisted per Maestro session)
-  recentClaudeSessions?: RecentClaudeSession[];
   // Pending AI command that will trigger a synopsis on completion (e.g., '/commit')
   pendingAICommandForSynopsis?: string;
   // Custom batch runner prompt (persisted per session)
   batchRunnerPrompt?: string;
   // Timestamp when the batch runner prompt was last modified
   batchRunnerPromptModifiedAt?: number;
+
+  // Tab management for AI mode (multi-tab Claude Code sessions)
+  // Each tab represents a separate Claude Code conversation
+  aiTabs: AITab[];
+  // Currently active tab ID
+  activeTabId: string;
+  // Stack of recently closed tabs for undo (max 25, runtime-only, not persisted)
+  closedTabHistory: ClosedTab[];
 }
 
 export interface Group {
@@ -195,6 +240,8 @@ export interface AgentConfig {
   name: string;
   available: boolean;
   path?: string;
+  command?: string;
+  args?: string[];
 }
 
 // Process spawning configuration

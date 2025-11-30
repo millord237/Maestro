@@ -27,6 +27,8 @@ interface ManagedProcess {
   isStreamJsonMode?: boolean; // True when using stream-json input/output (for images)
   jsonBuffer?: string; // Buffer for accumulating JSON output in batch mode
   lastCommand?: string; // Last command sent to terminal (for filtering command echoes)
+  sessionIdEmitted?: boolean; // True after session_id has been emitted (prevents duplicate emissions)
+  resultEmitted?: boolean; // True after result data has been emitted (prevents duplicate emissions)
 }
 
 /**
@@ -297,20 +299,18 @@ export class ProcessManager extends EventEmitter {
               try {
                 const msg = JSON.parse(line);
                 // Handle different message types from stream-json output
-                if (msg.type === 'assistant' && msg.message?.content) {
-                  // Extract text from content blocks
-                  const textContent = msg.message.content
-                    .filter((block: any) => block.type === 'text')
-                    .map((block: any) => block.text)
-                    .join('');
-                  if (textContent) {
-                    this.emit('data', sessionId, textContent);
-                  }
-                } else if (msg.type === 'result' && msg.result) {
+                // Policy: Use 'result' for complete response, skip 'assistant' streaming messages
+                // This gives us the final complete response rather than incremental chunks
+                // Only emit once per process to prevent duplicates
+                if (msg.type === 'result' && msg.result && !managedProcess.resultEmitted) {
+                  managedProcess.resultEmitted = true;
                   this.emit('data', sessionId, msg.result);
                 }
-                // Capture session_id from any message type
-                if (msg.session_id) {
+                // Skip 'assistant' type - we prefer the complete 'result' over streaming chunks
+                // Capture session_id from the first message only (prevents duplicate emissions)
+                // Claude includes session_id in every message, but we only want to emit once
+                if (msg.session_id && !managedProcess.sessionIdEmitted) {
+                  managedProcess.sessionIdEmitted = true;
                   this.emit('session-id', sessionId, msg.session_id);
                 }
                 // Extract usage statistics from stream-json messages (typically in 'result' type)
@@ -404,13 +404,15 @@ export class ProcessManager extends EventEmitter {
             try {
               const jsonResponse = JSON.parse(managedProcess.jsonBuffer);
 
-              // Emit the result text
-              if (jsonResponse.result) {
+              // Emit the result text (only once per process)
+              if (jsonResponse.result && !managedProcess.resultEmitted) {
+                managedProcess.resultEmitted = true;
                 this.emit('data', sessionId, jsonResponse.result);
               }
 
-              // Emit session_id if present
-              if (jsonResponse.session_id) {
+              // Emit session_id if present (only once per process)
+              if (jsonResponse.session_id && !managedProcess.sessionIdEmitted) {
+                managedProcess.sessionIdEmitted = true;
                 this.emit('session-id', sessionId, jsonResponse.session_id);
               }
 

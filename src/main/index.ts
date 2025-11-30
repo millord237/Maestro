@@ -146,6 +146,7 @@ type ClaudeSessionOrigin = 'user' | 'auto';
 interface ClaudeSessionOriginInfo {
   origin: ClaudeSessionOrigin;
   sessionName?: string; // User-defined session name from Maestro
+  starred?: boolean;    // Whether the session is starred
 }
 interface ClaudeSessionOriginsData {
   // Map of projectPath -> { claudeSessionId -> origin info }
@@ -180,10 +181,13 @@ function createWebServer(): WebServer {
       const group = s.groupId ? groups.find((g: any) => g.id === s.groupId) : null;
 
       // Extract last AI response for mobile preview (first 3 lines, max 500 chars)
+      // Use active tab's logs as the source of truth
       let lastResponse = null;
-      if (s.aiLogs && s.aiLogs.length > 0) {
+      const activeTab = s.aiTabs?.find((t: any) => t.id === s.activeTabId) || s.aiTabs?.[0];
+      const tabLogs = activeTab?.logs || [];
+      if (tabLogs.length > 0) {
         // Find the last stdout/stderr entry from the AI (not user messages)
-        const lastAiLog = [...s.aiLogs].reverse().find((log: any) =>
+        const lastAiLog = [...tabLogs].reverse().find((log: any) =>
           log.source === 'stdout' || log.source === 'stderr'
         );
         if (lastAiLog && lastAiLog.text) {
@@ -205,6 +209,19 @@ function createWebServer(): WebServer {
         }
       }
 
+      // Map aiTabs to web-safe format (strip logs to reduce payload)
+      const aiTabs = s.aiTabs?.map((tab: any) => ({
+        id: tab.id,
+        claudeSessionId: tab.claudeSessionId || null,
+        name: tab.name || null,
+        starred: tab.starred || false,
+        inputValue: tab.inputValue || '',
+        usageStats: tab.usageStats || null,
+        createdAt: tab.createdAt,
+        state: tab.state || 'idle',
+        thinkingStartTime: tab.thinkingStartTime || null,
+      })) || [];
+
       return {
         id: s.id,
         name: s.name,
@@ -219,15 +236,28 @@ function createWebServer(): WebServer {
         lastResponse,
         claudeSessionId: s.claudeSessionId || null,
         thinkingStartTime: s.thinkingStartTime || null,
+        aiTabs,
+        activeTabId: s.activeTabId || (aiTabs.length > 0 ? aiTabs[0].id : undefined),
       };
     });
   });
 
   // Set up callback for web server to fetch single session details
-  server.setGetSessionDetailCallback((sessionId: string) => {
+  // Optional tabId param allows fetching logs for a specific tab (avoids race conditions)
+  server.setGetSessionDetailCallback((sessionId: string, tabId?: string) => {
     const sessions = sessionsStore.get('sessions', []);
     const session = sessions.find((s: any) => s.id === sessionId);
     if (!session) return null;
+
+    // Get the requested tab's logs (or active tab if no tabId provided)
+    // Tabs are the source of truth for AI conversation history
+    let aiLogs: any[] = [];
+    const targetTabId = tabId || session.activeTabId;
+    if (session.aiTabs && session.aiTabs.length > 0) {
+      const targetTab = session.aiTabs.find((t: any) => t.id === targetTabId) || session.aiTabs[0];
+      aiLogs = targetTab?.logs || [];
+    }
+
     return {
       id: session.id,
       name: session.name,
@@ -235,11 +265,12 @@ function createWebServer(): WebServer {
       state: session.state,
       inputMode: session.inputMode,
       cwd: session.cwd,
-      aiLogs: session.aiLogs || [],
+      aiLogs,
       shellLogs: session.shellLogs || [],
       usageStats: session.usageStats,
       claudeSessionId: session.claudeSessionId,
       isGitRepo: session.isGitRepo,
+      activeTabId: targetTabId,
     };
   });
 
@@ -371,6 +402,48 @@ function createWebServer(): WebServer {
     // Forward to renderer - it will handle session selection and broadcasts
     logger.info(`[Web→Desktop] Sending IPC remote:selectSession to renderer`, 'WebServer');
     mainWindow.webContents.send('remote:selectSession', sessionId);
+    return true;
+  });
+
+  // Tab operation callbacks
+  server.setSelectTabCallback(async (sessionId: string, tabId: string) => {
+    logger.info(`[Web→Desktop] Tab select callback invoked: session=${sessionId}, tab=${tabId}`, 'WebServer');
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for selectTab', 'WebServer');
+      return false;
+    }
+
+    mainWindow.webContents.send('remote:selectTab', sessionId, tabId);
+    return true;
+  });
+
+  server.setNewTabCallback(async (sessionId: string) => {
+    logger.info(`[Web→Desktop] New tab callback invoked: session=${sessionId}`, 'WebServer');
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for newTab', 'WebServer');
+      return null;
+    }
+
+    // Use invoke for synchronous response with tab ID
+    return new Promise((resolve) => {
+      const responseChannel = `remote:newTab:response:${Date.now()}`;
+      ipcMain.once(responseChannel, (_event, result) => {
+        resolve(result);
+      });
+      mainWindow!.webContents.send('remote:newTab', sessionId, responseChannel);
+      // Timeout after 5 seconds
+      setTimeout(() => resolve(null), 5000);
+    });
+  });
+
+  server.setCloseTabCallback(async (sessionId: string, tabId: string) => {
+    logger.info(`[Web→Desktop] Close tab callback invoked: session=${sessionId}, tab=${tabId}`, 'WebServer');
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for closeTab', 'WebServer');
+      return false;
+    }
+
+    mainWindow.webContents.send('remote:closeTab', sessionId, tabId);
     return true;
   });
 
@@ -659,6 +732,15 @@ function setupIpcHandlers() {
     return false;
   });
 
+  // Broadcast tab changes to web clients
+  ipcMain.handle('web:broadcastTabsChange', async (_, sessionId: string, aiTabs: any[], activeTabId: string) => {
+    if (webServer && webServer.getWebClientCount() > 0) {
+      webServer.broadcastTabsChange(sessionId, aiTabs, activeTabId);
+      return true;
+    }
+    return false;
+  });
+
   // Session/Process management
   ipcMain.handle('process:spawn', async (_, config: {
     sessionId: string;
@@ -698,6 +780,10 @@ function setupIpcHandlers() {
     // If no shell is specified and this is a terminal session, use the default shell from settings
     const shellToUse = config.shell || (config.toolType === 'terminal' ? store.get('defaultShell', 'zsh') : undefined);
 
+    // Extract Claude session ID from --resume arg if present
+    const resumeArgIndex = finalArgs.indexOf('--resume');
+    const claudeSessionId = resumeArgIndex !== -1 ? finalArgs[resumeArgIndex + 1] : undefined;
+
     logger.info(`Spawning process: ${config.command}`, 'ProcessManager', {
       sessionId: config.sessionId,
       toolType: config.toolType,
@@ -705,7 +791,9 @@ function setupIpcHandlers() {
       command: config.command,
       args: finalArgs,
       requiresPty: agent?.requiresPty || false,
-      shell: shellToUse
+      shell: shellToUse,
+      ...(claudeSessionId && { claudeSessionId }),
+      ...(config.prompt && { prompt: config.prompt.length > 500 ? config.prompt.substring(0, 500) + '...' : config.prompt })
     });
 
     const result = processManager.spawn({
@@ -859,13 +947,15 @@ function setupIpcHandlers() {
 
   ipcMain.handle('git:log', async (_, cwd: string, options?: { limit?: number; search?: string }) => {
     // Get git log with formatted output for parsing
-    // Format: hash|author|date|refs|subject
+    // Format: hash|author|date|refs|subject followed by shortstat
+    // Using a unique separator to split commits
     const limit = options?.limit || 100;
     const args = [
       'log',
       `--max-count=${limit}`,
-      '--pretty=format:%H|%an|%ad|%D|%s',
-      '--date=iso-strict'
+      '--pretty=format:COMMIT_START%H|%an|%ad|%D|%s',
+      '--date=iso-strict',
+      '--shortstat'
     ];
 
     // Add search filter if provided
@@ -879,20 +969,35 @@ function setupIpcHandlers() {
       return { entries: [], error: result.stderr };
     }
 
-    const entries = result.stdout
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        const [hash, author, date, refs, ...subjectParts] = line.split('|');
-        return {
-          hash,
-          shortHash: hash?.slice(0, 7),
-          author,
-          date,
-          refs: refs ? refs.split(', ').filter(r => r.trim()) : [],
-          subject: subjectParts.join('|'), // In case subject contains |
-        };
-      });
+    // Split by COMMIT_START marker and parse each commit
+    const commits = result.stdout.split('COMMIT_START').filter(c => c.trim());
+    const entries = commits.map(commitBlock => {
+      const lines = commitBlock.split('\n').filter(l => l.trim());
+      const mainLine = lines[0];
+      const [hash, author, date, refs, ...subjectParts] = mainLine.split('|');
+
+      // Parse shortstat line (e.g., " 3 files changed, 10 insertions(+), 5 deletions(-)")
+      let additions = 0;
+      let deletions = 0;
+      const statLine = lines.find(l => l.includes('changed'));
+      if (statLine) {
+        const addMatch = statLine.match(/(\d+) insertion/);
+        const delMatch = statLine.match(/(\d+) deletion/);
+        if (addMatch) additions = parseInt(addMatch[1], 10);
+        if (delMatch) deletions = parseInt(delMatch[1], 10);
+      }
+
+      return {
+        hash,
+        shortHash: hash?.slice(0, 7),
+        author,
+        date,
+        refs: refs ? refs.split(', ').filter(r => r.trim()) : [],
+        subject: subjectParts.join('|'), // In case subject contains |
+        additions,
+        deletions,
+      };
+    });
 
     return { entries, error: null };
   });
@@ -2247,6 +2352,27 @@ function setupIpcHandlers() {
     }
     claudeSessionOriginsStore.set('origins', origins);
     logger.debug(`Updated Claude session name: ${claudeSessionId} = ${sessionName}`, 'ClaudeSessionOrigins', { projectPath });
+    return true;
+  });
+
+  // Update starred status for an existing Claude session
+  ipcMain.handle('claude:updateSessionStarred', async (_event, projectPath: string, claudeSessionId: string, starred: boolean) => {
+    const origins = claudeSessionOriginsStore.get('origins', {});
+    if (!origins[projectPath]) {
+      origins[projectPath] = {};
+    }
+    const existing = origins[projectPath][claudeSessionId];
+    // Convert string origin to object format, or update existing object
+    if (typeof existing === 'string') {
+      origins[projectPath][claudeSessionId] = { origin: existing, starred };
+    } else if (existing) {
+      origins[projectPath][claudeSessionId] = { ...existing, starred };
+    } else {
+      // No existing origin, default to 'user' since they're starring it
+      origins[projectPath][claudeSessionId] = { origin: 'user', starred };
+    }
+    claudeSessionOriginsStore.set('origins', origins);
+    logger.debug(`Updated Claude session starred: ${claudeSessionId} = ${starred}`, 'ClaudeSessionOrigins', { projectPath });
     return true;
   });
 

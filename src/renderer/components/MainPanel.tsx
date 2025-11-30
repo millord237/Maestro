@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Wand2, ExternalLink, Columns, Copy, List, Loader2, Clock, GitBranch, ArrowUp, ArrowDown, FileEdit, Play, Star, Edit2, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Wand2, ExternalLink, Columns, Copy, Loader2, GitBranch, ArrowUp, ArrowDown, FileEdit, List } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
 import { InputArea } from './InputArea';
@@ -7,9 +7,10 @@ import { FilePreview } from './FilePreview';
 import { ErrorBoundary } from './ErrorBoundary';
 import { GitStatusWidget } from './GitStatusWidget';
 import { AgentSessionsBrowser } from './AgentSessionsBrowser';
+import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
-import { formatActiveTime } from '../utils/theme';
-import type { Session, Theme, Shortcut, FocusArea, BatchRunState, RecentClaudeSession } from '../types';
+import { getActiveTab, getBusyTabs } from '../utils/tabHelpers';
+import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
   command: string;
@@ -57,7 +58,7 @@ interface MainPanelProps {
   setLogViewerOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveClaudeSessionId: (id: string | null) => void;
-  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[], sessionName?: string) => void;
+  onResumeClaudeSession: (claudeSessionId: string, messages: import('../types').LogEntry[], sessionName?: string, starred?: boolean) => void;
   onNewClaudeSession: () => void;
   setActiveFocus: (focus: FocusArea) => void;
   setOutputSearchOpen: (open: boolean) => void;
@@ -98,7 +99,8 @@ interface MainPanelProps {
   getContextColor: (usage: number, theme: Theme) => string;
   setActiveSessionId: (id: string) => void;
   onDeleteLog?: (logId: string) => void;
-  onRemoveQueuedMessage?: (messageId: string) => void;
+  onRemoveQueuedItem?: (itemId: string) => void;
+  onOpenQueueBrowser?: () => void;
 
   // Auto mode props
   batchRunState?: BatchRunState;
@@ -108,9 +110,17 @@ interface MainPanelProps {
   // TTS settings
   audioFeedbackCommand?: string;
 
-  // Recent Claude sessions for quick access
-  recentClaudeSessions: RecentClaudeSession[];
-  onResumeRecentSession: (sessionId: string) => void;
+  // Tab management for AI sessions
+  onTabSelect?: (tabId: string) => void;
+  onTabClose?: (tabId: string) => void;
+  onNewTab?: () => void;
+  onTabRename?: (tabId: string, newName: string) => void;
+  onRequestTabRename?: (tabId: string) => void;
+  onTabReorder?: (fromIndex: number, toIndex: number) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
+  onTabStar?: (tabId: string, starred: boolean) => void;
+  onUpdateTabByClaudeSessionId?: (claudeSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
+  onToggleTabReadOnlyMode?: () => void;
 }
 
 export function MainPanel(props: MainPanelProps) {
@@ -129,7 +139,7 @@ export function MainPanel(props: MainPanelProps) {
     setAboutModalOpen, setRightPanelOpen, setGitLogOpen, inputRef, logsEndRef, terminalOutputRef,
     fileTreeContainerRef, fileTreeFilterInputRef, toggleInputMode, processInput, handleInterrupt,
     handleInputKeyDown, handlePaste, handleDrop, getContextColor, setActiveSessionId,
-    batchRunState, onStopBatchRun, showConfirmation, onRemoveQueuedMessage,
+    batchRunState, onStopBatchRun, showConfirmation, onRemoveQueuedItem, onOpenQueueBrowser,
     isMobileLandscape = false
   } = props;
 
@@ -139,29 +149,31 @@ export function MainPanel(props: MainPanelProps) {
   // Context window tooltip hover state
   const [contextTooltipOpen, setContextTooltipOpen] = useState(false);
   const contextTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Session ID copied notification
-  const [showSessionIdCopied, setShowSessionIdCopied] = useState(false);
   // Git pill tooltip hover state
   const [gitTooltipOpen, setGitTooltipOpen] = useState(false);
   const gitTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Agent sessions tooltip hover state
-  const [sessionsTooltipOpen, setSessionsTooltipOpen] = useState(false);
-  const sessionsTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Session ID pill overlay state (hover-triggered with delay for smooth UX)
-  const [sessionPillOverlayOpen, setSessionPillOverlayOpen] = useState(false);
-  const [sessionPillRenaming, setSessionPillRenaming] = useState(false);
-  const [sessionPillRenameValue, setSessionPillRenameValue] = useState('');
-  const sessionPillHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Starred and named Claude sessions (stored per project cwd)
-  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
-  const [namedSessions, setNamedSessions] = useState<Record<string, string>>({});
-  const sessionPillRef = useRef<HTMLDivElement>(null);
   // Panel width for responsive hiding of widgets
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // Extract recent sessions from props
-  const { recentClaudeSessions, onResumeRecentSession } = props;
+  // Extract tab handlers from props
+  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar } = props;
+
+  // Get the active tab for header display
+  // The header should show the active tab's data (UUID, name, cost, context), not session-level data
+  // Directly find the active tab without memoization to ensure it updates on every render
+  const activeTab = activeSession?.aiTabs?.find(tab => tab.id === activeSession.activeTabId)
+    ?? activeSession?.aiTabs?.[0]
+    ?? null;
+
+  // Compute context usage percentage from active tab's usage stats
+  const activeTabContextUsage = useMemo(() => {
+    if (!activeTab?.usageStats) return 0;
+    const { inputTokens, outputTokens, contextWindow } = activeTab.usageStats;
+    if (!contextWindow || contextWindow === 0) return 0;
+    const contextTokens = inputTokens + outputTokens;
+    return Math.min(Math.round((contextTokens / contextWindow) * 100), 100);
+  }, [activeTab?.usageStats]);
 
   // Track panel width for responsive widget hiding
   useEffect(() => {
@@ -182,7 +194,6 @@ export function MainPanel(props: MainPanelProps) {
   }, []);
 
   // Responsive breakpoints for hiding widgets
-  const showTimeWidget = panelWidth > 600;
   const showCostWidget = panelWidth > 500;
 
   // Git info state
@@ -193,6 +204,9 @@ export function MainPanel(props: MainPanelProps) {
     ahead: number;
     uncommittedChanges: number;
   } | null>(null);
+
+  // Copy notification state (centered flash notice)
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
 
   // Fetch git info when session changes or becomes a git repo
   useEffect(() => {
@@ -218,111 +232,14 @@ export function MainPanel(props: MainPanelProps) {
     return () => clearInterval(interval);
   }, [activeSession?.id, activeSession?.isGitRepo, activeSession?.cwd, activeSession?.shellCwd, activeSession?.inputMode]);
 
-  // Load starred and named Claude sessions (per project cwd)
-  // Named sessions come from claudeSessionOriginsStore (single source of truth)
-  useEffect(() => {
-    const loadSessionMetadata = async () => {
-      if (!activeSession?.cwd) return;
-      try {
-        // Load starred sessions from settings
-        const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-        const savedStarred = await window.maestro.settings.get(starredKey);
-        if (savedStarred && Array.isArray(savedStarred)) {
-          setStarredSessions(new Set(savedStarred));
-        } else {
-          setStarredSessions(new Set());
-        }
-
-        // Load named sessions from Claude session origins (single source of truth)
-        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
-        const named: Record<string, string> = {};
-        for (const [sessionId, originData] of Object.entries(origins)) {
-          if (typeof originData === 'object' && originData?.sessionName) {
-            named[sessionId] = originData.sessionName;
-          }
-        }
-        setNamedSessions(named);
-      } catch (error) {
-        console.error('Failed to load session metadata:', error);
-      }
-    };
-    loadSessionMetadata();
-  }, [activeSession?.cwd]);
-
-  // Toggle star for current session
-  const toggleStar = useCallback(async () => {
-    if (!activeSession?.claudeSessionId || !activeSession?.cwd) return;
-    const sessionId = activeSession.claudeSessionId;
-    const newStarred = new Set(starredSessions);
-    if (newStarred.has(sessionId)) {
-      newStarred.delete(sessionId);
-    } else {
-      newStarred.add(sessionId);
-    }
-    setStarredSessions(newStarred);
-    try {
-      const starredKey = `starredClaudeSessions:${activeSession.cwd}`;
-      await window.maestro.settings.set(starredKey, Array.from(newStarred));
-    } catch (error) {
-      console.error('Failed to save starred sessions:', error);
-    }
-  }, [activeSession?.claudeSessionId, activeSession?.cwd, starredSessions]);
-
-  // Rename current session
-  const saveSessionName = useCallback(async () => {
-    if (!activeSession?.claudeSessionId || !activeSession?.cwd) return;
-    const sessionId = activeSession.claudeSessionId;
-    const name = sessionPillRenameValue.trim();
-
-    // Update local state for immediate UI feedback
-    const newNamed = { ...namedSessions };
-    if (name) {
-      newNamed[sessionId] = name;
-    } else {
-      delete newNamed[sessionId];
-    }
-    setNamedSessions(newNamed);
-    setSessionPillRenaming(false);
-    setSessionPillRenameValue('');
-
-    try {
-      // Save to claudeSessionOriginsStore (single source of truth)
-      await window.maestro.claude.updateSessionName(
-        activeSession.cwd,
-        sessionId,
-        name
-      );
-    } catch (error) {
-      console.error('Failed to save session name:', error);
-    }
-  }, [activeSession?.claudeSessionId, activeSession?.cwd, sessionPillRenameValue, namedSessions]);
-
-  // Close session pill overlay when clicking outside (mainly for rename mode)
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (sessionPillOverlayOpen && sessionPillRef.current && !sessionPillRef.current.contains(event.target as Node)) {
-        setSessionPillOverlayOpen(false);
-        setSessionPillRenaming(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sessionPillOverlayOpen]);
-
   // Cleanup hover timeouts on unmount
   useEffect(() => {
     return () => {
-      if (sessionPillHoverTimeout.current) {
-        clearTimeout(sessionPillHoverTimeout.current);
-      }
       if (gitTooltipTimeout.current) {
         clearTimeout(gitTooltipTimeout.current);
       }
       if (contextTooltipTimeout.current) {
         clearTimeout(contextTooltipTimeout.current);
-      }
-      if (sessionsTooltipTimeout.current) {
-        clearTimeout(sessionsTooltipTimeout.current);
       }
     };
   }, []);
@@ -347,24 +264,15 @@ export function MainPanel(props: MainPanelProps) {
     }
   };
 
-  // Copy to clipboard handler
-  const copyToClipboard = async (text: string) => {
+  // Copy to clipboard handler with flash notification
+  const copyToClipboard = async (text: string, message?: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      // Show centered flash notification
+      setCopyNotification(message || 'Copied to Clipboard');
+      setTimeout(() => setCopyNotification(null), 2000);
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
-    }
-  };
-
-  // Copy session ID to clipboard with notification
-  const copySessionIdToClipboard = async () => {
-    if (!activeSession?.claudeSessionId) return;
-    try {
-      await navigator.clipboard.writeText(activeSession.claudeSessionId);
-      setShowSessionIdCopied(true);
-      setTimeout(() => setShowSessionIdCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy session ID to clipboard:', err);
     }
   };
 
@@ -388,6 +296,7 @@ export function MainPanel(props: MainPanelProps) {
           onClose={() => setAgentSessionsOpen(false)}
           onResumeSession={onResumeClaudeSession}
           onNewSession={onNewClaudeSession}
+          onUpdateTab={props.onUpdateTabByClaudeSessionId}
         />
       </div>
     );
@@ -580,179 +489,6 @@ export function MainPanel(props: MainPanelProps) {
                 onViewDiff={handleViewGitDiff}
               />
 
-              {/* Session ID Pill with Overlay (hover-triggered) */}
-              {activeSession.inputMode === 'ai' && activeSession.claudeSessionId && (
-                <div
-                  className="relative"
-                  ref={sessionPillRef}
-                  onMouseEnter={() => {
-                    // Clear any pending close timeout
-                    if (sessionPillHoverTimeout.current) {
-                      clearTimeout(sessionPillHoverTimeout.current);
-                      sessionPillHoverTimeout.current = null;
-                    }
-                    setSessionPillOverlayOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    // Delay closing to allow mouse to reach the dropdown
-                    sessionPillHoverTimeout.current = setTimeout(() => {
-                      // Don't close if we're in rename mode
-                      if (!sessionPillRenaming) {
-                        setSessionPillOverlayOpen(false);
-                      }
-                    }, 150);
-                  }}
-                >
-                  <div
-                    className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border cursor-default hover:opacity-80 transition-opacity max-w-[200px]"
-                    style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent, borderColor: theme.colors.accent + '30' }}
-                    title={namedSessions[activeSession.claudeSessionId] || activeSession.claudeSessionId}
-                  >
-                    {starredSessions.has(activeSession.claudeSessionId) && (
-                      <Star className="w-2.5 h-2.5 fill-current shrink-0" />
-                    )}
-                    <span className="truncate">
-                      {namedSessions[activeSession.claudeSessionId] || activeSession.claudeSessionId.split('-')[0].toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Invisible bridge to prevent hover gap issues */}
-                  {sessionPillOverlayOpen && (
-                    <div
-                      className="absolute left-0 right-0 h-3 pointer-events-auto"
-                      style={{ top: '100%' }}
-                      onMouseEnter={() => {
-                        if (sessionPillHoverTimeout.current) {
-                          clearTimeout(sessionPillHoverTimeout.current);
-                          sessionPillHoverTimeout.current = null;
-                        }
-                        setSessionPillOverlayOpen(true);
-                      }}
-                    />
-                  )}
-
-                  {/* Overlay dropdown */}
-                  {sessionPillOverlayOpen && (
-                    <div
-                      className="absolute top-full left-0 mt-1 z-50 rounded-lg border shadow-xl overflow-hidden"
-                      style={{
-                        backgroundColor: theme.colors.bgSidebar,
-                        borderColor: theme.colors.border,
-                        minWidth: '280px'
-                      }}
-                    >
-                      {/* Session name display (if named) */}
-                      {namedSessions[activeSession.claudeSessionId] && (
-                        <div
-                          className="px-3 py-2 text-xs font-medium border-b"
-                          style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                        >
-                          {namedSessions[activeSession.claudeSessionId]}
-                        </div>
-                      )}
-                      {/* Session ID display */}
-                      <div
-                        className="px-3 py-2 text-[10px] font-mono border-b"
-                        style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
-                      >
-                        {activeSession.claudeSessionId}
-                      </div>
-
-                      {/* Rename input */}
-                      {sessionPillRenaming ? (
-                        <div className="p-2 border-b" style={{ borderColor: theme.colors.border }}>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              value={sessionPillRenameValue}
-                              onChange={(e) => setSessionPillRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  saveSessionName();
-                                } else if (e.key === 'Escape') {
-                                  setSessionPillRenaming(false);
-                                  setSessionPillRenameValue('');
-                                }
-                              }}
-                              placeholder="Enter name..."
-                              autoFocus
-                              className="flex-1 px-2 py-1 text-xs rounded border bg-transparent outline-none"
-                              style={{
-                                borderColor: theme.colors.border,
-                                color: theme.colors.textMain
-                              }}
-                            />
-                            <button
-                              onClick={saveSessionName}
-                              className="p-1 rounded hover:bg-white/10"
-                              style={{ color: theme.colors.success }}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSessionPillRenaming(false);
-                                setSessionPillRenameValue('');
-                              }}
-                              className="p-1 rounded hover:bg-white/10"
-                              style={{ color: theme.colors.error }}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* Actions */}
-                      <div className="py-1">
-                        {/* Copy */}
-                        <button
-                          onClick={() => {
-                            copySessionIdToClipboard();
-                            setSessionPillOverlayOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Copy className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-                          Copy Session ID
-                          {showSessionIdCopied && (
-                            <span className="ml-auto text-[10px]" style={{ color: theme.colors.success }}>Copied!</span>
-                          )}
-                        </button>
-
-                        {/* Star */}
-                        <button
-                          onClick={() => {
-                            toggleStar();
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Star
-                            className={`w-3.5 h-3.5 ${starredSessions.has(activeSession.claudeSessionId!) ? 'fill-current' : ''}`}
-                            style={{ color: starredSessions.has(activeSession.claudeSessionId!) ? theme.colors.warning : theme.colors.textDim }}
-                          />
-                          {starredSessions.has(activeSession.claudeSessionId!) ? 'Unstar Session' : 'Star Session'}
-                        </button>
-
-                        {/* Rename */}
-                        <button
-                          onClick={() => {
-                            setSessionPillRenameValue(namedSessions[activeSession.claudeSessionId!] || '');
-                            setSessionPillRenaming(true);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-white/5 transition-colors"
-                          style={{ color: theme.colors.textMain }}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-                          {namedSessions[activeSession.claudeSessionId!] ? 'Rename Session' : 'Name Session'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Center: AUTO Mode Indicator */}
@@ -790,26 +526,31 @@ export function MainPanel(props: MainPanelProps) {
             )}
 
             <div className="flex items-center gap-3">
-              {/* Time Tracker - styled as pill (hidden when panel is narrow) */}
-              {showTimeWidget && activeSession.activeTimeMs > 0 && (
-                <span
-                  className="flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded-full border"
-                  style={{ borderColor: theme.colors.accent + '30', color: theme.colors.accent, backgroundColor: theme.colors.accent + '10' }}
-                  title={`Active time in this session: ${formatActiveTime(activeSession.activeTimeMs)}`}
+              {/* Session UUID Pill - click to copy full UUID, left-most of session stats */}
+              {activeSession.inputMode === 'ai' && activeTab?.claudeSessionId && (
+                <button
+                  className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors hover:opacity-80"
+                  style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent, borderColor: theme.colors.accent + '30' }}
+                  title={`Click to copy: ${activeTab.claudeSessionId}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(activeTab.claudeSessionId!, 'Session ID Copied to Clipboard');
+                  }}
                 >
-                  <Clock className="w-3 h-3" />
-                  {formatActiveTime(activeSession.activeTimeMs)}
-                </span>
+                  {activeTab.claudeSessionId.split('-')[0].toUpperCase()}
+                </button>
               )}
 
-              {/* Cost Tracker - styled as pill (hidden when panel is narrow) */}
-              {showCostWidget && activeSession.inputMode === 'ai' && activeSession.usageStats && activeSession.usageStats.totalCostUsd > 0 && (
+
+              {/* Cost Tracker - styled as pill (hidden when panel is narrow) - shows active tab's cost */}
+              {showCostWidget && activeSession.inputMode === 'ai' && activeTab?.claudeSessionId && (
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
-                  ${activeSession.usageStats.totalCostUsd.toFixed(2)}
+                  ${(activeTab?.usageStats?.totalCostUsd ?? 0).toFixed(2)}
                 </span>
               )}
 
-              {/* Context Window Widget with Tooltip */}
+              {/* Context Window Widget with Tooltip - only show for tabs with Claude session */}
+              {activeSession.inputMode === 'ai' && activeTab?.claudeSessionId && (
               <div
                 className="flex flex-col items-end mr-2 relative cursor-pointer"
                 onMouseEnter={() => {
@@ -832,14 +573,14 @@ export function MainPanel(props: MainPanelProps) {
                   <div
                     className="h-full transition-all duration-500 ease-out"
                     style={{
-                      width: `${activeSession.contextUsage}%`,
-                      backgroundColor: getContextColor(activeSession.contextUsage, theme)
+                      width: `${activeTabContextUsage}%`,
+                      backgroundColor: getContextColor(activeTabContextUsage, theme)
                     }}
                   />
                 </div>
 
                 {/* Context Window Tooltip */}
-                {contextTooltipOpen && activeSession.inputMode === 'ai' && activeSession.usageStats && (
+                {contextTooltipOpen && activeSession.inputMode === 'ai' && (
                   <>
                     {/* Invisible bridge to prevent hover gap */}
                     <div
@@ -878,25 +619,25 @@ export function MainPanel(props: MainPanelProps) {
                         <div className="flex justify-between items-center">
                           <span className="text-xs" style={{ color: theme.colors.textDim }}>Input Tokens</span>
                           <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
-                            {activeSession.usageStats.inputTokens.toLocaleString()}
+                            {(activeTab?.usageStats?.inputTokens ?? 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xs" style={{ color: theme.colors.textDim }}>Output Tokens</span>
                           <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
-                            {activeSession.usageStats.outputTokens.toLocaleString()}
+                            {(activeTab?.usageStats?.outputTokens ?? 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xs" style={{ color: theme.colors.textDim }}>Cache Read</span>
                           <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
-                            {activeSession.usageStats.cacheReadInputTokens.toLocaleString()}
+                            {(activeTab?.usageStats?.cacheReadInputTokens ?? 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xs" style={{ color: theme.colors.textDim }}>Cache Write</span>
                           <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
-                            {activeSession.usageStats.cacheCreationInputTokens.toLocaleString()}
+                            {(activeTab?.usageStats?.cacheCreationInputTokens ?? 0).toLocaleString()}
                           </span>
                         </div>
 
@@ -905,24 +646,24 @@ export function MainPanel(props: MainPanelProps) {
                             <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Tokens</span>
                             <span className="text-xs font-mono font-bold" style={{ color: theme.colors.accent }}>
                               {(
-                                activeSession.usageStats.inputTokens +
-                                activeSession.usageStats.outputTokens
+                                (activeTab?.usageStats?.inputTokens ?? 0) +
+                                (activeTab?.usageStats?.outputTokens ?? 0)
                               ).toLocaleString()}
                             </span>
                           </div>
                           <div className="flex justify-between items-center mt-1">
                             <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Size</span>
                             <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
-                              {activeSession.usageStats.contextWindow.toLocaleString()}
+                              {(activeTab?.usageStats?.contextWindow ?? 200000).toLocaleString()}
                             </span>
                           </div>
                           <div className="flex justify-between items-center mt-1">
                             <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Usage</span>
                             <span
                               className="text-xs font-mono font-bold"
-                              style={{ color: getContextColor(activeSession.contextUsage, theme) }}
+                              style={{ color: getContextColor(activeTabContextUsage, theme) }}
                             >
-                              {activeSession.contextUsage}%
+                              {activeTabContextUsage}%
                             </span>
                           </div>
                         </div>
@@ -932,142 +673,20 @@ export function MainPanel(props: MainPanelProps) {
                   </>
                 )}
               </div>
+              )}
 
-              {/* Agent Sessions Button with Recent Sessions Hover */}
-              <div
-                className="relative"
-                onMouseEnter={() => {
-                  // Clear any pending close timeout
-                  if (sessionsTooltipTimeout.current) {
-                    clearTimeout(sessionsTooltipTimeout.current);
-                    sessionsTooltipTimeout.current = null;
-                  }
-                  setSessionsTooltipOpen(true);
+              {/* Agent Sessions Button */}
+              <button
+                onClick={() => {
+                  setActiveClaudeSessionId(null);
+                  setAgentSessionsOpen(true);
                 }}
-                onMouseLeave={() => {
-                  // Delay closing to allow mouse to reach the dropdown
-                  sessionsTooltipTimeout.current = setTimeout(() => {
-                    setSessionsTooltipOpen(false);
-                  }, 150);
-                }}
+                className="p-2 rounded hover:bg-white/5"
+                title={`Agent Sessions (${shortcuts.agentSessions?.keys?.join('+').replace('Meta', 'Cmd').replace('Shift', '⇧') || 'Cmd+⇧+L'})`}
               >
-                <button
-                  onClick={() => {
-                    setActiveClaudeSessionId(null);
-                    setAgentSessionsOpen(true);
-                  }}
-                  className="p-2 rounded hover:bg-white/5"
-                  title={`Agent Sessions (${shortcuts.agentSessions.keys.join('+').replace('Meta', 'Cmd').replace('Shift', '\u21E7')})`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
+                <List className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+              </button>
 
-                {/* Recent Sessions Hover Overlay */}
-                {sessionsTooltipOpen && recentClaudeSessions.length > 0 && (
-                  <>
-                    {/* Invisible bridge to prevent hover gap */}
-                    <div
-                      className="absolute left-0 right-0 h-3 pointer-events-auto"
-                      style={{ top: '100%' }}
-                      onMouseEnter={() => {
-                        if (sessionsTooltipTimeout.current) {
-                          clearTimeout(sessionsTooltipTimeout.current);
-                          sessionsTooltipTimeout.current = null;
-                        }
-                        setSessionsTooltipOpen(true);
-                      }}
-                    />
-                    <div
-                      className="absolute top-full right-0 mt-1 w-72 rounded-lg border shadow-xl z-50 pointer-events-auto"
-                      style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
-                      onMouseEnter={() => {
-                        if (sessionsTooltipTimeout.current) {
-                          clearTimeout(sessionsTooltipTimeout.current);
-                          sessionsTooltipTimeout.current = null;
-                        }
-                        setSessionsTooltipOpen(true);
-                      }}
-                      onMouseLeave={() => {
-                        sessionsTooltipTimeout.current = setTimeout(() => {
-                          setSessionsTooltipOpen(false);
-                        }, 150);
-                      }}
-                    >
-                    <div
-                      className="px-3 py-2 text-xs font-bold uppercase border-b"
-                      style={{ color: theme.colors.textDim, borderColor: theme.colors.border }}
-                    >
-                      Recent Sessions
-                    </div>
-                    <div className="max-h-80 overflow-y-auto scrollbar-thin">
-                      {recentClaudeSessions.slice(0, 8).map((session) => {
-                        const isStarred = starredSessions.has(session.sessionId);
-                        const sessionName = namedSessions[session.sessionId] || session.sessionName;
-                        const hasName = !!sessionName;
-
-                        return (
-                          <button
-                            key={session.sessionId}
-                            onClick={() => {
-                              onResumeRecentSession(session.sessionId);
-                              setSessionsTooltipOpen(false);
-                            }}
-                            className="w-full text-left px-3 py-2 hover:bg-white/5 transition-colors flex items-center gap-2"
-                          >
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Play className="w-3 h-3" style={{ color: theme.colors.accent }} />
-                              {isStarred && (
-                                <Star className="w-3 h-3 fill-current" style={{ color: theme.colors.warning }} />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              {hasName ? (
-                                <>
-                                  <div className="text-xs font-medium truncate" style={{ color: theme.colors.textMain }}>
-                                    {sessionName}
-                                  </div>
-                                  <div className="text-[10px] truncate" style={{ color: theme.colors.textDim }}>
-                                    {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-xs truncate" style={{ color: theme.colors.textMain }}>
-                                  {session.firstMessage || `Session ${session.sessionId.slice(0, 8)}...`}
-                                </div>
-                              )}
-                              <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
-                                {(() => {
-                                  const date = new Date(session.timestamp);
-                                  const now = new Date();
-                                  const diffMs = now.getTime() - date.getTime();
-                                  const diffMins = Math.floor(diffMs / 60000);
-                                  const diffHours = Math.floor(diffMins / 60);
-                                  if (diffMins < 1) return 'just now';
-                                  if (diffMins < 60) return `${diffMins}m ago`;
-                                  if (diffHours < 24) return `${diffHours}h ago`;
-                                  return date.toLocaleDateString();
-                                })()}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                      <div
-                        className="px-3 py-2 text-xs border-t text-center cursor-pointer hover:bg-white/5"
-                        style={{ color: theme.colors.accent, borderColor: theme.colors.border }}
-                        onClick={() => {
-                          setActiveClaudeSessionId(null);
-                          setAgentSessionsOpen(true);
-                          setSessionsTooltipOpen(false);
-                        }}
-                      >
-                        View all sessions →
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
               {!rightPanelOpen && (
                 <button onClick={() => setRightPanelOpen(true)} className="p-2 rounded hover:bg-white/5" title={`Show right panel (${shortcuts.toggleRightPanel.keys.join('+').replace('Meta', 'Cmd')})`}>
                   <Columns className="w-4 h-4" />
@@ -1075,6 +694,23 @@ export function MainPanel(props: MainPanelProps) {
               )}
             </div>
           </div>
+          )}
+
+          {/* Tab Bar - only shown in AI mode when we have tabs */}
+          {activeSession.inputMode === 'ai' && activeSession.aiTabs && activeSession.aiTabs.length > 0 && onTabSelect && onTabClose && onNewTab && (
+            <TabBar
+              tabs={activeSession.aiTabs}
+              activeTabId={activeSession.activeTabId}
+              theme={theme}
+              onTabSelect={onTabSelect}
+              onTabClose={onTabClose}
+              onNewTab={onNewTab}
+              onTabRename={onTabRename}
+              onRequestRename={onRequestTabRename}
+              onTabReorder={onTabReorder}
+              onCloseOthers={onCloseOtherTabs}
+              onTabStar={onTabStar}
+            />
           )}
 
           {/* Show File Preview in main area when open, otherwise show terminal output and input */}
@@ -1104,6 +740,7 @@ export function MainPanel(props: MainPanelProps) {
             <>
               {/* Logs Area */}
               <TerminalOutput
+                key={`${activeSession.id}-${activeSession.activeTabId}`}
                 ref={terminalOutputRef}
                 session={activeSession}
                 theme={theme}
@@ -1119,7 +756,7 @@ export function MainPanel(props: MainPanelProps) {
                 logsEndRef={logsEndRef}
                 maxOutputLines={maxOutputLines}
                 onDeleteLog={props.onDeleteLog}
-                onRemoveQueuedMessage={onRemoveQueuedMessage}
+                onRemoveQueuedItem={onRemoveQueuedItem}
                 onInterrupt={handleInterrupt}
                 audioFeedbackCommand={props.audioFeedbackCommand}
               />
@@ -1162,29 +799,37 @@ export function MainPanel(props: MainPanelProps) {
                 onInputFocus={handleInputFocus}
                 isAutoModeActive={isAutoModeActive}
                 sessions={sessions}
-                namedSessions={namedSessions}
-                onSessionClick={setActiveSessionId}
+                onSessionClick={(sessionId, tabId) => {
+                  setActiveSessionId(sessionId);
+                  // Also switch to the busy tab if provided
+                  if (tabId && onTabSelect) {
+                    onTabSelect(tabId);
+                  }
+                }}
+                onOpenQueueBrowser={onOpenQueueBrowser}
+                tabReadOnlyMode={activeTab?.readOnlyMode ?? false}
+                onToggleTabReadOnlyMode={props.onToggleTabReadOnlyMode}
               />
               )}
             </>
           )}
 
         </div>
-
-        {/* Session ID Copied Notification Toast */}
-        {showSessionIdCopied && (
-          <div
-            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-lg shadow-2xl text-base font-bold animate-in fade-in zoom-in-95 duration-200 z-50"
-            style={{
-              backgroundColor: theme.colors.accent,
-              color: theme.colors.accentForeground,
-              textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            Session ID Copied to Clipboard
-          </div>
-        )}
       </ErrorBoundary>
+
+      {/* Copy Notification Toast - centered flash notice */}
+      {copyNotification && (
+        <div
+          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-lg shadow-2xl text-base font-bold animate-in fade-in zoom-in-95 duration-200 z-50"
+          style={{
+            backgroundColor: theme.colors.accent,
+            color: theme.colors.accentForeground,
+            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          {copyNotification}
+        </div>
+      )}
     </>
   );
 }

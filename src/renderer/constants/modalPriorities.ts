@@ -20,6 +20,9 @@ export const MODAL_PRIORITIES = {
   /** Rename instance modal */
   RENAME_INSTANCE: 900,
 
+  /** Rename tab modal */
+  RENAME_TAB: 875,
+
   /** Rename group modal */
   RENAME_GROUP: 850,
 
@@ -37,6 +40,9 @@ export const MODAL_PRIORITIES = {
 
   /** Agent sessions browser (Cmd+Shift+L) */
   AGENT_SESSIONS: 680,
+
+  /** Execution queue browser modal */
+  EXECUTION_QUEUE_BROWSER: 670,
 
   /** Keyboard shortcuts help modal */
   SHORTCUTS_HELP: 650,

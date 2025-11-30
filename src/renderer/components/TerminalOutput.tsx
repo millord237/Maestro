@@ -5,6 +5,7 @@ import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { getActiveTab } from '../utils/tabHelpers';
 
 // ============================================================================
 // Pure helper functions (moved outside component to prevent recreation)
@@ -754,7 +755,7 @@ interface TerminalOutputProps {
   logsEndRef: React.RefObject<HTMLDivElement>;
   maxOutputLines: number;
   onDeleteLog?: (logId: string) => number | null; // Returns the index to scroll to after deletion
-  onRemoveQueuedMessage?: (messageId: string) => void; // Callback to remove a queued message
+  onRemoveQueuedItem?: (itemId: string) => void; // Callback to remove a queued item from execution queue
   onInterrupt?: () => void; // Callback to interrupt the current process
   audioFeedbackCommand?: string; // TTS command for speech synthesis
 }
@@ -763,7 +764,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   const {
     session, theme, fontFamily, activeFocus, outputSearchOpen, outputSearchQuery,
     setOutputSearchOpen, setOutputSearchQuery, setActiveFocus, setLightboxImage,
-    inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedMessage, onInterrupt,
+    inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedItem, onInterrupt,
     audioFeedbackCommand
   } = props;
 
@@ -822,6 +823,12 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const lastLogCountRef = useRef(0);
+
+  // Track read state per tab - stores the log count when user scrolled to bottom
+  const tabReadStateRef = useRef<Map<string, number>>(new Map());
+
+  // Get active tab ID for resetting state on tab switch
+  const activeTabId = session.inputMode === 'ai' ? session.activeTabId : null;
 
   // Copy text to clipboard with notification
   const copyToClipboard = useCallback(async (text: string) => {
@@ -998,7 +1005,12 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     });
   }, [theme]);
 
-  const activeLogs: LogEntry[] = session.inputMode === 'ai' ? session.aiLogs : session.shellLogs;
+  // In AI mode, use the active tab's logs if tabs exist, otherwise fall back to session.aiLogs
+  // This supports the new multi-tab feature while maintaining backwards compatibility
+  const activeTab = session.inputMode === 'ai' ? getActiveTab(session) : undefined;
+  const activeLogs: LogEntry[] = session.inputMode === 'ai'
+    ? (activeTab?.logs ?? session.aiLogs)
+    : session.shellLogs;
 
   // In AI mode, collapse consecutive non-user entries into single response blocks
   // This provides a cleaner view where each user message gets one response
@@ -1060,10 +1072,52 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     if (atBottom) {
       setHasNewMessages(false);
       setNewMessageCount(0);
+      // Save read state for current tab
+      if (activeTabId) {
+        tabReadStateRef.current.set(activeTabId, filteredLogs.length);
+      }
     }
-  }, []);
+  }, [activeTabId, filteredLogs.length]);
 
-  // Detect new messages when user is not at bottom
+  // Restore read state when switching tabs
+  useEffect(() => {
+    if (!activeTabId) {
+      // Terminal mode - just reset
+      setHasNewMessages(false);
+      setNewMessageCount(0);
+      setIsAtBottom(true);
+      lastLogCountRef.current = filteredLogs.length;
+      return;
+    }
+
+    // Restore saved read state for this tab
+    const savedReadCount = tabReadStateRef.current.get(activeTabId);
+    const currentCount = filteredLogs.length;
+
+    if (savedReadCount !== undefined) {
+      // Tab was visited before - check for new messages since last read
+      const unreadCount = currentCount - savedReadCount;
+      if (unreadCount > 0) {
+        setHasNewMessages(true);
+        setNewMessageCount(unreadCount);
+        setIsAtBottom(false);
+      } else {
+        setHasNewMessages(false);
+        setNewMessageCount(0);
+        setIsAtBottom(true);
+      }
+    } else {
+      // First visit to this tab - mark all as read
+      tabReadStateRef.current.set(activeTabId, currentCount);
+      setHasNewMessages(false);
+      setNewMessageCount(0);
+      setIsAtBottom(true);
+    }
+
+    lastLogCountRef.current = currentCount;
+  }, [activeTabId]); // Only run when tab changes, not when filteredLogs changes
+
+  // Detect new messages when user is not at bottom (while staying on same tab)
   useEffect(() => {
     const currentCount = filteredLogs.length;
     if (currentCount > lastLogCountRef.current) {
@@ -1081,10 +1135,15 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         setNewMessageCount(prev => prev + newCount);
         // Also update isAtBottom state to match reality
         setIsAtBottom(false);
+      } else {
+        // At bottom, update read state
+        if (activeTabId) {
+          tabReadStateRef.current.set(activeTabId, currentCount);
+        }
       }
     }
     lastLogCountRef.current = currentCount;
-  }, [filteredLogs.length, isAtBottom]);
+  }, [filteredLogs.length, isAtBottom, activeTabId]);
 
   // Scroll to bottom function
   const scrollToBottom = useCallback(() => {
@@ -1261,8 +1320,8 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           </div>
         )}
 
-        {/* Queued messages section - only show in AI mode */}
-        {session.inputMode === 'ai' && session.messageQueue && session.messageQueue.length > 0 && (
+        {/* Queued items section - only show in AI mode */}
+        {session.inputMode === 'ai' && session.executionQueue && session.executionQueue.length > 0 && (
           <>
             {/* QUEUED separator */}
             <div className="mx-6 my-3 flex items-center gap-3">
@@ -1271,28 +1330,31 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                 className="text-xs font-bold tracking-wider"
                 style={{ color: theme.colors.warning }}
               >
-                QUEUED
+                QUEUED ({session.executionQueue.length})
               </span>
               <div className="flex-1 h-px" style={{ backgroundColor: theme.colors.border }} />
             </div>
 
-            {/* Queued messages */}
-            {session.messageQueue.map((msg) => {
-              const isLongMessage = msg.text.length > 200;
-              const isQueuedExpanded = expandedQueuedMessages.has(msg.id);
+            {/* Queued items */}
+            {session.executionQueue.map((item) => {
+              const displayText = item.type === 'command' ? item.command : item.text || '';
+              const isLongMessage = displayText.length > 200;
+              const isQueuedExpanded = expandedQueuedMessages.has(item.id);
 
               return (
                 <div
-                  key={msg.id}
+                  key={item.id}
                   className="mx-6 mb-2 p-3 rounded-lg opacity-60 relative group"
                   style={{
-                    backgroundColor: theme.colors.accent + '20',
-                    borderLeft: `3px solid ${theme.colors.accent}`
+                    backgroundColor: item.type === 'command'
+                      ? theme.colors.success + '20'
+                      : theme.colors.accent + '20',
+                    borderLeft: `3px solid ${item.type === 'command' ? theme.colors.success : theme.colors.accent}`
                   }}
                 >
                   {/* Remove button */}
                   <button
-                    onClick={() => setQueueRemoveConfirmId(msg.id)}
+                    onClick={() => setQueueRemoveConfirmId(item.id)}
                     className="absolute top-2 right-2 p-1 rounded hover:bg-black/20 transition-colors"
                     style={{ color: theme.colors.textDim }}
                     title="Remove from queue"
@@ -1300,26 +1362,43 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                     <X className="w-4 h-4" />
                   </button>
 
-                  {/* Message content */}
+                  {/* Tab indicator */}
+                  {item.tabName && (
+                    <div
+                      className="text-xs mb-1 font-mono"
+                      style={{ color: theme.colors.textDim }}
+                    >
+                      → {item.tabName}
+                    </div>
+                  )}
+
+                  {/* Item content */}
                   <div
                     className="text-sm pr-8 whitespace-pre-wrap break-words"
                     style={{ color: theme.colors.textMain }}
                   >
-                    {isLongMessage && !isQueuedExpanded
-                      ? msg.text.substring(0, 200) + '...'
-                      : msg.text}
+                    {item.type === 'command' && (
+                      <span style={{ color: theme.colors.success, fontWeight: 600 }}>
+                        {item.command}
+                      </span>
+                    )}
+                    {item.type === 'message' && (
+                      isLongMessage && !isQueuedExpanded
+                        ? displayText.substring(0, 200) + '...'
+                        : displayText
+                    )}
                   </div>
 
                   {/* Show more/less toggle for long messages */}
-                  {isLongMessage && (
+                  {item.type === 'message' && isLongMessage && (
                     <button
                       onClick={() => {
                         setExpandedQueuedMessages(prev => {
                           const newSet = new Set(prev);
-                          if (newSet.has(msg.id)) {
-                            newSet.delete(msg.id);
+                          if (newSet.has(item.id)) {
+                            newSet.delete(item.id);
                           } else {
-                            newSet.add(msg.id);
+                            newSet.add(item.id);
                           }
                           return newSet;
                         });
@@ -1338,19 +1417,19 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
                       ) : (
                         <>
                           <ChevronDown className="w-3 h-3" />
-                          Show all ({msg.text.split('\n').length} lines)
+                          Show all ({displayText.split('\n').length} lines)
                         </>
                       )}
                     </button>
                   )}
 
                   {/* Images indicator */}
-                  {msg.images && msg.images.length > 0 && (
+                  {item.images && item.images.length > 0 && (
                     <div
                       className="mt-1 text-xs"
                       style={{ color: theme.colors.textDim }}
                     >
-                      {msg.images.length} image{msg.images.length > 1 ? 's' : ''} attached
+                      {item.images.length} image{item.images.length > 1 ? 's' : ''} attached
                     </div>
                   )}
                 </div>
@@ -1391,8 +1470,8 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
               </button>
               <button
                 onClick={() => {
-                  if (onRemoveQueuedMessage) {
-                    onRemoveQueuedMessage(queueRemoveConfirmId);
+                  if (onRemoveQueuedItem) {
+                    onRemoveQueuedItem(queueRemoveConfirmId);
                   }
                   setQueueRemoveConfirmId(null);
                 }}
