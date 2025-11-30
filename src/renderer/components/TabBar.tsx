@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Star, Copy, Edit2 } from 'lucide-react';
 import type { AITab, Theme } from '../types';
@@ -35,6 +35,7 @@ interface TabProps {
   onRename: () => void;
   onStar?: (starred: boolean) => void;
   shortcutHint?: number | null;
+  registerRef?: (el: HTMLDivElement | null) => void;
 }
 
 /**
@@ -74,7 +75,8 @@ function Tab({
   isDragOver,
   onRename,
   onStar,
-  shortcutHint
+  shortcutHint,
+  registerRef
 }: TabProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -82,6 +84,12 @@ function Tab({
   const [overlayPosition, setOverlayPosition] = useState<{ top: number; left: number } | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabRef = useRef<HTMLDivElement>(null);
+
+  // Register ref with parent for scroll-into-view functionality
+  const setTabRef = useCallback((el: HTMLDivElement | null) => {
+    (tabRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    registerRef?.(el);
+  }, [registerRef]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -158,7 +166,7 @@ function Tab({
   // Active tab is bright and obvious, inactive tabs are more muted
   return (
     <div
-      ref={tabRef}
+      ref={setTabRef}
       className={`
         relative flex items-center gap-1.5 px-3 py-1.5 cursor-pointer
         transition-all duration-150 select-none
@@ -471,6 +479,15 @@ export function TabBar({
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
 
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Scroll active tab into view when it changes
+  useEffect(() => {
+    const activeTabElement = tabRefs.current.get(activeTabId);
+    if (activeTabElement) {
+      activeTabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  }, [activeTabId]);
 
   // Can always close tabs - closing the last one creates a fresh new tab
   const canClose = true;
@@ -571,6 +588,13 @@ export function TabBar({
               onRename={() => handleRenameRequest(tab.id)}
               onStar={onTabStar ? (starred) => onTabStar(tab.id, starred) : undefined}
               shortcutHint={index < 9 ? index + 1 : null}
+              registerRef={(el) => {
+                if (el) {
+                  tabRefs.current.set(tab.id, el);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
             />
           </React.Fragment>
         );

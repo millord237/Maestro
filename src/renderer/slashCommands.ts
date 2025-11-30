@@ -28,6 +28,8 @@ export interface SlashCommandContext {
   addToast?: (toast: { type: 'success' | 'info' | 'warning' | 'error'; title: string; message: string; group?: string; project?: string; taskDuration?: number; duration?: number }) => void;
   // Refresh history panel after adding entries
   refreshHistoryPanel?: () => void;
+  // Add log entry to active tab
+  addLogToActiveTab?: (sessionId: string, logEntry: { source: 'user' | 'ai' | 'system' | 'shell'; text: string }) => void;
 }
 
 // Synopsis prompt for getting a summary of recent work
@@ -36,10 +38,10 @@ const SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
 export const slashCommands: SlashCommand[] = [
   {
     command: '/synopsis',
-    description: 'Get a synopsis of recent work and add to history',
+    description: 'Synopsize the active tab and add a user entry to history',
     aiOnly: true,
     execute: async (context: SlashCommandContext) => {
-      const { activeSessionId, sessions, setSessions, spawnBackgroundSynopsis, addHistoryEntry, refreshHistoryPanel } = context;
+      const { activeSessionId, sessions, setSessions, spawnBackgroundSynopsis, addHistoryEntry, refreshHistoryPanel, addLogToActiveTab } = context;
 
       const actualActiveId = activeSessionId || (sessions.length > 0 ? sessions[0].id : '');
       if (!actualActiveId) return;
@@ -49,6 +51,12 @@ export const slashCommands: SlashCommand[] = [
 
       // Need a claudeSessionId to resume the conversation
       if (!activeSession.claudeSessionId) return;
+
+      // Add /synopsis command to the tab's message history
+      addLogToActiveTab?.(actualActiveId, {
+        source: 'user',
+        text: '/synopsis'
+      });
 
       // Request synopsis from agent by resuming the existing session
       if (spawnBackgroundSynopsis && addHistoryEntry) {
@@ -72,6 +80,12 @@ export const slashCommands: SlashCommand[] = [
         }));
 
         if (result.success && result.response) {
+          // Add synopsis response to tab's message history
+          addLogToActiveTab?.(actualActiveId, {
+            source: 'ai',
+            text: result.response
+          });
+
           addHistoryEntry({
             type: 'USER',
             summary: result.response,

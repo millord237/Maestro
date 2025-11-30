@@ -2794,6 +2794,9 @@ export default function MaestroConsole() {
           setSessions(prev => prev.map(s =>
             s.id === activeSession.id ? result.session : s
           ));
+          // Auto-focus the input so user can start typing immediately
+          setActiveFocus('main');
+          setTimeout(() => inputRef.current?.focus(), 50);
         }
         if (isTabShortcut(e, 'closeTab')) {
           e.preventDefault();
@@ -3374,6 +3377,7 @@ export default function MaestroConsole() {
           spawnBackgroundSynopsis,
           addToast,
           refreshHistoryPanel: () => rightPanelRef.current?.refreshHistoryPanel(),
+          addLogToActiveTab,
         });
 
         setInputValue('');
