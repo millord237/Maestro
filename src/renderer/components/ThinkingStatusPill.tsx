@@ -4,7 +4,12 @@
  * Appears centered above the input area when the AI is busy.
  */
 import React, { memo, useState, useEffect } from 'react';
-import type { Session, Theme } from '../types';
+import type { Session, Theme, AITab } from '../types';
+
+// Helper to get the write-mode (busy) tab from a session
+function getWriteModeTab(session: Session): AITab | undefined {
+  return session.aiTabs?.find(tab => tab.state === 'busy');
+}
 
 interface ThinkingStatusPillProps {
   sessions: Session[];
@@ -60,17 +65,6 @@ function formatTokens(tokens: number): string {
     return `${(tokens / 1000).toFixed(1)}k`;
   }
   return tokens.toString();
-}
-
-// Helper to format bytes compactly
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-  }
-  if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)}KB`;
-  }
-  return `${bytes}B`;
 }
 
 // Single session row for the expanded dropdown (Thinking Pill dropdown)
@@ -143,17 +137,27 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
 
   // Get tokens for current thinking cycle only (not cumulative context)
   const primaryTokens = primarySession.currentCycleTokens || 0;
-  // Get bytes received during streaming (for real-time progress when tokens not yet available)
-  const primaryBytes = primarySession.currentCycleBytes || 0;
 
   // Get display components - show more on larger screens
   const maestroSessionName = primarySession.name;
-  const claudeSessionId = primarySession.claudeSessionId;
+
+  // Get the write-mode tab to display its info (for tabified sessions)
+  const writeModeTab = getWriteModeTab(primarySession);
+
+  // Use tab's claudeSessionId if available, fallback to session's (legacy)
+  const claudeSessionId = writeModeTab?.claudeSessionId || primarySession.claudeSessionId;
+
+  // Priority: 1. namedSessions lookup, 2. tab's name, 3. UUID octet
   const customName = claudeSessionId ? namedSessions?.[claudeSessionId] : undefined;
+  const tabName = writeModeTab?.name;
+
+  // Display name: prefer namedSessions, then tab name, then UUID octet
+  const displayClaudeId = customName || tabName || (claudeSessionId ? claudeSessionId.substring(0, 8).toUpperCase() : null);
 
   // For tooltip, show all available info
   const tooltipParts = [maestroSessionName];
   if (claudeSessionId) tooltipParts.push(`Claude: ${claudeSessionId}`);
+  if (tabName) tooltipParts.push(`Tab: ${tabName}`);
   if (customName) tooltipParts.push(`Named: ${customName}`);
   const fullTooltip = tooltipParts.join(' | ');
 
@@ -189,33 +193,25 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
           style={{ backgroundColor: theme.colors.border }}
         />
 
-        {/* Token/Bytes info for this thought cycle */}
-        {/* Show tokens once available, otherwise show streaming bytes for real-time progress */}
-        <div className="flex items-center gap-1 shrink-0 text-xs" style={{ color: theme.colors.textDim }}>
-          {primaryTokens > 0 ? (
-            <>
-              <span>Tokens:</span>
-              <span className="font-medium" style={{ color: theme.colors.textMain }}>
-                {formatTokens(primaryTokens)}
-              </span>
-            </>
-          ) : primaryBytes > 0 ? (
-            <>
-              <span>Recv:</span>
-              <span className="font-medium" style={{ color: theme.colors.textMain }}>
-                {formatBytes(primaryBytes)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span>Recv:</span>
-              <span>...</span>
-            </>
-          )}
-        </div>
+        {/* Token info for this thought cycle - only show when available */}
+        {primaryTokens > 0 && (
+          <div className="flex items-center gap-1 shrink-0 text-xs" style={{ color: theme.colors.textDim }}>
+            <span>Tokens:</span>
+            <span className="font-medium" style={{ color: theme.colors.textMain }}>
+              {formatTokens(primaryTokens)}
+            </span>
+          </div>
+        )}
 
-        {/* Elapsed time for primary session */}
-        {primarySession.thinkingStartTime && (
+        {/* Placeholder when no tokens yet */}
+        {primaryTokens === 0 && (
+          <div className="flex items-center gap-1 shrink-0 text-xs" style={{ color: theme.colors.textDim }}>
+            <span>Thinking...</span>
+          </div>
+        )}
+
+        {/* Elapsed time - prefer write-mode tab's time for accurate parallel tracking */}
+        {(writeModeTab?.thinkingStartTime || primarySession.thinkingStartTime) && (
           <>
             <div
               className="w-px h-4 shrink-0"
@@ -224,15 +220,15 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
             <div className="flex items-center gap-1 shrink-0 text-xs" style={{ color: theme.colors.textDim }}>
               <span>Elapsed:</span>
               <ElapsedTimeDisplay
-                startTime={primarySession.thinkingStartTime}
+                startTime={writeModeTab?.thinkingStartTime || primarySession.thinkingStartTime!}
                 textColor={theme.colors.textMain}
               />
             </div>
           </>
         )}
 
-        {/* Thinking Pill - Claude session ID (first 8 chars, uppercase) */}
-        {claudeSessionId && (
+        {/* Thinking Pill - Claude session ID / tab name */}
+        {displayClaudeId && (
           <>
             <div
               className="w-px h-4 shrink-0"
@@ -242,9 +238,9 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
               onClick={() => onSessionClick?.(primarySession.id)}
               className="text-xs font-mono hover:underline cursor-pointer"
               style={{ color: theme.colors.accent }}
-              title={`Claude Session: ${claudeSessionId}`}
+              title={claudeSessionId ? `Claude Session: ${claudeSessionId}` : 'Claude Session'}
             >
-              {customName || claudeSessionId.substring(0, 8).toUpperCase()}
+              {displayClaudeId}
             </button>
           </>
         )}
@@ -324,8 +320,19 @@ export const ThinkingStatusPill = memo(ThinkingStatusPillInner, (prevProps, next
       prev.claudeSessionId !== next.claudeSessionId ||
       prev.state !== next.state ||
       prev.thinkingStartTime !== next.thinkingStartTime ||
-      prev.currentCycleTokens !== next.currentCycleTokens ||
-      prev.currentCycleBytes !== next.currentCycleBytes
+      prev.currentCycleTokens !== next.currentCycleTokens
+    ) {
+      return false;
+    }
+
+    // Also check write-mode tab's name, claudeSessionId, and thinkingStartTime (for tabified sessions)
+    const prevWriteTab = getWriteModeTab(prev);
+    const nextWriteTab = getWriteModeTab(next);
+    if (
+      prevWriteTab?.id !== nextWriteTab?.id ||
+      prevWriteTab?.name !== nextWriteTab?.name ||
+      prevWriteTab?.claudeSessionId !== nextWriteTab?.claudeSessionId ||
+      prevWriteTab?.thinkingStartTime !== nextWriteTab?.thinkingStartTime
     ) {
       return false;
     }
@@ -334,9 +341,12 @@ export const ThinkingStatusPill = memo(ThinkingStatusPillInner, (prevProps, next
   // Check if namedSessions changed for any thinking session
   if (prevProps.namedSessions !== nextProps.namedSessions) {
     for (const session of nextThinking) {
-      if (session.claudeSessionId) {
-        const prevName = prevProps.namedSessions?.[session.claudeSessionId];
-        const nextName = nextProps.namedSessions?.[session.claudeSessionId];
+      // Check both session's and write-mode tab's claudeSessionId
+      const writeTab = getWriteModeTab(session);
+      const claudeId = writeTab?.claudeSessionId || session.claudeSessionId;
+      if (claudeId) {
+        const prevName = prevProps.namedSessions?.[claudeId];
+        const nextName = nextProps.namedSessions?.[claudeId];
         if (prevName !== nextName) return false;
       }
     }

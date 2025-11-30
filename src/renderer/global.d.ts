@@ -1,0 +1,324 @@
+/**
+ * Global type declarations for the renderer process.
+ * This file makes the window.maestro API available throughout the renderer.
+ */
+
+interface ProcessConfig {
+  sessionId: string;
+  toolType: string;
+  cwd: string;
+  command: string;
+  args: string[];
+  prompt?: string;
+  shell?: string;
+  images?: string[];
+}
+
+interface AgentConfig {
+  id: string;
+  name: string;
+  available: boolean;
+  path?: string;
+  command?: string;
+  args?: string[];
+}
+
+interface DirectoryEntry {
+  name: string;
+  isDirectory: boolean;
+  path: string;
+}
+
+interface ShellInfo {
+  id: string;
+  name: string;
+  available: boolean;
+  path?: string;
+}
+
+interface UsageStats {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  totalCostUsd: number;
+  contextWindow: number;
+}
+
+interface MaestroAPI {
+  settings: {
+    get: (key: string) => Promise<unknown>;
+    set: (key: string, value: unknown) => Promise<boolean>;
+    getAll: () => Promise<Record<string, unknown>>;
+  };
+  sessions: {
+    getAll: () => Promise<any[]>;
+    setAll: (sessions: any[]) => Promise<boolean>;
+  };
+  groups: {
+    getAll: () => Promise<any[]>;
+    setAll: (groups: any[]) => Promise<boolean>;
+  };
+  process: {
+    spawn: (config: ProcessConfig) => Promise<{ pid: number; success: boolean }>;
+    write: (sessionId: string, data: string) => Promise<boolean>;
+    interrupt: (sessionId: string) => Promise<boolean>;
+    kill: (sessionId: string) => Promise<boolean>;
+    resize: (sessionId: string, cols: number, rows: number) => Promise<boolean>;
+    runCommand: (config: { sessionId: string; command: string; cwd: string; shell?: string }) => Promise<{ exitCode: number }>;
+    getActiveProcesses: () => Promise<Array<{
+      sessionId: string;
+      toolType: string;
+      pid: number;
+      cwd: string;
+      isTerminal: boolean;
+      isBatchMode: boolean;
+    }>>;
+    onData: (callback: (sessionId: string, data: string) => void) => () => void;
+    onExit: (callback: (sessionId: string, code: number) => void) => () => void;
+    onSessionId: (callback: (sessionId: string, claudeSessionId: string) => void) => () => void;
+    onRemoteCommand: (callback: (sessionId: string, command: string) => void) => () => void;
+    onRemoteSwitchMode: (callback: (sessionId: string, mode: 'ai' | 'terminal') => void) => () => void;
+    onRemoteInterrupt: (callback: (sessionId: string) => void) => () => void;
+    onRemoteSelectSession: (callback: (sessionId: string) => void) => () => void;
+    onRemoteSelectTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
+    onRemoteNewTab: (callback: (sessionId: string, responseChannel: string) => void) => () => void;
+    sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null) => void;
+    onRemoteCloseTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
+    onStderr: (callback: (sessionId: string, data: string) => void) => () => void;
+    onCommandExit: (callback: (sessionId: string, code: number) => void) => () => void;
+    onUsage: (callback: (sessionId: string, usageStats: UsageStats) => void) => () => void;
+  };
+  web: {
+    broadcastUserInput: (sessionId: string, command: string, inputMode: 'ai' | 'terminal') => Promise<void>;
+    broadcastAutoRunState: (sessionId: string, state: {
+      isRunning: boolean;
+      totalTasks: number;
+      completedTasks: number;
+      currentTaskIndex: number;
+      isStopping?: boolean;
+    } | null) => Promise<void>;
+    broadcastTabsChange: (sessionId: string, aiTabs: Array<{
+      id: string;
+      claudeSessionId: string | null;
+      name: string | null;
+      starred: boolean;
+      inputValue: string;
+      usageStats?: UsageStats;
+      createdAt: number;
+      state: 'idle' | 'busy';
+      thinkingStartTime?: number | null;
+    }>, activeTabId: string) => Promise<void>;
+  };
+  git: {
+    status: (cwd: string) => Promise<{ staged: string[]; unstaged: string[]; untracked: string[]; branch?: string }>;
+    diff: (cwd: string, file?: string) => Promise<string>;
+    isRepo: (cwd: string) => Promise<boolean>;
+    numstat: (cwd: string) => Promise<{ stdout: string; stderr: string }>;
+    branch: (cwd: string) => Promise<{ stdout: string; stderr: string }>;
+    remote: (cwd: string) => Promise<{ stdout: string; stderr: string }>;
+    info: (cwd: string) => Promise<{
+      branch: string;
+      remote: string;
+      behind: number;
+      ahead: number;
+      uncommittedChanges: number;
+    }>;
+    log: (cwd: string, options?: { limit?: number; search?: string }) => Promise<{
+      entries: Array<{
+        hash: string;
+        shortHash: string;
+        author: string;
+        date: string;
+        refs: string[];
+        subject: string;
+      }>;
+      error: string | null;
+    }>;
+    show: (cwd: string, hash: string) => Promise<{ stdout: string; stderr: string }>;
+  };
+  fs: {
+    readDir: (dirPath: string) => Promise<DirectoryEntry[]>;
+    readFile: (filePath: string) => Promise<string>;
+  };
+  webserver: {
+    getUrl: () => Promise<string>;
+    getConnectedClients: () => Promise<number>;
+  };
+  live: {
+    toggle: (sessionId: string, claudeSessionId?: string) => Promise<{ live: boolean; url: string | null }>;
+    getStatus: (sessionId: string) => Promise<{ live: boolean; url: string | null }>;
+    getDashboardUrl: () => Promise<string | null>;
+    getLiveSessions: () => Promise<Array<{ sessionId: string; claudeSessionId?: string; enabledAt: number }>>;
+    broadcastActiveSession: (sessionId: string) => Promise<void>;
+    disableAll: () => Promise<{ success: boolean; count: number }>;
+    startServer: () => Promise<{ success: boolean; url?: string; error?: string }>;
+    stopServer: () => Promise<{ success: boolean; error?: string }>;
+  };
+  agents: {
+    detect: () => Promise<AgentConfig[]>;
+    refresh: (agentId?: string) => Promise<AgentConfig[]>;
+    get: (agentId: string) => Promise<AgentConfig | null>;
+    getConfig: (agentId: string) => Promise<Record<string, any>>;
+    setConfig: (agentId: string, config: Record<string, any>) => Promise<boolean>;
+    getConfigValue: (agentId: string, key: string) => Promise<any>;
+    setConfigValue: (agentId: string, key: string, value: any) => Promise<boolean>;
+  };
+  dialog: {
+    selectFolder: () => Promise<string | null>;
+  };
+  fonts: {
+    detect: () => Promise<string[]>;
+  };
+  shells: {
+    detect: () => Promise<ShellInfo[]>;
+  };
+  shell: {
+    openExternal: (url: string) => Promise<void>;
+  };
+  devtools: {
+    open: () => Promise<void>;
+    close: () => Promise<void>;
+    toggle: () => Promise<void>;
+  };
+  logger: {
+    log: (level: string, message: string, context?: string, data?: unknown) => Promise<void>;
+    getLogs: (filter?: { level?: string; context?: string; limit?: number }) => Promise<Array<{
+      timestamp: number;
+      level: string;
+      message: string;
+      context?: string;
+      data?: unknown;
+    }>>;
+    clearLogs: () => Promise<void>;
+    setLogLevel: (level: string) => Promise<void>;
+    getLogLevel: () => Promise<string>;
+    setMaxLogBuffer: (max: number) => Promise<void>;
+    getMaxLogBuffer: () => Promise<number>;
+    toast: (title: string, data?: unknown) => Promise<void>;
+  };
+  claude: {
+    listSessions: (projectPath: string) => Promise<Array<{
+      sessionId: string;
+      projectPath: string;
+      timestamp: string;
+      modifiedAt: string;
+      firstMessage: string;
+      messageCount: number;
+      sizeBytes: number;
+      costUsd: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      durationSeconds: number;
+      origin?: 'user' | 'auto';
+      sessionName?: string;
+      starred?: boolean;
+    }>>;
+    getGlobalStats: () => Promise<{
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      totalSizeBytes: number;
+      isComplete: boolean;
+    }>;
+    onGlobalStatsUpdate: (callback: (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      totalSizeBytes: number;
+      isComplete: boolean;
+    }) => void) => () => void;
+    readSessionMessages: (projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => Promise<{
+      messages: Array<{
+        type: string;
+        role?: string;
+        content: string;
+        timestamp: string;
+        uuid: string;
+        toolUse?: any;
+      }>;
+      total: number;
+      hasMore: boolean;
+    }>;
+    searchSessions: (projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') => Promise<Array<{
+      sessionId: string;
+      matchType: 'title' | 'user' | 'assistant';
+      matchPreview: string;
+      matchCount: number;
+    }>>;
+    getCommands: (projectPath: string) => Promise<Array<{
+      command: string;
+      description: string;
+    }>>;
+    registerSessionOrigin: (projectPath: string, claudeSessionId: string, origin: 'user' | 'auto', sessionName?: string) => Promise<boolean>;
+    updateSessionName: (projectPath: string, claudeSessionId: string, sessionName: string) => Promise<boolean>;
+    updateSessionStarred: (projectPath: string, claudeSessionId: string, starred: boolean) => Promise<boolean>;
+    getSessionOrigins: (projectPath: string) => Promise<Record<string, 'user' | 'auto' | { origin: 'user' | 'auto'; sessionName?: string; starred?: boolean }>>;
+    deleteMessagePair: (projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{ success: boolean; linesRemoved?: number; error?: string }>;
+  };
+  tempfile: {
+    write: (content: string, filename?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+    read: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+    delete: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  };
+  history: {
+    getAll: (projectPath?: string, sessionId?: string) => Promise<Array<{
+      id: string;
+      type: 'AUTO' | 'USER';
+      timestamp: number;
+      summary: string;
+      claudeSessionId?: string;
+      projectPath: string;
+      sessionId?: string;
+      contextUsage?: number;
+      usageStats?: UsageStats;
+    }>>;
+    add: (entry: {
+      id: string;
+      type: 'AUTO' | 'USER';
+      timestamp: number;
+      summary: string;
+      claudeSessionId?: string;
+      projectPath: string;
+      sessionId?: string;
+      contextUsage?: number;
+      usageStats?: UsageStats;
+    }) => Promise<boolean>;
+    clear: (projectPath?: string) => Promise<boolean>;
+    delete: (entryId: string) => Promise<boolean>;
+  };
+  notification: {
+    show: (title: string, body: string) => Promise<{ success: boolean; error?: string }>;
+    speak: (text: string, command?: string) => Promise<{ success: boolean; ttsId?: number; error?: string }>;
+    stopSpeak: (ttsId: number) => Promise<{ success: boolean; error?: string }>;
+  };
+  attachments: {
+    save: (sessionId: string, base64Data: string, filename: string) => Promise<{ success: boolean; path?: string; filename?: string; error?: string }>;
+    load: (sessionId: string, filename: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+    delete: (sessionId: string, filename: string) => Promise<{ success: boolean; error?: string }>;
+    list: (sessionId: string) => Promise<{ success: boolean; files: string[]; error?: string }>;
+    getPath: (sessionId: string) => Promise<{ success: boolean; path: string }>;
+  };
+}
+
+declare global {
+  interface Window {
+    maestro: MaestroAPI;
+    maestroTest?: {
+      addToast: (type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => void;
+      showPromptTooLong: (usageStats: any) => void;
+    };
+  }
+}
+
+export {};

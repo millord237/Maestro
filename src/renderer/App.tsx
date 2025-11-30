@@ -37,7 +37,7 @@ import { gitService } from './services/git';
 // Import types and constants
 import type {
   ToolType, SessionState, RightPanelTab,
-  ThemeId, FocusArea, LogEntry, Session, Group, AITab
+  FocusArea, LogEntry, Session, Group, AITab, UsageStats, QueuedItem
 } from './types';
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
@@ -548,7 +548,7 @@ export default function MaestroConsole() {
       let tabIdFromSession: string | undefined;
 
       // Check for new format with tab ID: sessionId-ai-tabId
-      const aiTabMatch = sessionId.match(/^(.+)-ai-([^-]+)$/);
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
       if (aiTabMatch) {
         actualSessionId = aiTabMatch[1];
         tabIdFromSession = aiTabMatch[2];
@@ -684,7 +684,7 @@ export default function MaestroConsole() {
       let tabIdFromSession: string | undefined;
 
       // Check for new format with tab ID: sessionId-ai-tabId
-      const aiTabMatch = sessionId.match(/^(.+)-ai-([^-]+)$/);
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
       if (aiTabMatch) {
         actualSessionId = aiTabMatch[1];
         tabIdFromSession = aiTabMatch[2];
@@ -712,9 +712,11 @@ export default function MaestroConsole() {
         projectName: string;
         duration: number;
         claudeSessionId?: string;
+        tabName?: string;
         usageStats?: UsageStats;
         prompt?: string;
         response?: string;
+        sessionSizeKB?: string;
       } | null = null;
       let queuedItemToProcess: { sessionId: string; item: QueuedItem } | null = null;
       // Track if we need to run synopsis after completion (for /commit and other AI commands)
@@ -731,9 +733,16 @@ export default function MaestroConsole() {
             };
           } else {
             // Task complete - gather toast notification data
-            const lastUserLog = currentSession.aiLogs.filter(log => log.source === 'user').pop();
-            const lastAiLog = currentSession.aiLogs.filter(log => log.source === 'stdout' || log.source === 'ai').pop();
+            // Use tab's logs if available (new tab system), fallback to session-level aiLogs (legacy)
+            const activeTab = getActiveTab(currentSession);
+            const logs = activeTab?.logs || currentSession.aiLogs;
+            const lastUserLog = logs.filter(log => log.source === 'user').pop();
+            const lastAiLog = logs.filter(log => log.source === 'stdout' || log.source === 'ai').pop();
             const duration = currentSession.thinkingStartTime ? Date.now() - currentSession.thinkingStartTime : 0;
+
+            // Calculate session size in bytes for debugging context issues
+            const sessionSizeBytes = logs.reduce((sum, log) => sum + (log.text?.length || 0), 0);
+            const sessionSizeKB = (sessionSizeBytes / 1024).toFixed(1);
 
             // Get group name for this session (sessions have groupId, groups have id)
             const sessionGroup = currentSession.groupId
@@ -763,8 +772,9 @@ export default function MaestroConsole() {
             }
 
             // Get the active tab's claudeSessionId for traceability
-            const activeTab = getActiveTab(currentSession);
             const claudeSessionId = activeTab?.claudeSessionId || currentSession.claudeSessionId;
+            // Get tab name: prefer tab's name, fallback to short UUID from claudeSessionId
+            const tabName = activeTab?.name || (claudeSessionId ? claudeSessionId.substring(0, 8).toUpperCase() : undefined);
 
             toastData = {
               title,
@@ -773,9 +783,11 @@ export default function MaestroConsole() {
               projectName,
               duration,
               claudeSessionId: claudeSessionId || undefined,
+              tabName,
               usageStats: currentSession.usageStats,
               prompt: lastUserLog?.text,
-              response: lastAiLog?.text
+              response: lastAiLog?.text,
+              sessionSizeKB
             };
 
             // Check if this was a custom AI command that should trigger synopsis
@@ -818,9 +830,25 @@ export default function MaestroConsole() {
               };
             }
 
+            // IMPORTANT: First set the ORIGINAL tab (that just finished) to idle
+            // Then set up the TARGET tab (next in queue) for processing
+            // Also set target tab to 'busy' so thinking pill can find it via getWriteModeTab()
+            let updatedAiTabs = s.aiTabs.map(tab => {
+              // Set the original tab (that just finished) to idle
+              if (tabIdFromSession && tab.id === tabIdFromSession) {
+                console.log('[onExit] Setting original tab to idle before processing queue:', tab.id.substring(0, 8));
+                return { ...tab, state: 'idle' as const };
+              }
+              // Set the target tab (next in queue) to busy with thinkingStartTime
+              if (tab.id === targetTab.id) {
+                console.log('[onExit] Setting target tab to busy for queue processing:', tab.id.substring(0, 8), 'name:', tab.name);
+                return { ...tab, state: 'busy' as const, thinkingStartTime: Date.now() };
+              }
+              return tab;
+            });
+
             // For message items, add a log entry to the target tab
             // For command items, the log entry will be added when the command is processed
-            let updatedAiTabs = s.aiTabs;
             if (nextItem.type === 'message' && nextItem.text) {
               const logEntry: LogEntry = {
                 id: generateId(),
@@ -829,19 +857,21 @@ export default function MaestroConsole() {
                 text: nextItem.text,
                 images: nextItem.images
               };
-              updatedAiTabs = s.aiTabs.map(tab =>
+              updatedAiTabs = updatedAiTabs.map(tab =>
                 tab.id === targetTab.id
                   ? { ...tab, logs: [...tab.logs, logEntry] }
                   : tab
               );
             }
 
+            // NOTE: Do NOT switch activeTabId - let user control tab switching
+            // The queued message processes in the background on its target tab
             return {
               ...s,
               state: 'busy' as SessionState,
               busySource: 'ai',
               aiTabs: updatedAiTabs,
-              activeTabId: targetTab.id, // Switch to the target tab
+              // activeTabId stays unchanged - user controls tab switching
               executionQueue: remainingQueue,
               thinkingStartTime: Date.now(),
               currentCycleTokens: 0,
@@ -851,24 +881,38 @@ export default function MaestroConsole() {
 
           // Task complete - set the specific tab to 'idle' for write-mode tracking
           // Use tabIdFromSession if available (new format), otherwise set all busy tabs to idle (legacy)
+          console.log('[onExit] Setting tabs to idle:', {
+            tabIdFromSession,
+            tabIds: s.aiTabs?.map(t => t.id),
+            tabStates: s.aiTabs?.map(t => ({ id: t.id.substring(0, 8), state: t.state }))
+          });
           const updatedAiTabs = s.aiTabs?.length > 0
             ? s.aiTabs.map(tab => {
                 if (tabIdFromSession) {
                   // New format: only update the specific tab
-                  return tab.id === tabIdFromSession ? { ...tab, state: 'idle' as const } : tab;
+                  const shouldUpdate = tab.id === tabIdFromSession;
+                  if (shouldUpdate) {
+                    console.log('[onExit] Setting tab to idle:', tab.id.substring(0, 8));
+                  }
+                  return shouldUpdate ? { ...tab, state: 'idle' as const, thinkingStartTime: undefined } : tab;
                 } else {
                   // Legacy format: update all busy tabs
-                  return tab.state === 'busy' ? { ...tab, state: 'idle' as const } : tab;
+                  return tab.state === 'busy' ? { ...tab, state: 'idle' as const, thinkingStartTime: undefined } : tab;
                 }
               })
             : s.aiTabs;
 
+          // Check if ANY other tabs are still busy (for parallel read-only execution)
+          // Only set session to idle if no tabs are busy
+          const anyTabStillBusy = updatedAiTabs.some(tab => tab.state === 'busy');
+          console.log('[onExit] Any tab still busy?', anyTabStillBusy, 'tabs:', updatedAiTabs.map(t => ({ id: t.id.substring(0, 8), state: t.state })));
+
           // Task complete - also clear pending AI command flag
           return {
             ...s,
-            state: 'idle' as SessionState,
-            busySource: undefined,
-            thinkingStartTime: undefined,
+            state: anyTabStillBusy ? 'busy' as SessionState : 'idle' as SessionState,
+            busySource: anyTabStillBusy ? s.busySource : undefined,
+            thinkingStartTime: anyTabStillBusy ? s.thinkingStartTime : undefined,
             pendingAICommandForSynopsis: undefined,
             aiTabs: updatedAiTabs
           };
@@ -898,11 +942,12 @@ export default function MaestroConsole() {
       } else if (toastData) {
         setTimeout(() => {
           // Log agent completion for debugging and traceability
-          window.maestro.logger.info('Agent process completed', {
+          window.maestro.logger.log('info', 'Agent process completed', 'App', {
             claudeSessionId: toastData!.claudeSessionId,
             group: toastData!.groupName,
             project: toastData!.projectName,
             durationMs: toastData!.duration,
+            sessionSizeKB: toastData!.sessionSizeKB,
             prompt: toastData!.prompt?.substring(0, 200) + (toastData!.prompt && toastData!.prompt.length > 200 ? '...' : ''),
             response: toastData!.response?.substring(0, 500) + (toastData!.response && toastData!.response.length > 500 ? '...' : ''),
             inputTokens: toastData!.usageStats?.inputTokens,
@@ -919,6 +964,7 @@ export default function MaestroConsole() {
             project: toastData!.projectName,
             taskDuration: toastData!.duration,
             claudeSessionId: toastData!.claudeSessionId,
+            tabName: toastData!.tabName,
           });
         }, 0);
       }
@@ -981,7 +1027,7 @@ export default function MaestroConsole() {
       let tabId: string | undefined;
 
       // Check for new format with tab ID: sessionId-ai-tabId
-      const aiTabMatch = sessionId.match(/^(.+)-ai-([^-]+)$/);
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
       if (aiTabMatch) {
         actualSessionId = aiTabMatch[1];
         tabId = aiTabMatch[2];
@@ -1048,12 +1094,15 @@ export default function MaestroConsole() {
             return s;
           }
 
-          // Update the target tab's claudeSessionId and clear awaitingSessionId flag
-          const updatedAiTabs = s.aiTabs.map(tab =>
-            tab.id === targetTab.id
-              ? { ...tab, claudeSessionId, awaitingSessionId: false }
-              : tab
-          );
+          // Update the target tab's claudeSessionId, name (if not already set), and clear awaitingSessionId flag
+          // Generate short UUID for display (first 8 chars, uppercase)
+          const shortUuid = claudeSessionId.substring(0, 8).toUpperCase();
+          const updatedAiTabs = s.aiTabs.map(tab => {
+            if (tab.id !== targetTab.id) return tab;
+            // Only set name if it's still the default "New Session"
+            const newName = (!tab.name || tab.name === 'New Session') ? shortUuid : tab.name;
+            return { ...tab, claudeSessionId, awaitingSessionId: false, name: newName };
+          });
 
           console.log('[onSessionId] Storing Claude session ID on tab:', targetTab.id, 'claudeSessionId:', claudeSessionId, 'fromTabId:', tabId || 'legacy');
           return { ...s, aiTabs: updatedAiTabs, claudeSessionId }; // Also keep session-level for backwards compatibility
@@ -1133,7 +1182,7 @@ export default function MaestroConsole() {
 
       // Parse sessionId to get actual session ID (handles -ai-tabId and legacy -ai suffix)
       let actualSessionId: string;
-      const aiTabMatch = sessionId.match(/^(.+)-ai-([^-]+)$/);
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
       if (aiTabMatch) {
         actualSessionId = aiTabMatch[1];
       } else if (sessionId.endsWith('-ai')) {
@@ -1426,8 +1475,8 @@ export default function MaestroConsole() {
 
         // Use createTab helper
         const result = createTab(s);
-        newTabId = result.newTab.id;
-        return result.updatedSession;
+        newTabId = result.tab.id;
+        return result.session;
       }));
 
       // Send response back with the new tab ID
@@ -1569,11 +1618,13 @@ export default function MaestroConsole() {
     }));
   }, [activeSession]);
 
-  // Helper to add a log entry to the active tab's logs (used for slash commands, system messages, etc.)
+  // Helper to add a log entry to a specific tab's logs (or active tab if no tabId provided)
+  // Used for slash commands, system messages, queued items, etc.
   // This centralizes the logic for routing logs to the correct tab
-  const addLogToActiveTab = useCallback((
+  const addLogToTab = useCallback((
     sessionId: string,
-    logEntry: Omit<LogEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: number }
+    logEntry: Omit<LogEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: number },
+    tabId?: string // Optional: if not provided, uses active tab
   ) => {
     const entry: LogEntry = {
       id: logEntry.id || generateId(),
@@ -1588,21 +1639,33 @@ export default function MaestroConsole() {
     setSessions(prev => prev.map(s => {
       if (s.id !== sessionId) return s;
 
-      const activeTab = getActiveTab(s);
-      if (!activeTab) {
+      // Use specified tab or fall back to active tab
+      const targetTab = tabId
+        ? s.aiTabs.find(tab => tab.id === tabId)
+        : getActiveTab(s);
+
+      if (!targetTab) {
         // Fallback: no tabs exist, use deprecated aiLogs
-        console.warn('[addLogToActiveTab] No active tab found, using aiLogs (deprecated)');
+        console.warn('[addLogToTab] No target tab found, using aiLogs (deprecated)');
         return { ...s, aiLogs: [...s.aiLogs, entry] };
       }
 
-      // Update active tab's logs
+      // Update target tab's logs
       const updatedAiTabs = s.aiTabs.map(tab =>
-        tab.id === activeTab.id ? { ...tab, logs: [...tab.logs, entry] } : tab
+        tab.id === targetTab.id ? { ...tab, logs: [...tab.logs, entry] } : tab
       );
 
       return { ...s, aiTabs: updatedAiTabs };
     }));
   }, []);
+
+  // Convenience wrapper that always uses active tab (backward compatibility)
+  const addLogToActiveTab = useCallback((
+    sessionId: string,
+    logEntry: Omit<LogEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: number }
+  ) => {
+    addLogToTab(sessionId, logEntry);
+  }, [addLogToTab]);
 
   // Tab completion suggestions (must be after inputValue is defined)
   const tabCompletionSuggestions = useMemo(() => {
@@ -1977,11 +2040,12 @@ export default function MaestroConsole() {
     },
     onComplete: (info) => {
       // Find group name for the session
-      const sessionGroup = groups.find(g => g.sessionIds?.includes(info.sessionId));
+      const session = sessions.find(s => s.id === info.sessionId);
+      const sessionGroup = session?.groupId ? groups.find(g => g.id === session.groupId) : null;
       const groupName = sessionGroup?.name || 'Ungrouped';
 
       // Determine toast type and message based on completion status
-      const isSuccess = info.completedTasks > 0 && !info.wasStopped;
+      const _isSuccess = info.completedTasks > 0 && !info.wasStopped;
       const toastType = info.wasStopped ? 'warning' : (info.completedTasks === info.totalTasks ? 'success' : 'info');
 
       // Build message
@@ -3253,8 +3317,15 @@ export default function MaestroConsole() {
             );
 
             // Queue the command if AI is busy
-            if (activeSession.state === 'busy') {
-              const activeTab = getActiveTab(activeSession);
+            // For read-only mode tabs: only queue if THIS TAB is busy (allows parallel execution)
+            // For write mode tabs: queue if ANY tab in session is busy (prevents conflicts)
+            const activeTab = getActiveTab(activeSession);
+            const isReadOnlyMode = activeTab?.readOnlyMode === true;
+            const shouldQueue = isReadOnlyMode
+              ? activeTab?.state === 'busy'
+              : activeSession.state === 'busy';
+
+            if (shouldQueue) {
               const queuedItem: QueuedItem = {
                 id: generateId(),
                 timestamp: Date.now(),
@@ -3311,31 +3382,44 @@ export default function MaestroConsole() {
     const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
 
     // Queue messages when AI is busy (only in AI mode)
-    if (activeSession.state === 'busy' && currentMode === 'ai') {
+    // For read-only mode tabs: only queue if THIS TAB is busy (allows parallel execution)
+    // For write mode tabs: queue if ANY tab in session is busy (prevents conflicts)
+    if (currentMode === 'ai') {
       const activeTab = getActiveTab(activeSession);
-      const queuedItem: QueuedItem = {
-        id: generateId(),
-        timestamp: Date.now(),
-        tabId: activeTab?.id || activeSession.activeTabId,
-        type: 'message',
-        text: inputValue,
-        images: [...stagedImages],
-        tabName: activeTab?.name || (activeTab?.claudeSessionId ? activeTab.claudeSessionId.split('-')[0].toUpperCase() : 'New')
-      };
+      const isReadOnlyMode = activeTab?.readOnlyMode === true;
 
-      setSessions(prev => prev.map(s => {
-        if (s.id !== activeSessionId) return s;
-        return {
-          ...s,
-          executionQueue: [...s.executionQueue, queuedItem]
+      // Determine if we should queue this message
+      // Read-only tabs can run in parallel - only queue if this specific tab is busy
+      // Write mode tabs must wait for any busy tab to finish
+      const shouldQueue = isReadOnlyMode
+        ? activeTab?.state === 'busy'  // Read-only: only queue if THIS tab is busy
+        : activeSession.state === 'busy';  // Write mode: queue if session is busy
+
+      if (shouldQueue) {
+        const queuedItem: QueuedItem = {
+          id: generateId(),
+          timestamp: Date.now(),
+          tabId: activeTab?.id || activeSession.activeTabId,
+          type: 'message',
+          text: inputValue,
+          images: [...stagedImages],
+          tabName: activeTab?.name || (activeTab?.claudeSessionId ? activeTab.claudeSessionId.split('-')[0].toUpperCase() : 'New')
         };
-      }));
 
-      // Clear input
-      setInputValue('');
-      setStagedImages([]);
-      if (inputRef.current) inputRef.current.style.height = 'auto';
-      return;
+        setSessions(prev => prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          return {
+            ...s,
+            executionQueue: [...s.executionQueue, queuedItem]
+          };
+        }));
+
+        // Clear input
+        setInputValue('');
+        setStagedImages([]);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        return;
+      }
     }
 
     console.log('[processInput] Processing input', {
@@ -3435,6 +3519,7 @@ export default function MaestroConsole() {
 
       // Update the active tab's logs and state to 'busy' for write-mode tracking
       // Also mark as awaitingSessionId if this is a new session (no claudeSessionId yet)
+      // Set thinkingStartTime on the tab for accurate elapsed time tracking (especially for parallel tabs)
       const isNewSession = !activeTab.claudeSessionId;
       const updatedAiTabs = s.aiTabs.map(tab =>
         tab.id === activeTab.id
@@ -3442,6 +3527,7 @@ export default function MaestroConsole() {
               ...tab,
               logs: [...tab.logs, newEntry],
               state: 'busy' as const,
+              thinkingStartTime: Date.now(),
               // Mark this tab as awaiting session ID so we can assign it correctly
               // when the session ID comes back (prevents cross-tab assignment)
               awaitingSessionId: isNewSession ? true : tab.awaitingSessionId
@@ -3507,11 +3593,16 @@ export default function MaestroConsole() {
           const agent = await window.maestro.agents.get('claude-code');
           if (!agent) throw new Error('Claude Code agent not found');
 
+          // IMPORTANT: Get fresh session state from ref to avoid stale closure bug
+          // If user switches tabs quickly, activeSession from closure may have wrong activeTabId
+          const freshSession = sessionsRef.current.find(s => s.id === activeSessionId);
+          if (!freshSession) throw new Error('Session not found');
+
           // Build spawn args with resume if we have a session ID
           // Use the ACTIVE TAB's claudeSessionId (not the deprecated session-level one)
           const spawnArgs = [...agent.args];
-          const activeTab = getActiveTab(activeSession);
-          const tabClaudeSessionId = activeTab?.claudeSessionId;
+          const freshActiveTab = getActiveTab(freshSession);
+          const tabClaudeSessionId = freshActiveTab?.claudeSessionId;
           const isNewSession = !tabClaudeSessionId;
 
           if (tabClaudeSessionId) {
@@ -3519,7 +3610,7 @@ export default function MaestroConsole() {
           }
 
           // Add read-only/plan mode when auto mode is active OR tab has readOnlyMode enabled
-          if (activeBatchRunState.isRunning || activeTab?.readOnlyMode) {
+          if (activeBatchRunState.isRunning || freshActiveTab?.readOnlyMode) {
             spawnArgs.push('--permission-mode', 'plan');
           }
 
@@ -3528,9 +3619,9 @@ export default function MaestroConsole() {
           // Use agent.path (full path) if available, otherwise fall back to agent.command
           const commandToUse = agent.path || agent.command;
           console.log('[processInput] Spawning Claude:', {
-            maestroSessionId: activeSession.id,
+            maestroSessionId: freshSession.id,
             targetSessionId,
-            activeTabId: activeTab?.id,
+            activeTabId: freshActiveTab?.id,
             claudeSessionId: tabClaudeSessionId || 'NEW SESSION',
             isResume: !!tabClaudeSessionId,
             command: commandToUse,
@@ -3540,7 +3631,7 @@ export default function MaestroConsole() {
           await window.maestro.process.spawn({
             sessionId: targetSessionId,
             toolType: 'claude-code',
-            cwd: activeSession.cwd,
+            cwd: freshSession.cwd,
             command: commandToUse,
             args: spawnArgs,
             prompt: capturedInputValue,
@@ -3961,7 +4052,12 @@ export default function MaestroConsole() {
       return;
     }
 
-    const targetSessionId = `${sessionId}-ai`;
+    // Find the TARGET tab for this queued item (NOT the active tab!)
+    // The item carries its intended tabId from when it was queued
+    const targetTab = session.aiTabs.find(tab => tab.id === item.tabId) || getActiveTab(session);
+    const targetSessionId = `${sessionId}-ai-${targetTab?.id || 'default'}`;
+
+    console.log('[processQueuedItem] Processing for tab:', targetTab?.id?.substring(0, 8), 'name:', targetTab?.name);
 
     try {
       // Get agent configuration
@@ -3969,10 +4065,9 @@ export default function MaestroConsole() {
       if (!agent) throw new Error('Claude Code agent not found');
 
       // Build spawn args with resume if we have a session ID
-      // Use the ACTIVE TAB's claudeSessionId (not the deprecated session-level one)
-      const spawnArgs = [...agent.args];
-      const activeTab = getActiveTab(session);
-      const tabClaudeSessionId = activeTab?.claudeSessionId;
+      // Use the TARGET TAB's claudeSessionId (not the active tab or deprecated session-level one)
+      const spawnArgs = [...(agent.args || [])];
+      const tabClaudeSessionId = targetTab?.claudeSessionId;
 
       if (tabClaudeSessionId) {
         spawnArgs.push('--resume', tabClaudeSessionId);
@@ -4016,14 +4111,15 @@ export default function MaestroConsole() {
           );
 
           // Add user log showing the command with its interpolated prompt
-          addLogToActiveTab(sessionId, {
+          // Use target tab (from queued item), not active tab
+          addLogToTab(sessionId, {
             source: 'user',
             text: substitutedPrompt,
             aiCommand: {
               command: matchingCommand.command,
               description: matchingCommand.description
             }
-          });
+          }, item.tabId);
 
           // Track this command for automatic synopsis on completion
           setSessions(prev => prev.map(s => {
@@ -4892,6 +4988,16 @@ export default function MaestroConsole() {
             if (!activeSession || !renameTabId) return;
             setSessions(prev => prev.map(s => {
               if (s.id !== activeSession.id) return s;
+              // Find the tab to get its claudeSessionId for persistence
+              const tab = s.aiTabs.find(t => t.id === renameTabId);
+              if (tab?.claudeSessionId) {
+                // Persist name to Claude session metadata (async, fire and forget)
+                window.maestro.claude.updateSessionName(
+                  s.cwd,
+                  tab.claudeSessionId,
+                  newName || ''
+                ).catch(err => console.error('Failed to persist tab name:', err));
+              }
               return {
                 ...s,
                 aiTabs: s.aiTabs.map(tab =>

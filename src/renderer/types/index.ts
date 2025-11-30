@@ -3,7 +3,7 @@
 // Re-export theme types from shared location
 export { Theme, ThemeId, ThemeMode, ThemeColors, isValidThemeId } from '../../shared/theme-types';
 
-export type ToolType = 'claude' | 'aider' | 'opencode' | 'terminal';
+export type ToolType = 'claude' | 'claude-code' | 'aider' | 'opencode' | 'terminal';
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 export type RightPanelTab = 'files' | 'history' | 'scratchpad';
@@ -27,7 +27,7 @@ export interface FileArtifact {
 export interface LogEntry {
   id: string;
   timestamp: number;
-  source: 'stdout' | 'stderr' | 'system' | 'user';
+  source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai';
   text: string;
   interactive?: boolean;
   options?: string[];
@@ -136,6 +136,7 @@ export interface AITab {
   state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
   readOnlyMode?: boolean;          // When true, Claude operates in plan/read-only mode
   awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
+  thinkingStartTime?: number;      // Timestamp when tab started thinking (for elapsed time display)
 }
 
 // Closed tab entry for undo functionality (Cmd+Shift+T)
@@ -239,6 +240,8 @@ export interface AgentConfig {
   name: string;
   available: boolean;
   path?: string;
+  command?: string;
+  args?: string[];
 }
 
 // Process spawning configuration

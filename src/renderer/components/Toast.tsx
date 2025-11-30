@@ -110,8 +110,8 @@ function ToastItem({ toast, theme, onRemove }: { toast: ToastType; theme: Theme;
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Header with group/project */}
-          {(toast.group || toast.project) && (
+          {/* Header with group/project and tab name */}
+          {(toast.group || toast.project || toast.tabName) && (
             <div
               className="flex items-center gap-2 text-xs mb-1"
               style={{ color: theme.colors.textDim }}
@@ -126,6 +126,18 @@ function ToastItem({ toast, theme, onRemove }: { toast: ToastType; theme: Theme;
               )}
               {toast.project && (
                 <span className="truncate">{toast.project}</span>
+              )}
+              {toast.tabName && (
+                <>
+                  <span style={{ color: theme.colors.border }}>•</span>
+                  <span
+                    className="font-mono"
+                    style={{ color: theme.colors.accent }}
+                    title={toast.claudeSessionId ? `Claude Session: ${toast.claudeSessionId}` : undefined}
+                  >
+                    {toast.tabName}
+                  </span>
+                </>
               )}
             </div>
           )}
