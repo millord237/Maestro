@@ -172,7 +172,8 @@ export type SwitchModeCallback = (
 
 // Callback type for selecting/switching to a session in the desktop app
 // This forwards to the renderer which handles state updates and broadcasts
-export type SelectSessionCallback = (sessionId: string) => Promise<boolean>;
+// Optional tabId to also switch to a specific tab within the session
+export type SelectSessionCallback = (sessionId: string, tabId?: string) => Promise<boolean>;
 
 // Tab operation callbacks for multi-tab support
 export type SelectTabCallback = (sessionId: string, tabId: string) => Promise<boolean>;
@@ -1204,7 +1205,8 @@ export class WebServer {
       case 'select_session': {
         // Select/switch to a session in the desktop app
         const sessionId = message.sessionId as string;
-        logger.info(`[Web] Received select_session message: session=${sessionId}`, LOG_CONTEXT);
+        const tabId = message.tabId as string | undefined;
+        logger.info(`[Web] Received select_session message: session=${sessionId}, tab=${tabId || 'none'}`, LOG_CONTEXT);
 
         if (!sessionId) {
           client.socket.send(JSON.stringify({
@@ -1225,9 +1227,9 @@ export class WebServer {
           return;
         }
 
-        // Forward to desktop's session selection logic
-        logger.info(`[Web] Calling selectSessionCallback for session ${sessionId}`, LOG_CONTEXT);
-        this.selectSessionCallback(sessionId)
+        // Forward to desktop's session selection logic (include tabId if provided)
+        logger.info(`[Web] Calling selectSessionCallback for session ${sessionId}${tabId ? `, tab ${tabId}` : ''}`, LOG_CONTEXT);
+        this.selectSessionCallback(sessionId, tabId)
           .then((success) => {
             client.socket.send(JSON.stringify({
               type: 'select_session_result',

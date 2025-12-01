@@ -268,23 +268,29 @@ export function AboutModal({ theme, sessions, onClose }: AboutModalProps) {
           {/* Made in Austin */}
           <div className="pt-3 text-center flex flex-col items-center gap-2">
             {/* Texas Flag - Lone Star Flag */}
-            <svg
-              viewBox="0 0 150 100"
-              className="w-12 h-8"
-              style={{ opacity: 0.7 }}
+            <button
+              onClick={() => window.maestro.shell.openExternal('https://www.sanjacsaloon.com')}
+              className="hover:opacity-100 transition-opacity cursor-pointer"
+              style={{ background: 'none', border: 'none', padding: 0 }}
             >
-              {/* Blue vertical stripe */}
-              <rect x="0" y="0" width="50" height="100" fill="#002868" />
-              {/* White horizontal stripe */}
-              <rect x="50" y="0" width="100" height="50" fill="#FFFFFF" />
-              {/* Red horizontal stripe */}
-              <rect x="50" y="50" width="100" height="50" fill="#BF0A30" />
-              {/* White five-pointed star */}
-              <polygon
-                points="25,15 29.5,30 45,30 32.5,40 37,55 25,45 13,55 17.5,40 5,30 20.5,30"
-                fill="#FFFFFF"
-              />
-            </svg>
+              <svg
+                viewBox="0 0 150 100"
+                className="w-12 h-8"
+                style={{ opacity: 0.7 }}
+              >
+                {/* Blue vertical stripe */}
+                <rect x="0" y="0" width="50" height="100" fill="#002868" />
+                {/* White horizontal stripe */}
+                <rect x="50" y="0" width="100" height="50" fill="#FFFFFF" />
+                {/* Red horizontal stripe */}
+                <rect x="50" y="50" width="100" height="50" fill="#BF0A30" />
+                {/* White five-pointed star */}
+                <polygon
+                  points="25,15 29.5,30 45,30 32.5,40 37,55 25,45 13,55 17.5,40 5,30 20.5,30"
+                  fill="#FFFFFF"
+                />
+              </svg>
+            </button>
             <span className="text-xs" style={{ color: theme.colors.textDim }}>Made in Austin, TX</span>
           </div>
         </div>

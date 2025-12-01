@@ -1513,9 +1513,10 @@ export default function MaestroConsole() {
 
   // Handle remote session selection from web interface
   // This allows web clients to switch the active session in the desktop app
+  // If tabId is provided, also switches to that tab within the session
   useEffect(() => {
-    const unsubscribeSelectSession = window.maestro.process.onRemoteSelectSession((sessionId: string) => {
-      console.log('[Remote] Received session selection from web interface:', { sessionId });
+    const unsubscribeSelectSession = window.maestro.process.onRemoteSelectSession((sessionId: string, tabId?: string) => {
+      console.log('[Remote] Received session selection from web interface:', { sessionId, tabId });
 
       // Check if session exists
       const session = sessionsRef.current.find(s => s.id === sessionId);
@@ -1527,12 +1528,35 @@ export default function MaestroConsole() {
       // Switch to the session (same as clicking in SessionList)
       setActiveSessionId(sessionId);
       console.log('[Remote] Switched to session:', sessionId);
+
+      // If tabId provided, also switch to that tab
+      if (tabId) {
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+          // Check if tab exists
+          if (!s.aiTabs.some(t => t.id === tabId)) {
+            console.log('[Remote] Tab not found for selection:', tabId);
+            return s;
+          }
+          console.log('[Remote] Switched to tab:', tabId);
+          return { ...s, activeTabId: tabId };
+        }));
+      }
     });
 
     // Handle remote tab selection from web interface
+    // This also switches to the session if not already active
     const unsubscribeSelectTab = window.maestro.process.onRemoteSelectTab((sessionId: string, tabId: string) => {
       console.log('[Remote] Received tab selection from web interface:', { sessionId, tabId });
 
+      // First, switch to the session if not already active
+      const currentActiveId = activeSessionIdRef.current;
+      if (currentActiveId !== sessionId) {
+        console.log('[Remote] Switching to session:', sessionId);
+        setActiveSessionId(sessionId);
+      }
+
+      // Then update the active tab within the session
       setSessions(prev => prev.map(s => {
         if (s.id !== sessionId) return s;
         // Check if tab exists

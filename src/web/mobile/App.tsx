@@ -727,8 +727,8 @@ export default function MobileApp() {
     setActiveSessionId(sessionId);
     setActiveTabId(session?.activeTabId || null);
     triggerHaptic(HAPTIC_PATTERNS.tap);
-    // Notify desktop to switch to this session
-    send({ type: 'select_session', sessionId });
+    // Notify desktop to switch to this session (include activeTabId if available)
+    send({ type: 'select_session', sessionId, tabId: session?.activeTabId || undefined });
   }, [sessions, send]);
 
   // Handle selecting a tab within a session
@@ -848,14 +848,7 @@ export default function MobileApp() {
     triggerHaptic(HAPTIC_PATTERNS.tap);
 
     // Send mode switch command via WebSocket
-    const message = {
-      type: 'switch_mode',
-      sessionId: activeSessionId,
-      mode,
-    };
-    console.log('[Mobile] Sending switch_mode message:', message);
-    const sent = send(message);
-    console.log('[Mobile] send() returned:', sent);
+    send({ type: 'switch_mode', sessionId: activeSessionId, mode });
 
     // Optimistically update local session state
     setSessions(prev => prev.map(s =>

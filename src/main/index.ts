@@ -394,8 +394,9 @@ function createWebServer(): WebServer {
 
   // Set up callback for web server to select/switch to a session in the desktop
   // This forwards to the renderer which handles state updates and broadcasts
-  server.setSelectSessionCallback(async (sessionId: string) => {
-    logger.info(`[Web→Desktop] Session select callback invoked: session=${sessionId}`, 'WebServer');
+  // If tabId is provided, also switches to that tab within the session
+  server.setSelectSessionCallback(async (sessionId: string, tabId?: string) => {
+    logger.info(`[Web→Desktop] Session select callback invoked: session=${sessionId}, tab=${tabId || 'none'}`, 'WebServer');
     if (!mainWindow) {
       logger.warn('mainWindow is null for selectSession', 'WebServer');
       return false;
@@ -403,7 +404,7 @@ function createWebServer(): WebServer {
 
     // Forward to renderer - it will handle session selection and broadcasts
     logger.info(`[Web→Desktop] Sending IPC remote:selectSession to renderer`, 'WebServer');
-    mainWindow.webContents.send('remote:selectSession', sessionId);
+    mainWindow.webContents.send('remote:selectSession', sessionId, tabId);
     return true;
   });
 

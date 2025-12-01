@@ -115,11 +115,12 @@ contextBridge.exposeInMainWorld('maestro', {
       return () => ipcRenderer.removeListener('remote:interrupt', handler);
     },
     // Remote session selection from web interface - forwards to desktop's setActiveSessionId logic
-    onRemoteSelectSession: (callback: (sessionId: string) => void) => {
+    // Optional tabId to also switch to a specific tab within the session
+    onRemoteSelectSession: (callback: (sessionId: string, tabId?: string) => void) => {
       console.log('[Preload] Registering onRemoteSelectSession listener');
-      const handler = (_: any, sessionId: string) => {
-        console.log('[Preload] Received remote:selectSession IPC:', { sessionId });
-        callback(sessionId);
+      const handler = (_: any, sessionId: string, tabId?: string) => {
+        console.log('[Preload] Received remote:selectSession IPC:', { sessionId, tabId });
+        callback(sessionId, tabId);
       };
       ipcRenderer.on('remote:selectSession', handler);
       return () => ipcRenderer.removeListener('remote:selectSession', handler);
