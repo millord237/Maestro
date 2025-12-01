@@ -1216,6 +1216,8 @@ export function SessionList(props: SessionListProps) {
                           key={`group-${group.id}-${session.id}`}
                           draggable
                           onDragStart={() => handleDragStart(session.id)}
+                          onDragOver={handleDragOver}
+                          onDrop={() => handleDropOnGroup(group.id)}
                           onClick={() => setActiveSessionId(session.id)}
                           onContextMenu={(e) => handleContextMenu(e, session.id)}
                           className={`px-4 py-2 cursor-move flex items-center justify-between group border-l-2 transition-all hover:bg-opacity-50 ${draggingSessionId === session.id ? 'opacity-50' : ''}`}
@@ -1485,6 +1487,8 @@ export function SessionList(props: SessionListProps) {
                   key={`ungrouped-${session.id}`}
                   draggable
                   onDragStart={() => handleDragStart(session.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDropOnUngrouped}
                   onClick={() => setActiveSessionId(session.id)}
                   onContextMenu={(e) => handleContextMenu(e, session.id)}
                   className={`px-4 py-2 rounded cursor-move flex items-center justify-between mb-1 hover:bg-opacity-50 border-l-2 transition-all group ${draggingSessionId === session.id ? 'opacity-50' : ''}`}

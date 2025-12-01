@@ -261,6 +261,8 @@ export interface Session {
   closedTabHistory: ClosedTab[];
   // Saved scroll position for terminal/shell output view
   terminalScrollTop?: number;
+  // Draft input for terminal mode (persisted across session switches)
+  terminalDraftInput?: string;
 }
 
 export interface Group {

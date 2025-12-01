@@ -33,6 +33,7 @@ interface ProcessNode {
   children?: ProcessNode[];
   toolType?: string;
   cwd?: string;
+  claudeSessionId?: string; // UUID octet from the Claude session (for AI processes)
 }
 
 export function ProcessMonitor(props: ProcessMonitorProps) {
@@ -178,6 +179,12 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
     return 'ai';
   };
 
+  // Extract tab ID from process session ID (format: {sessionId}-ai-{tabId})
+  const parseTabId = (processSessionId: string): string | null => {
+    const match = processSessionId.match(/-ai-([^-]+)$/);
+    return match ? match[1] : null;
+  };
+
   // Build the process tree using real active processes
   const buildProcessTree = (): ProcessNode[] => {
     const tree: ProcessNode[] = [];
@@ -231,6 +238,18 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
           label = `AI Agent (${proc.toolType})`;
         }
 
+        // Look up Claude session ID from the tab if this is an AI process
+        let claudeSessionId: string | undefined;
+        if (processType === 'ai') {
+          const tabId = parseTabId(proc.sessionId);
+          if (tabId && session.aiTabs) {
+            const tab = session.aiTabs.find(t => t.id === tabId);
+            if (tab?.claudeSessionId) {
+              claudeSessionId = tab.claudeSessionId;
+            }
+          }
+        }
+
         sessionNode.children!.push({
           id: `process-${proc.sessionId}`,
           type: 'process',
@@ -240,7 +259,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
           sessionId: session.id,
           isAlive: true, // Active processes are always alive
           toolType: proc.toolType,
-          cwd: proc.cwd
+          cwd: proc.cwd,
+          claudeSessionId
         });
       });
 
@@ -537,6 +557,11 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             style={{ backgroundColor: statusColor }}
           />
           <span className="text-sm flex-1 truncate">{node.label}</span>
+          {node.claudeSessionId && (
+            <span className="text-xs font-mono flex-shrink-0" style={{ color: theme.colors.accent }}>
+              {node.claudeSessionId.substring(0, 8)}...
+            </span>
+          )}
           <span className="text-xs font-mono flex-shrink-0" style={{ color: theme.colors.textDim }}>
             {node.pid ? `PID: ${node.pid}` : 'No PID'}
           </span>
