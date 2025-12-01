@@ -44,6 +44,12 @@ interface MainPanelProps {
   tabCompletionOpen?: boolean;
   tabCompletionSuggestions?: import('../hooks/useTabCompletion').TabCompletionSuggestion[];
   selectedTabCompletionIndex?: number;
+  // @ mention completion props (AI mode)
+  atMentionOpen?: boolean;
+  atMentionFilter?: string;
+  atMentionStartIndex?: number;
+  atMentionSuggestions?: Array<{ value: string; type: 'file' | 'folder'; displayText: string; fullPath: string }>;
+  selectedAtMentionIndex?: number;
   previewFile: { name: string; content: string; path: string } | null;
   markdownRawMode: boolean;
   shortcuts: Record<string, Shortcut>;
@@ -78,6 +84,11 @@ interface MainPanelProps {
   // Tab completion setters
   setTabCompletionOpen?: (open: boolean) => void;
   setSelectedTabCompletionIndex?: (index: number) => void;
+  // @ mention completion setters
+  setAtMentionOpen?: (open: boolean) => void;
+  setAtMentionFilter?: (filter: string) => void;
+  setAtMentionStartIndex?: (index: number) => void;
+  setSelectedAtMentionIndex?: (index: number) => void;
   setPreviewFile: (file: { name: string; content: string; path: string } | null) => void;
   setMarkdownRawMode: (mode: boolean) => void;
   setAboutModalOpen: (open: boolean) => void;
@@ -136,6 +147,8 @@ export function MainPanel(props: MainPanelProps) {
     commandHistorySelectedIndex, slashCommandOpen, slashCommands, selectedSlashCommandIndex,
     tabCompletionOpen, tabCompletionSuggestions, selectedTabCompletionIndex,
     setTabCompletionOpen, setSelectedTabCompletionIndex,
+    atMentionOpen, atMentionFilter, atMentionStartIndex, atMentionSuggestions, selectedAtMentionIndex,
+    setAtMentionOpen, setAtMentionFilter, setAtMentionStartIndex, setSelectedAtMentionIndex,
     previewFile, markdownRawMode, shortcuts, rightPanelOpen, maxOutputLines, gitDiffPreview,
     fileTreeFilterOpen, logLevel, setGitDiffPreview, setLogViewerOpen, setAgentSessionsOpen, setActiveClaudeSessionId,
     onResumeClaudeSession, onNewClaudeSession, setActiveFocus, setOutputSearchOpen, setOutputSearchQuery,
@@ -835,6 +848,15 @@ export function MainPanel(props: MainPanelProps) {
                 tabCompletionSuggestions={tabCompletionSuggestions}
                 selectedTabCompletionIndex={selectedTabCompletionIndex}
                 setSelectedTabCompletionIndex={setSelectedTabCompletionIndex}
+                atMentionOpen={atMentionOpen}
+                setAtMentionOpen={setAtMentionOpen}
+                atMentionFilter={atMentionFilter}
+                setAtMentionFilter={setAtMentionFilter}
+                atMentionStartIndex={atMentionStartIndex}
+                setAtMentionStartIndex={setAtMentionStartIndex}
+                atMentionSuggestions={atMentionSuggestions}
+                selectedAtMentionIndex={selectedAtMentionIndex}
+                setSelectedAtMentionIndex={setSelectedAtMentionIndex}
                 inputRef={inputRef}
                 handleInputKeyDown={handleInputKeyDown}
                 handlePaste={handlePaste}

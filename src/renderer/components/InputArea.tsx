@@ -50,6 +50,16 @@ interface InputAreaProps {
   tabCompletionSuggestions?: TabCompletionSuggestion[];
   selectedTabCompletionIndex?: number;
   setSelectedTabCompletionIndex?: (index: number) => void;
+  // @ mention completion props (AI mode only)
+  atMentionOpen?: boolean;
+  setAtMentionOpen?: (open: boolean) => void;
+  atMentionFilter?: string;
+  setAtMentionFilter?: (filter: string) => void;
+  atMentionStartIndex?: number;
+  setAtMentionStartIndex?: (index: number) => void;
+  atMentionSuggestions?: Array<{ value: string; type: 'file' | 'folder'; displayText: string; fullPath: string }>;
+  selectedAtMentionIndex?: number;
+  setSelectedAtMentionIndex?: (index: number) => void;
   // ThinkingStatusPill props
   sessions?: Session[];
   namedSessions?: Record<string, string>;
@@ -77,6 +87,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     tabCompletionOpen = false, setTabCompletionOpen,
     tabCompletionSuggestions = [], selectedTabCompletionIndex = 0,
     setSelectedTabCompletionIndex,
+    atMentionOpen = false, setAtMentionOpen,
+    atMentionFilter = '', setAtMentionFilter,
+    atMentionStartIndex = -1, setAtMentionStartIndex,
+    atMentionSuggestions = [], selectedAtMentionIndex = 0,
+    setSelectedAtMentionIndex,
     sessions = [], namedSessions, onSessionClick, autoRunState, onStopAutoRun,
     onOpenQueueBrowser,
     tabReadOnlyMode = false, onToggleTabReadOnlyMode
@@ -134,6 +149,9 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
   // Refs for tab completion items to enable scroll-into-view
   const tabCompletionItemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  // Refs for @ mention items to enable scroll-into-view
+  const atMentionItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
   // Memoize command history filtering to avoid expensive Set operations on every keystroke
   const commandHistoryFilterLower = commandHistoryFilter.toLowerCase();
   const filteredCommandHistory = useMemo(() => {
@@ -163,6 +181,16 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
       });
     }
   }, [selectedTabCompletionIndex, tabCompletionOpen]);
+
+  // Scroll selected @ mention item into view when index changes
+  useEffect(() => {
+    if (atMentionOpen && atMentionItemRefs.current[selectedAtMentionIndex]) {
+      atMentionItemRefs.current[selectedAtMentionIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [selectedAtMentionIndex, atMentionOpen]);
 
   return (
     <div className="relative p-4 border-t" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
@@ -378,6 +406,54 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
         </div>
       )}
 
+      {/* @ Mention Dropdown (AI mode file picker) */}
+      {atMentionOpen && !isTerminalMode && atMentionSuggestions.length > 0 && (
+        <div
+          className="absolute bottom-full left-4 right-4 mb-1 rounded-lg border shadow-lg overflow-hidden z-50"
+          style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+        >
+          <div className="px-3 py-2 border-b text-xs font-medium" style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}>
+            Files {atMentionFilter && <span className="opacity-50">matching "{atMentionFilter}"</span>}
+          </div>
+          <div className="overflow-y-auto max-h-56 scrollbar-thin">
+            {atMentionSuggestions.map((suggestion, idx) => {
+              const isSelected = idx === selectedAtMentionIndex;
+              const IconComponent = suggestion.type === 'folder' ? Folder : File;
+
+              return (
+                <div
+                  key={`${suggestion.type}-${suggestion.value}`}
+                  ref={el => atMentionItemRefs.current[idx] = el}
+                  className={`px-3 py-2 cursor-pointer text-sm font-mono flex items-center gap-2 ${isSelected ? 'ring-1 ring-inset' : ''}`}
+                  style={{
+                    backgroundColor: isSelected ? theme.colors.bgActivity : 'transparent',
+                    ringColor: theme.colors.accent,
+                    color: theme.colors.textMain
+                  }}
+                  onClick={() => {
+                    // Replace @filter with @path
+                    const beforeAt = inputValue.substring(0, atMentionStartIndex);
+                    const afterFilter = inputValue.substring(atMentionStartIndex + 1 + atMentionFilter.length);
+                    setInputValue(beforeAt + '@' + suggestion.value + ' ' + afterFilter);
+                    setAtMentionOpen?.(false);
+                    setAtMentionFilter?.('');
+                    setAtMentionStartIndex?.(-1);
+                    inputRef.current?.focus();
+                  }}
+                  onMouseEnter={() => setSelectedAtMentionIndex?.(idx)}
+                >
+                  <IconComponent className="w-3.5 h-3.5 flex-shrink-0" style={{
+                    color: suggestion.type === 'folder' ? theme.colors.warning : theme.colors.textDim
+                  }} />
+                  <span className="flex-1 truncate">{suggestion.fullPath}</span>
+                  <span className="text-[10px] opacity-40 flex-shrink-0">{suggestion.type}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <div
           className="flex-1 relative border rounded-lg bg-opacity-50 flex flex-col"
@@ -406,6 +482,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
               onBlur={onInputBlur}
               onChange={e => {
                 const value = e.target.value;
+                const cursorPosition = e.target.selectionStart || 0;
                 setInputValue(value);
 
                 // Show slash command autocomplete when typing /
@@ -415,6 +492,41 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                   setSelectedSlashCommandIndex(0);
                 } else {
                   setSlashCommandOpen(false);
+                }
+
+                // @ mention file completion (AI mode only)
+                if (!isTerminalMode && setAtMentionOpen && setAtMentionFilter && setAtMentionStartIndex && setSelectedAtMentionIndex) {
+                  // Find the last @ before cursor that's not part of a completed mention
+                  let atIndex = -1;
+                  for (let i = cursorPosition - 1; i >= 0; i--) {
+                    if (value[i] === '@') {
+                      // Check if this @ is at start of input or after a space/newline
+                      if (i === 0 || /\s/.test(value[i - 1])) {
+                        atIndex = i;
+                        break;
+                      }
+                    }
+                    // Stop if we hit a space (means we're past any potential @ trigger)
+                    if (value[i] === ' ' || value[i] === '\n') {
+                      break;
+                    }
+                  }
+
+                  if (atIndex >= 0) {
+                    // Extract filter text after @
+                    const filterText = value.substring(atIndex + 1, cursorPosition);
+                    // Only show dropdown if filter doesn't contain spaces (incomplete mention)
+                    if (!filterText.includes(' ')) {
+                      setAtMentionOpen(true);
+                      setAtMentionFilter(filterText);
+                      setAtMentionStartIndex(atIndex);
+                      setSelectedAtMentionIndex(0);
+                    } else {
+                      setAtMentionOpen(false);
+                    }
+                  } else {
+                    setAtMentionOpen(false);
+                  }
                 }
 
                 // Auto-grow logic - limit to 5 lines (~112px with text-sm)

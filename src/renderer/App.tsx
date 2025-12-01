@@ -28,6 +28,7 @@ import { CONDUCTOR_BADGES } from './constants/conductorBadges';
 import { useBatchProcessor } from './hooks/useBatchProcessor';
 import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory } from './hooks';
 import { useTabCompletion, TabCompletionSuggestion } from './hooks/useTabCompletion';
+import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -1361,6 +1362,9 @@ export default function MaestroConsole() {
   // Tab completion hook for terminal mode
   const { getSuggestions: getTabCompletionSuggestions } = useTabCompletion(activeSession);
 
+  // @ mention completion hook for AI mode
+  const { getSuggestions: getAtMentionSuggestions } = useAtMentionCompletion(activeSession);
+
   // Broadcast active session change to web clients
   useEffect(() => {
     if (activeSessionId && isLiveMode) {
@@ -1663,10 +1667,26 @@ export default function MaestroConsole() {
   // Track previous active tab to detect tab switches
   const prevActiveTabIdRef = useRef<string | undefined>(activeTab?.id);
 
+  // Track previous active session to detect session switches (for terminal draft persistence)
+  const prevActiveSessionIdRef = useRef<string | undefined>(activeSession?.id);
+
   // Sync local AI input with tab's persisted value when switching tabs
   // Also clear the hasUnread indicator when a tab becomes active
   useEffect(() => {
     if (activeTab && activeTab.id !== prevActiveTabIdRef.current) {
+      const prevTabId = prevActiveTabIdRef.current;
+
+      // Save the current AI input to the PREVIOUS tab before loading new tab's input
+      // This ensures we don't lose draft input when clicking directly on another tab
+      if (prevTabId && aiInputValueLocal) {
+        setSessions(prev => prev.map(s => ({
+          ...s,
+          aiTabs: s.aiTabs.map(tab =>
+            tab.id === prevTabId ? { ...tab, inputValue: aiInputValueLocal } : tab
+          )
+        })));
+      }
+
       // Tab changed - load the new tab's persisted input value
       setAiInputValueLocal(activeTab.inputValue ?? '');
       prevActiveTabIdRef.current = activeTab.id;
@@ -1710,6 +1730,37 @@ export default function MaestroConsole() {
       };
     }));
   }, [activeSession]);
+
+  // Function to persist terminal input to session state (called on blur/session switch)
+  const syncTerminalInputToSession = useCallback((value: string, sessionId?: string) => {
+    const targetSessionId = sessionId || activeSession?.id;
+    if (!targetSessionId) return;
+    setSessions(prev => prev.map(s =>
+      s.id === targetSessionId ? { ...s, terminalDraftInput: value } : s
+    ));
+  }, [activeSession?.id]);
+
+  // Sync terminal input when switching sessions
+  // Save current terminal input to old session, load from new session
+  useEffect(() => {
+    if (activeSession && activeSession.id !== prevActiveSessionIdRef.current) {
+      const prevSessionId = prevActiveSessionIdRef.current;
+
+      // Save terminal input to the previous session (if there was one and we have input)
+      if (prevSessionId && terminalInputValue) {
+        setSessions(prev => prev.map(s =>
+          s.id === prevSessionId ? { ...s, terminalDraftInput: terminalInputValue } : s
+        ));
+      }
+
+      // Load terminal input from the new session
+      setTerminalInputValue(activeSession.terminalDraftInput ?? '');
+
+      // Update ref to current session
+      prevActiveSessionIdRef.current = activeSession.id;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id]);
 
   // Use local state for responsive typing - no session state update on every keystroke
   const inputValue = isAiMode ? aiInputValueLocal : terminalInputValue;
@@ -1798,6 +1849,14 @@ export default function MaestroConsole() {
     }
     return getTabCompletionSuggestions(inputValue);
   }, [tabCompletionOpen, activeSession, inputValue, getTabCompletionSuggestions]);
+
+  // @ mention suggestions for AI mode
+  const atMentionSuggestions = useMemo(() => {
+    if (!atMentionOpen || !activeSession || activeSession.inputMode !== 'ai') {
+      return [];
+    }
+    return getAtMentionSuggestions(atMentionFilter);
+  }, [atMentionOpen, activeSession, atMentionFilter, getAtMentionSuggestions]);
 
   // Sync file tree selection to match tab completion suggestion
   // This highlights the corresponding file/folder in the right panel when navigating tab completion
@@ -2852,8 +2911,12 @@ export default function MaestroConsole() {
         return;
       }
 
-      // Tab navigation
+      // Tab navigation between panels (disabled when input is focused for tab completion)
       if (e.key === 'Tab') {
+        // Skip global Tab handling when input is focused - let handleInputKeyDown handle it
+        if (document.activeElement === ctx.inputRef.current) {
+          return;
+        }
         e.preventDefault();
         if (ctx.activeFocus === 'sidebar' && !e.shiftKey) {
           // Tab from sidebar goes to main input
@@ -3683,6 +3746,7 @@ export default function MaestroConsole() {
         setInputValue('');
         setSlashCommandOpen(false);
         if (isAiMode) syncAiInputToSession('');
+        else syncTerminalInputToSession('');
         if (inputRef.current) inputRef.current.style.height = 'auto';
         return;
       }
@@ -3717,6 +3781,7 @@ export default function MaestroConsole() {
         setInputValue('');
         setSlashCommandOpen(false);
         if (isAiMode) syncAiInputToSession('');
+        else syncTerminalInputToSession('');
         if (inputRef.current) inputRef.current.style.height = 'auto';
         return;
       }
@@ -4035,6 +4100,8 @@ export default function MaestroConsole() {
     // Sync empty value to session state (prevents stale input restoration on blur)
     if (isAiMode) {
       syncAiInputToSession('');
+    } else {
+      syncTerminalInputToSession('');
     }
 
     // Reset height
@@ -4802,6 +4869,38 @@ export default function MaestroConsole() {
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setTabCompletionOpen(false);
+        return;
+      }
+    }
+
+    // Handle @ mention completion dropdown (AI mode only)
+    if (atMentionOpen && activeSession?.inputMode === 'ai') {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedAtMentionIndex(prev => Math.min(prev + 1, atMentionSuggestions.length - 1));
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedAtMentionIndex(prev => Math.max(prev - 1, 0));
+        return;
+      } else if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        const selected = atMentionSuggestions[selectedAtMentionIndex];
+        if (selected) {
+          // Replace the @filter with the selected file path
+          const beforeAt = inputValue.substring(0, atMentionStartIndex);
+          const afterFilter = inputValue.substring(atMentionStartIndex + 1 + atMentionFilter.length);
+          setInputValue(beforeAt + '@' + selected.value + ' ' + afterFilter);
+        }
+        setAtMentionOpen(false);
+        setAtMentionFilter('');
+        setAtMentionStartIndex(-1);
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setAtMentionOpen(false);
+        setAtMentionFilter('');
+        setAtMentionStartIndex(-1);
         return;
       }
     }
@@ -5833,6 +5932,15 @@ export default function MaestroConsole() {
         tabCompletionSuggestions={tabCompletionSuggestions}
         selectedTabCompletionIndex={selectedTabCompletionIndex}
         setSelectedTabCompletionIndex={setSelectedTabCompletionIndex}
+        atMentionOpen={atMentionOpen}
+        setAtMentionOpen={setAtMentionOpen}
+        atMentionFilter={atMentionFilter}
+        setAtMentionFilter={setAtMentionFilter}
+        atMentionStartIndex={atMentionStartIndex}
+        setAtMentionStartIndex={setAtMentionStartIndex}
+        atMentionSuggestions={atMentionSuggestions}
+        selectedAtMentionIndex={selectedAtMentionIndex}
+        setSelectedAtMentionIndex={setSelectedAtMentionIndex}
         setPreviewFile={setPreviewFile}
         setMarkdownRawMode={setMarkdownRawMode}
         setAboutModalOpen={setAboutModalOpen}
@@ -6138,9 +6246,11 @@ export default function MaestroConsole() {
           }
         }}
         onInputBlur={() => {
-          // Persist AI input to session state on blur (only in AI mode)
+          // Persist input to session state on blur
           if (isAiMode) {
             syncAiInputToSession(aiInputValueLocal);
+          } else {
+            syncTerminalInputToSession(terminalInputValue);
           }
         }}
       />
