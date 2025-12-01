@@ -633,7 +633,7 @@ export default function MaestroConsole() {
         const isTargetTabActive = targetTab.id === s.activeTabId;
         const updatedAiTabs = s.aiTabs.map(tab =>
           tab.id === targetTab.id
-            ? { ...tab, logs: updatedTabLogs, hasUnread: isTargetTabActive ? tab.hasUnread : true }
+            ? { ...tab, logs: updatedTabLogs, hasUnread: !isTargetTabActive }
             : tab
         );
 
