@@ -52,6 +52,8 @@ interface MainPanelProps {
   gitDiffPreview: string | null;
   fileTreeFilterOpen: boolean;
   logLevel?: string; // Current log level setting for LogViewer
+  logViewerSelectedLevels: string[]; // Persisted filter selections for LogViewer
+  setLogViewerSelectedLevels: (levels: string[]) => void;
 
   // Setters
   setGitDiffPreview: (preview: string | null) => void;
@@ -299,7 +301,13 @@ export function MainPanel(props: MainPanelProps) {
   if (logViewerOpen) {
     return (
       <div className="flex-1 flex flex-col min-w-0 relative" style={{ backgroundColor: theme.colors.bgMain }}>
-        <LogViewer theme={theme} onClose={() => setLogViewerOpen(false)} logLevel={logLevel} />
+        <LogViewer
+          theme={theme}
+          onClose={() => setLogViewerOpen(false)}
+          logLevel={logLevel}
+          savedSelectedLevels={props.logViewerSelectedLevels}
+          onSelectedLevelsChange={props.setLogViewerSelectedLevels}
+        />
       </div>
     );
   }

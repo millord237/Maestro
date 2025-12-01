@@ -248,6 +248,12 @@ export default function MaestroConsole() {
   // Flash notification state (for inline notifications like "Commands disabled while agent is working")
   const [flashNotification, setFlashNotification] = useState<string | null>(null);
 
+  // @ mention file completion state (AI mode only, desktop only)
+  const [atMentionOpen, setAtMentionOpen] = useState(false);
+  const [atMentionFilter, setAtMentionFilter] = useState('');
+  const [atMentionStartIndex, setAtMentionStartIndex] = useState(-1);  // Position of @ in input
+  const [selectedAtMentionIndex, setSelectedAtMentionIndex] = useState(0);
+
   // Note: Images are now stored per-tab in AITab.stagedImages
   // See stagedImages/setStagedImages computed from active tab below
 
@@ -5003,19 +5009,23 @@ export default function MaestroConsole() {
         setCommandHistorySelectedIndex(0);
       }
     } else if (e.key === 'Tab') {
-      // Tab completion only in terminal mode when not showing slash commands
-      if (activeSession?.inputMode === 'terminal' && !slashCommandOpen && inputValue.trim()) {
+      // Tab completion in terminal mode when not showing slash commands
+      // Always prevent default Tab behavior in terminal mode to avoid focus change
+      if (activeSession?.inputMode === 'terminal' && !slashCommandOpen) {
         e.preventDefault();
-        // Get suggestions and show dropdown if there are any
-        const suggestions = getTabCompletionSuggestions(inputValue);
-        if (suggestions.length > 0) {
-          // If only one suggestion, auto-complete it
-          if (suggestions.length === 1) {
-            setInputValue(suggestions[0].value);
-          } else {
-            // Show dropdown for multiple suggestions
-            setSelectedTabCompletionIndex(0);
-            setTabCompletionOpen(true);
+
+        // Only show suggestions if there's input
+        if (inputValue.trim()) {
+          const suggestions = getTabCompletionSuggestions(inputValue);
+          if (suggestions.length > 0) {
+            // If only one suggestion, auto-complete it
+            if (suggestions.length === 1) {
+              setInputValue(suggestions[0].value);
+            } else {
+              // Show dropdown for multiple suggestions
+              setSelectedTabCompletionIndex(0);
+              setTabCompletionOpen(true);
+            }
           }
         }
       }
@@ -5364,11 +5374,41 @@ export default function MaestroConsole() {
       {/* --- DRAGGABLE TITLE BAR (hidden in mobile landscape) --- */}
       {!isMobileLandscape && (
       <div
-        className="fixed top-0 left-0 right-0 h-10"
+        className="fixed top-0 left-0 right-0 h-10 flex items-center justify-center"
         style={{
           WebkitAppRegion: 'drag',
         } as React.CSSProperties}
-      />
+      >
+        {activeSession && (
+          <span
+            className="text-xs select-none opacity-50"
+            style={{ color: theme.colors.textDim }}
+          >
+            {(() => {
+              const parts: string[] = [];
+              // Group name (if grouped)
+              const group = groups.find(g => g.id === activeSession.groupId);
+              if (group) {
+                parts.push(`${group.emoji} ${group.name}`);
+              }
+              // Agent name mapping
+              const agentNames: Record<string, string> = {
+                'claude-code': 'Claude Code',
+                'claude': 'Claude',
+                'aider': 'Aider',
+                'opencode': 'OpenCode',
+                'terminal': 'Terminal',
+              };
+              parts.push(agentNames[activeSession.toolType] || activeSession.toolType);
+              // Session name or UUID octet
+              const sessionLabel = activeSession.name ||
+                (activeSession.claudeSessionId ? activeSession.claudeSessionId.split('-')[0].toUpperCase() : 'New');
+              parts.push(sessionLabel);
+              return parts.join(' | ');
+            })()}
+          </span>
+        )}
+      </div>
       )}
 
       {/* --- MODALS --- */}

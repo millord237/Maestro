@@ -445,9 +445,9 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             )}
             {!hasChildren && <div className="w-4 h-4 flex-shrink-0" />}
             <span className="mr-2">{node.emoji}</span>
-            <span className="font-medium">{node.label}</span>
+            <span className="font-medium flex-1 truncate">{node.label}</span>
             {hasChildren && (
-              <span className="text-xs ml-auto" style={{ color: theme.colors.textDim }}>
+              <span className="text-xs flex-shrink-0" style={{ color: theme.colors.textDim }}>
                 {node.children!.length} {node.children!.length === 1 ? 'session' : 'sessions'}
               </span>
             )}
@@ -488,8 +488,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             )}
             {!hasChildren && <div className="w-4 h-4 flex-shrink-0" />}
             <Activity className="w-4 h-4 flex-shrink-0" style={{ color: activeCount > 0 ? theme.colors.success : theme.colors.textDim }} />
-            <span>{node.label}</span>
-            <span className="text-xs ml-auto flex items-center gap-2" style={{ color: theme.colors.textDim }}>
+            <span className="flex-1 truncate">{node.label}</span>
+            <span className="text-xs flex items-center gap-2 flex-shrink-0" style={{ color: theme.colors.textDim }}>
               {activeCount > 0 && (
                 <span
                   className="px-1.5 py-0.5 rounded text-xs"
@@ -536,8 +536,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ backgroundColor: statusColor }}
           />
-          <span className="text-sm">{node.label}</span>
-          <span className="text-xs ml-auto font-mono" style={{ color: theme.colors.textDim }}>
+          <span className="text-sm flex-1 truncate">{node.label}</span>
+          <span className="text-xs font-mono flex-shrink-0" style={{ color: theme.colors.textDim }}>
             {node.pid ? `PID: ${node.pid}` : 'No PID'}
           </span>
           <span

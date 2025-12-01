@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ExternalLink, Trophy, Clock, Star, Share2, Copy, Download, Check } from 'lucide-react';
 import type { Theme, ThemeMode } from '../types';
 import type { ConductorBadge } from '../constants/conductorBadges';
@@ -6,6 +6,20 @@ import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { AnimatedMaestro } from './MaestroSilhouette';
 import { formatCumulativeTime, formatTimeRemaining, getNextBadge } from '../constants/conductorBadges';
+
+// Confetti particle type
+interface ConfettiParticle {
+  id: number;
+  x: number;
+  y: number;
+  rotation: number;
+  color: string;
+  size: number;
+  velocityX: number;
+  velocityY: number;
+  rotationSpeed: number;
+  delay: number;
+}
 
 interface StandingOvationOverlayProps {
   theme: Theme;
@@ -73,6 +87,34 @@ export function StandingOvationOverlay({
   // Accent colors
   const goldColor = '#FFD700';
   const purpleAccent = theme.colors.accent;
+
+  // Generate confetti particles that shoot from center
+  const confettiParticles = useMemo<ConfettiParticle[]>(() => {
+    const particles: ConfettiParticle[] = [];
+    const colors = [goldColor, purpleAccent, '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+    const numParticles = 80;
+
+    for (let i = 0; i < numParticles; i++) {
+      // Random angle for burst direction (full 360 degrees)
+      const angle = (Math.random() * Math.PI * 2);
+      // Random speed for variety
+      const speed = 200 + Math.random() * 400;
+
+      particles.push({
+        id: i,
+        x: 50, // Start at center (%)
+        y: 50, // Start at center (%)
+        rotation: Math.random() * 360,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: 6 + Math.random() * 10,
+        velocityX: Math.cos(angle) * speed,
+        velocityY: Math.sin(angle) * speed,
+        rotationSpeed: (Math.random() - 0.5) * 720,
+        delay: Math.random() * 0.3, // Stagger the burst
+      });
+    }
+    return particles;
+  }, [purpleAccent]);
 
   // Generate shareable achievement card as canvas
   const generateShareImage = useCallback(async (): Promise<HTMLCanvasElement> => {
@@ -246,40 +288,57 @@ export function StandingOvationOverlay({
       tabIndex={-1}
       onClick={onClose}
       style={{
-        background: isDark
-          ? 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.3) 0%, rgba(0, 0, 0, 0.95) 70%)'
-          : 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.2) 0%, rgba(255, 255, 255, 0.98) 70%)',
+        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
       }}
     >
-      {/* Sparkle effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+      {/* Confetti burst effect - behind the modal (z-index: 0) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
+        {confettiParticles.map((particle) => (
           <div
-            key={i}
-            className="absolute animate-pulse"
+            key={particle.id}
+            className="absolute"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              width: `${4 + Math.random() * 8}px`,
-              height: `${4 + Math.random() * 8}px`,
-              borderRadius: '50%',
-              background: i % 3 === 0 ? goldColor : purpleAccent,
-              opacity: 0.3 + Math.random() * 0.4,
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${1 + Math.random() * 2}s`,
-            }}
+              left: `${particle.x}%`,
+              top: `${particle.y}%`,
+              width: `${particle.size}px`,
+              height: `${particle.size * 0.6}px`,
+              backgroundColor: particle.color,
+              borderRadius: '2px',
+              transform: `rotate(${particle.rotation}deg)`,
+              opacity: 0,
+              animation: `confetti-burst 3s ease-out ${particle.delay}s forwards`,
+              // CSS custom properties for the animation
+              '--vx': `${particle.velocityX}px`,
+              '--vy': `${particle.velocityY}px`,
+              '--rot': `${particle.rotationSpeed}deg`,
+            } as React.CSSProperties}
           />
         ))}
       </div>
 
-      {/* Main content card */}
+      {/* Keyframe animation style */}
+      <style>{`
+        @keyframes confetti-burst {
+          0% {
+            opacity: 1;
+            transform: translate(0, 0) rotate(0deg);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(var(--vx), calc(var(--vy) + 200px)) rotate(var(--rot));
+          }
+        }
+      `}</style>
+
+      {/* Main content card - z-index: 1 to be above confetti */}
       <div
         className="relative max-w-lg w-full mx-4 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: theme.colors.bgSidebar,
           border: `2px solid ${goldColor}`,
-          boxShadow: `0 0 60px ${purpleAccent}40, 0 0 100px ${goldColor}20`,
+          boxShadow: `0 0 40px rgba(0, 0, 0, 0.5)`,
+          zIndex: 1,
         }}
       >
         {/* Header with glow */}

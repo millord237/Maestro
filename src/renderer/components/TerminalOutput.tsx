@@ -518,9 +518,10 @@ const LogItemComponent = memo(({
                     .prose h5 { color: ${theme.colors.textMain}; font-size: 0.9em; font-weight: bold; margin: 0.3em 0 0.15em 0; opacity: 0.8; line-height: 1.3; }
                     .prose h6 { color: ${theme.colors.textDim}; font-size: 0.85em; font-weight: bold; margin: 0.3em 0 0.15em 0; line-height: 1.3; }
                     .prose p { color: ${theme.colors.textMain}; margin: 0.25em 0; line-height: 1.5; }
-                    .prose ul, .prose ol { color: ${theme.colors.textMain}; margin: 0.1em 0; padding-left: 1.5em; }
-                    .prose li { margin: 0; padding: 0; line-height: 1.35; }
-                    .prose li > p { margin: 0; }
+                    .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.75em 0; padding-left: 2em; }
+                    .prose ul ul, .prose ul ol, .prose ol ul, .prose ol ol { margin: 0; padding-left: 1.5em; }
+                    .prose li { margin: 0; padding: 0; line-height: 1.5; }
+                    .prose li > p { margin: 0; display: inline; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                     .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
                     .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }
@@ -665,9 +666,10 @@ const LogItemComponent = memo(({
                     .prose h5 { color: ${theme.colors.textMain}; font-size: 0.9em; font-weight: bold; margin: 0.3em 0 0.15em 0; opacity: 0.8; line-height: 1.3; }
                     .prose h6 { color: ${theme.colors.textDim}; font-size: 0.85em; font-weight: bold; margin: 0.3em 0 0.15em 0; line-height: 1.3; }
                     .prose p { color: ${theme.colors.textMain}; margin: 0.25em 0; line-height: 1.5; }
-                    .prose ul, .prose ol { color: ${theme.colors.textMain}; margin: 0.1em 0; padding-left: 1.5em; }
-                    .prose li { margin: 0; padding: 0; line-height: 1.35; }
-                    .prose li > p { margin: 0; }
+                    .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.75em 0; padding-left: 2em; }
+                    .prose ul ul, .prose ul ol, .prose ol ul, .prose ol ol { margin: 0; padding-left: 1.5em; }
+                    .prose li { margin: 0; padding: 0; line-height: 1.5; }
+                    .prose li > p { margin: 0; display: inline; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                     .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
                     .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }
@@ -795,9 +797,10 @@ const LogItemComponent = memo(({
                   .prose h5 { color: ${theme.colors.textMain}; font-size: 0.9em; font-weight: bold; margin: 0.3em 0 0.15em 0; opacity: 0.8; line-height: 1.3; }
                   .prose h6 { color: ${theme.colors.textDim}; font-size: 0.85em; font-weight: bold; margin: 0.3em 0 0.15em 0; line-height: 1.3; }
                   .prose p { color: ${theme.colors.textMain}; margin: 0.25em 0; line-height: 1.5; }
-                  .prose ul, .prose ol { color: ${theme.colors.textMain}; margin: 0.1em 0; padding-left: 1.5em; }
-                  .prose li { margin: 0; padding: 0; line-height: 1.35; }
-                  .prose li > p { margin: 0; }
+                  .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.75em 0; padding-left: 2em; }
+                  .prose ul ul, .prose ul ol, .prose ol ul, .prose ol ol { margin: 0; padding-left: 1.5em; }
+                  .prose li { margin: 0; padding: 0; line-height: 1.5; }
+                  .prose li > p { margin: 0; display: inline; }
                   .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                   .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
                   .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }

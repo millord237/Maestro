@@ -23,9 +23,19 @@ export interface AgentConfig {
   path?: string;
   requiresPty?: boolean; // Whether this agent needs a pseudo-terminal
   configOptions?: AgentConfigOption[]; // Agent-specific configuration
+  hidden?: boolean; // If true, agent is hidden from UI (internal use only)
 }
 
 const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path'>[] = [
+  {
+    id: 'terminal',
+    name: 'Terminal',
+    binaryName: 'bash',
+    command: 'bash',
+    args: [],
+    requiresPty: true,
+    hidden: true, // Internal agent, not shown in UI
+  },
   {
     id: 'claude-code',
     name: 'Claude Code',

@@ -491,6 +491,7 @@ export function SessionList(props: SessionListProps) {
     : sessions;
 
   // Temporarily expand groups when filtering to show matching sessions
+  // Note: Only depend on sessionFilter and sessions (not filteredSessions which changes reference each render)
   useEffect(() => {
     if (sessionFilter) {
       // Save current group states before filtering
@@ -502,7 +503,7 @@ export function SessionList(props: SessionListProps) {
 
       // Find groups that contain matching sessions
       const groupsWithMatches = new Set<string>();
-      filteredSessions.forEach(session => {
+      sessions.filter(s => s.name.toLowerCase().includes(sessionFilter.toLowerCase())).forEach(session => {
         if (session.groupId) {
           groupsWithMatches.add(session.groupId);
         }
@@ -523,7 +524,8 @@ export function SessionList(props: SessionListProps) {
         setPreFilterGroupStates(new Map());
       }
     }
-  }, [sessionFilter, filteredSessions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionFilter]);
 
   // Get the jump number (1-9, 0=10th) for a session based on its position in visibleSessions
   const getSessionJumpNumber = (sessionId: string): string | null => {
