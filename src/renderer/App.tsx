@@ -623,8 +623,12 @@ export default function MaestroConsole() {
         }
 
         // Update the target tab's logs within the aiTabs array
+        // Also mark as unread if this is not the active tab
+        const isTargetTabActive = targetTab.id === s.activeTabId;
         const updatedAiTabs = s.aiTabs.map(tab =>
-          tab.id === targetTab.id ? { ...tab, logs: updatedTabLogs } : tab
+          tab.id === targetTab.id
+            ? { ...tab, logs: updatedTabLogs, hasUnread: isTargetTabActive ? tab.hasUnread : true }
+            : tab
         );
 
         return {

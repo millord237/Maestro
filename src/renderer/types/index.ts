@@ -162,6 +162,7 @@ export interface AITab {
   awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
   thinkingStartTime?: number;      // Timestamp when tab started thinking (for elapsed time display)
   scrollTop?: number;              // Saved scroll position for this tab's output view
+  hasUnread?: boolean;             // True when tab has new messages while not active
 }
 
 // Closed tab entry for undo functionality (Cmd+Shift+T)

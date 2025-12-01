@@ -323,13 +323,22 @@ export function setActiveTab(session: Session, tabId: string): SetActiveTabResul
   }
 
   // Update the session with the new active tab
+  // Also clear the hasUnread flag on the tab being activated
+  const updatedTabs = session.aiTabs.map(tab =>
+    tab.id === tabId ? { ...tab, hasUnread: false } : tab
+  );
+
   const updatedSession: Session = {
     ...session,
-    activeTabId: tabId
+    activeTabId: tabId,
+    aiTabs: updatedTabs
   };
 
+  // Return the updated target tab (with hasUnread cleared)
+  const updatedTargetTab = updatedTabs.find(tab => tab.id === tabId)!;
+
   return {
-    tab: targetTab,
+    tab: updatedTargetTab,
     session: updatedSession
   };
 }

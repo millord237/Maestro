@@ -214,6 +214,15 @@ function Tab({
         />
       )}
 
+      {/* Unread indicator - solid dot for tabs with unread messages (only when not active and not busy) */}
+      {!isActive && tab.state !== 'busy' && tab.hasUnread && (
+        <div
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: theme.colors.accent }}
+          title="New messages"
+        />
+      )}
+
       {/* Star indicator for starred sessions */}
       {tab.starred && (
         <Star
