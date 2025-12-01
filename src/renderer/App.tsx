@@ -68,7 +68,7 @@ export default function MaestroConsole() {
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
   // --- TOAST NOTIFICATIONS ---
-  const { addToast, setDefaultDuration: setToastDefaultDuration, setAudioFeedback } = useToast();
+  const { addToast, setDefaultDuration: setToastDefaultDuration, setAudioFeedback, setOsNotifications } = useToast();
 
   // --- MOBILE LANDSCAPE MODE (reading-only view) ---
   const isMobileLandscape = useMobileLandscape();
@@ -262,6 +262,11 @@ export default function MaestroConsole() {
   useEffect(() => {
     setAudioFeedback(audioFeedbackEnabled, audioFeedbackCommand);
   }, [audioFeedbackEnabled, audioFeedbackCommand, setAudioFeedback]);
+
+  // Sync OS notifications setting to ToastContext
+  useEffect(() => {
+    setOsNotifications(osNotificationsEnabled);
+  }, [osNotificationsEnabled, setOsNotifications]);
 
   // Close file preview when switching sessions
   useEffect(() => {
