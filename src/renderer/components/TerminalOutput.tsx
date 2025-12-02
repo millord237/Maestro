@@ -603,7 +603,7 @@ const LogItemComponent = memo(({
                     .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                     .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
                     .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.75em 0; }
-                    .prose table { border-collapse: collapse; width: 100%; margin: 0; }
+                    .prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
                     .prose th, .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
                     .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
                     .prose strong { font-weight: bold; }
@@ -747,7 +747,7 @@ const LogItemComponent = memo(({
                     .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                     .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
                     .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.75em 0; }
-                    .prose table { border-collapse: collapse; width: 100%; margin: 0; }
+                    .prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
                     .prose th, .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
                     .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
                     .prose strong { font-weight: bold; }
@@ -873,7 +873,7 @@ const LogItemComponent = memo(({
                   .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                   .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
                   .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.75em 0; }
-                  .prose table { border-collapse: collapse; width: 100%; margin: 0; }
+                  .prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
                   .prose th, .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
                   .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
                   .prose strong { font-weight: bold; }
