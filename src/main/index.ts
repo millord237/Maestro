@@ -1474,14 +1474,27 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('tunnel:start', async () => {
-    // Get web server port
+    // Get web server URL (includes the security token)
     const serverUrl = webServer?.getSecureUrl();
     if (!serverUrl) {
       return { success: false, error: 'Web server not running' };
     }
 
-    const port = new URL(serverUrl).port;
-    return await tunnelManager.start(parseInt(port, 10));
+    // Parse the URL to get port and token path
+    const parsedUrl = new URL(serverUrl);
+    const port = parseInt(parsedUrl.port, 10);
+    const tokenPath = parsedUrl.pathname; // e.g., "/7d7f7162-614c-43e2-bb8a-8a8123c2f56a"
+
+    const result = await tunnelManager.start(port);
+
+    if (result.success && result.url) {
+      // Append the token path to the tunnel URL for security
+      // e.g., "https://xyz.trycloudflare.com" + "/TOKEN" = "https://xyz.trycloudflare.com/TOKEN"
+      const fullTunnelUrl = result.url + tokenPath;
+      return { success: true, url: fullTunnelUrl };
+    }
+
+    return result;
   });
 
   ipcMain.handle('tunnel:stop', async () => {
