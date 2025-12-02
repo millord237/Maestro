@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="138" height="20" role="img" aria-label="Made with Maestro">
+<svg xmlns="http://www.w3.org/2000/svg" width="142" height="20" role="img" aria-label="Made with Maestro">
   <!-- Left section (icon) - darker purple -->
   <rect width="20" height="20" rx="3" fill="#5B3D8A"/>
 
@@ -9,9 +9,9 @@
   </g>
 
   <!-- Right section (text) - lighter purple -->
-  <rect x="18" width="120" height="20" rx="3" fill="#8B5CF6"/>
+  <rect x="18" width="124" height="20" rx="3" fill="#8B5CF6"/>
   <rect x="18" width="5" height="20" fill="#5B3D8A"/>
 
-  <!-- Text -->
-  <text x="79" y="14" font-family="DejaVu Sans Mono,Consolas,Monaco,Liberation Mono,Lucida Console,monospace" font-size="11" fill="#fff" text-anchor="middle">Made with Maestro</text>
+  <!-- Text with left padding -->
+  <text x="83" y="14" font-family="DejaVu Sans Mono,Consolas,Monaco,Liberation Mono,Lucida Console,monospace" font-size="11" fill="#fff" text-anchor="middle">Made with Maestro</text>
 </svg>
