@@ -152,6 +152,7 @@ export default function MaestroConsole() {
   const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>('files');
   const [activeFocus, setActiveFocus] = useState<FocusArea>('main');
   const [bookmarksCollapsed, setBookmarksCollapsed] = useState(false);
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
   // File Explorer State
   const [previewFile, setPreviewFile] = useState<{name: string; content: string; path: string} | null>(null);
@@ -3126,6 +3127,10 @@ export default function MaestroConsole() {
             };
           }));
         }
+        if (ctx.isTabShortcut(e, 'filterUnreadTabs')) {
+          e.preventDefault();
+          ctx.setShowUnreadOnly(prev => !prev);
+        }
         if (ctx.isTabShortcut(e, 'nextTab')) {
           e.preventDefault();
           const result = ctx.navigateToNextTab(ctx.activeSession);
@@ -3589,7 +3594,7 @@ export default function MaestroConsole() {
     setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
-    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward
+    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, setShowUnreadOnly
   };
 
   const toggleGroup = (groupId: string) => {
@@ -5791,6 +5796,15 @@ export default function MaestroConsole() {
           sessions={sessions}
           groups={groups}
           onClose={() => setProcessMonitorOpen(false)}
+          onNavigateToSession={(sessionId, tabId) => {
+            setActiveSessionId(sessionId);
+            if (tabId) {
+              // Switch to the specific tab within the session
+              setSessions(prev => prev.map(s =>
+                s.id === sessionId ? { ...s, activeTabId: tabId } : s
+              ));
+            }
+          }}
         />
       )}
 
@@ -6327,6 +6341,22 @@ export default function MaestroConsole() {
               ...s,
               aiTabs: s.aiTabs.map(tab =>
                 tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+              )
+            };
+          }));
+        }}
+        showUnreadOnly={showUnreadOnly}
+        onToggleUnreadFilter={() => setShowUnreadOnly(prev => !prev)}
+        onToggleTabSaveToHistory={() => {
+          if (!activeSession) return;
+          const activeTab = getActiveTab(activeSession);
+          if (!activeTab) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(tab =>
+                tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
               )
             };
           }));

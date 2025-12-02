@@ -86,8 +86,8 @@ Each session shows a color-coded status indicator:
 | New Agent | `Cmd+N` | `Ctrl+N` |
 | Kill Agent | `Cmd+Shift+Backspace` | `Ctrl+Shift+Backspace` |
 | Move Agent to Group | `Cmd+Shift+M` | `Ctrl+Shift+M` |
-| Previous Agent | `Cmd+Shift+{` | `Ctrl+Shift+{` |
-| Next Agent | `Cmd+Shift+}` | `Ctrl+Shift+}` |
+| Previous Agent | `Cmd+[` | `Ctrl+[` |
+| Next Agent | `Cmd+]` | `Ctrl+]` |
 | Jump to Agent (1-9, 0=10th) | `Opt+Cmd+NUMBER` | `Alt+Ctrl+NUMBER` |
 | Switch AI/Command Terminal | `Cmd+J` | `Ctrl+J` |
 | Show Shortcuts Help | `Cmd+/` | `Ctrl+/` |
@@ -181,14 +181,7 @@ In AI mode, use `@` to reference files in your prompts:
 
 ## Slash Commands
 
-Maestro includes an extensible slash command system with autocomplete:
-
-| Command | Description |
-|---------|-------------|
-| `/clear` | Clear the output history for the current mode |
-| `/jump` | Jump to current working directory in file tree (terminal mode only) |
-
-Type `/` in the input area to open the autocomplete menu, use arrow keys to navigate, and press `Tab` or `Enter` to select.
+Maestro includes an extensible slash command system with autocomplete. Type `/` in the input area to open the autocomplete menu, use arrow keys to navigate, and press `Tab` or `Enter` to select.
 
 ### Custom AI Commands
 

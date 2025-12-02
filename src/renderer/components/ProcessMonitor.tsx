@@ -9,6 +9,7 @@ interface ProcessMonitorProps {
   sessions: Session[];
   groups: Group[];
   onClose: () => void;
+  onNavigateToSession?: (sessionId: string, tabId?: string) => void;
 }
 
 interface ActiveProcess {
@@ -34,10 +35,11 @@ interface ProcessNode {
   toolType?: string;
   cwd?: string;
   claudeSessionId?: string; // UUID octet from the Claude session (for AI processes)
+  tabId?: string; // Tab ID for navigation to specific AI tab
 }
 
 export function ProcessMonitor(props: ProcessMonitorProps) {
-  const { theme, sessions, groups, onClose } = props;
+  const { theme, sessions, groups, onClose, onNavigateToSession } = props;
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeProcesses, setActiveProcesses] = useState<ActiveProcess[]>([]);
@@ -240,8 +242,9 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
 
         // Look up Claude session ID from the tab if this is an AI process
         let claudeSessionId: string | undefined;
+        let tabId: string | undefined;
         if (processType === 'ai') {
-          const tabId = parseTabId(proc.sessionId);
+          tabId = parseTabId(proc.sessionId) || undefined;
           if (tabId && session.aiTabs) {
             const tab = session.aiTabs.find(t => t.id === tabId);
             if (tab?.claudeSessionId) {
@@ -260,7 +263,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
           isAlive: true, // Active processes are always alive
           toolType: proc.toolType,
           cwd: proc.cwd,
-          claudeSessionId
+          claudeSessionId,
+          tabId
         });
       });
 
@@ -557,7 +561,21 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
             style={{ backgroundColor: statusColor }}
           />
           <span className="text-sm flex-1 truncate">{node.label}</span>
-          {node.claudeSessionId && (
+          {node.claudeSessionId && node.sessionId && onNavigateToSession && (
+            <button
+              className="text-xs font-mono flex-shrink-0 hover:underline cursor-pointer"
+              style={{ color: theme.colors.accent }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateToSession(node.sessionId!, node.tabId);
+                onClose();
+              }}
+              title="Click to navigate to this session"
+            >
+              {node.claudeSessionId.substring(0, 8)}...
+            </button>
+          )}
+          {node.claudeSessionId && (!node.sessionId || !onNavigateToSession) && (
             <span className="text-xs font-mono flex-shrink-0" style={{ color: theme.colors.accent }}>
               {node.claudeSessionId.substring(0, 8)}...
             </span>

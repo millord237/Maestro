@@ -136,6 +136,9 @@ interface MainPanelProps {
   onTabStar?: (tabId: string, starred: boolean) => void;
   onUpdateTabByClaudeSessionId?: (claudeSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
   onToggleTabReadOnlyMode?: () => void;
+  onToggleTabSaveToHistory?: () => void;
+  showUnreadOnly?: boolean;
+  onToggleUnreadFilter?: () => void;
   // Scroll position persistence
   onScrollPositionChange?: (scrollTop: number) => void;
   // Input blur handler for persisting AI input state
@@ -178,7 +181,7 @@ export function MainPanel(props: MainPanelProps) {
   const headerRef = useRef<HTMLDivElement>(null);
 
   // Extract tab handlers from props
-  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar } = props;
+  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar, showUnreadOnly, onToggleUnreadFilter } = props;
 
   // Get the active tab for header display
   // The header should show the active tab's data (UUID, name, cost, context), not session-level data
@@ -763,6 +766,8 @@ export function MainPanel(props: MainPanelProps) {
               onTabReorder={onTabReorder}
               onCloseOthers={onCloseOtherTabs}
               onTabStar={onTabStar}
+              showUnreadOnly={showUnreadOnly}
+              onToggleUnreadFilter={onToggleUnreadFilter}
             />
           )}
 
@@ -878,6 +883,8 @@ export function MainPanel(props: MainPanelProps) {
                 onOpenQueueBrowser={onOpenQueueBrowser}
                 tabReadOnlyMode={activeTab?.readOnlyMode ?? false}
                 onToggleTabReadOnlyMode={props.onToggleTabReadOnlyMode}
+                tabSaveToHistory={activeTab?.saveToHistory ?? false}
+                onToggleTabSaveToHistory={props.onToggleTabSaveToHistory}
               />
               )}
             </>

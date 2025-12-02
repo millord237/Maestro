@@ -73,6 +73,9 @@ interface InputAreaProps {
   // Read-only mode toggle (per-tab)
   tabReadOnlyMode?: boolean;
   onToggleTabReadOnlyMode?: () => void;
+  // Save to History toggle (per-tab)
+  tabSaveToHistory?: boolean;
+  onToggleTabSaveToHistory?: () => void;
 }
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
@@ -97,7 +100,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     setSelectedAtMentionIndex,
     sessions = [], namedSessions, onSessionClick, autoRunState, onStopAutoRun,
     onOpenQueueBrowser,
-    tabReadOnlyMode = false, onToggleTabReadOnlyMode
+    tabReadOnlyMode = false, onToggleTabReadOnlyMode,
+    tabSaveToHistory = false, onToggleTabSaveToHistory
   } = props;
 
   // Check if we're in read-only mode (auto mode OR manual toggle - Claude will be in plan mode)
@@ -640,6 +644,24 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Save to History toggle - AI mode only */}
+              {session.inputMode === 'ai' && onToggleTabSaveToHistory && (
+                <button
+                  onClick={onToggleTabSaveToHistory}
+                  className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full cursor-pointer transition-all ${
+                    tabSaveToHistory ? '' : 'opacity-40 hover:opacity-70'
+                  }`}
+                  style={{
+                    backgroundColor: tabSaveToHistory ? `${theme.colors.info}25` : 'transparent',
+                    color: tabSaveToHistory ? theme.colors.info : theme.colors.textDim,
+                    border: tabSaveToHistory ? `1px solid ${theme.colors.info}50` : '1px solid transparent'
+                  }}
+                  title="Save to History (Cmd+S) - Synopsis added after each completion"
+                >
+                  <History className="w-3 h-3" />
+                  <span>History</span>
+                </button>
+              )}
               {/* Read-only mode toggle - AI mode only */}
               {session.inputMode === 'ai' && onToggleTabReadOnlyMode && (
                 <button

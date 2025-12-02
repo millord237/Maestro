@@ -15,6 +15,8 @@ interface TabBarProps {
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
   onCloseOthers?: (tabId: string) => void;
   onTabStar?: (tabId: string, starred: boolean) => void;
+  showUnreadOnly?: boolean;
+  onToggleUnreadFilter?: () => void;
 }
 
 interface TabProps {
@@ -476,7 +478,9 @@ export function TabBar({
   onRequestRename,
   onTabReorder,
   onCloseOthers,
-  onTabStar
+  onTabStar,
+  showUnreadOnly: showUnreadOnlyProp,
+  onToggleUnreadFilter
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<{
     tabId: string;
@@ -486,7 +490,10 @@ export function TabBar({
 
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  // Use prop if provided (controlled), otherwise use local state (uncontrolled)
+  const [showUnreadOnlyLocal, setShowUnreadOnlyLocal] = useState(false);
+  const showUnreadOnly = showUnreadOnlyProp ?? showUnreadOnlyLocal;
+  const toggleUnreadFilter = onToggleUnreadFilter ?? (() => setShowUnreadOnlyLocal(prev => !prev));
 
   const tabBarRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -603,7 +610,7 @@ export function TabBar({
         style={{ backgroundColor: theme.colors.bgSidebar }}
       >
         <button
-          onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+          onClick={toggleUnreadFilter}
           className="relative flex items-center justify-center w-6 h-6 rounded transition-colors"
           style={{
             color: showUnreadOnly ? theme.colors.accent : theme.colors.textDim,

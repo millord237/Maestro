@@ -159,6 +159,7 @@ export interface AITab {
   createdAt: number;               // Timestamp for ordering
   state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
   readOnlyMode?: boolean;          // When true, Claude operates in plan/read-only mode
+  saveToHistory?: boolean;         // When true, synopsis is requested after each completion and saved to History
   awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
   thinkingStartTime?: number;      // Timestamp when tab started thinking (for elapsed time display)
   scrollTop?: number;              // Saved scroll position for this tab's output view
