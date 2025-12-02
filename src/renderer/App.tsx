@@ -5538,19 +5538,17 @@ export default function MaestroConsole() {
               if (group) {
                 parts.push(`${group.emoji} ${group.name}`);
               }
-              // Agent name mapping
-              const agentNames: Record<string, string> = {
-                'claude-code': 'Claude Code',
-                'claude': 'Claude',
-                'aider': 'Aider',
-                'opencode': 'OpenCode',
-                'terminal': 'Terminal',
-              };
-              parts.push(agentNames[activeSession.toolType] || activeSession.toolType);
-              // Session name or UUID octet
-              const sessionLabel = activeSession.name ||
-                (activeSession.claudeSessionId ? activeSession.claudeSessionId.split('-')[0].toUpperCase() : 'New');
-              parts.push(sessionLabel);
+              // Agent name (user-given name for this agent instance)
+              parts.push(activeSession.name);
+              // Active tab name or UUID octet
+              const activeTab = activeSession.aiTabs?.find(t => t.id === activeSession.activeTabId);
+              if (activeTab) {
+                const tabLabel = activeTab.name ||
+                  (activeTab.claudeSessionId ? activeTab.claudeSessionId.split('-')[0].toUpperCase() : null);
+                if (tabLabel) {
+                  parts.push(tabLabel);
+                }
+              }
               return parts.join(' | ');
             })()}
           </span>
