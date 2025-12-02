@@ -38,8 +38,6 @@ interface MaestroSettings {
   llmProvider: string;
   modelSlug: string;
   apiKey: string;
-  tunnelProvider: string;
-  tunnelApiKey: string;
   shortcuts: Record<string, any>;
   defaultAgent: string;
   fontSize: number;
@@ -59,8 +57,6 @@ const store = new Store<MaestroSettings>({
     llmProvider: 'openrouter',
     modelSlug: 'anthropic/claude-3.5-sonnet',
     apiKey: '',
-    tunnelProvider: 'ngrok',
-    tunnelApiKey: '',
     shortcuts: {},
     defaultAgent: 'claude-code',
     fontSize: 14,
