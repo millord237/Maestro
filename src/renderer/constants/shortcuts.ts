@@ -38,6 +38,7 @@ export const FIXED_SHORTCUTS: Record<string, Shortcut> = {
 
 // Tab navigation shortcuts (AI mode only)
 export const TAB_SHORTCUTS: Record<string, Shortcut> = {
+  tabSwitcher: { id: 'tabSwitcher', label: 'Tab Switcher', keys: ['Alt', 'Meta', 't'] },
   newTab: { id: 'newTab', label: 'New Tab', keys: ['Meta', 't'] },
   closeTab: { id: 'closeTab', label: 'Close Tab', keys: ['Meta', 'w'] },
   reopenClosedTab: { id: 'reopenClosedTab', label: 'Reopen Closed Tab', keys: ['Meta', 'Shift', 't'] },

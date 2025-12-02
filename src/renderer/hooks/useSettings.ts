@@ -29,14 +29,6 @@ const DEFAULT_AUTO_RUN_STATS: AutoRunStats = {
 // Template variables available: {{SESSION_ID}}, {{SESSION_NAME}}, {{CLAUDE_SESSION_ID}}, {{PROJECT_NAME}}, {{DATE}}, {{TIME}}, etc.
 const DEFAULT_AI_COMMANDS: CustomAICommand[] = [
   {
-    id: 'synopsis',
-    command: '/synopsis',
-    description: 'Get a synopsis of recent work and add to history',
-    prompt: 'Synopsize our recent work in 2-3 sentences max.',
-    isBuiltIn: true,
-    isSystemCommand: true, // This is handled by slashCommands.ts, not sent as a prompt
-  },
-  {
     id: 'commit',
     command: '/commit',
     description: 'Commit outstanding changes and push up',

@@ -570,9 +570,9 @@ export function TabBar({
   const unreadCount = tabs.filter(t => t.hasUnread).length;
 
   // Filter tabs based on unread filter state
-  // When filter is on, show unread tabs + active tab (so user doesn't lose context)
+  // When filter is on, show ONLY unread tabs (can be empty)
   const displayedTabs = showUnreadOnly
-    ? tabs.filter(t => t.hasUnread || t.id === activeTabId)
+    ? tabs.filter(t => t.hasUnread)
     : tabs;
 
   // Check if tabs overflow the container (need sticky + button)
@@ -636,6 +636,16 @@ export function TabBar({
           {showUnreadOnly ? 'Showing unread only' : 'Filter unread tabs'}
         </div>
       </div>
+
+      {/* Empty state when filter is on but no unread tabs */}
+      {showUnreadOnly && displayedTabs.length === 0 && (
+        <div
+          className="flex items-center px-3 py-1.5 text-xs italic shrink-0 self-center mb-1"
+          style={{ color: theme.colors.textDim }}
+        >
+          No unread tabs
+        </div>
+      )}
 
       {/* Tabs with separators between inactive tabs */}
       {displayedTabs.map((tab, index) => {

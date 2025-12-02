@@ -262,6 +262,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const [fileStats, setFileStats] = useState<FileStats | null>(null);
+  const [showStatsBar, setShowStatsBar] = useState(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -295,6 +296,20 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
         });
     }
   }, [file?.path]);
+
+  // Track scroll position to show/hide stats bar
+  useEffect(() => {
+    const contentEl = contentRef.current;
+    if (!contentEl) return;
+
+    const handleScroll = () => {
+      // Show stats bar when scrolled to top (within 10px), hide otherwise
+      setShowStatsBar(contentEl.scrollTop <= 10);
+    };
+
+    contentEl.addEventListener('scroll', handleScroll);
+    return () => contentEl.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Auto-focus on mount so keyboard shortcuts work immediately
   useEffect(() => {
@@ -671,66 +686,72 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
       onKeyDown={handleKeyDown}
     >
       {/* Header */}
-      <div className="border-b flex items-center justify-between px-6 py-3 shrink-0" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}>
-        <div className="flex items-center gap-3">
-          <FileCode className="w-5 h-5 shrink-0" style={{ color: theme.colors.accent }} />
-          <div className="min-w-0">
-            <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>{file.name}</div>
-            <div className="text-xs opacity-50 truncate" style={{ color: theme.colors.textDim }}>{directoryPath}</div>
-          </div>
-          {/* File Stats */}
-          {fileStats && (
-            <div className="flex items-center gap-4 ml-4 pl-4 border-l" style={{ borderColor: theme.colors.border }}>
-              <div className="text-xs" style={{ color: theme.colors.textDim }}>
-                <span className="opacity-60">Size:</span>{' '}
-                <span style={{ color: theme.colors.textMain }}>{formatFileSize(fileStats.size)}</span>
-              </div>
-              <div className="text-xs" style={{ color: theme.colors.textDim }}>
-                <span className="opacity-60">Modified:</span>{' '}
-                <span style={{ color: theme.colors.textMain }}>{formatDateTime(fileStats.modifiedAt)}</span>
-              </div>
-              <div className="text-xs" style={{ color: theme.colors.textDim }}>
-                <span className="opacity-60">Created:</span>{' '}
-                <span style={{ color: theme.colors.textMain }}>{formatDateTime(fileStats.createdAt)}</span>
-              </div>
+      <div className="shrink-0" style={{ backgroundColor: theme.colors.bgSidebar }}>
+        {/* Main header row */}
+        <div className="border-b flex items-center justify-between px-6 py-3" style={{ borderColor: theme.colors.border }}>
+          <div className="flex items-center gap-3">
+            <FileCode className="w-5 h-5 shrink-0" style={{ color: theme.colors.accent }} />
+            <div className="min-w-0">
+              <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>{file.name}</div>
+              <div className="text-xs opacity-50 truncate" style={{ color: theme.colors.textDim }}>{directoryPath}</div>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {isMarkdown && (
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isMarkdown && (
+              <button
+                onClick={() => setMarkdownRawMode(!markdownRawMode)}
+                className="p-2 rounded hover:bg-white/10 transition-colors"
+                style={{ color: markdownRawMode ? theme.colors.accent : theme.colors.textDim }}
+                title={`${markdownRawMode ? "Show rendered markdown" : "Show raw markdown"} (${formatShortcut('toggleMarkdownMode')})`}
+              >
+                {markdownRawMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+              </button>
+            )}
             <button
-              onClick={() => setMarkdownRawMode(!markdownRawMode)}
+              onClick={copyContentToClipboard}
               className="p-2 rounded hover:bg-white/10 transition-colors"
-              style={{ color: markdownRawMode ? theme.colors.accent : theme.colors.textDim }}
-              title={`${markdownRawMode ? "Show rendered markdown" : "Show raw markdown"} (${formatShortcut('toggleMarkdownMode')})`}
+              style={{ color: theme.colors.textDim }}
+              title={isImage ? "Copy image to clipboard" : "Copy content to clipboard"}
             >
-              {markdownRawMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+              <Clipboard className="w-4 h-4" />
             </button>
-          )}
-          <button
-            onClick={copyContentToClipboard}
-            className="p-2 rounded hover:bg-white/10 transition-colors"
-            style={{ color: theme.colors.textDim }}
-            title={isImage ? "Copy image to clipboard" : "Copy content to clipboard"}
-          >
-            <Clipboard className="w-4 h-4" />
-          </button>
-          <button
-            onClick={copyPathToClipboard}
-            className="p-2 rounded hover:bg-white/10 transition-colors"
-            style={{ color: theme.colors.textDim }}
-            title="Copy full path to clipboard"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 rounded hover:bg-white/10 transition-colors"
-            style={{ color: theme.colors.textDim }}
-          >
-            <X className="w-5 h-5" />
-          </button>
+            <button
+              onClick={copyPathToClipboard}
+              className="p-2 rounded hover:bg-white/10 transition-colors"
+              style={{ color: theme.colors.textDim }}
+              title="Copy full path to clipboard"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded hover:bg-white/10 transition-colors"
+              style={{ color: theme.colors.textDim }}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+        {/* File Stats subbar - hidden on scroll */}
+        {fileStats && showStatsBar && (
+          <div
+            className="flex items-center gap-4 px-6 py-1.5 border-b transition-all duration-200"
+            style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}
+          >
+            <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
+              <span className="opacity-60">Size:</span>{' '}
+              <span style={{ color: theme.colors.textMain }}>{formatFileSize(fileStats.size)}</span>
+            </div>
+            <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
+              <span className="opacity-60">Modified:</span>{' '}
+              <span style={{ color: theme.colors.textMain }}>{formatDateTime(fileStats.modifiedAt)}</span>
+            </div>
+            <div className="text-[10px]" style={{ color: theme.colors.textDim }}>
+              <span className="opacity-60">Created:</span>{' '}
+              <span style={{ color: theme.colors.textMain }}>{formatDateTime(fileStats.createdAt)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}

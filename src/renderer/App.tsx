@@ -19,6 +19,7 @@ import { ProcessMonitor } from './components/ProcessMonitor';
 import { GitDiffViewer } from './components/GitDiffViewer';
 import { GitLogViewer } from './components/GitLogViewer';
 import { BatchRunnerModal } from './components/BatchRunnerModal';
+import { TabSwitcherModal } from './components/TabSwitcherModal';
 import { ExecutionQueueBrowser } from './components/ExecutionQueueBrowser';
 import { StandingOvationOverlay } from './components/StandingOvationOverlay';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
@@ -153,6 +154,8 @@ export default function MaestroConsole() {
   const [activeFocus, setActiveFocus] = useState<FocusArea>('main');
   const [bookmarksCollapsed, setBookmarksCollapsed] = useState(false);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  // Track the active tab ID before entering unread filter mode, so we can restore it when exiting
+  const preFilterActiveTabIdRef = useRef<string | null>(null);
 
   // File Explorer State
   const [previewFile, setPreviewFile] = useState<{name: string; content: string; path: string} | null>(null);
@@ -229,6 +232,9 @@ export default function MaestroConsole() {
 
   // Batch Runner Modal State
   const [batchRunnerModalOpen, setBatchRunnerModalOpen] = useState(false);
+
+  // Tab Switcher Modal State
+  const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
   const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
   const [renameGroupValue, setRenameGroupValue] = useState('');
   const [renameGroupEmoji, setRenameGroupEmoji] = useState('📂');
@@ -777,14 +783,20 @@ export default function MaestroConsole() {
             tabId: completedTab?.id // For toast navigation to specific tab
           };
 
-          // Check if this was a custom AI command that should trigger synopsis
-          // Only trigger synopsis when queue is empty (final task complete)
-          if (currentSession.executionQueue.length === 0 && currentSession.pendingAICommandForSynopsis && currentSession.claudeSessionId) {
+          // Check if synopsis should be triggered:
+          // 1. Tab has saveToHistory enabled, OR
+          // 2. This was a custom AI command (pendingAICommandForSynopsis)
+          // Only trigger when queue is empty (final task complete) and we have a claudeSessionId
+          const shouldSynopsis = currentSession.executionQueue.length === 0 &&
+            (completedTab?.claudeSessionId || currentSession.claudeSessionId) &&
+            (completedTab?.saveToHistory || currentSession.pendingAICommandForSynopsis);
+
+          if (shouldSynopsis) {
             synopsisData = {
               sessionId: actualSessionId,
               cwd: currentSession.cwd,
-              claudeSessionId: currentSession.claudeSessionId,
-              command: currentSession.pendingAICommandForSynopsis,
+              claudeSessionId: completedTab?.claudeSessionId || currentSession.claudeSessionId!,
+              command: currentSession.pendingAICommandForSynopsis || 'Save to History',
               groupName,
               projectName,
               tabName,
@@ -3075,6 +3087,10 @@ export default function MaestroConsole() {
 
       // Tab shortcuts (AI mode only, requires an explicitly selected session)
       if (ctx.activeSessionId && ctx.activeSession?.inputMode === 'ai' && ctx.activeSession?.aiTabs) {
+        if (ctx.isTabShortcut(e, 'tabSwitcher')) {
+          e.preventDefault();
+          ctx.setTabSwitcherOpen(true);
+        }
         if (ctx.isTabShortcut(e, 'newTab')) {
           e.preventDefault();
           const result = ctx.createTab(ctx.activeSession);
@@ -3127,9 +3143,21 @@ export default function MaestroConsole() {
             };
           }));
         }
+        if (ctx.isTabShortcut(e, 'toggleSaveToHistory')) {
+          e.preventDefault();
+          ctx.setSessions(prev => prev.map(s => {
+            if (s.id !== ctx.activeSession!.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(tab =>
+                tab.id === s.activeTabId ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
+              )
+            };
+          }));
+        }
         if (ctx.isTabShortcut(e, 'filterUnreadTabs')) {
           e.preventDefault();
-          ctx.setShowUnreadOnly(prev => !prev);
+          ctx.toggleUnreadFilter();
         }
         if (ctx.isTabShortcut(e, 'nextTab')) {
           e.preventDefault();
@@ -3494,6 +3522,27 @@ export default function MaestroConsole() {
     setSlashCommandOpen(false);
   };
 
+  // Toggle unread tabs filter with save/restore of active tab
+  const toggleUnreadFilter = useCallback(() => {
+    if (!showUnreadOnly) {
+      // Entering filter mode: save current active tab
+      preFilterActiveTabIdRef.current = activeSession?.activeTabId || null;
+    } else {
+      // Exiting filter mode: restore previous active tab if it still exists
+      if (preFilterActiveTabIdRef.current && activeSession) {
+        const tabStillExists = activeSession.aiTabs.some(t => t.id === preFilterActiveTabIdRef.current);
+        if (tabStillExists) {
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return { ...s, activeTabId: preFilterActiveTabIdRef.current! };
+          }));
+        }
+        preFilterActiveTabIdRef.current = null;
+      }
+    }
+    setShowUnreadOnly(prev => !prev);
+  }, [showUnreadOnly, activeSession]);
+
   // Toggle global live mode (enables web interface for all sessions)
   const toggleGlobalLive = async () => {
     try {
@@ -3594,7 +3643,8 @@ export default function MaestroConsole() {
     setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
-    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, setShowUnreadOnly
+    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
+    setTabSwitcherOpen
   };
 
   const toggleGroup = (groupId: string) => {
@@ -3719,102 +3769,31 @@ export default function MaestroConsole() {
     } : s));
   }, [activeSessionId]);
 
-  const processInput = async () => {
+  const processInput = async (overrideInputValue?: string) => {
+    const effectiveInputValue = overrideInputValue ?? inputValue;
     console.log('[processInput] Called with:', {
       hasActiveSession: !!activeSession,
       activeSessionId: activeSession?.id,
-      inputValue: inputValue?.substring(0, 50),
-      inputValueLength: inputValue?.length,
-      stagedImagesCount: stagedImages.length
+      inputValue: effectiveInputValue?.substring(0, 50),
+      inputValueLength: effectiveInputValue?.length,
+      stagedImagesCount: stagedImages.length,
+      isOverride: overrideInputValue !== undefined
     });
-    if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) {
+    if (!activeSession || (!effectiveInputValue.trim() && stagedImages.length === 0)) {
       console.log('[processInput] EARLY RETURN - missing activeSession or empty input');
       return;
     }
 
     // Block slash commands when agent is busy (in AI mode)
-    if (inputValue.trim().startsWith('/') && activeSession.state === 'busy' && activeSession.inputMode === 'ai') {
+    if (effectiveInputValue.trim().startsWith('/') && activeSession.state === 'busy' && activeSession.inputMode === 'ai') {
       showFlashNotification('Commands disabled while agent is working');
       return;
     }
 
-    // Note: Slash commands can now be queued (removed blocking logic)
-
-    // Handle slash commands
-    if (inputValue.trim().startsWith('/')) {
-      const commandText = inputValue.trim();
+    // Handle slash commands (custom AI commands only - built-in commands have been removed)
+    if (effectiveInputValue.trim().startsWith('/')) {
+      const commandText = effectiveInputValue.trim();
       const isTerminalMode = activeSession.inputMode === 'terminal';
-      const matchingCommand = slashCommands.find(cmd => {
-        if (cmd.command !== commandText) return false;
-        // Apply mode filtering (same as autocomplete)
-        if (cmd.terminalOnly && !isTerminalMode) return false;
-        if (cmd.aiOnly && isTerminalMode) return false;
-        return true;
-      });
-
-      if (matchingCommand) {
-        matchingCommand.execute({
-          activeSessionId,
-          sessions,
-          setSessions,
-          currentMode: activeSession.inputMode,
-          groups,
-          setRightPanelOpen,
-          setActiveRightTab,
-          setActiveFocus,
-          setSelectedFileIndex,
-          // Batch processing and synopsis context
-          sendPromptToAgent: spawnAgentWithPrompt,
-          addHistoryEntry,
-          startNewClaudeSession,
-          spawnBackgroundSynopsis,
-          addToast,
-          refreshHistoryPanel: () => rightPanelRef.current?.refreshHistoryPanel(),
-          addLogToActiveTab,
-        });
-
-        setInputValue('');
-        setSlashCommandOpen(false);
-        if (isAiMode) syncAiInputToSession('');
-        else syncTerminalInputToSession('');
-        if (inputRef.current) inputRef.current.style.height = 'auto';
-        return;
-      }
-
-      // Check if command exists but isn't available in current mode
-      const existingCommand = slashCommands.find(cmd => cmd.command === commandText);
-      if (existingCommand) {
-        // Command exists but not available in this mode - show error and don't send to AI
-        const modeLabel = isTerminalMode ? 'AI' : 'terminal';
-        const errorLog: LogEntry = {
-          id: generateId(),
-          timestamp: Date.now(),
-          source: 'system',
-          text: `${commandText} is only available in ${modeLabel} mode.`
-        };
-        setSessions(prev => prev.map(s => {
-          if (s.id !== activeSessionId) return s;
-          if (activeSession.inputMode === 'ai') {
-            // Add to active tab's logs
-            const activeTab = getActiveTab(s);
-            if (!activeTab) return s;
-            return {
-              ...s,
-              aiTabs: s.aiTabs.map(tab =>
-                tab.id === activeTab.id ? { ...tab, logs: [...tab.logs, errorLog] } : tab
-              )
-            };
-          } else {
-            return { ...s, shellLogs: [...s.shellLogs, errorLog] };
-          }
-        }));
-        setInputValue('');
-        setSlashCommandOpen(false);
-        if (isAiMode) syncAiInputToSession('');
-        else syncTerminalInputToSession('');
-        if (inputRef.current) inputRef.current.style.height = 'auto';
-        return;
-      }
 
       // Check for custom AI commands (only in AI mode)
       if (!isTerminalMode) {
@@ -3951,7 +3930,7 @@ export default function MaestroConsole() {
           timestamp: Date.now(),
           tabId: activeTab?.id || activeSession.activeTabId,
           type: 'message',
-          text: inputValue,
+          text: effectiveInputValue,
           images: [...stagedImages],
           tabName: activeTab?.name || (activeTab?.claudeSessionId ? activeTab.claudeSessionId.split('-')[0].toUpperCase() : 'New'),
           readOnlyMode: isReadOnlyMode
@@ -3976,7 +3955,7 @@ export default function MaestroConsole() {
 
     console.log('[processInput] Processing input', {
       currentMode,
-      inputValue: inputValue.substring(0, 50),
+      inputValue: effectiveInputValue.substring(0, 50),
       toolType: activeSession.toolType,
       sessionId: activeSession.id
     });
@@ -3989,7 +3968,7 @@ export default function MaestroConsole() {
       id: generateId(),
       timestamp: Date.now(),
       source: 'user',
-      text: inputValue,
+      text: effectiveInputValue,
       images: [...stagedImages],
       ...(isReadOnlyEntry && { readOnly: true })
     };
@@ -3998,7 +3977,7 @@ export default function MaestroConsole() {
     let newShellCwd = activeSession.shellCwd;
     let cwdChanged = false;
     if (currentMode === 'terminal') {
-      const trimmedInput = inputValue.trim();
+      const trimmedInput = effectiveInputValue.trim();
       // Handle bare "cd" command - go to session's original directory
       if (trimmedInput === 'cd') {
         cwdChanged = true;
@@ -4052,8 +4031,8 @@ export default function MaestroConsole() {
       const historyKey = currentMode === 'ai' ? 'aiCommandHistory' : 'shellCommandHistory';
       const currentHistory = currentMode === 'ai' ? (s.aiCommandHistory || []) : (s.shellCommandHistory || []);
       const newHistory = [...currentHistory];
-      if (inputValue.trim() && (newHistory.length === 0 || newHistory[newHistory.length - 1] !== inputValue.trim())) {
-        newHistory.push(inputValue.trim());
+      if (effectiveInputValue.trim() && (newHistory.length === 0 || newHistory[newHistory.length - 1] !== effectiveInputValue.trim())) {
+        newHistory.push(effectiveInputValue.trim());
       }
 
       // For terminal mode, add to shellLogs
@@ -4118,7 +4097,7 @@ export default function MaestroConsole() {
     }
 
     // Capture input value and images before clearing (needed for async batch mode spawn)
-    const capturedInputValue = inputValue;
+    const capturedInputValue = effectiveInputValue;
     const capturedImages = [...stagedImages];
 
     // Broadcast user input to web clients so they stay in sync
@@ -4383,61 +4362,12 @@ export default function MaestroConsole() {
       let promptToSend = command;
       let commandMetadata: { command: string; description: string } | undefined;
 
+      // Handle slash commands (custom AI commands only - built-in commands have been removed)
       if (command.trim().startsWith('/')) {
         const commandText = command.trim();
         console.log('[Remote] Detected slash command:', commandText);
 
-        // First, check for built-in slash commands (like /synopsis, /clear)
-        // Use effectiveInputMode (from web) instead of session.inputMode
-        const isTerminalMode = effectiveInputMode === 'terminal';
-        const matchingBuiltinCommand = slashCommands.find(cmd => {
-          if (cmd.command !== commandText) return false;
-          // Apply mode filtering
-          if (cmd.terminalOnly && !isTerminalMode) return false;
-          if (cmd.aiOnly && isTerminalMode) return false;
-          return true;
-        });
-
-        if (matchingBuiltinCommand) {
-          console.log('[Remote] Found matching built-in slash command:', matchingBuiltinCommand.command);
-
-          // Execute the built-in command with full context (using refs for latest function versions)
-          // Use effectiveInputMode (from web) instead of session.inputMode
-          matchingBuiltinCommand.execute({
-            activeSessionId: sessionId,
-            sessions: sessionsRef.current,
-            setSessions,
-            currentMode: effectiveInputMode,
-            groups: groupsRef.current,
-            setRightPanelOpen,
-            setActiveRightTab,
-            setActiveFocus,
-            setSelectedFileIndex,
-            sendPromptToAgent: spawnAgentWithPromptRef.current || undefined,
-            addHistoryEntry: addHistoryEntryRef.current || undefined,
-            startNewClaudeSession: startNewClaudeSessionRef.current || undefined,
-            spawnBackgroundSynopsis: spawnBackgroundSynopsisRef.current || undefined,
-            addToast: addToastRef.current,
-            refreshHistoryPanel: () => rightPanelRef.current?.refreshHistoryPanel(),
-          });
-
-          // Built-in command executed - don't continue to spawn AI
-          return;
-        }
-
-        // Check if command exists but isn't available in current mode
-        const existingBuiltinCommand = slashCommands.find(cmd => cmd.command === commandText);
-        if (existingBuiltinCommand) {
-          const modeLabel = isTerminalMode ? 'AI' : 'terminal';
-          console.log('[Remote] Built-in command exists but not available in', effectiveInputMode, 'mode');
-          addLogToActiveTab(sessionId, {
-            source: 'system',
-            text: `${commandText} is only available in ${modeLabel} mode.`
-          });
-          return;
-        }
-
-        // Next, look up in custom AI commands
+        // Look up in custom AI commands
         const matchingCustomCommand = customAICommandsRef.current.find(
           cmd => cmd.command === commandText
         );
@@ -4954,9 +4884,9 @@ export default function MaestroConsole() {
       const isTerminalMode = activeSession.inputMode === 'terminal';
       const filteredCommands = allSlashCommands.filter(cmd => {
         // Check if command is only available in terminal mode
-        if (cmd.terminalOnly && !isTerminalMode) return false;
+        if ('terminalOnly' in cmd && cmd.terminalOnly && !isTerminalMode) return false;
         // Check if command is only available in AI mode
-        if (cmd.aiOnly && isTerminalMode) return false;
+        if ('aiOnly' in cmd && cmd.aiOnly && isTerminalMode) return false;
         // Check if command matches input
         return cmd.command.toLowerCase().startsWith(inputValue.toLowerCase());
       });
@@ -4983,9 +4913,8 @@ export default function MaestroConsole() {
           setInputValue('');
           if (inputRef.current) inputRef.current.style.height = 'auto';
 
-          // Check if this is a custom AI command (has prompt but no execute)
-          if ('prompt' in selectedCommand && selectedCommand.prompt && !('execute' in selectedCommand)) {
-            // Substitute template variables and send to the AI agent
+          // Execute the custom AI command (substitute template variables and send to agent)
+          if ('prompt' in selectedCommand && selectedCommand.prompt) {
             // Use the same spawn logic as processInput for proper tab-based session ID tracking
             (async () => {
               let gitBranch: string | undefined;
@@ -5117,24 +5046,10 @@ export default function MaestroConsole() {
                 }));
               }
             })();
-          } else if ('execute' in selectedCommand && selectedCommand.execute) {
-            // Execute the built-in command directly
-            selectedCommand.execute({
-              activeSessionId,
-              sessions,
-              setSessions,
-              currentMode: activeSession.inputMode,
-              groups,
-              setRightPanelOpen,
-              setActiveRightTab,
-              setActiveFocus,
-              setSelectedFileIndex,
-              sendPromptToAgent: spawnAgentWithPrompt,
-              addHistoryEntry,
-              startNewClaudeSession,
-              spawnBackgroundSynopsis,
-              addToast,
-            });
+          } else {
+            // Claude Code slash command (no prompt property) - send raw command text
+            // Claude Code will expand the command itself from .claude/commands/*.md
+            processInput(selectedCommand.command);
           }
         }
       } else if (e.key === 'Escape') {
@@ -6346,7 +6261,7 @@ export default function MaestroConsole() {
           }));
         }}
         showUnreadOnly={showUnreadOnly}
-        onToggleUnreadFilter={() => setShowUnreadOnly(prev => !prev)}
+        onToggleUnreadFilter={toggleUnreadFilter}
         onToggleTabSaveToHistory={() => {
           if (!activeSession) return;
           const activeTab = getActiveTab(activeSession);
@@ -6458,6 +6373,22 @@ export default function MaestroConsole() {
           lastModifiedAt={activeSession.batchRunnerPromptModifiedAt}
           showConfirmation={showConfirmation}
           scratchpadContent={activeSession.scratchPadContent}
+        />
+      )}
+
+      {/* --- TAB SWITCHER MODAL --- */}
+      {tabSwitcherOpen && activeSession?.aiTabs && (
+        <TabSwitcherModal
+          theme={theme}
+          tabs={activeSession.aiTabs}
+          activeTabId={activeSession.activeTabId}
+          shortcut={TAB_SHORTCUTS.tabSwitcher}
+          onTabSelect={(tabId) => {
+            setSessions(prev => prev.map(s =>
+              s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
+            ));
+          }}
+          onClose={() => setTabSwitcherOpen(false)}
         />
       )}
 

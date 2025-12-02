@@ -19,6 +19,8 @@ interface ConfettiParticle {
   velocityY: number;
   rotationSpeed: number;
   delay: number;
+  shape: 'rect' | 'square' | 'circle' | 'star';
+  duration: number;
 }
 
 interface StandingOvationOverlayProps {
@@ -88,31 +90,59 @@ export function StandingOvationOverlay({
   const goldColor = '#FFD700';
   const purpleAccent = theme.colors.accent;
 
-  // Generate confetti particles that shoot from center
+  // Generate confetti particles - Ray Cast style explosion with multiple waves
   const confettiParticles = useMemo<ConfettiParticle[]>(() => {
     const particles: ConfettiParticle[] = [];
-    const colors = [goldColor, purpleAccent, '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
-    const numParticles = 80;
+    const colors = [
+      goldColor, purpleAccent,
+      '#FF6B6B', '#FF8E53', '#FFA726', // Warm colors
+      '#4ECDC4', '#45B7D1', '#64B5F6', // Cool colors
+      '#96CEB4', '#81C784', // Greens
+      '#FFEAA7', '#FFD54F', // Yellows
+      '#DDA0DD', '#BA68C8', '#9575CD', // Purples
+      '#F48FB1', '#FF80AB', // Pinks
+      '#FFFFFF', '#E0E0E0', // Whites/silvers
+    ];
 
-    for (let i = 0; i < numParticles; i++) {
-      // Random angle for burst direction (full 360 degrees)
-      const angle = (Math.random() * Math.PI * 2);
-      // Random speed for variety
-      const speed = 200 + Math.random() * 400;
+    // Multiple burst waves for that explosive Ray Cast feel
+    const waves = [
+      { count: 400, speedMin: 600, speedMax: 1200, delayBase: 0, delaySpread: 0.1 },    // Initial explosion
+      { count: 300, speedMin: 400, speedMax: 900, delayBase: 0.05, delaySpread: 0.15 }, // Second wave
+      { count: 200, speedMin: 300, speedMax: 700, delayBase: 0.1, delaySpread: 0.2 },   // Third wave
+      { count: 150, speedMin: 200, speedMax: 500, delayBase: 0.2, delaySpread: 0.3 },   // Slower trailing pieces
+      { count: 100, speedMin: 100, speedMax: 300, delayBase: 0.3, delaySpread: 0.5 },   // Floaty pieces
+    ];
 
-      particles.push({
-        id: i,
-        x: 50, // Start at center (%)
-        y: 50, // Start at center (%)
-        rotation: Math.random() * 360,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        size: 6 + Math.random() * 10,
-        velocityX: Math.cos(angle) * speed,
-        velocityY: Math.sin(angle) * speed,
-        rotationSpeed: (Math.random() - 0.5) * 720,
-        delay: Math.random() * 0.3, // Stagger the burst
-      });
+    let id = 0;
+
+    const shapes: Array<'rect' | 'square' | 'circle' | 'star'> = ['rect', 'rect', 'rect', 'square', 'square', 'circle', 'star'];
+
+    for (const wave of waves) {
+      for (let i = 0; i < wave.count; i++) {
+        // Random angle for burst direction (full 360 degrees)
+        const angle = Math.random() * Math.PI * 2;
+        // Random speed within wave's range
+        const speed = wave.speedMin + Math.random() * (wave.speedMax - wave.speedMin);
+        // Add some vertical bias for gravity feel
+        const gravityBias = Math.random() * 150;
+
+        particles.push({
+          id: id++,
+          x: 50 + (Math.random() - 0.5) * 5, // Slight spread from center
+          y: 50 + (Math.random() - 0.5) * 5,
+          rotation: Math.random() * 360,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: 4 + Math.random() * 12, // Varied sizes
+          velocityX: Math.cos(angle) * speed,
+          velocityY: Math.sin(angle) * speed + gravityBias,
+          rotationSpeed: (Math.random() - 0.5) * 1080, // More spin
+          delay: wave.delayBase + Math.random() * wave.delaySpread,
+          shape: shapes[Math.floor(Math.random() * shapes.length)],
+          duration: 2.5 + Math.random() * 2.5, // 2.5-5 seconds
+        });
+      }
     }
+
     return particles;
   }, [purpleAccent]);
 
@@ -288,44 +318,90 @@ export function StandingOvationOverlay({
       tabIndex={-1}
       onClick={onClose}
       style={{
-        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: 'rgba(0, 0, 0, 0.95)',
       }}
     >
       {/* Confetti burst effect - behind the modal (z-index: 0) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
-        {confettiParticles.map((particle) => (
-          <div
-            key={particle.id}
-            className="absolute"
-            style={{
-              left: `${particle.x}%`,
-              top: `${particle.y}%`,
-              width: `${particle.size}px`,
-              height: `${particle.size * 0.6}px`,
-              backgroundColor: particle.color,
-              borderRadius: '2px',
-              transform: `rotate(${particle.rotation}deg)`,
-              opacity: 0,
-              animation: `confetti-burst 3s ease-out ${particle.delay}s forwards`,
-              // CSS custom properties for the animation
-              '--vx': `${particle.velocityX}px`,
-              '--vy': `${particle.velocityY}px`,
-              '--rot': `${particle.rotationSpeed}deg`,
-            } as React.CSSProperties}
-          />
-        ))}
+        {confettiParticles.map((particle) => {
+          // Determine shape styling
+          let width: string;
+          let height: string;
+          let borderRadius: string;
+          let boxShadow: string;
+
+          switch (particle.shape) {
+            case 'circle':
+              width = `${particle.size}px`;
+              height = `${particle.size}px`;
+              borderRadius = '50%';
+              boxShadow = `0 0 ${particle.size / 2}px ${particle.color}40`;
+              break;
+            case 'square':
+              width = `${particle.size}px`;
+              height = `${particle.size}px`;
+              borderRadius = '2px';
+              boxShadow = `0 0 ${particle.size / 3}px ${particle.color}30`;
+              break;
+            case 'star':
+              width = `${particle.size}px`;
+              height = `${particle.size}px`;
+              borderRadius = '0';
+              boxShadow = `0 0 ${particle.size}px ${particle.color}60`;
+              break;
+            case 'rect':
+            default:
+              width = `${particle.size}px`;
+              height = `${particle.size * 0.4}px`;
+              borderRadius = '1px';
+              boxShadow = 'none';
+              break;
+          }
+
+          return (
+            <div
+              key={particle.id}
+              className="absolute"
+              style={{
+                left: `${particle.x}%`,
+                top: `${particle.y}%`,
+                width,
+                height,
+                backgroundColor: particle.color,
+                borderRadius,
+                boxShadow,
+                transform: `rotate(${particle.rotation}deg)`,
+                opacity: 0,
+                animation: `confetti-burst ${particle.duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${particle.delay}s forwards`,
+                // CSS custom properties for the animation
+                '--vx': `${particle.velocityX}px`,
+                '--vy': `${particle.velocityY}px`,
+                '--rot': `${particle.rotationSpeed}deg`,
+              } as React.CSSProperties}
+            />
+          );
+        })}
       </div>
 
-      {/* Keyframe animation style */}
+      {/* Keyframe animation style - enhanced physics */}
       <style>{`
         @keyframes confetti-burst {
           0% {
             opacity: 1;
-            transform: translate(0, 0) rotate(0deg);
+            transform: translate(0, 0) rotate(0deg) scale(1);
+          }
+          10% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.9;
+          }
+          80% {
+            opacity: 0.5;
           }
           100% {
             opacity: 0;
-            transform: translate(var(--vx), calc(var(--vy) + 200px)) rotate(var(--rot));
+            transform: translate(var(--vx), calc(var(--vy) + 600px)) rotate(var(--rot)) scale(0.5);
           }
         }
       `}</style>

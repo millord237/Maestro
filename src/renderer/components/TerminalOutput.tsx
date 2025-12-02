@@ -516,18 +516,19 @@ const LogItemComponent = memo(({
         ) : shouldCollapse && !isExpanded ? (
           <div>
             <div
-              className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre-wrap text-sm break-all' : 'whitespace-pre-wrap text-sm break-all'}`}
+              className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre text-sm' : 'whitespace-pre-wrap text-sm break-all'}`}
               style={{
                 maxHeight: `${maxOutputLines * 1.5}em`,
-                overflow: 'hidden',
+                overflow: isTerminal && log.source !== 'user' ? 'hidden' : 'hidden',
                 color: theme.colors.textMain,
                 fontFamily,
-                wordBreak: 'break-all'
+                wordBreak: isTerminal && log.source !== 'user' ? undefined : 'break-all'
               }}
             >
               {isTerminal && log.source !== 'user' ? (
                 // Content sanitized with DOMPurify above
-                <div style={{ wordBreak: 'break-all' }} dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
+                // Horizontal scroll for terminal output to preserve column alignment
+                <div className="overflow-x-auto scrollbar-thin" dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
               ) : isAIMode && !markdownRawMode ? (
                 // Collapsed markdown preview with rendered markdown
                 <div className="prose prose-sm max-w-none" style={{ color: theme.colors.textMain, lineHeight: 1.5 }}>
@@ -630,14 +631,14 @@ const LogItemComponent = memo(({
         ) : shouldCollapse && isExpanded ? (
           <div>
             <div
-              className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre-wrap text-sm break-all' : 'whitespace-pre-wrap text-sm break-all'}`}
+              className={`${isTerminal && log.source !== 'user' ? 'whitespace-pre text-sm scrollbar-thin' : 'whitespace-pre-wrap text-sm break-all'}`}
               style={{
                 maxHeight: '600px',
                 overflow: 'auto',
                 overscrollBehavior: 'contain',
                 color: theme.colors.textMain,
                 fontFamily,
-                wordBreak: 'break-all'
+                wordBreak: isTerminal && log.source !== 'user' ? undefined : 'break-all'
               }}
               onWheel={(e) => {
                 // Prevent scroll from propagating to parent when this container can scroll
@@ -654,7 +655,8 @@ const LogItemComponent = memo(({
             >
               {isTerminal && log.source !== 'user' ? (
                 // Content sanitized with DOMPurify above
-                <div style={{ wordBreak: 'break-all' }} dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
+                // Horizontal scroll for terminal output to preserve column alignment
+                <div dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
               ) : log.source === 'user' && isTerminal ? (
                 <div style={{ fontFamily }}>
                   <span style={{ color: theme.colors.accent }}>$ </span>
@@ -782,8 +784,8 @@ const LogItemComponent = memo(({
             {isTerminal && log.source !== 'user' ? (
               // Content sanitized with DOMPurify above
               <div
-                className="whitespace-pre-wrap text-sm break-all"
-                style={{ color: theme.colors.textMain, fontFamily, overscrollBehavior: 'contain', wordBreak: 'break-all' }}
+                className="whitespace-pre text-sm overflow-x-auto scrollbar-thin"
+                style={{ color: theme.colors.textMain, fontFamily, overscrollBehavior: 'contain' }}
                 dangerouslySetInnerHTML={{ __html: displayHtmlContent }}
               />
             ) : log.source === 'user' && isTerminal ? (
