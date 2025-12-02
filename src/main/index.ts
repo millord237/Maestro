@@ -8,6 +8,7 @@ import { execFileNoThrow } from './utils/execFile';
 import { logger } from './utils/logger';
 import { detectShells } from './utils/shellDetector';
 import { isCloudflaredInstalled } from './utils/cliDetection';
+import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 
@@ -648,6 +649,8 @@ app.on('before-quit', async () => {
   // Clean up all running processes
   logger.info('Killing all running processes', 'Shutdown');
   processManager?.killAll();
+  logger.info('Stopping tunnel', 'Shutdown');
+  await tunnelManager.stop();
   logger.info('Stopping web server', 'Shutdown');
   await webServer?.stop();
   logger.info('Shutdown complete', 'Shutdown');
@@ -1465,9 +1468,29 @@ function setupIpcHandlers() {
     await shell.openExternal(url);
   });
 
-  // Tunnel operations (cloudflared CLI detection)
+  // Tunnel operations (cloudflared CLI detection and tunnel management)
   ipcMain.handle('tunnel:isCloudflaredInstalled', async () => {
     return await isCloudflaredInstalled();
+  });
+
+  ipcMain.handle('tunnel:start', async () => {
+    // Get web server port
+    const serverUrl = webServer?.getSecureUrl();
+    if (!serverUrl) {
+      return { success: false, error: 'Web server not running' };
+    }
+
+    const port = new URL(serverUrl).port;
+    return await tunnelManager.start(parseInt(port, 10));
+  });
+
+  ipcMain.handle('tunnel:stop', async () => {
+    await tunnelManager.stop();
+    return { success: true };
+  });
+
+  ipcMain.handle('tunnel:getStatus', async () => {
+    return tunnelManager.getStatus();
   });
 
   // DevTools operations
