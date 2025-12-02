@@ -27,7 +27,7 @@ const CodeBlockWithCopy = memo(({ language, codeContent, theme, onCopy }: CodeBl
     <div className="relative group/codeblock">
       <button
         onClick={() => onCopy(codeContent)}
-        className="absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover/codeblock:opacity-70 hover:!opacity-100 transition-opacity z-10"
+        className="absolute bottom-2 right-2 p-1.5 rounded opacity-0 group-hover/codeblock:opacity-70 hover:!opacity-100 transition-opacity z-10"
         style={{
           backgroundColor: theme.colors.bgActivity,
           color: theme.colors.textDim,
@@ -598,7 +598,7 @@ const LogItemComponent = memo(({
                     .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                     .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-                    .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0; }
+                    .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
                     .prose pre code { background: none; padding: 0; }
                     .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                     .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
@@ -742,7 +742,7 @@ const LogItemComponent = memo(({
                     .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                     .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-                    .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0; }
+                    .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
                     .prose pre code { background: none; padding: 0; }
                     .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                     .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
@@ -868,7 +868,7 @@ const LogItemComponent = memo(({
                   .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                   .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
                   .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-                  .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0; }
+                  .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
                   .prose pre code { background: none; padding: 0; }
                   .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0; color: ${theme.colors.textDim}; }
                   .prose a { color: ${theme.colors.accent}; text-decoration: underline; }

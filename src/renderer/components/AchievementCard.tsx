@@ -562,22 +562,20 @@ export function AchievementCard({ theme, autoRunStats, onEscapeWithBadgeOpen }: 
           {/* Circular progress ring - 11 segments */}
           <BadgeProgressRing currentLevel={currentLevel} size={72} theme={theme} />
 
-          {/* Inner circle with Maestro icon */}
+          {/* Inner circle with Maestro icon - always use dark bg with light silhouette for visibility */}
           <div
-            className="absolute rounded-full flex items-center justify-center"
+            className="absolute rounded-full flex items-center justify-center overflow-hidden"
             style={{
               top: 8,
               left: 8,
               width: 56,
               height: 56,
-              background: currentLevel > 0
-                ? `linear-gradient(135deg, ${theme.colors.accent}20 0%, #FFD70020 100%)`
-                : theme.colors.bgMain,
+              background: currentLevel > 0 ? '#2d2d44' : theme.colors.bgMain,
               border: `2px solid ${currentLevel > 0 ? '#FFD700' : theme.colors.border}`,
             }}
           >
             <MaestroSilhouette
-              variant="dark"
+              variant="light"
               size={36}
               style={{ opacity: currentLevel > 0 ? 1 : 0.3 }}
             />

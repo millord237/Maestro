@@ -67,13 +67,16 @@ export function countUnfinishedTasks(content: string): number {
  * Hook for managing batch processing of scratchpad tasks across multiple sessions
  */
 // Synopsis prompt for batch tasks - requests a two-part response
-const BATCH_SYNOPSIS_PROMPT = `Provide a synopsis of what you just accomplished in this task using this exact format:
+const BATCH_SYNOPSIS_PROMPT = `Provide a brief synopsis of what you just accomplished in this task using this exact format:
 
 **Summary:** [1-2 sentences describing the key outcome]
 
 **Details:** [A paragraph with more specifics about what was done, files changed, etc.]
 
-Be specific about what was actually accomplished, not what was attempted.`;
+Rules:
+- Be specific about what was actually accomplished, not what was attempted.
+- Focus only on meaningful work that was done. Omit filler phrases like "the task is complete", "no further action needed", "everything is working", etc.
+- If nothing meaningful was accomplished, respond with only: **Summary:** No changes made.`;
 
 /**
  * Parse a synopsis response into short summary and full synopsis

@@ -95,8 +95,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
   <script>
     const SIZES = [1024, 512, 384, 192, 152, 144, 128, 96, 72];
-    const PURPLE = '#8B5CF6';
-    const PURPLE_DARK = '#7C3AED';
+    const PURPLE = '#2d1f4e';
+    const PURPLE_DARK = '#1a1a2e';
 
     function drawMaestro(ctx, size) {
       const scale = size / 512;
