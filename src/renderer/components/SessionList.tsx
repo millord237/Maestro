@@ -362,6 +362,15 @@ export function SessionList(props: SessionListProps) {
     }
   }, [isLiveMode, liveOverlayOpen, cloudflaredChecked]);
 
+  // Reset tunnel state when live mode is disabled
+  useEffect(() => {
+    if (!isLiveMode) {
+      setTunnelStatus('off');
+      setTunnelUrl(null);
+      setTunnelError(null);
+    }
+  }, [isLiveMode]);
+
   // Handle tunnel toggle (start/stop remote access)
   const handleTunnelToggle = async () => {
     if (tunnelStatus === 'connected') {
