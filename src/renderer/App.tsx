@@ -20,6 +20,7 @@ import { GitDiffViewer } from './components/GitDiffViewer';
 import { GitLogViewer } from './components/GitLogViewer';
 import { BatchRunnerModal } from './components/BatchRunnerModal';
 import { TabSwitcherModal } from './components/TabSwitcherModal';
+import { PromptComposerModal } from './components/PromptComposerModal';
 import { ExecutionQueueBrowser } from './components/ExecutionQueueBrowser';
 import { StandingOvationOverlay } from './components/StandingOvationOverlay';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
@@ -233,6 +234,9 @@ export default function MaestroConsole() {
 
   // Tab Switcher Modal State
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
+
+  // Prompt Composer Modal State
+  const [promptComposerOpen, setPromptComposerOpen] = useState(false);
   const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
   const [renameGroupValue, setRenameGroupValue] = useState('');
   const [renameGroupEmoji, setRenameGroupEmoji] = useState('📂');
@@ -2675,9 +2679,11 @@ export default function MaestroConsole() {
         const isCycleShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === '[' || e.key === ']');
         // Allow sidebar toggle shortcuts (Alt+Cmd+Arrow) even when modals are open
         const isLayoutShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
-        // Allow right panel tab shortcuts (Cmd+Shift+F/H/S/J) even when overlays are open
+        // Allow right panel tab shortcuts (Cmd+Shift+F/H/S) even when overlays are open
         const keyLower = e.key.toLowerCase();
-        const isRightPanelShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && (keyLower === 'f' || keyLower === 'h' || keyLower === 's' || keyLower === 'j');
+        const isRightPanelShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && (keyLower === 'f' || keyLower === 'h' || keyLower === 's');
+        // Allow jumpToBottom (Cmd+Shift+J) from anywhere - always scroll main panel to bottom
+        const isJumpToBottomShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && keyLower === 'j';
         // Allow system utility shortcuts (Alt+Cmd+L for logs, Alt+Cmd+P for processes) even when modals are open
         const isSystemUtilShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (keyLower === 'l' || keyLower === 'p');
         // Allow session jump shortcuts (Alt+Cmd+NUMBER) even when modals are open
@@ -2686,17 +2692,17 @@ export default function MaestroConsole() {
         if (ctx.hasOpenModal()) {
           // TRUE MODAL is open - block most shortcuts from App.tsx
           // The modal's own handler will handle Cmd+Shift+[] if it supports it
-          // BUT allow layout shortcuts (sidebar toggles), system utility shortcuts, and session jump to work
-          if (!isLayoutShortcut && !isSystemUtilShortcut && !isSessionJumpShortcut) {
+          // BUT allow layout shortcuts (sidebar toggles), system utility shortcuts, session jump, and jumpToBottom to work
+          if (!isLayoutShortcut && !isSystemUtilShortcut && !isSessionJumpShortcut && !isJumpToBottomShortcut) {
             return;
           }
-          // Fall through to handle layout/system utility/session jump shortcuts below
+          // Fall through to handle layout/system utility/session jump/jumpToBottom shortcuts below
         } else {
           // Only OVERLAYS are open (FilePreview, LogViewer, etc.)
           // Allow Cmd+Shift+[] to fall through to App.tsx handler
           // (which will cycle right panel tabs when previewFile is set)
           // Also allow right panel tab shortcuts to switch tabs while overlay is open
-          if (!isCycleShortcut && !isLayoutShortcut && !isRightPanelShortcut && !isSystemUtilShortcut && !isSessionJumpShortcut) {
+          if (!isCycleShortcut && !isLayoutShortcut && !isRightPanelShortcut && !isSystemUtilShortcut && !isSessionJumpShortcut && !isJumpToBottomShortcut) {
             return;
           }
           // Fall through to cyclePrev/cycleNext logic below
@@ -6209,6 +6215,7 @@ export default function MaestroConsole() {
             syncTerminalInputToSession(terminalInputValue);
           }
         }}
+        onOpenPromptComposer={() => setPromptComposerOpen(true)}
       />
 
       {/* --- RIGHT PANEL (hidden in mobile landscape) --- */}
@@ -6293,6 +6300,16 @@ export default function MaestroConsole() {
           onClose={() => setTabSwitcherOpen(false)}
         />
       )}
+
+      {/* --- PROMPT COMPOSER MODAL --- */}
+      <PromptComposerModal
+        isOpen={promptComposerOpen}
+        onClose={() => setPromptComposerOpen(false)}
+        theme={theme}
+        initialValue={inputValue}
+        onSubmit={(value) => setInputValue(value)}
+        sessionName={activeSession?.name}
+      />
 
       {/* --- EXECUTION QUEUE BROWSER --- */}
       <ExecutionQueueBrowser

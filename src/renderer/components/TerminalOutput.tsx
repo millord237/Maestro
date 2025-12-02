@@ -593,7 +593,7 @@ const LogItemComponent = memo(({
                     .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.5em 0; padding-left: 2em; }
                     .prose li ul, .prose li ol { margin: 0 !important; padding-left: 1.5em; }
                     .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-                    .prose li > p:first-child { margin: 0 !important; display: inline !important; }
+                    .prose li > p:first-child { margin: 0 !important; display: contents !important; }
                     .prose li > p:first-child + ul, .prose li > p:first-child + ol { display: block; margin-top: 0 !important; }
                     .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
@@ -737,7 +737,7 @@ const LogItemComponent = memo(({
                     .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.5em 0; padding-left: 2em; }
                     .prose li ul, .prose li ol { margin: 0 !important; padding-left: 1.5em; }
                     .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-                    .prose li > p:first-child { margin: 0 !important; display: inline !important; }
+                    .prose li > p:first-child { margin: 0 !important; display: contents !important; }
                     .prose li > p:first-child + ul, .prose li > p:first-child + ol { display: block; margin-top: 0 !important; }
                     .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                     .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
@@ -863,7 +863,7 @@ const LogItemComponent = memo(({
                   .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.5em 0; padding-left: 2em; }
                   .prose li ul, .prose li ol { margin: 0 !important; padding-left: 1.5em; }
                   .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-                  .prose li > p:first-child { margin: 0 !important; display: inline !important; }
+                  .prose li > p:first-child { margin: 0 !important; display: contents !important; }
                   .prose li > p:first-child + ul, .prose li > p:first-child + ol { display: block; margin-top: 0 !important; }
                   .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
                   .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
