@@ -367,8 +367,20 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     // Compare prompt
     if (prompt !== loadedPlaybook.prompt) return true;
 
+    // Compare worktree settings
+    const savedWorktree = loadedPlaybook.worktreeSettings;
+    if (savedWorktree) {
+      // Playbook has worktree settings - check if current state differs
+      if (!worktreeEnabled) return true;
+      if (branchName !== savedWorktree.branchNameTemplate) return true;
+      if (createPROnCompletion !== savedWorktree.createPROnCompletion) return true;
+    } else {
+      // Playbook doesn't have worktree settings - modified if worktree is now enabled with a branch
+      if (worktreeEnabled && branchName) return true;
+    }
+
     return false;
-  }, [documents, loopEnabled, prompt, loadedPlaybook]);
+  }, [documents, loopEnabled, prompt, loadedPlaybook, worktreeEnabled, branchName, createPROnCompletion]);
 
   // Register layer on mount
   useEffect(() => {
@@ -589,6 +601,18 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     setPrompt(playbook.prompt);
     setLoadedPlaybook(playbook);
     setShowPlaybookDropdown(false);
+
+    // Restore worktree settings if present
+    if (playbook.worktreeSettings) {
+      setWorktreeEnabled(true);
+      setBranchName(playbook.worktreeSettings.branchNameTemplate);
+      setCreatePROnCompletion(playbook.worktreeSettings.createPROnCompletion);
+    } else {
+      // Clear worktree settings if playbook doesn't have them
+      setWorktreeEnabled(false);
+      setBranchName('');
+      setCreatePROnCompletion(false);
+    }
   }, []);
 
   // Handle opening the delete confirmation modal
@@ -631,7 +655,8 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
     setSavingPlaybook(true);
     try {
-      const result = await window.maestro.playbooks.create(sessionId, {
+      // Build playbook data, including worktree settings if enabled
+      const playbookData: Parameters<typeof window.maestro.playbooks.create>[1] = {
         name,
         documents: documents.map(d => ({
           filename: d.filename,
@@ -639,7 +664,18 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         })),
         loopEnabled,
         prompt
-      });
+      };
+
+      // Include worktree settings if worktree is enabled
+      // Note: We store branchName as the template - users can modify it when loading
+      if (worktreeEnabled && branchName) {
+        playbookData.worktreeSettings = {
+          branchNameTemplate: branchName,
+          createPROnCompletion
+        };
+      }
+
+      const result = await window.maestro.playbooks.create(sessionId, playbookData);
 
       if (result.success) {
         setPlaybooks(prev => [...prev, result.playbook]);
@@ -650,7 +686,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
       console.error('Failed to save playbook:', error);
     }
     setSavingPlaybook(false);
-  }, [sessionId, documents, loopEnabled, prompt, savingPlaybook]);
+  }, [sessionId, documents, loopEnabled, prompt, worktreeEnabled, branchName, createPROnCompletion, savingPlaybook]);
 
   // Handle updating an existing playbook
   const handleSaveUpdate = useCallback(async () => {
@@ -658,7 +694,8 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
     setSavingPlaybook(true);
     try {
-      const result = await window.maestro.playbooks.update(sessionId, loadedPlaybook.id, {
+      // Build update data, including worktree settings if enabled
+      const updateData: Parameters<typeof window.maestro.playbooks.update>[2] = {
         documents: documents.map(d => ({
           filename: d.filename,
           resetOnCompletion: d.resetOnCompletion
@@ -666,7 +703,20 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         loopEnabled,
         prompt,
         updatedAt: Date.now()
-      });
+      };
+
+      // Include worktree settings if worktree is enabled, otherwise clear them
+      if (worktreeEnabled && branchName) {
+        updateData.worktreeSettings = {
+          branchNameTemplate: branchName,
+          createPROnCompletion
+        };
+      } else {
+        // Explicitly set to undefined to clear previous worktree settings
+        updateData.worktreeSettings = undefined;
+      }
+
+      const result = await window.maestro.playbooks.update(sessionId, loadedPlaybook.id, updateData);
 
       if (result.success) {
         setLoadedPlaybook(result.playbook);
@@ -676,7 +726,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
       console.error('Failed to update playbook:', error);
     }
     setSavingPlaybook(false);
-  }, [sessionId, loadedPlaybook, documents, loopEnabled, prompt, savingPlaybook]);
+  }, [sessionId, loadedPlaybook, documents, loopEnabled, prompt, worktreeEnabled, branchName, createPROnCompletion, savingPlaybook]);
 
   // Handle discarding changes and reloading original playbook configuration
   const handleDiscardChanges = useCallback(() => {
