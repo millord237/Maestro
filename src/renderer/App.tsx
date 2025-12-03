@@ -1677,7 +1677,8 @@ export default function MaestroConsole() {
 
       // Save the current AI input to the PREVIOUS tab before loading new tab's input
       // This ensures we don't lose draft input when clicking directly on another tab
-      if (prevTabId && aiInputValueLocal) {
+      // Also ensures clearing the input (empty string) is persisted when switching away
+      if (prevTabId) {
         setSessions(prev => prev.map(s => ({
           ...s,
           aiTabs: s.aiTabs.map(tab =>
@@ -2390,14 +2391,17 @@ export default function MaestroConsole() {
       // Use provided messages or fetch them
       let messages: LogEntry[];
       if (providedMessages && providedMessages.length > 0) {
+        console.log('[handleResumeSession] Using provided messages:', providedMessages.length);
         messages = providedMessages;
       } else {
+        console.log('[handleResumeSession] Loading messages for:', claudeSessionId, 'cwd:', activeSession.cwd);
         // Load the session messages
         const result = await window.maestro.claude.readSessionMessages(
           activeSession.cwd,
           claudeSessionId,
           { offset: 0, limit: 100 }
         );
+        console.log('[handleResumeSession] Loaded result:', result);
 
         // Convert to log entries
         messages = result.messages.map((msg: { type: string; content: string; timestamp: string; uuid: string }) => ({
@@ -2406,6 +2410,7 @@ export default function MaestroConsole() {
           source: msg.type === 'user' ? 'user' as const : 'stdout' as const,
           text: msg.content || ''
         }));
+        console.log('[handleResumeSession] Converted to', messages.length, 'log entries');
       }
 
       // Look up starred status and session name from stores if not provided
@@ -2432,17 +2437,19 @@ export default function MaestroConsole() {
 
       // Update the session and switch to AI mode
       // IMPORTANT: Use functional update to get fresh session state and avoid race conditions
+      console.log('[handleResumeSession] Creating tab with', messages.length, 'logs, name:', name, 'starred:', isStarred);
       setSessions(prev => prev.map(s => {
         if (s.id !== activeSession.id) return s;
 
         // Create tab from the CURRENT session state (not stale closure value)
-        const { session: updatedSession } = createTab(s, {
+        const { session: updatedSession, tab: newTab } = createTab(s, {
           claudeSessionId,
           logs: messages,
           name,
           starred: isStarred
         });
 
+        console.log('[handleResumeSession] Created tab:', newTab.id, 'with', newTab.logs.length, 'logs, activeTabId:', updatedSession.activeTabId);
         return { ...updatedSession, inputMode: 'ai' };
       }));
       setActiveClaudeSessionId(claudeSessionId);
@@ -5865,6 +5872,7 @@ export default function MaestroConsole() {
         setActiveClaudeSessionId={setActiveClaudeSessionId}
         onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean) => {
           // Opens the Claude session as a new tab (or switches to existing tab if duplicate)
+          console.log('[onResumeClaudeSession] Called with:', claudeSessionId, 'messages:', messages.length, 'name:', sessionName, 'starred:', starred);
           handleResumeSession(claudeSessionId, messages, sessionName, starred);
         }}
         onNewClaudeSession={() => {
@@ -6314,18 +6322,10 @@ export default function MaestroConsole() {
               s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
             ));
           }}
-          onNamedSessionSelect={(claudeSessionId, projectPath, sessionName) => {
-            // Open a closed named session as a new tab in the current session
-            // Note: The session might be from a different project - we'll open it anyway
-            // and let Claude Code handle the context appropriately
-            const result = createTab(activeSession, {
-              claudeSessionId,
-              name: sessionName,
-              logs: [], // Will be populated when the session is resumed
-            });
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id ? result.session : s
-            ));
+          onNamedSessionSelect={(claudeSessionId, _projectPath, sessionName, starred) => {
+            // Open a closed named session as a new tab - use handleResumeSession to properly load messages
+            console.log('[onNamedSessionSelect] Opening session:', claudeSessionId, 'name:', sessionName, 'starred:', starred);
+            handleResumeSession(claudeSessionId, [], sessionName, starred);
             // Focus input so user can start interacting immediately
             setActiveFocus('main');
             setTimeout(() => inputRef.current?.focus(), 50);

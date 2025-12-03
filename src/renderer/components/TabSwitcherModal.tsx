@@ -26,7 +26,7 @@ interface TabSwitcherModalProps {
   cwd: string; // Current working directory for syncing tab names
   shortcut?: Shortcut;
   onTabSelect: (tabId: string) => void;
-  onNamedSessionSelect: (claudeSessionId: string, projectPath: string, sessionName: string) => void;
+  onNamedSessionSelect: (claudeSessionId: string, projectPath: string, sessionName: string, starred?: boolean) => void;
   onClose: () => void;
 }
 
@@ -331,7 +331,7 @@ export function TabSwitcherModal({
     if (item.type === 'open') {
       onTabSelect(item.tab.id);
     } else {
-      onNamedSessionSelect(item.session.claudeSessionId, item.session.projectPath, item.session.sessionName);
+      onNamedSessionSelect(item.session.claudeSessionId, item.session.projectPath, item.session.sessionName, item.session.starred);
     }
     onClose();
   };

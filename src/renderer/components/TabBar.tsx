@@ -171,6 +171,7 @@ function Tab({
   return (
     <div
       ref={setTabRef}
+      data-tab-id={tab.id}
       className={`
         relative flex items-center gap-1.5 px-3 py-1.5 cursor-pointer
         transition-all duration-150 select-none
@@ -239,7 +240,7 @@ function Tab({
       {hasDraft && (
         <Pencil
           className="w-3 h-3 shrink-0"
-          style={{ color: theme.colors.textDim }}
+          style={{ color: theme.colors.warning }}
           title="Has draft message"
         />
       )}
@@ -513,7 +514,6 @@ export function TabBar({
   const prevActiveTabIdRef = useRef(activeTabId);
 
   // Scroll active tab into view when user navigates to a different tab
-  // Use 'center' to ensure the tab isn't hidden under sticky elements (unread filter, new tab button)
   // Don't scroll when closing tabs (tab count decreased) to avoid jarring movement
   useEffect(() => {
     const tabCountDecreased = tabs.length < prevTabCountRef.current;
@@ -525,13 +525,15 @@ export function TabBar({
 
     // Only scroll if active tab changed AND we didn't just close a tab
     if (activeTabChanged && !tabCountDecreased) {
-      const timeoutId = setTimeout(() => {
-        const activeTabElement = tabRefs.current.get(activeTabId);
+      // Use rAF to ensure the new tab has rendered
+      const rafId = requestAnimationFrame(() => {
+        // Query the DOM directly using data attribute - more reliable than refs for async tab creation
+        const activeTabElement = tabBarRef.current?.querySelector(`[data-tab-id="${activeTabId}"]`);
         if (activeTabElement) {
           activeTabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
-      }, 0);
-      return () => clearTimeout(timeoutId);
+      });
+      return () => cancelAnimationFrame(rafId);
     }
   }, [activeTabId, tabs.length]);
 
