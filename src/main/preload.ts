@@ -437,6 +437,27 @@ contextBridge.exposeInMainWorld('maestro', {
   autorun: {
     listDocs: (folderPath: string) =>
       ipcRenderer.invoke('autorun:listDocs', folderPath),
+    readDoc: (folderPath: string, filename: string) =>
+      ipcRenderer.invoke('autorun:readDoc', folderPath, filename),
+    writeDoc: (folderPath: string, filename: string, content: string) =>
+      ipcRenderer.invoke('autorun:writeDoc', folderPath, filename, content),
+    saveImage: (
+      folderPath: string,
+      docName: string,
+      base64Data: string,
+      extension: string
+    ) =>
+      ipcRenderer.invoke(
+        'autorun:saveImage',
+        folderPath,
+        docName,
+        base64Data,
+        extension
+      ),
+    deleteImage: (folderPath: string, relativePath: string) =>
+      ipcRenderer.invoke('autorun:deleteImage', folderPath, relativePath),
+    listImages: (folderPath: string, docName: string) =>
+      ipcRenderer.invoke('autorun:listImages', folderPath, docName),
   },
 });
 
@@ -724,7 +745,36 @@ export interface MaestroAPI {
     getPath: (sessionId: string) => Promise<{ success: boolean; path: string }>;
   };
   autorun: {
-    listDocs: (folderPath: string) => Promise<{ success: boolean; files: string[]; error?: string }>;
+    listDocs: (
+      folderPath: string
+    ) => Promise<{ success: boolean; files: string[]; error?: string }>;
+    readDoc: (
+      folderPath: string,
+      filename: string
+    ) => Promise<{ success: boolean; content?: string; error?: string }>;
+    writeDoc: (
+      folderPath: string,
+      filename: string,
+      content: string
+    ) => Promise<{ success: boolean; error?: string }>;
+    saveImage: (
+      folderPath: string,
+      docName: string,
+      base64Data: string,
+      extension: string
+    ) => Promise<{ success: boolean; relativePath?: string; error?: string }>;
+    deleteImage: (
+      folderPath: string,
+      relativePath: string
+    ) => Promise<{ success: boolean; error?: string }>;
+    listImages: (
+      folderPath: string,
+      docName: string
+    ) => Promise<{
+      success: boolean;
+      images?: { filename: string; relativePath: string }[];
+      error?: string;
+    }>;
   };
 }
 

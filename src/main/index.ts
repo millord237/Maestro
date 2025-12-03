@@ -3334,6 +3334,156 @@ function setupIpcHandlers() {
       }
     }
   );
+
+  // Save image to Auto Run folder
+  ipcMain.handle(
+    'autorun:saveImage',
+    async (
+      _event,
+      folderPath: string,
+      docName: string,
+      base64Data: string,
+      extension: string
+    ) => {
+      try {
+        // Sanitize docName to prevent directory traversal
+        const sanitizedDocName = path.basename(docName).replace(/\.md$/i, '');
+        if (sanitizedDocName.includes('..') || sanitizedDocName.includes('/')) {
+          return { success: false, error: 'Invalid document name' };
+        }
+
+        // Validate extension (only allow common image formats)
+        const allowedExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+        const sanitizedExtension = extension.toLowerCase().replace(/[^a-z]/g, '');
+        if (!allowedExtensions.includes(sanitizedExtension)) {
+          return { success: false, error: 'Invalid image extension' };
+        }
+
+        // Create images subdirectory if it doesn't exist
+        const imagesDir = path.join(folderPath, 'images');
+        try {
+          await fs.mkdir(imagesDir, { recursive: true });
+        } catch {
+          // Directory might already exist, that's fine
+        }
+
+        // Generate filename: {docName}-{timestamp}.{ext}
+        const timestamp = Date.now();
+        const filename = `${sanitizedDocName}-${timestamp}.${sanitizedExtension}`;
+        const filePath = path.join(imagesDir, filename);
+
+        // Validate the file is within the folder path (prevent traversal)
+        const resolvedPath = path.resolve(filePath);
+        const resolvedFolder = path.resolve(folderPath);
+        if (!resolvedPath.startsWith(resolvedFolder)) {
+          return { success: false, error: 'Invalid file path' };
+        }
+
+        // Decode and write the image
+        const buffer = Buffer.from(base64Data, 'base64');
+        await fs.writeFile(filePath, buffer);
+
+        // Return the relative path for markdown insertion
+        const relativePath = `images/${filename}`;
+        logger.info(`Saved Auto Run image: ${relativePath}`, 'AutoRun');
+        return { success: true, relativePath };
+      } catch (error) {
+        logger.error('Error saving Auto Run image', 'AutoRun', error);
+        return { success: false, error: String(error) };
+      }
+    }
+  );
+
+  // Delete image from Auto Run folder
+  ipcMain.handle(
+    'autorun:deleteImage',
+    async (_event, folderPath: string, relativePath: string) => {
+      try {
+        // Sanitize relativePath to prevent directory traversal
+        const normalizedPath = path.normalize(relativePath);
+        if (
+          normalizedPath.includes('..') ||
+          path.isAbsolute(normalizedPath) ||
+          !normalizedPath.startsWith('images/')
+        ) {
+          return { success: false, error: 'Invalid image path' };
+        }
+
+        const filePath = path.join(folderPath, normalizedPath);
+
+        // Validate the file is within the folder path (prevent traversal)
+        const resolvedPath = path.resolve(filePath);
+        const resolvedFolder = path.resolve(folderPath);
+        if (!resolvedPath.startsWith(resolvedFolder)) {
+          return { success: false, error: 'Invalid file path' };
+        }
+
+        // Check if file exists
+        try {
+          await fs.access(filePath);
+        } catch {
+          return { success: false, error: 'Image file not found' };
+        }
+
+        // Delete the file
+        await fs.unlink(filePath);
+        logger.info(`Deleted Auto Run image: ${relativePath}`, 'AutoRun');
+        return { success: true };
+      } catch (error) {
+        logger.error('Error deleting Auto Run image', 'AutoRun', error);
+        return { success: false, error: String(error) };
+      }
+    }
+  );
+
+  // List images for a document (by prefix match)
+  ipcMain.handle(
+    'autorun:listImages',
+    async (_event, folderPath: string, docName: string) => {
+      try {
+        // Sanitize docName to prevent directory traversal
+        const sanitizedDocName = path.basename(docName).replace(/\.md$/i, '');
+        if (sanitizedDocName.includes('..') || sanitizedDocName.includes('/')) {
+          return { success: false, error: 'Invalid document name' };
+        }
+
+        const imagesDir = path.join(folderPath, 'images');
+
+        // Check if images directory exists
+        try {
+          await fs.access(imagesDir);
+        } catch {
+          // No images directory means no images
+          return { success: true, images: [] };
+        }
+
+        // Read directory contents
+        const files = await fs.readdir(imagesDir);
+
+        // Filter files that start with the docName prefix
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+        const images = files
+          .filter((file) => {
+            // Check if filename starts with docName-
+            if (!file.startsWith(`${sanitizedDocName}-`)) {
+              return false;
+            }
+            // Check if it has a valid image extension
+            const ext = file.split('.').pop()?.toLowerCase();
+            return ext && imageExtensions.includes(ext);
+          })
+          .map((file) => ({
+            filename: file,
+            relativePath: `images/${file}`,
+          }));
+
+        return { success: true, images };
+      } catch (error) {
+        logger.error('Error listing Auto Run images', 'AutoRun', error);
+        return { success: false, error: String(error) };
+      }
+    }
+  );
 }
 
 // Handle process output streaming (set up after initialization)
