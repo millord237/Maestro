@@ -651,7 +651,8 @@ export function TabBar({
             zIndex: 6
           }}
         >
-          {showUnreadOnly ? 'Showing unread only' : 'Filter unread tabs'}
+          {showUnreadOnly ? 'Showing unread only' : 'Filter unread tabs'}{' '}
+          <span style={{ color: theme.colors.textDim }}>(Cmd+U)</span>
         </div>
       </div>
 

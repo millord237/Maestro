@@ -669,7 +669,14 @@ export default function MaestroConsole() {
     });
 
     // Handle process exit
-    const unsubscribeExit = window.maestro.process.onExit((sessionId: string, code: number) => {
+    const unsubscribeExit = window.maestro.process.onExit(async (sessionId: string, code: number) => {
+      // Log all exit events to help diagnose thinking pill disappearing prematurely
+      console.log('[onExit] Process exit event received:', {
+        rawSessionId: sessionId,
+        exitCode: code,
+        timestamp: new Date().toISOString()
+      });
+
       // Parse sessionId to determine which process exited
       // Format: {id}-ai-{tabId}, {id}-terminal, {id}-batch-{timestamp}
       let actualSessionId: string;
@@ -691,6 +698,26 @@ export default function MaestroConsole() {
       } else {
         actualSessionId = sessionId;
         isFromAi = false;
+      }
+
+      // SAFETY CHECK: Verify the process is actually gone before transitioning to idle
+      // This prevents the thinking pill from disappearing while the process is still running
+      // (which can happen if we receive a stale/duplicate exit event)
+      if (isFromAi) {
+        try {
+          const activeProcesses = await window.maestro.process.getActiveProcesses();
+          const processStillRunning = activeProcesses.some(p => p.sessionId === sessionId);
+          if (processStillRunning) {
+            console.warn('[onExit] Process still running despite exit event, ignoring:', {
+              sessionId,
+              activeProcesses: activeProcesses.map(p => p.sessionId)
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('[onExit] Failed to verify process status:', error);
+          // Continue with exit handling if we can't verify - better than getting stuck
+        }
       }
 
       // For AI exits, gather toast data BEFORE state update to avoid side effects in updater
@@ -909,6 +936,18 @@ export default function MaestroConsole() {
           const anyTabStillBusy = updatedAiTabs.some(tab => tab.state === 'busy');
           const newState = anyTabStillBusy ? 'busy' as SessionState : 'idle' as SessionState;
           const newBusySource = anyTabStillBusy ? s.busySource : undefined;
+
+          // Log state transition for debugging thinking pill issues
+          console.log('[onExit] Session state transition:', {
+            sessionId: s.id.substring(0, 8),
+            tabIdFromSession: tabIdFromSession?.substring(0, 8),
+            previousState: s.state,
+            newState,
+            previousBusySource: s.busySource,
+            newBusySource,
+            anyTabStillBusy,
+            tabStates: updatedAiTabs.map(t => ({ id: t.id.substring(0, 8), state: t.state }))
+          });
 
           // Task complete - also clear pending AI command flag
           return {
