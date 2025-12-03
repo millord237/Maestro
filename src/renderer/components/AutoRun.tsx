@@ -11,7 +11,7 @@ import { MermaidRenderer } from './MermaidRenderer';
 // Memoize remarkPlugins array - it never changes
 const REMARK_PLUGINS = [remarkGfm];
 
-interface ScratchpadProps {
+interface AutoRunProps {
   content: string;
   onChange: (content: string) => void;
   theme: any;
@@ -303,7 +303,7 @@ function ImagePreview({
 }
 
 // Inner implementation component
-function ScratchpadInner({
+function AutoRunInner({
   content,
   onChange,
   theme,
@@ -317,7 +317,7 @@ function ScratchpadInner({
   onOpenBatchRunner,
   onStopBatchRun,
   sessionState
-}: ScratchpadProps) {
+}: AutoRunProps) {
   const isLocked = batchRunState?.isRunning || false;
   const isAgentBusy = sessionState === 'busy' || sessionState === 'connecting';
   const isStopping = batchRunState?.isStopping || false;
@@ -1149,7 +1149,7 @@ function ScratchpadInner({
               color: theme.colors.accentForeground,
               border: `1px solid ${theme.colors.accent}`
             }}
-            title={isAgentBusy ? "Cannot run while agent is thinking" : "Run batch processing on scratchpad tasks"}
+            title={isAgentBusy ? "Cannot run while agent is thinking" : "Run batch processing on Auto Run tasks"}
           >
             <Play className="w-3.5 h-3.5" />
             Run
@@ -1442,8 +1442,8 @@ function ScratchpadInner({
   );
 }
 
-// Memoized Scratchpad component with custom comparison to prevent unnecessary re-renders
-export const Scratchpad = memo(ScratchpadInner, (prevProps, nextProps) => {
+// Memoized AutoRun component with custom comparison to prevent unnecessary re-renders
+export const AutoRun = memo(AutoRunInner, (prevProps, nextProps) => {
   // Only re-render when these specific props actually change
   return (
     prevProps.content === nextProps.content &&

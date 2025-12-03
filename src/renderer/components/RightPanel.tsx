@@ -3,7 +3,7 @@ import { PanelRightClose, PanelRightOpen, Loader2 } from 'lucide-react';
 import type { Session, Theme, RightPanelTab, Shortcut, BatchRunState } from '../types';
 import { FileExplorerPanel } from './FileExplorerPanel';
 import { HistoryPanel, HistoryPanelHandle } from './HistoryPanel';
-import { Scratchpad } from './Scratchpad';
+import { AutoRun } from './AutoRun';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 export interface RightPanelHandle {
@@ -229,7 +229,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
         )}
 
         {activeRightTab === 'scratchpad' && (
-          <Scratchpad
+          <AutoRun
             content={session.scratchPadContent}
             onChange={updateScratchPad}
             theme={theme}
