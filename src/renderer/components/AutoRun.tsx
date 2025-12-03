@@ -375,6 +375,12 @@ function AutoRunInner({
   // Track if user is actively editing (to avoid overwriting their changes)
   const isEditingRef = useRef(false);
 
+  // Auto-save timer ref for 5-second debounce
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track the last saved content to avoid unnecessary saves
+  const lastSavedContentRef = useRef<string>(content);
+
   // Sync local content from prop when session changes (switching sessions)
   useEffect(() => {
     if (sessionId !== prevSessionIdRef.current) {
@@ -400,6 +406,54 @@ function AutoRunInner({
       handleContentChange(localContent);
     }
   }, [localContent, content, handleContentChange]);
+
+  // Auto-save to disk with 5-second debounce
+  useEffect(() => {
+    // Only save if we have a folder and selected file
+    if (!folderPath || !selectedFile) return;
+
+    // Only save if content has actually changed from last saved
+    if (localContent === lastSavedContentRef.current) return;
+
+    // Clear any existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Schedule save after 5 seconds of inactivity
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      // Double-check content hasn't been externally synced
+      if (localContent !== lastSavedContentRef.current) {
+        try {
+          await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent);
+          lastSavedContentRef.current = localContent;
+          // Also sync to parent state so UI stays consistent
+          handleContentChange(localContent);
+        } catch (err) {
+          console.error('Auto-save failed:', err);
+        }
+      }
+    }, 5000);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [localContent, folderPath, selectedFile, handleContentChange]);
+
+  // Clear auto-save timer and update lastSavedContent when document changes (session or file change)
+  useEffect(() => {
+    // Clear pending auto-save when document changes
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
+    // Reset lastSavedContent to the new content
+    lastSavedContentRef.current = content;
+  }, [selectedFile, sessionId, content]);
+
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
