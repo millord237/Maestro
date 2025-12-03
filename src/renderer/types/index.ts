@@ -144,6 +144,26 @@ export interface BatchRunState {
   startTime?: number; // Timestamp when batch run started
 }
 
+// Document entry within a playbook (similar to BatchDocumentEntry but for storage)
+export interface PlaybookDocumentEntry {
+  filename: string;                  // Document filename (without .md)
+  resetOnCompletion: boolean;
+  // Note: isDuplicate is not stored - duplicates are just repeated entries
+}
+
+// A saved Playbook configuration
+export interface Playbook {
+  id: string;                        // Unique ID (UUID)
+  name: string;                      // User-defined name
+  createdAt: number;                 // Timestamp
+  updatedAt: number;                 // Timestamp
+
+  // Configuration
+  documents: PlaybookDocumentEntry[];  // Ordered list of documents
+  loopEnabled: boolean;
+  prompt: string;                    // Custom agent prompt
+}
+
 // Usage statistics from Claude Code CLI
 export interface UsageStats {
   inputTokens: number;
