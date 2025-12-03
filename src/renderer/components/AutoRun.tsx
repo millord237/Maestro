@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Copy, Check, Trash2 } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Copy, Check, Trash2, FolderOpen, FileText, RefreshCw } from 'lucide-react';
 import type { BatchRunState, SessionState, Theme } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -1589,7 +1589,57 @@ function AutoRunInner({
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden">
-        {mode === 'edit' ? (
+        {/* Empty folder state - show when folder is configured but has no documents */}
+        {folderPath && documentList.length === 0 && !isLoadingDocuments ? (
+          <div
+            className="h-full flex flex-col items-center justify-center text-center px-6"
+            style={{ color: theme.colors.textDim }}
+          >
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: theme.colors.bgActivity }}
+            >
+              <FileText className="w-8 h-8" style={{ color: theme.colors.textDim }} />
+            </div>
+            <h3
+              className="text-lg font-semibold mb-2"
+              style={{ color: theme.colors.textMain }}
+            >
+              No Documents Found
+            </h3>
+            <p className="mb-4 max-w-xs text-sm">
+              The selected folder doesn't contain any markdown (.md) files.
+            </p>
+            <p className="mb-6 max-w-xs text-xs" style={{ color: theme.colors.textDim }}>
+              Create a markdown file in the folder to get started, or select a different folder.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={onRefresh}
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: theme.colors.textMain,
+                  border: `1px solid ${theme.colors.border}`,
+                }}
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+              <button
+                onClick={onOpenSetup}
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: theme.colors.accent,
+                  color: theme.colors.accentForeground,
+                }}
+              >
+                <FolderOpen className="w-4 h-4" />
+                Change Folder
+              </button>
+            </div>
+          </div>
+        ) : mode === 'edit' ? (
           <textarea
             ref={textareaRef}
             value={localContent}
