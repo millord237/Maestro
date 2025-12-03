@@ -6505,6 +6505,7 @@ export default function MaestroConsole() {
             return matches ? matches.length : 0;
           }}
           sessionId={activeSession.id}
+          sessionCwd={activeSession.cwd}
         />
       )}
 

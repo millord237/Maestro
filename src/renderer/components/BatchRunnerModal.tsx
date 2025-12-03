@@ -63,6 +63,8 @@ interface BatchRunnerModalProps {
   getDocumentTaskCount: (filename: string) => Promise<number>; // Get task count for a document
   // Session ID for playbook storage
   sessionId: string;
+  // Session cwd for git worktree support
+  sessionCwd: string;
 }
 
 // Helper function to count unchecked tasks in scratchpad content
@@ -103,7 +105,8 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     currentDocument,
     allDocuments,
     getDocumentTaskCount,
-    sessionId
+    sessionId,
+    sessionCwd
   } = props;
 
   // Document list state
@@ -152,6 +155,10 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   const [playbookToDelete, setPlaybookToDelete] = useState<Playbook | null>(null);
   const playbackDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Git worktree state - only show worktree section for git repos
+  const [isGitRepo, setIsGitRepo] = useState(false);
+  const [checkingGitRepo, setCheckingGitRepo] = useState(true);
+
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
 
@@ -193,6 +200,23 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
     loadPlaybooks();
   }, [sessionId]);
+
+  // Check if session cwd is a git repo on mount (for worktree support)
+  useEffect(() => {
+    const checkGitRepo = async () => {
+      setCheckingGitRepo(true);
+      try {
+        const result = await window.maestro.git.isRepo(sessionCwd);
+        setIsGitRepo(result === true);
+      } catch (error) {
+        console.error('Failed to check if git repo:', error);
+        setIsGitRepo(false);
+      }
+      setCheckingGitRepo(false);
+    };
+
+    checkGitRepo();
+  }, [sessionCwd]);
 
   // Calculate total tasks across selected documents
   const totalTaskCount = documents.reduce((sum, doc) => sum + (taskCounts[doc.filename] || 0), 0);
