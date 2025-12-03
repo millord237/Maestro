@@ -98,6 +98,7 @@ export interface BatchDocumentEntry {
   filename: string;        // The actual document filename (without .md)
   resetOnCompletion: boolean;  // Uncheck all boxes when done
   isDuplicate: boolean;    // True if this is a duplicate (can be removed)
+  isMissing?: boolean;     // True if this document no longer exists in the folder (for playbook loading)
 }
 
 // Git worktree configuration for Auto Run

@@ -338,9 +338,17 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     return () => clearTimeout(timeoutId);
   }, [worktreePath, branchName, worktreeEnabled, sessionCwd]);
 
-  // Calculate total tasks across selected documents
-  const totalTaskCount = documents.reduce((sum, doc) => sum + (taskCounts[doc.filename] || 0), 0);
+  // Calculate total tasks across selected documents (excluding missing documents)
+  const totalTaskCount = documents.reduce((sum, doc) => {
+    // Don't count tasks from missing documents
+    if (doc.isMissing) return sum;
+    return sum + (taskCounts[doc.filename] || 0);
+  }, 0);
   const hasNoTasks = totalTaskCount === 0;
+
+  // Count missing documents for warning display
+  const missingDocCount = documents.filter(doc => doc.isMissing).length;
+  const hasMissingDocs = missingDocCount > 0;
 
   // Track if the current configuration differs from the loaded playbook
   const isPlaybookModified = useMemo(() => {
@@ -452,9 +460,12 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     // Also save when running
     onSave(prompt);
 
+    // Filter out missing documents before starting batch run
+    const validDocuments = documents.filter(doc => !doc.isMissing);
+
     // Build config with optional worktree settings
     const config: BatchRunConfig = {
-      documents,
+      documents: validDocuments,
       prompt,
       loopEnabled
     };
@@ -588,12 +599,17 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   // Handle loading a playbook
   const handleLoadPlaybook = useCallback((playbook: Playbook) => {
     // Convert stored entries to BatchDocumentEntry with IDs
+    // Also detect missing documents (documents in playbook that don't exist in allDocuments)
+    const allDocsSet = new Set(allDocuments);
+
     const entries: BatchDocumentEntry[] = playbook.documents.map((doc, index) => ({
       id: crypto.randomUUID(),
       filename: doc.filename,
       resetOnCompletion: doc.resetOnCompletion,
       // Mark as duplicate if same filename appears earlier
-      isDuplicate: playbook.documents.slice(0, index).some(d => d.filename === doc.filename)
+      isDuplicate: playbook.documents.slice(0, index).some(d => d.filename === doc.filename),
+      // Mark as missing if document doesn't exist in the folder
+      isMissing: !allDocsSet.has(doc.filename)
     }));
 
     setDocuments(entries);
@@ -613,7 +629,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
       setBranchName('');
       setCreatePROnCompletion(false);
     }
-  }, []);
+  }, [allDocuments]);
 
   // Handle opening the delete confirmation modal
   const handleDeletePlaybook = useCallback((playbook: Playbook, e: React.MouseEvent) => {
@@ -956,31 +972,50 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
                     return (
                       <div
                         key={doc.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, doc.id)}
+                        draggable={!doc.isMissing} // Don't allow dragging missing docs
+                        onDragStart={(e) => !doc.isMissing && handleDragStart(e, doc.id)}
                         onDragOver={(e) => handleDragOver(e, doc.id)}
                         onDragEnd={handleDragEnd}
                         className={`flex items-center gap-3 px-3 py-2 transition-all ${
                           isBeingDragged ? 'opacity-50' : ''
-                        } ${isDragTarget ? 'bg-white/10' : 'hover:bg-white/5'}`}
-                        style={{ borderColor: theme.colors.border }}
+                        } ${isDragTarget ? 'bg-white/10' : 'hover:bg-white/5'} ${
+                          doc.isMissing ? 'opacity-60' : ''
+                        }`}
+                        style={{
+                          borderColor: theme.colors.border,
+                          backgroundColor: doc.isMissing ? theme.colors.error + '08' : undefined
+                        }}
                       >
                         {/* Drag Handle */}
                         <GripVertical
-                          className="w-4 h-4 cursor-grab active:cursor-grabbing shrink-0"
-                          style={{ color: theme.colors.textDim }}
+                          className={`w-4 h-4 shrink-0 ${doc.isMissing ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
+                          style={{ color: doc.isMissing ? theme.colors.error + '60' : theme.colors.textDim }}
                         />
 
                         {/* Document Name */}
                         <span
-                          className="flex-1 text-sm font-medium truncate"
-                          style={{ color: theme.colors.textMain }}
+                          className={`flex-1 text-sm font-medium truncate ${doc.isMissing ? 'line-through' : ''}`}
+                          style={{ color: doc.isMissing ? theme.colors.error : theme.colors.textMain }}
                         >
                           {doc.filename}
                         </span>
 
-                        {/* Reset Indicator (shown when reset is enabled) */}
-                        {doc.resetOnCompletion && (
+                        {/* Missing Indicator */}
+                        {doc.isMissing && (
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded shrink-0 uppercase font-bold"
+                            style={{
+                              backgroundColor: theme.colors.error + '20',
+                              color: theme.colors.error
+                            }}
+                            title="This document no longer exists in the folder"
+                          >
+                            Missing
+                          </span>
+                        )}
+
+                        {/* Reset Indicator (shown when reset is enabled, hidden for missing docs) */}
+                        {doc.resetOnCompletion && !doc.isMissing && (
                           <RotateCcw
                             className="w-3.5 h-3.5 shrink-0"
                             style={{ color: theme.colors.accent }}
@@ -988,34 +1023,38 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
                           />
                         )}
 
-                        {/* Task Count Badge */}
-                        <span
-                          className="text-xs px-2 py-0.5 rounded shrink-0"
-                          style={{
-                            backgroundColor: docTaskCount === 0 ? theme.colors.error + '20' : theme.colors.success + '20',
-                            color: docTaskCount === 0 ? theme.colors.error : theme.colors.success
-                          }}
-                        >
-                          {loadingTaskCounts ? '...' : `${docTaskCount} ${docTaskCount === 1 ? 'task' : 'tasks'}`}
-                        </span>
+                        {/* Task Count Badge (hidden for missing docs) */}
+                        {!doc.isMissing && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded shrink-0"
+                            style={{
+                              backgroundColor: docTaskCount === 0 ? theme.colors.error + '20' : theme.colors.success + '20',
+                              color: docTaskCount === 0 ? theme.colors.error : theme.colors.success
+                            }}
+                          >
+                            {loadingTaskCounts ? '...' : `${docTaskCount} ${docTaskCount === 1 ? 'task' : 'tasks'}`}
+                          </span>
+                        )}
 
-                        {/* Reset Toggle Button */}
-                        <button
-                          onClick={() => handleToggleReset(doc.id)}
-                          className={`p-1 rounded transition-colors shrink-0 ${
-                            doc.resetOnCompletion ? '' : 'hover:bg-white/10'
-                          }`}
-                          style={{
-                            backgroundColor: doc.resetOnCompletion ? theme.colors.accent + '20' : 'transparent',
-                            color: doc.resetOnCompletion ? theme.colors.accent : theme.colors.textDim
-                          }}
-                          title={doc.resetOnCompletion ? 'Disable reset on completion' : 'Enable reset on completion'}
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Reset Toggle Button (hidden for missing docs) */}
+                        {!doc.isMissing && (
+                          <button
+                            onClick={() => handleToggleReset(doc.id)}
+                            className={`p-1 rounded transition-colors shrink-0 ${
+                              doc.resetOnCompletion ? '' : 'hover:bg-white/10'
+                            }`}
+                            style={{
+                              backgroundColor: doc.resetOnCompletion ? theme.colors.accent + '20' : 'transparent',
+                              color: doc.resetOnCompletion ? theme.colors.accent : theme.colors.textDim
+                            }}
+                            title={doc.resetOnCompletion ? 'Disable reset on completion' : 'Enable reset on completion'}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
-                        {/* Duplicate Button (only shown for reset-enabled docs) */}
-                        {doc.resetOnCompletion && (
+                        {/* Duplicate Button (only shown for reset-enabled docs that aren't missing) */}
+                        {doc.resetOnCompletion && !doc.isMissing && (
                           <button
                             onClick={() => handleDuplicateDocument(doc.id)}
                             className="p-1 rounded hover:bg-white/10 transition-colors shrink-0"
@@ -1026,13 +1065,13 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
                           </button>
                         )}
 
-                        {/* Remove Button (only for duplicates or when multiple docs exist) */}
-                        {(doc.isDuplicate || documents.length > 1) && (
+                        {/* Remove Button (only for duplicates, multiple docs, OR missing docs) */}
+                        {(doc.isDuplicate || documents.length > 1 || doc.isMissing) && (
                           <button
                             onClick={() => handleRemoveDocument(doc.id)}
                             className="p-1 rounded hover:bg-white/10 transition-colors shrink-0"
-                            style={{ color: theme.colors.textDim }}
-                            title="Remove document"
+                            style={{ color: doc.isMissing ? theme.colors.error : theme.colors.textDim }}
+                            title={doc.isMissing ? 'Remove missing document' : 'Remove document'}
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -1044,10 +1083,28 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
               )}
             </div>
 
+            {/* Missing Documents Warning */}
+            {hasMissingDocs && (
+              <div
+                className="mt-2 flex items-center gap-2 p-2 rounded border text-xs"
+                style={{
+                  backgroundColor: theme.colors.warning + '10',
+                  borderColor: theme.colors.warning + '40',
+                  color: theme.colors.warning
+                }}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {missingDocCount} document{missingDocCount > 1 ? 's' : ''} no longer exist{missingDocCount === 1 ? 's' : ''} in the folder and will be skipped
+                </span>
+              </div>
+            )}
+
             {/* Total Summary */}
             {documents.length > 1 && (
               <div className="mt-2 text-xs" style={{ color: theme.colors.textDim }}>
-                Total: {loadingTaskCounts ? '...' : totalTaskCount} tasks across {documents.length} documents
+                Total: {loadingTaskCounts ? '...' : totalTaskCount} tasks across {documents.length - missingDocCount} {hasMissingDocs ? 'available ' : ''}document{documents.length - missingDocCount !== 1 ? 's' : ''}
+                {hasMissingDocs && ` (${missingDocCount} missing)`}
               </div>
             )}
 
@@ -1433,10 +1490,15 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
           </button>
           <button
             onClick={handleGo}
-            disabled={hasNoTasks || documents.length === 0}
+            disabled={hasNoTasks || documents.length === 0 || documents.length === missingDocCount}
             className="flex items-center gap-2 px-4 py-2 rounded text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: (hasNoTasks || documents.length === 0) ? theme.colors.textDim : theme.colors.accent }}
-            title={hasNoTasks ? 'No unchecked tasks in documents' : documents.length === 0 ? 'No documents selected' : 'Run batch processing'}
+            style={{ backgroundColor: (hasNoTasks || documents.length === 0 || documents.length === missingDocCount) ? theme.colors.textDim : theme.colors.accent }}
+            title={
+              documents.length === 0 ? 'No documents selected' :
+              documents.length === missingDocCount ? 'All selected documents are missing' :
+              hasNoTasks ? 'No unchecked tasks in documents' :
+              'Run batch processing'
+            }
           >
             <Play className="w-4 h-4" />
             Go
