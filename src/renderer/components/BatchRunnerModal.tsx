@@ -1219,6 +1219,25 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
                     </div>
                   )}
 
+                  {/* Info: Existing worktree with same branch (no mismatch) */}
+                  {!worktreeValidation.checking && worktreeValidation.exists && !worktreeValidation.branchMismatch && worktreeValidation.sameRepo && worktreeValidation.currentBranch && (
+                    <div
+                      className="flex items-center gap-2 p-3 rounded border"
+                      style={{
+                        backgroundColor: theme.colors.accent + '10',
+                        borderColor: theme.colors.accent + '40'
+                      }}
+                    >
+                      <GitBranch
+                        className="w-4 h-4 shrink-0"
+                        style={{ color: theme.colors.accent }}
+                      />
+                      <p className="text-sm" style={{ color: theme.colors.textMain }}>
+                        Existing worktree on branch "{worktreeValidation.currentBranch}"
+                      </p>
+                    </div>
+                  )}
+
                   {/* Warning: Worktree exists with different branch */}
                   {!worktreeValidation.checking && worktreeValidation.exists && worktreeValidation.branchMismatch && worktreeValidation.sameRepo && (
                     <div
