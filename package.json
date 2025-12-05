@@ -13,17 +13,7 @@
     "url": "https://github.com/yourusername/maestro.git"
   },
   "bin": {
-    "maestro-playbook": "./dist/cli/cli/index.js"
-  },
-  "pkg": {
-    "scripts": "dist/cli/**/*.js",
-    "targets": [
-      "node20-macos-arm64",
-      "node20-macos-x64",
-      "node20-win-x64",
-      "node20-linux-x64"
-    ],
-    "outputPath": "dist/cli/bin"
+    "maestro-playbook": "./dist/cli/maestro-playbook.js"
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
@@ -33,14 +23,13 @@
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "build": "npm run build:main && npm run build:renderer && npm run build:web && npm run build:cli",
     "build:main": "tsc -p tsconfig.main.json",
-    "build:cli": "tsc -p tsconfig.cli.json",
-    "build:cli:bin": "npm run build:cli && pkg dist/cli/cli/index.js --config package.json",
+    "build:cli": "node scripts/build-cli.mjs",
     "build:renderer": "vite build",
     "build:web": "vite build --config vite.config.web.mts",
-    "package": "node scripts/set-version.mjs npm run build && npm run build:cli:bin && node scripts/set-version.mjs electron-builder --mac --win --linux",
-    "package:mac": "node scripts/set-version.mjs npm run build && npm run build:cli:bin && node scripts/set-version.mjs electron-builder --mac",
-    "package:win": "node scripts/set-version.mjs npm run build && npm run build:cli:bin && node scripts/set-version.mjs electron-builder --win",
-    "package:linux": "node scripts/set-version.mjs npm run build && npm run build:cli:bin && node scripts/set-version.mjs electron-builder --linux",
+    "package": "node scripts/set-version.mjs npm run build && node scripts/set-version.mjs electron-builder --mac --win --linux",
+    "package:mac": "node scripts/set-version.mjs npm run build && node scripts/set-version.mjs electron-builder --mac",
+    "package:win": "node scripts/set-version.mjs npm run build && node scripts/set-version.mjs electron-builder --win",
+    "package:linux": "node scripts/set-version.mjs npm run build && node scripts/set-version.mjs electron-builder --linux",
     "start": "electron .",
     "clean": "rm -rf dist release node_modules/.vite",
     "postinstall": "electron-rebuild -f -w node-pty"
@@ -78,8 +67,8 @@
       "icon": "build/icon.icns",
       "extraResources": [
         {
-          "from": "dist/cli/bin/maestro-macos-${arch}",
-          "to": "maestro-playbook"
+          "from": "dist/cli/maestro-playbook.js",
+          "to": "maestro-playbook.js"
         }
       ]
     },
@@ -101,8 +90,8 @@
       "icon": "build/icon.ico",
       "extraResources": [
         {
-          "from": "dist/cli/bin/maestro-win-x64.exe",
-          "to": "maestro-playbook.exe"
+          "from": "dist/cli/maestro-playbook.js",
+          "to": "maestro-playbook.js"
         }
       ]
     },
@@ -116,8 +105,8 @@
       "icon": "build/icon.png",
       "extraResources": [
         {
-          "from": "dist/cli/bin/maestro-linux-x64",
-          "to": "maestro-playbook"
+          "from": "dist/cli/maestro-playbook.js",
+          "to": "maestro-playbook.js"
         }
       ]
     },
@@ -166,13 +155,13 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/ws": "^8.5.10",
     "@vitejs/plugin-react": "^4.2.1",
-    "@yao-pkg/pkg": "^6.10.1",
     "autoprefixer": "^10.4.16",
     "canvas": "^3.2.0",
     "concurrently": "^8.2.2",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
     "electron-rebuild": "^3.2.9",
+    "esbuild": "^0.24.2",
     "lucide-react": "^0.303.0",
     "postcss": "^8.4.33",
     "react": "^18.2.0",

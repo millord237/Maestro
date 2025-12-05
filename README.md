@@ -346,21 +346,29 @@ You can run separate batch processes in different Maestro sessions simultaneousl
 
 ## Command Line Interface
 
-Maestro includes a CLI tool (`maestro-playbook`) for running playbooks from the command line, cron jobs, or CI/CD pipelines. The CLI is a standalone binary that requires no additional dependencies.
+Maestro includes a CLI tool (`maestro-playbook`) for running playbooks from the command line, cron jobs, or CI/CD pipelines. The CLI requires Node.js (which you already have if you're using Claude Code).
 
 ### Installation
 
-The CLI binary is bundled with Maestro. After installation, create a symlink to add it to your PATH:
+The CLI is bundled with Maestro as a JavaScript file. Create a shell wrapper to run it:
 
 ```bash
 # macOS (after installing Maestro.app)
-sudo ln -sf "/Applications/Maestro.app/Contents/Resources/maestro-playbook" /usr/local/bin/maestro-playbook
+echo '#!/bin/bash\nnode "/Applications/Maestro.app/Contents/Resources/maestro-playbook.js" "$@"' | sudo tee /usr/local/bin/maestro-playbook && sudo chmod +x /usr/local/bin/maestro-playbook
 
-# Windows (run as Administrator in PowerShell)
-# The binary is located at: C:\Program Files\Maestro\resources\maestro-playbook.exe
+# Linux (deb/rpm installs to /opt)
+echo '#!/bin/bash\nnode "/opt/Maestro/resources/maestro-playbook.js" "$@"' | sudo tee /usr/local/bin/maestro-playbook && sudo chmod +x /usr/local/bin/maestro-playbook
 
-# Linux (AppImage - extract first, or use deb/rpm which installs to /opt)
-sudo ln -sf "/opt/Maestro/resources/maestro-playbook" /usr/local/bin/maestro-playbook
+# Windows (PowerShell as Administrator) - create a batch file
+@"
+@echo off
+node "%ProgramFiles%\Maestro\resources\maestro-playbook.js" %*
+"@ | Out-File -FilePath "$env:ProgramFiles\Maestro\maestro-playbook.cmd" -Encoding ASCII
+```
+
+Alternatively, run directly with Node.js:
+```bash
+node "/Applications/Maestro.app/Contents/Resources/maestro-playbook.js" list groups
 ```
 
 ### Usage

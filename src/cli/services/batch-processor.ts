@@ -298,20 +298,23 @@ export async function* runPlaybook(
         };
 
         // Substitute template variables in the prompt
-        const finalPrompt = substituteTemplateVariables(playbook.prompt, templateContext);
+        const basePrompt = substituteTemplateVariables(playbook.prompt, templateContext);
 
         // Read document content and expand template variables in it
         const { content: docContent } = readDocAndCountTasks(folderPath, docEntry.filename);
-        if (docContent) {
-          const expandedDocContent = substituteTemplateVariables(docContent, templateContext);
-          // Write the expanded content back to the document temporarily
-          // (Claude will read this file, so it needs the expanded variables)
-          if (expandedDocContent !== docContent) {
-            writeDoc(folderPath, `${docEntry.filename}.md`, expandedDocContent);
-          }
+        const expandedDocContent = docContent
+          ? substituteTemplateVariables(docContent, templateContext)
+          : '';
+
+        // Write expanded content back to document (so agent edits have correct paths)
+        if (expandedDocContent && expandedDocContent !== docContent) {
+          writeDoc(folderPath, `${docEntry.filename}.md`, expandedDocContent);
         }
 
-        // Spawn agent
+        // Combine prompt with document content - agent works on what it's given
+        const finalPrompt = `${basePrompt}\n\n---\n\n# ${docEntry.filename}.md\n\n${expandedDocContent}`;
+
+        // Spawn agent with combined prompt + document
         const result = await spawnAgent(session.cwd, finalPrompt);
 
         const elapsedMs = Date.now() - taskStartTime;
