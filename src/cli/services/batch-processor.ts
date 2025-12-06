@@ -101,9 +101,10 @@ export async function* runPlaybook(
     dryRun?: boolean;
     writeHistory?: boolean;
     debug?: boolean;
+    verbose?: boolean;
   } = {}
 ): AsyncGenerator<JsonlEvent> {
-  const { dryRun = false, writeHistory = true, debug = false } = options;
+  const { dryRun = false, writeHistory = true, debug = false, verbose = false } = options;
   const batchStartTime = Date.now();
 
   // Get git branch and group name for template variable substitution
@@ -312,7 +313,20 @@ export async function* runPlaybook(
         }
 
         // Combine prompt with document content - agent works on what it's given
-        const finalPrompt = `${basePrompt}\n\n---\n\n# ${docEntry.filename}.md\n\n${expandedDocContent}`;
+        // Include explicit file path so agent knows where to save changes
+        const finalPrompt = `${basePrompt}\n\n---\n\n# Current Document: ${docFilePath}\n\nProcess tasks from this document and save changes back to the file above.\n\n${expandedDocContent}`;
+
+        // Emit verbose event with full prompt
+        if (verbose) {
+          yield {
+            type: 'verbose',
+            timestamp: Date.now(),
+            category: 'prompt',
+            document: docEntry.filename,
+            taskIndex,
+            prompt: finalPrompt,
+          };
+        }
 
         // Spawn agent with combined prompt + document
         const result = await spawnAgent(session.cwd, finalPrompt);

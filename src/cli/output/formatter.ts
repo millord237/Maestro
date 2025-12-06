@@ -375,6 +375,16 @@ export function formatRunEvent(event: RunEvent): string {
       return `${timeStr} ${c('gray', '🔍')} ${c(categoryColor, `[${category}]`)} ${dim(message)}`;
     }
 
+    case 'verbose': {
+      const category = event.category as string;
+      const doc = event.document as string;
+      const taskIndex = (event.taskIndex as number) + 1;
+      const prompt = event.prompt as string;
+      const separator = c('gray', '─'.repeat(80));
+      const header = `${timeStr} ${c('magenta', '📝')} ${c('magenta', `[${category}]`)} ${bold(doc)} Task ${taskIndex}`;
+      return `${separator}\n${header}\n${separator}\n${prompt}\n${separator}`;
+    }
+
     default:
       return `${timeStr} ${dim(event.type)}`;
   }

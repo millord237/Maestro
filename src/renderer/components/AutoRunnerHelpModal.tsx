@@ -208,6 +208,54 @@ export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps
             </div>
           </section>
 
+          {/* Running Single Document */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Play className="w-5 h-5" style={{ color: theme.colors.accent }} />
+              <h3 className="font-bold">Running a Single Document</h3>
+            </div>
+            <div
+              className="text-sm space-y-2 pl-7"
+              style={{ color: theme.colors.textDim }}
+            >
+              <p>
+                Click <strong style={{ color: theme.colors.textMain }}>Run</strong> to open the batch runner.
+                By default, the currently selected document is ready to run.
+              </p>
+              <p>
+                The runner spawns a fresh AI session for each unchecked task. When a task completes,
+                the agent checks it off and exits. If tasks remain, another agent is spawned for the next task.
+              </p>
+              <p>
+                The document is provided to the agent as a file path, giving it direct access to read and modify tasks.
+              </p>
+            </div>
+          </section>
+
+          {/* Running Multiple Documents */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Settings className="w-5 h-5" style={{ color: theme.colors.accent }} />
+              <h3 className="font-bold">Running Multiple Documents</h3>
+            </div>
+            <div
+              className="text-sm space-y-2 pl-7"
+              style={{ color: theme.colors.textDim }}
+            >
+              <p>
+                Click <strong style={{ color: theme.colors.textMain }}>"+ Add Docs"</strong> in the batch runner
+                to select additional documents. Documents are processed sequentially in the order shown.
+              </p>
+              <p>
+                <strong style={{ color: theme.colors.textMain }}>Drag to reorder:</strong> Use the grip handle
+                to rearrange documents in the queue.
+              </p>
+              <p>
+                Documents with zero unchecked tasks are automatically skipped.
+              </p>
+            </div>
+          </section>
+
           {/* Template Variables */}
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -260,54 +308,6 @@ export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps
                 Variables work in both the <strong style={{ color: theme.colors.textMain }}>agent prompt</strong> (in Playbook settings)
                 and within <strong style={{ color: theme.colors.textMain }}>document content</strong>. Use them to create
                 reusable templates that adapt to different contexts.
-              </p>
-            </div>
-          </section>
-
-          {/* Running Single Document */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Play className="w-5 h-5" style={{ color: theme.colors.accent }} />
-              <h3 className="font-bold">Running a Single Document</h3>
-            </div>
-            <div
-              className="text-sm space-y-2 pl-7"
-              style={{ color: theme.colors.textDim }}
-            >
-              <p>
-                Click <strong style={{ color: theme.colors.textMain }}>Run</strong> to open the batch runner.
-                By default, the currently selected document is ready to run.
-              </p>
-              <p>
-                The runner spawns a fresh AI session for each unchecked task. When a task completes,
-                the agent checks it off and exits. If tasks remain, another agent is spawned for the next task.
-              </p>
-              <p>
-                The document is provided to the agent as a file path, giving it direct access to read and modify tasks.
-              </p>
-            </div>
-          </section>
-
-          {/* Running Multiple Documents */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Settings className="w-5 h-5" style={{ color: theme.colors.accent }} />
-              <h3 className="font-bold">Running Multiple Documents</h3>
-            </div>
-            <div
-              className="text-sm space-y-2 pl-7"
-              style={{ color: theme.colors.textDim }}
-            >
-              <p>
-                Click <strong style={{ color: theme.colors.textMain }}>"+ Add Docs"</strong> in the batch runner
-                to select additional documents. Documents are processed sequentially in the order shown.
-              </p>
-              <p>
-                <strong style={{ color: theme.colors.textMain }}>Drag to reorder:</strong> Use the grip handle
-                to rearrange documents in the queue.
-              </p>
-              <p>
-                Documents with zero unchecked tasks are automatically skipped.
               </p>
             </div>
           </section>

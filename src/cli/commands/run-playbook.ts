@@ -13,6 +13,7 @@ interface RunPlaybookOptions {
   history?: boolean; // commander uses --no-history which becomes history: false
   json?: boolean;
   debug?: boolean;
+  verbose?: boolean;
 }
 
 export async function runPlaybook(playbookId: string, options: RunPlaybookOptions): Promise<void> {
@@ -82,6 +83,7 @@ export async function runPlaybook(playbookId: string, options: RunPlaybookOption
       dryRun: options.dryRun,
       writeHistory: options.history !== false, // --no-history sets history to false
       debug: options.debug,
+      verbose: options.verbose,
     });
 
     for await (const event of generator) {

@@ -63,6 +63,7 @@ program
   .option('--no-history', 'Do not write history entries')
   .option('--json', 'Output as JSON lines (for scripting)')
   .option('--debug', 'Show detailed debug output for troubleshooting')
+  .option('--verbose', 'Show full prompt sent to agent on each iteration')
   .action(runPlaybook);
 
 program.parse();
