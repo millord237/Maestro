@@ -4,11 +4,12 @@ import type { Session, Theme, RightPanelTab, Shortcut, BatchRunState } from '../
 import type { FileTreeChanges } from '../utils/fileExplorer';
 import { FileExplorerPanel } from './FileExplorerPanel';
 import { HistoryPanel, HistoryPanelHandle } from './HistoryPanel';
-import { AutoRun } from './AutoRun';
+import { AutoRun, AutoRunHandle } from './AutoRun';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 export interface RightPanelHandle {
   refreshHistoryPanel: () => void;
+  focusAutoRun: () => void;
 }
 
 interface RightPanelProps {
@@ -97,11 +98,15 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
   } = props;
 
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
+  const autoRunRef = useRef<AutoRunHandle>(null);
 
-  // Expose refreshHistoryPanel method to parent
+  // Expose methods to parent
   useImperativeHandle(ref, () => ({
     refreshHistoryPanel: () => {
       historyPanelRef.current?.refreshHistory();
+    },
+    focusAutoRun: () => {
+      autoRunRef.current?.focus();
     }
   }), []);
 
@@ -111,6 +116,16 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
       // Small delay to ensure the panel is rendered
       requestAnimationFrame(() => {
         historyPanelRef.current?.focus();
+      });
+    }
+  }, [activeRightTab, rightPanelOpen, activeFocus]);
+
+  // Focus the auto run panel when switching to autorun tab
+  useEffect(() => {
+    if (activeRightTab === 'autorun' && rightPanelOpen && activeFocus === 'right') {
+      // Small delay to ensure the panel is rendered
+      requestAnimationFrame(() => {
+        autoRunRef.current?.focus();
       });
     }
   }, [activeRightTab, rightPanelOpen, activeFocus]);
@@ -247,6 +262,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
 
         {activeRightTab === 'autorun' && (
           <AutoRun
+            ref={autoRunRef}
             theme={theme}
             sessionId={session.id}
             folderPath={session.autoRunFolderPath || null}

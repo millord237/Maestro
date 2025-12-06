@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo, useMemo, forwardRef, useImperativeHandle } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -60,6 +60,10 @@ interface AutoRunProps {
 
   // Legacy prop for backwards compatibility
   onChange?: (content: string) => void;
+}
+
+export interface AutoRunHandle {
+  focus: () => void;
 }
 
 // Cache for loaded images to avoid repeated IPC calls
@@ -347,7 +351,7 @@ function ImagePreview({
 }
 
 // Inner implementation component
-function AutoRunInner({
+const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInner({
   theme,
   sessionId,
   folderPath,
@@ -372,7 +376,7 @@ function AutoRunInner({
   onStopBatchRun,
   sessionState,
   onChange,  // Legacy prop for backwards compatibility
-}: AutoRunProps) {
+}, ref) {
   const isLocked = batchRunState?.isRunning || false;
   const isAgentBusy = sessionState === 'busy' || sessionState === 'connecting';
   const isStopping = batchRunState?.isStopping || false;
@@ -646,6 +650,18 @@ function AutoRunInner({
     value: localContent,
     onChange: setLocalContent,
   });
+
+  // Expose focus method to parent via ref
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      // Focus the appropriate element based on current mode
+      if (mode === 'edit' && textareaRef.current) {
+        textareaRef.current.focus();
+      } else if (mode === 'preview' && previewRef.current) {
+        previewRef.current.focus();
+      }
+    }
+  }), [mode]);
 
   // Load existing images for the current document from the Auto Run folder
   useEffect(() => {
@@ -1954,7 +1970,7 @@ function AutoRunInner({
       )}
     </div>
   );
-}
+});
 
 // Memoized AutoRun component with custom comparison to prevent unnecessary re-renders
 export const AutoRun = memo(AutoRunInner, (prevProps, nextProps) => {

@@ -795,6 +795,19 @@ export function CommandInputBar({
   }, [isMobilePhone, inputMode, onInputFocus]);
 
   /**
+   * Auto-focus the textarea when expanded mode is activated
+   */
+  useEffect(() => {
+    if (isExpanded && isMobilePhone && inputMode === 'ai' && textareaRef.current) {
+      // Small delay to ensure DOM has updated
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isExpanded, isMobilePhone, inputMode]);
+
+  /**
    * Collapse input when submitting on mobile
    */
   const handleMobileSubmit = useCallback((e: React.FormEvent) => {
@@ -898,6 +911,7 @@ export function CommandInputBar({
         onClose={handleCloseSlashCommand}
         selectedIndex={selectedSlashCommandIndex}
         onSelectedIndexChange={setSelectedSlashCommandIndex}
+        isInputExpanded={isExpanded}
       />
 
       {/* EXPANDED MOBILE AI MODE - Full width textarea with send button below */}
@@ -1219,8 +1233,8 @@ export function CommandInputBar({
               // The slash will be added when a command is selected
               setSlashCommandOpen(true);
               setSelectedSlashCommandIndex(0);
-              // Focus the textarea
-              textareaRef.current?.focus();
+              // Don't focus textarea - we want to show slash commands without expanding the input
+              // User can tap the input separately if they want to type
             }}
             disabled={isDisabled}
             style={{
@@ -1342,6 +1356,7 @@ export function CommandInputBar({
           </div>
         ) : (
           /* AI mode: regular textarea - on mobile phone, focus triggers expanded mode */
+          /* On mobile, collapsed state shows single-line height matching buttons */
           <textarea
             ref={textareaRef}
             value={value}
@@ -1359,8 +1374,10 @@ export function CommandInputBar({
               flex: 1,
               // minWidth: 0 is critical for flex items to shrink below content size
               minWidth: 0,
-              // Large touch-friendly padding (minimum 12px, but larger for comfort)
-              padding: '14px 18px',
+              // On mobile collapsed state: tighter padding to match button height (48px)
+              // height = padding-top + line-height + padding-bottom + border = 11 + 22 + 11 + 4 = 48
+              // On desktop/tablet: use original larger padding for comfort
+              padding: isMobilePhone ? '11px 14px' : '14px 18px',
               borderRadius: '12px',
               backgroundColor: colors.bgMain,
               border: `2px solid ${colors.border}`,
@@ -1371,10 +1388,12 @@ export function CommandInputBar({
               fontFamily: 'inherit',
               lineHeight: `${LINE_HEIGHT}px`,
               outline: 'none',
-              height: `${textareaHeight}px`,
+              // On mobile: force single-line height to match buttons (48px)
+              // On desktop: use auto-expanding height
+              height: isMobilePhone ? `${MIN_INPUT_HEIGHT}px` : `${textareaHeight}px`,
               // Large minimum height for easy touch targeting
               minHeight: `${MIN_INPUT_HEIGHT}px`,
-              maxHeight: `${MAX_TEXTAREA_HEIGHT}px`,
+              maxHeight: isMobilePhone ? `${MIN_INPUT_HEIGHT}px` : `${MAX_TEXTAREA_HEIGHT}px`,
               // Reset appearance for consistent styling
               WebkitAppearance: 'none',
               appearance: 'none',
@@ -1385,8 +1404,9 @@ export function CommandInputBar({
               // Better text rendering on mobile
               WebkitFontSmoothing: 'antialiased',
               MozOsxFontSmoothing: 'grayscale',
-              // Enable scrolling when content exceeds max height
-              overflowY: textareaHeight >= MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden',
+              // On mobile collapsed: hide overflow (single line)
+              // On desktop: enable scrolling when content exceeds max height
+              overflowY: isMobilePhone ? 'hidden' : (textareaHeight >= MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden'),
               overflowX: 'hidden',
               wordWrap: 'break-word',
             }}

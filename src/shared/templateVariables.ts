@@ -80,11 +80,13 @@ export const TEMPLATE_VARIABLES = [
   { variable: '{{DATE}}', description: 'Date (YYYY-MM-DD)' },
   { variable: '{{DATETIME}}', description: 'Full datetime' },
   { variable: '{{DATE_SHORT}}', description: 'Date (MM/DD/YY)' },
+  { variable: '{{DAY}}', description: 'Day of month (01-31)' },
   { variable: '{{DOCUMENT_NAME}}', description: 'Current document name' },
   { variable: '{{DOCUMENT_PATH}}', description: 'Current document path' },
   { variable: '{{GIT_BRANCH}}', description: 'Git branch name' },
   { variable: '{{IS_GIT_REPO}}', description: 'Is git repo (true/false)' },
   { variable: '{{LOOP_NUMBER}}', description: 'Current loop iteration (1+)' },
+  { variable: '{{MONTH}}', description: 'Month (01-12)' },
   { variable: '{{PROJECT_NAME}}', description: 'Project folder name' },
   { variable: '{{PROJECT_PATH}}', description: 'Project directory path' },
   { variable: '{{SESSION_ID}}', description: 'Maestro session ID' },
@@ -93,6 +95,7 @@ export const TEMPLATE_VARIABLES = [
   { variable: '{{TIMESTAMP}}', description: 'Unix timestamp (ms)' },
   { variable: '{{TIME_SHORT}}', description: 'Time (HH:MM)' },
   { variable: '{{TOOL_TYPE}}', description: 'Agent type' },
+  { variable: '{{WEEKDAY}}', description: 'Day of week (Monday, etc.)' },
   { variable: '{{YEAR}}', description: 'Current year' },
 ];
 

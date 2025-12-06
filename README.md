@@ -238,6 +238,8 @@ Commands support **template variables** that are automatically substituted at ru
 | `{{PROJECT_PATH}}` | Full path to project directory |
 | `{{GIT_BRANCH}}` | Current git branch (if in a git repo) |
 | `{{DATE}}` | Current date (YYYY-MM-DD) |
+| `{{DAY}}` | Day of month (01-31) |
+| `{{MONTH}}` | Month (01-12) |
 | `{{TIME}}` | Current time (HH:MM:SS) |
 | `{{WEEKDAY}}` | Day of week (Monday, Tuesday, etc.) |
 

@@ -152,98 +152,117 @@ export function TabBar({
       style={{
         display: 'flex',
         alignItems: 'flex-end',
-        gap: '2px',
-        padding: '8px 8px 0 8px',
         backgroundColor: colors.bgSidebar,
         borderBottom: `1px solid ${colors.border}`,
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
       }}
     >
-      {/* Search tabs button - pinned at start */}
+      {/* Pinned search tabs button - always visible */}
       {onOpenTabSearch && (
+        <div
+          style={{
+            flexShrink: 0,
+            padding: '8px 0 0 8px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <button
+            onClick={onOpenTabSearch}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '28px',
+              height: '28px',
+              borderRadius: '14px',
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.bgMain,
+              color: colors.textDim,
+              cursor: 'pointer',
+              marginBottom: '4px',
+            }}
+            title={`Search ${tabs.length} tabs`}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Scrollable tabs area */}
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          alignItems: 'flex-end',
+          gap: '2px',
+          padding: '8px 8px 0 8px',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+        className="hide-scrollbar"
+      >
+        {tabs.map((tab) => (
+          <Tab
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            canClose={canClose}
+            colors={colors}
+            onSelect={() => onSelectTab(tab.id)}
+            onClose={() => onCloseTab(tab.id)}
+          />
+        ))}
+
+        {/* New tab button - simple plus icon, not in a tab shape */}
         <button
-          onClick={onOpenTabSearch}
+          onClick={onNewTab}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '28px',
-            height: '28px',
-            borderRadius: '14px',
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.bgMain,
+            width: '24px',
+            height: '24px',
+            borderRadius: '4px',
+            border: 'none',
+            backgroundColor: 'transparent',
             color: colors.textDim,
+            fontSize: '16px',
             cursor: 'pointer',
+            opacity: 0.7,
+            transition: 'all 0.15s ease',
             flexShrink: 0,
-            marginRight: '6px',
+            marginLeft: '4px',
             marginBottom: '4px',
             alignSelf: 'center',
           }}
-          title={`Search ${tabs.length} tabs`}
+          title="New Tab"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          +
         </button>
-      )}
-
-      {tabs.map((tab) => (
-        <Tab
-          key={tab.id}
-          tab={tab}
-          isActive={tab.id === activeTabId}
-          canClose={canClose}
-          colors={colors}
-          onSelect={() => onSelectTab(tab.id)}
-          onClose={() => onCloseTab(tab.id)}
-        />
-      ))}
-
-      {/* New tab button - simple plus icon, not in a tab shape */}
-      <button
-        onClick={onNewTab}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '24px',
-          height: '24px',
-          borderRadius: '4px',
-          border: 'none',
-          backgroundColor: 'transparent',
-          color: colors.textDim,
-          fontSize: '16px',
-          cursor: 'pointer',
-          opacity: 0.7,
-          transition: 'all 0.15s ease',
-          flexShrink: 0,
-          marginLeft: '4px',
-          marginBottom: '4px',
-          alignSelf: 'center',
-        }}
-        title="New Tab"
-      >
-        +
-      </button>
+      </div>
 
       {/* CSS for pulse animation */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
     </div>

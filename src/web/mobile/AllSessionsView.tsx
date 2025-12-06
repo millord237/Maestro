@@ -404,10 +404,12 @@ export function AllSessionsView({
     });
   }, [sessionsByGroup]);
 
-  // Initialize collapsed groups with all groups collapsed by default
+  // Initialize collapsed groups with all groups collapsed by default, except bookmarks
   useEffect(() => {
     if (collapsedGroups === null && sortedGroupKeys.length > 0) {
-      setCollapsedGroups(new Set(sortedGroupKeys));
+      // Start with all groups collapsed except bookmarks (which should be expanded by default)
+      const initialCollapsed = new Set(sortedGroupKeys.filter(key => key !== 'bookmarks'));
+      setCollapsedGroups(initialCollapsed);
     }
   }, [sortedGroupKeys, collapsedGroups]);
 

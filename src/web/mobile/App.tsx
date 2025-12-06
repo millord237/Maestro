@@ -732,6 +732,19 @@ export default function MobileApp() {
     connect();
   }, [connect]);
 
+  // Auto-reconnect every 30 seconds when disconnected
+  useEffect(() => {
+    // Only auto-reconnect if disconnected and not offline
+    if (connectionState !== 'disconnected' || isOffline) return;
+
+    const intervalId = setInterval(() => {
+      webLogger.info('Auto-reconnecting after 30 seconds...', 'MobileApp');
+      connect();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [connectionState, isOffline, connect]);
+
   // Handle session selection - also notifies desktop to switch
   const handleSelectSession = useCallback((sessionId: string) => {
     // Find the session to get its activeTabId
@@ -1068,11 +1081,10 @@ export default function MobileApp() {
           <p style={{ fontSize: '14px', color: colors.textDim, marginBottom: '12px' }}>
             {error || 'Unable to connect to Maestro desktop app.'}
           </p>
-          {reconnectAttempts > 0 && (
-            <p style={{ fontSize: '12px', color: colors.textDim, marginBottom: '12px' }}>
-              Reconnection attempts: {reconnectAttempts}
-            </p>
-          )}
+          <p style={{ fontSize: '12px', color: colors.textDim, marginBottom: '12px' }}>
+            Auto-reconnecting every 30 seconds...
+            {reconnectAttempts > 0 && ` (attempt ${reconnectAttempts})`}
+          </p>
           <button
             onClick={handleRetry}
             style={{
@@ -1086,7 +1098,7 @@ export default function MobileApp() {
               cursor: 'pointer',
             }}
           >
-            Retry Connection
+            Retry Now
           </button>
         </div>
       );

@@ -119,6 +119,7 @@ export type GetSessionsCallback = () => Array<{
   thinkingStartTime?: number | null; // Timestamp when AI started thinking (for elapsed time display)
   aiTabs?: AITabData[];
   activeTabId?: string;
+  bookmarked?: boolean; // Whether session is bookmarked (shows in Bookmarks group)
 }>;
 
 // Session detail type for single session endpoint

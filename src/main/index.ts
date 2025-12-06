@@ -293,6 +293,7 @@ function createWebServer(): WebServer {
         thinkingStartTime: s.thinkingStartTime || null,
         aiTabs,
         activeTabId: s.activeTabId || (aiTabs.length > 0 ? aiTabs[0].id : undefined),
+        bookmarked: s.bookmarked || false,
       };
     });
   });

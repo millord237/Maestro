@@ -805,12 +805,34 @@ export function SessionPillBar({
   const hasMultipleGroups = sortedGroupKeys.length > 1 ||
     (sortedGroupKeys.length === 1 && sortedGroupKeys[0] !== 'ungrouped');
 
-  // Initialize collapsed groups with all groups collapsed by default
+  // Initialize collapsed groups with all groups collapsed by default, except bookmarks
   useEffect(() => {
     if (collapsedGroups === null && sortedGroupKeys.length > 0) {
-      setCollapsedGroups(new Set(sortedGroupKeys));
+      // Start with all groups collapsed except bookmarks (which should be expanded by default)
+      const initialCollapsed = new Set(sortedGroupKeys.filter(key => key !== 'bookmarks'));
+      setCollapsedGroups(initialCollapsed);
     }
   }, [sortedGroupKeys, collapsedGroups]);
+
+  // Auto-expand the group containing the active session
+  useEffect(() => {
+    if (!activeSessionId || collapsedGroups === null) return;
+
+    // Find which group contains the active session
+    const activeSession = sessions.find(s => s.id === activeSessionId);
+    if (!activeSession) return;
+
+    const activeGroupKey = activeSession.groupId || 'ungrouped';
+
+    // If the active session's group is collapsed, expand it
+    if (collapsedGroups.has(activeGroupKey)) {
+      setCollapsedGroups(prev => {
+        const next = new Set(prev || []);
+        next.delete(activeGroupKey);
+        return next;
+      });
+    }
+  }, [activeSessionId, sessions, collapsedGroups]);
 
   // Handle long-press on a session pill
   const handleLongPress = useCallback((session: Session, rect: DOMRect) => {
@@ -822,8 +844,10 @@ export function SessionPillBar({
     setPopoverState(null);
   }, []);
 
-  // Toggle group collapsed state
+  // Toggle group collapsed state and scroll to show the group header when expanding
   const handleToggleCollapse = useCallback((groupId: string) => {
+    const wasCollapsed = collapsedGroups?.has(groupId) ?? true;
+
     setCollapsedGroups(prev => {
       const next = new Set(prev || []);
       if (next.has(groupId)) {
@@ -833,7 +857,26 @@ export function SessionPillBar({
       }
       return next;
     });
-  }, []);
+
+    // If we're expanding a group, scroll to show the group header at the start
+    if (wasCollapsed && scrollContainerRef.current) {
+      // Wait for the DOM to update with the expanded sessions
+      setTimeout(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        // Find the group header element by its data attribute
+        const groupHeader = container.querySelector(`[data-group-id="${groupId}"]`) as HTMLElement | null;
+        if (groupHeader) {
+          // Scroll to put the group header at the left edge (with a small margin)
+          container.scrollTo({
+            left: groupHeader.offsetLeft - 8,
+            behavior: 'smooth',
+          });
+        }
+      }, 50);
+    }
+  }, [collapsedGroups]);
 
   // Scroll active session into view when it changes
   useEffect(() => {
@@ -1024,6 +1067,7 @@ export function SessionPillBar({
                 {/* Group header (only show if multiple groups exist) */}
                 {showGroupHeader && (
                   <div
+                    data-group-id={groupKey}
                     style={{
                       scrollSnapAlign: 'start',
                     }}
