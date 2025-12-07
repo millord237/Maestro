@@ -117,6 +117,17 @@ Each session shows a color-coded status indicator:
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/66e6f9e9-969e-497e-8139-f9fbf26f976a" />
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/0aec0a73-a687-4b7f-9710-4bf9d1325b6d" />
 
+### Web Interface / Remote Control
+#### Chat
+<img width="603" height="1311" alt="IMG_0163" src="https://github.com/user-attachments/assets/366addb0-f75a-4399-acd3-20d35954802a" />
+
+#### Groups / Sessions
+<img width="603" height="1311" alt="IMG_0162" src="https://github.com/user-attachments/assets/39a2c029-3f5a-4d1e-a291-a6037a67da79" />
+
+#### History
+<img width="603" height="1311" alt="IMG_0164" src="https://github.com/user-attachments/assets/ee82d715-118d-4308-b478-f7116df87381" />
+
+
 ## Keyboard Shortcuts
 
 ### Global Shortcuts
