@@ -7,7 +7,7 @@ Maestro ships with a variety of themes that fall under three categories: Dark, L
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/bf76f858-e37d-48f5-966b-ee226f42cb76" />
 
 ### Monokai
-<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/259d3f06-bd06-4235-adfc-359418629a5c" />
+<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/09db8891-4303-419a-b4ab-be729cf65e04" />
 
 ### Nord
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/4183458e-99ec-4479-a525-c3031d29ac20" />
@@ -59,3 +59,4 @@ It's a vibe.
 ### InQuest
 An homage to InQuest.net, acquired by OPSWAT in 2024.
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/706961b2-037a-4228-9b69-0958847f2bcc" />
+
