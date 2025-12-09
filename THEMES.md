@@ -39,7 +39,7 @@ Maestro ships with a variety of themes that fall under three categories: Dark, L
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/33fcb801-7978-4af4-b10d-7e9d5c9301e6" />
 
 ### Ayu Light
-<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/096b29fa-109d-47fe-8510-f112e44f998c" />
+<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/ace98cd5-ef7d-4f52-bd5f-2d2af75f81a8" />
 
 ## Vibes
 
@@ -49,7 +49,7 @@ Purple is Pedram's favorite color.
 
 ### Maestro's Choice
 We asked Maestro to make a theme for itself, this is what it came up with.
-<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/9f2ae804-947e-4dd7-a8ee-acd5b727b6b0" />
+<img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/2af219f3-220d-4587-b147-692580c2acf6" />
 
 ### Dre Synth
 It's a vibe.
@@ -58,6 +58,7 @@ It's a vibe.
 ### InQuest
 An homage to InQuest.net, acquired by OPSWAT in 2024.
 <img width="3592" height="2302" alt="image" src="https://github.com/user-attachments/assets/7d10495d-6d66-41ce-83d9-36ba8681e3db" />
+
 
 
 
