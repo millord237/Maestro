@@ -73,22 +73,6 @@ const compareNamesIgnoringEmojis = (a: string, b: string): number => {
 
 // Get description for Claude Code slash commands
 // Built-in commands have known descriptions, custom ones use a generic description
-// Map toolType to human-readable agent display name
-const AGENT_DISPLAY_NAMES: Record<string, string> = {
-  'claude-code': 'Claude Code',
-  'claude': 'Claude',
-  'terminal': 'Terminal',
-  'aider': 'Aider',
-  'opencode': 'OpenCode',
-  'openai-codex': 'OpenAI Codex',
-  'gemini-cli': 'Gemini CLI',
-  'qwen3-coder': 'Qwen3 Coder',
-};
-
-const getAgentDisplayName = (toolType: string): string => {
-  return AGENT_DISPLAY_NAMES[toolType] || toolType;
-};
-
 const CLAUDE_BUILTIN_COMMANDS: Record<string, string> = {
   'compact': 'Summarize conversation to reduce context usage',
   'context': 'Show current context window usage',
@@ -824,7 +808,6 @@ export default function MaestroConsole() {
         summary: string;
         groupName: string;
         projectName: string;
-        agentName: string;
         duration: number;
         claudeSessionId?: string;
         tabName?: string;
@@ -837,7 +820,7 @@ export default function MaestroConsole() {
       } | null = null;
       let queuedItemToProcess: { sessionId: string; item: QueuedItem } | null = null;
       // Track if we need to run synopsis after completion (for /commit and other AI commands)
-      let synopsisData: { sessionId: string; cwd: string; claudeSessionId: string; command: string; groupName: string; projectName: string; agentName: string; tabName?: string; tabId?: string } | null = null;
+      let synopsisData: { sessionId: string; cwd: string; claudeSessionId: string; command: string; groupName: string; projectName: string; tabName?: string; tabId?: string } | null = null;
 
       if (isFromAi) {
         const currentSession = sessionsRef.current.find(s => s.id === actualSessionId);
@@ -908,7 +891,6 @@ export default function MaestroConsole() {
             summary,
             groupName,
             projectName,
-            agentName: getAgentDisplayName(currentSession.toolType),
             duration,
             claudeSessionId: claudeSessionId || undefined,
             tabName,
@@ -936,7 +918,6 @@ export default function MaestroConsole() {
               command: currentSession.pendingAICommandForSynopsis || 'Save to History',
               groupName,
               projectName,
-              agentName: getAgentDisplayName(currentSession.toolType),
               tabName,
               tabId: completedTab?.id
             };
@@ -1144,7 +1125,6 @@ export default function MaestroConsole() {
               message: toastData!.summary,
               group: toastData!.groupName,
               project: toastData!.projectName,
-              agentName: toastData!.agentName,
               taskDuration: toastData!.duration,
               claudeSessionId: toastData!.claudeSessionId,
               tabName: toastData!.tabName,
@@ -1188,7 +1168,6 @@ export default function MaestroConsole() {
               message: result.response,
               group: synopsisData!.groupName,
               project: synopsisData!.projectName,
-              agentName: synopsisData!.agentName,
               taskDuration: duration,
               sessionId: synopsisData!.sessionId,
               tabId: synopsisData!.tabId,
@@ -2595,7 +2574,6 @@ export default function MaestroConsole() {
         message,
         group: groupName,
         project: info.sessionName,
-        agentName: session ? getAgentDisplayName(session.toolType) : undefined,
         taskDuration: info.elapsedTimeMs,
         sessionId: info.sessionId,
       });
@@ -2637,7 +2615,6 @@ export default function MaestroConsole() {
           message: info.prUrl || 'Pull request created successfully',
           group: groupName,
           project: info.sessionName,
-          agentName: session ? getAgentDisplayName(session.toolType) : undefined,
           sessionId: info.sessionId,
         });
       } else {
@@ -2648,7 +2625,6 @@ export default function MaestroConsole() {
           message: info.error || 'Failed to create pull request',
           group: groupName,
           project: info.sessionName,
-          agentName: session ? getAgentDisplayName(session.toolType) : undefined,
           sessionId: info.sessionId,
         });
       }
@@ -7056,6 +7032,43 @@ export default function MaestroConsole() {
           setTimeout(() => processInput(value), 0);
         }}
         sessionName={activeSession?.name}
+        // Image attachment props - share with main input area
+        stagedImages={stagedImages}
+        setStagedImages={setStagedImages}
+        onOpenLightbox={handleSetLightboxImage}
+        // Bottom bar toggles - get from active tab
+        tabSaveToHistory={activeSession ? getActiveTab(activeSession)?.saveToHistory ?? false : false}
+        onToggleTabSaveToHistory={() => {
+          if (!activeSession) return;
+          const activeTab = getActiveTab(activeSession);
+          if (!activeTab) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(tab =>
+                tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
+              )
+            };
+          }));
+        }}
+        tabReadOnlyMode={activeSession ? getActiveTab(activeSession)?.readOnlyMode ?? false : false}
+        onToggleTabReadOnlyMode={() => {
+          if (!activeSession) return;
+          const activeTab = getActiveTab(activeSession);
+          if (!activeTab) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(tab =>
+                tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+              )
+            };
+          }));
+        }}
+        enterToSend={enterToSendAI}
+        onToggleEnterToSend={() => setEnterToSendAI(!enterToSendAI)}
       />
 
       {/* --- EXECUTION QUEUE BROWSER --- */}

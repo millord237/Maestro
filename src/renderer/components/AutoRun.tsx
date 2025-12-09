@@ -1667,11 +1667,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         {/* Help button */}
         <button
           onClick={() => setHelpModalOpen(true)}
-          className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-white/10"
-          style={{ color: theme.colors.textDim }}
+          className="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+          style={{
+            color: theme.colors.textDim,
+            border: `1px solid ${theme.colors.border}`
+          }}
           title="Learn about Auto Runner"
         >
-          <HelpCircle className="w-4 h-4" />
+          <HelpCircle className="w-3.5 h-3.5" />
         </button>
       </div>
 

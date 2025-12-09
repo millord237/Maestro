@@ -353,9 +353,10 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         }
 
         // Path exists - check if it's part of the same repo
+        // If there's no repoRoot, the directory exists but isn't a git repo - that's fine for a new worktree
         const mainRepoRootResult = await window.maestro.git.getRepoRoot(sessionCwd);
-        const sameRepo = mainRepoRootResult.success &&
-          worktreeInfoResult.repoRoot === mainRepoRootResult.root;
+        const sameRepo = !worktreeInfoResult.repoRoot || (mainRepoRootResult.success &&
+          worktreeInfoResult.repoRoot === mainRepoRootResult.root);
 
         // Check for branch mismatch (only if branch name is provided)
         const branchMismatch = branchName !== '' &&

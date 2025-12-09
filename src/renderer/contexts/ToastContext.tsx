@@ -5,9 +5,8 @@ export interface Toast {
   type: 'success' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
-  group?: string;
-  project?: string;
-  agentName?: string; // Agent/tool name (e.g., "Claude Code") for OS notifications
+  group?: string; // Maestro group name
+  project?: string; // Maestro session name (the agent name in Left Bar)
   duration?: number;
   taskDuration?: number; // How long the task took in ms
   claudeSessionId?: string; // Claude Code session UUID for traceability
@@ -93,25 +92,26 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
 
     // Show OS notification if enabled (compact format for small notification area)
     if (osNotificationsRef.current.enabled) {
-      // Build concise title including agent name and group
-      // Format: "AgentName: Group > Session" or "AgentName: Session" or fallbacks
-      const sessionLabel = toast.tabName || (toast.claudeSessionId ? toast.claudeSessionId.slice(0, 8) : null);
-      const agentPrefix = toast.agentName ? `${toast.agentName}: ` : '';
+      // Build title: [Group >] SessionName [> TabLabel]
+      // - project = Maestro session name (the agent name shown in Left Bar)
+      // - group = Maestro group name
+      // - tabName = tab label or short Claude session UUID
+      const tabLabel = toast.tabName || (toast.claudeSessionId ? toast.claudeSessionId.slice(0, 8) : null);
 
-      let notifTitle: string;
-      if (toast.group && sessionLabel) {
-        // Full format: "Claude Code: MyGroup > ABC123"
-        notifTitle = `${agentPrefix}${toast.group} > ${sessionLabel}`;
-      } else if (toast.group) {
-        // Group only: "Claude Code: MyGroup"
-        notifTitle = `${agentPrefix}${toast.group}`;
-      } else if (sessionLabel) {
-        // Session only: "Claude Code: ABC123"
-        notifTitle = `${agentPrefix}${sessionLabel}`;
-      } else {
-        // Fallback: use agent name or toast title
-        notifTitle = toast.agentName || toast.title;
+      // Build title parts
+      const parts: string[] = [];
+      if (toast.group) {
+        parts.push(toast.group);
       }
+      if (toast.project) {
+        parts.push(toast.project);
+      }
+      if (tabLabel) {
+        parts.push(tabLabel);
+      }
+
+      // Join with " > " or fallback to toast title
+      const notifTitle = parts.length > 0 ? parts.join(' > ') : toast.title;
 
       // Body is just a one-word status derived from toast type
       const notifBody = toast.type === 'success' ? 'Done'
