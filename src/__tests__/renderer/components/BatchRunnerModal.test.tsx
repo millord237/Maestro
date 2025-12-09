@@ -1265,8 +1265,8 @@ describe('DEFAULT_BATCH_PROMPT export', () => {
     expect(DEFAULT_BATCH_PROMPT).toBeDefined();
     expect(typeof DEFAULT_BATCH_PROMPT).toBe('string');
     expect(DEFAULT_BATCH_PROMPT).toContain('{{DOCUMENT_PATH}}');
-    expect(DEFAULT_BATCH_PROMPT).toContain('{{PROJECT_NAME}}');
     expect(DEFAULT_BATCH_PROMPT).toContain('{{AGENT_NAME}}');
+    expect(DEFAULT_BATCH_PROMPT).toContain('{{AGENT_PATH}}');
   });
 });
 

@@ -58,17 +58,17 @@ describe('TEMPLATE_VARIABLES constant', () => {
     });
   });
 
-  it('should include key session variables', () => {
+  it('should include key agent variables', () => {
     const variables = TEMPLATE_VARIABLES.map((v) => v.variable);
-    expect(variables).toContain('{{SESSION_ID}}');
-    expect(variables).toContain('{{SESSION_NAME}}');
+    expect(variables).toContain('{{AGENT_NAME}}');
+    expect(variables).toContain('{{AGENT_PATH}}');
+    expect(variables).toContain('{{AGENT_GROUP}}');
+    expect(variables).toContain('{{AGENT_SESSION_ID}}');
     expect(variables).toContain('{{TOOL_TYPE}}');
   });
 
-  it('should include key project variables', () => {
+  it('should include key path variables', () => {
     const variables = TEMPLATE_VARIABLES.map((v) => v.variable);
-    expect(variables).toContain('{{PROJECT_PATH}}');
-    expect(variables).toContain('{{PROJECT_NAME}}');
     expect(variables).toContain('{{CWD}}');
   });
 
@@ -111,8 +111,8 @@ describe('TEMPLATE_VARIABLES_GENERAL constant', () => {
 
   it('should include general variables', () => {
     const variables = TEMPLATE_VARIABLES_GENERAL.map((v) => v.variable);
-    expect(variables).toContain('{{SESSION_ID}}');
-    expect(variables).toContain('{{SESSION_NAME}}');
+    expect(variables).toContain('{{AGENT_NAME}}');
+    expect(variables).toContain('{{AGENT_PATH}}');
     expect(variables).toContain('{{DATE}}');
     expect(variables).toContain('{{GIT_BRANCH}}');
   });
@@ -135,47 +135,7 @@ describe('substituteTemplateVariables', () => {
     vi.useRealTimers();
   });
 
-  describe('Session Variables', () => {
-    it('should replace {{SESSION_ID}} with session.id', () => {
-      const context = createTestContext({
-        session: createTestSession({ id: 'unique-session-456' }),
-      });
-      const result = substituteTemplateVariables('ID: {{SESSION_ID}}', context);
-      expect(result).toBe('ID: unique-session-456');
-    });
-
-    it('should replace {{SESSION_NAME}} with session.name', () => {
-      const context = createTestContext({
-        session: createTestSession({ name: 'My Custom Session' }),
-      });
-      const result = substituteTemplateVariables('Name: {{SESSION_NAME}}', context);
-      expect(result).toBe('Name: My Custom Session');
-    });
-
-    it('should replace {{AGENT_SESSION_ID}} with claudeSessionId', () => {
-      const context = createTestContext({
-        session: createTestSession({ claudeSessionId: 'claude-session-789' }),
-      });
-      const result = substituteTemplateVariables('Agent: {{AGENT_SESSION_ID}}', context);
-      expect(result).toBe('Agent: claude-session-789');
-    });
-
-    it('should replace {{AGENT_SESSION_ID}} with empty string when claudeSessionId is undefined', () => {
-      const context = createTestContext({
-        session: createTestSession({ claudeSessionId: undefined }),
-      });
-      const result = substituteTemplateVariables('Agent: {{AGENT_SESSION_ID}}', context);
-      expect(result).toBe('Agent: ');
-    });
-
-    it('should replace {{TOOL_TYPE}} with session.toolType', () => {
-      const context = createTestContext({
-        session: createTestSession({ toolType: 'aider' }),
-      });
-      const result = substituteTemplateVariables('Tool: {{TOOL_TYPE}}', context);
-      expect(result).toBe('Tool: aider');
-    });
-
+  describe('Agent Variables', () => {
     it('should replace {{AGENT_NAME}} with session.name', () => {
       const context = createTestContext({
         session: createTestSession({ name: 'Agent Alpha' }),
@@ -201,10 +161,52 @@ describe('substituteTemplateVariables', () => {
       const result = substituteTemplateVariables('Group: {{AGENT_GROUP}}', context);
       expect(result).toBe('Group: ');
     });
+
+    it('should replace {{AGENT_SESSION_ID}} with claudeSessionId', () => {
+      const context = createTestContext({
+        session: createTestSession({ claudeSessionId: 'claude-session-789' }),
+      });
+      const result = substituteTemplateVariables('Agent: {{AGENT_SESSION_ID}}', context);
+      expect(result).toBe('Agent: claude-session-789');
+    });
+
+    it('should replace {{AGENT_SESSION_ID}} with empty string when claudeSessionId is undefined', () => {
+      const context = createTestContext({
+        session: createTestSession({ claudeSessionId: undefined }),
+      });
+      const result = substituteTemplateVariables('Agent: {{AGENT_SESSION_ID}}', context);
+      expect(result).toBe('Agent: ');
+    });
+
+    it('should replace {{TOOL_TYPE}} with session.toolType', () => {
+      const context = createTestContext({
+        session: createTestSession({ toolType: 'aider' }),
+      });
+      const result = substituteTemplateVariables('Tool: {{TOOL_TYPE}}', context);
+      expect(result).toBe('Tool: aider');
+    });
   });
 
-  describe('Project Variables', () => {
-    it('should replace {{PROJECT_PATH}} with session.fullPath when available', () => {
+  describe('Legacy Session Variables (backwards compatibility)', () => {
+    it('should still replace {{SESSION_ID}} with session.id', () => {
+      const context = createTestContext({
+        session: createTestSession({ id: 'unique-session-456' }),
+      });
+      const result = substituteTemplateVariables('ID: {{SESSION_ID}}', context);
+      expect(result).toBe('ID: unique-session-456');
+    });
+
+    it('should still replace {{SESSION_NAME}} with session.name', () => {
+      const context = createTestContext({
+        session: createTestSession({ name: 'My Custom Session' }),
+      });
+      const result = substituteTemplateVariables('Name: {{SESSION_NAME}}', context);
+      expect(result).toBe('Name: My Custom Session');
+    });
+  });
+
+  describe('Path Variables', () => {
+    it('should replace {{AGENT_PATH}} with session.fullPath when available', () => {
       const context = createTestContext({
         session: createTestSession({
           fullPath: '/full/path/to/project',
@@ -212,11 +214,11 @@ describe('substituteTemplateVariables', () => {
           cwd: '/current/working/dir',
         }),
       });
-      const result = substituteTemplateVariables('Path: {{PROJECT_PATH}}', context);
+      const result = substituteTemplateVariables('Path: {{AGENT_PATH}}', context);
       expect(result).toBe('Path: /full/path/to/project');
     });
 
-    it('should replace {{PROJECT_PATH}} with session.projectRoot when fullPath not available', () => {
+    it('should replace {{AGENT_PATH}} with session.projectRoot when fullPath not available', () => {
       const context = createTestContext({
         session: createTestSession({
           fullPath: undefined,
@@ -224,11 +226,11 @@ describe('substituteTemplateVariables', () => {
           cwd: '/current/working/dir',
         }),
       });
-      const result = substituteTemplateVariables('Path: {{PROJECT_PATH}}', context);
+      const result = substituteTemplateVariables('Path: {{AGENT_PATH}}', context);
       expect(result).toBe('Path: /project/root');
     });
 
-    it('should replace {{PROJECT_PATH}} with session.cwd as fallback', () => {
+    it('should replace {{AGENT_PATH}} with session.cwd as fallback', () => {
       const context = createTestContext({
         session: createTestSession({
           fullPath: undefined,
@@ -236,30 +238,8 @@ describe('substituteTemplateVariables', () => {
           cwd: '/current/working/dir',
         }),
       });
-      const result = substituteTemplateVariables('Path: {{PROJECT_PATH}}', context);
+      const result = substituteTemplateVariables('Path: {{AGENT_PATH}}', context);
       expect(result).toBe('Path: /current/working/dir');
-    });
-
-    it('should replace {{PROJECT_NAME}} with last path segment', () => {
-      const context = createTestContext({
-        session: createTestSession({
-          fullPath: '/Users/dev/projects/my-awesome-app',
-        }),
-      });
-      const result = substituteTemplateVariables('Project: {{PROJECT_NAME}}', context);
-      expect(result).toBe('Project: my-awesome-app');
-    });
-
-    it('should replace {{PROJECT_NAME}} from projectRoot when fullPath not available', () => {
-      const context = createTestContext({
-        session: createTestSession({
-          fullPath: undefined,
-          projectRoot: '/home/user/repos/backend-service',
-          cwd: '/tmp',
-        }),
-      });
-      const result = substituteTemplateVariables('Project: {{PROJECT_NAME}}', context);
-      expect(result).toBe('Project: backend-service');
     });
 
     it('should replace {{CWD}} with session.cwd', () => {
@@ -295,6 +275,30 @@ describe('substituteTemplateVariables', () => {
       });
       const result = substituteTemplateVariables('Folder: {{AUTORUN_FOLDER}}', context);
       expect(result).toBe('Folder: ');
+    });
+  });
+
+  describe('Legacy Project Variables (backwards compatibility)', () => {
+    it('should still replace {{PROJECT_PATH}} with session.fullPath when available', () => {
+      const context = createTestContext({
+        session: createTestSession({
+          fullPath: '/full/path/to/project',
+          projectRoot: '/project/root',
+          cwd: '/current/working/dir',
+        }),
+      });
+      const result = substituteTemplateVariables('Path: {{PROJECT_PATH}}', context);
+      expect(result).toBe('Path: /full/path/to/project');
+    });
+
+    it('should still replace {{PROJECT_NAME}} with last path segment', () => {
+      const context = createTestContext({
+        session: createTestSession({
+          fullPath: '/Users/dev/projects/my-awesome-app',
+        }),
+      });
+      const result = substituteTemplateVariables('Project: {{PROJECT_NAME}}', context);
+      expect(result).toBe('Project: my-awesome-app');
     });
   });
 
@@ -679,9 +683,9 @@ describe('substituteTemplateVariables', () => {
 
       const template = `# Context
 
-Your name is **{{AGENT_NAME}}**, working on **{{PROJECT_NAME}}**.
+Your name is **{{AGENT_NAME}}**, a Maestro-managed AI agent.
 
-- **Project Path:** {{PROJECT_PATH}}
+- **Agent Path:** {{AGENT_PATH}}
 - **Git Branch:** {{GIT_BRANCH}}
 - **Loop Iteration:** {{LOOP_NUMBER}}
 - **Date:** {{DATE}}
@@ -692,8 +696,7 @@ Please complete the tasks in {{DOCUMENT_NAME}}.`;
       const result = substituteTemplateVariables(template, context);
 
       expect(result).toContain('Your name is **Backend Dev**');
-      expect(result).toContain('working on **myproject**');
-      expect(result).toContain('**Project Path:** /Users/dev/myproject');
+      expect(result).toContain('**Agent Path:** /Users/dev/myproject');
       expect(result).toContain('**Git Branch:** feature/api-v2');
       expect(result).toContain('**Loop Iteration:** 00003');
       expect(result).toContain('**Date:** 2025-03-15');

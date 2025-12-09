@@ -148,8 +148,8 @@ describe('AutoRunnerHelpModal', () => {
     });
 
     it('should render available template variable examples', () => {
-      expect(screen.getByText('{{SESSION_NAME}}')).toBeInTheDocument();
-      expect(screen.getByText('{{PROJECT_PATH}}')).toBeInTheDocument();
+      expect(screen.getByText('{{AGENT_NAME}}')).toBeInTheDocument();
+      expect(screen.getByText('{{AGENT_PATH}}')).toBeInTheDocument();
       expect(screen.getByText('{{GIT_BRANCH}}')).toBeInTheDocument();
       expect(screen.getByText('{{DATE}}')).toBeInTheDocument();
       expect(screen.getByText('{{LOOP_NUMBER}}')).toBeInTheDocument();

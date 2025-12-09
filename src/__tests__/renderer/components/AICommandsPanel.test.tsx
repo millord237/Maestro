@@ -199,7 +199,7 @@ describe('AICommandsPanel', () => {
 
       // Check for some common template variables (uppercase with underscores)
       expect(screen.getByText('{{AGENT_NAME}}')).toBeInTheDocument();
-      expect(screen.getByText('{{PROJECT_PATH}}')).toBeInTheDocument();
+      expect(screen.getByText('{{AGENT_PATH}}')).toBeInTheDocument();
     });
   });
 

@@ -279,21 +279,18 @@ Create your own slash commands in **Settings > Custom AI Commands**. Each comman
 
 Commands support **template variables** that are automatically substituted at runtime:
 
-#### Session Variables
+#### Agent Variables
 | Variable | Description |
 |----------|-------------|
-| `{{SESSION_ID}}` | Maestro session ID (unique identifier) |
-| `{{SESSION_NAME}}` | Current session name |
+| `{{AGENT_NAME}}` | Agent name |
+| `{{AGENT_PATH}}` | Agent home directory path (full path to project) |
+| `{{AGENT_GROUP}}` | Agent's group name (if grouped) |
 | `{{AGENT_SESSION_ID}}` | Agent session ID (for conversation continuity) |
 | `{{TOOL_TYPE}}` | Agent type (claude-code, aider, etc.) |
-| `{{AGENT_NAME}}` | Agent name (same as session name) |
-| `{{AGENT_GROUP}}` | Agent's group name (if grouped) |
 
-#### Project Variables
+#### Path Variables
 | Variable | Description |
 |----------|-------------|
-| `{{PROJECT_PATH}}` | Full path to project directory |
-| `{{PROJECT_NAME}}` | Project folder name (last segment of path) |
 | `{{CWD}}` | Current working directory |
 | `{{AUTORUN_FOLDER}}` | Auto Run documents folder path |
 
@@ -327,7 +324,7 @@ Commands support **template variables** that are automatically substituted at ru
 
 **Example**: A custom `/standup` command with prompt:
 ```
-It's {{WEEKDAY}}, {{DATE}}. I'm on branch {{GIT_BRANCH}} in {{PROJECT_NAME}}.
+It's {{WEEKDAY}}, {{DATE}}. I'm on branch {{GIT_BRANCH}} at {{AGENT_PATH}}.
 Summarize what I worked on yesterday and suggest priorities for today.
 ```
 

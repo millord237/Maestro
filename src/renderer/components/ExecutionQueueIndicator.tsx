@@ -55,8 +55,8 @@ export function ExecutionQueueIndicator({ session, theme, onClick }: ExecutionQu
     const availableWidth = containerWidth - fixedWidth - plusIndicatorWidth;
     const calculatedMax = Math.floor(availableWidth / avgPillWidth);
 
-    // Clamp between 1 and 5, but prefer showing at least 3 when space allows
-    const maxPills = Math.min(5, Math.max(1, calculatedMax));
+    // Clamp between 0 and 5 - can show zero pills on very small screens
+    const maxPills = Math.min(5, Math.max(0, calculatedMax));
     setMaxVisiblePills(maxPills);
   }, []);
 
@@ -136,7 +136,10 @@ export function ExecutionQueueIndicator({ session, theme, onClick }: ExecutionQu
         {tabNames.length > maxVisiblePills && (
           <span
             className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
-            style={{ color: theme.colors.textDim }}
+            style={{
+              backgroundColor: maxVisiblePills === 0 ? theme.colors.accent + '30' : 'transparent',
+              color: maxVisiblePills === 0 ? theme.colors.textMain : theme.colors.textDim
+            }}
           >
             +{tabNames.length - maxVisiblePills}
           </span>

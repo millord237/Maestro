@@ -2392,14 +2392,14 @@ export default function MaestroConsole() {
   }, []);
 
   // Helper to add history entry
-  const addHistoryEntry = useCallback(async (entry: { type: 'AUTO' | 'USER'; summary: string; fullResponse?: string; claudeSessionId?: string }) => {
+  // Note: usageStats should be passed explicitly for per-task tracking (e.g., batch runs)
+  // Do NOT use cumulative session stats here - they represent lifetime totals, not per-entry metrics
+  const addHistoryEntry = useCallback(async (entry: { type: 'AUTO' | 'USER'; summary: string; fullResponse?: string; claudeSessionId?: string; usageStats?: UsageStats }) => {
     if (!activeSession) return;
 
-    // Get session name and usageStats from active tab
-    // Use tab-level usageStats to match what's displayed in the UI header
+    // Get session name from active tab
     const activeTab = getActiveTab(activeSession);
     const sessionName = activeTab?.name;
-    const usageStats = activeTab?.usageStats || activeSession.usageStats;
 
     await window.maestro.history.add({
       id: generateId(),
@@ -2412,7 +2412,9 @@ export default function MaestroConsole() {
       sessionName: sessionName,
       projectPath: activeSession.cwd,
       contextUsage: activeSession.contextUsage,
-      usageStats: usageStats
+      // Only include usageStats if explicitly provided (per-task tracking)
+      // Never use cumulative session stats - they're lifetime totals
+      usageStats: entry.usageStats
     });
 
     // Refresh history panel to show the new entry
@@ -3404,6 +3406,13 @@ export default function MaestroConsole() {
         e.preventDefault();
         ctx.toggleTabStar();
       }
+      else if (ctx.isShortcut(e, 'openPromptComposer')) {
+        e.preventDefault();
+        // Only open in AI mode
+        if (ctx.activeSession?.inputMode === 'ai') {
+          ctx.setPromptComposerOpen(true);
+        }
+      }
       else if (ctx.isShortcut(e, 'focusInput')) {
         e.preventDefault();
         ctx.setActiveFocus('main');
@@ -4103,7 +4112,7 @@ export default function MaestroConsole() {
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
     setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownRawMode,
-    toggleTabStar
+    toggleTabStar, setPromptComposerOpen
   };
 
   const toggleGroup = (groupId: string) => {
@@ -6876,7 +6885,10 @@ export default function MaestroConsole() {
       {/* --- PROMPT COMPOSER MODAL --- */}
       <PromptComposerModal
         isOpen={promptComposerOpen}
-        onClose={() => setPromptComposerOpen(false)}
+        onClose={() => {
+          setPromptComposerOpen(false);
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }}
         theme={theme}
         initialValue={inputValue}
         onSubmit={(value) => setInputValue(value)}

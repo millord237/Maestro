@@ -68,7 +68,7 @@ vi.mock('../../../renderer/components/TemplateAutocompleteDropdown', () => ({
 vi.mock('../../../renderer/utils/templateVariables', () => ({
   TEMPLATE_VARIABLES: [
     { variable: '{{SESSION_NAME}}', description: 'Current session name' },
-    { variable: '{{PROJECT_PATH}}', description: 'Project directory path' },
+    { variable: '{{AGENT_PATH}}', description: 'Agent home directory path' },
     { variable: '{{DATE}}', description: 'Current date' },
     { variable: '{{TIME}}', description: 'Current time' },
     { variable: '{{GIT_BRANCH}}', description: 'Current git branch' },
@@ -444,7 +444,7 @@ describe('AgentPromptComposerModal', () => {
       });
 
       expect(screen.getByText('{{SESSION_NAME}}')).toBeInTheDocument();
-      expect(screen.getByText('{{PROJECT_PATH}}')).toBeInTheDocument();
+      expect(screen.getByText('{{AGENT_PATH}}')).toBeInTheDocument();
       expect(screen.getByText('{{DATE}}')).toBeInTheDocument();
       expect(screen.getByText('{{TIME}}')).toBeInTheDocument();
       expect(screen.getByText('{{GIT_BRANCH}}')).toBeInTheDocument();
@@ -467,7 +467,7 @@ describe('AgentPromptComposerModal', () => {
       });
 
       expect(screen.getByText('Current session name')).toBeInTheDocument();
-      expect(screen.getByText('Project directory path')).toBeInTheDocument();
+      expect(screen.getByText('Agent home directory path')).toBeInTheDocument();
       expect(screen.getByText('Current date')).toBeInTheDocument();
       expect(screen.getByText('Current time')).toBeInTheDocument();
       expect(screen.getByText('Current git branch')).toBeInTheDocument();

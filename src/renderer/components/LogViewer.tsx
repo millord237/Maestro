@@ -205,7 +205,7 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
 
   const loadLogs = async () => {
     try {
-      const systemLogs = await window.maestro.logger.getLogs();
+      const systemLogs = await window.maestro.logger.getLogs({ limit: 50 });
       setLogs(systemLogs);
     } catch (error) {
       console.error('Failed to load logs:', error);

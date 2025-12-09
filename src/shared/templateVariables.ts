@@ -3,18 +3,15 @@
  *
  * Available variables (case-insensitive):
  *
- * Session Variables:
- *   {{SESSION_ID}}        - Maestro session ID (unique identifier)
- *   {{SESSION_NAME}}      - Current session name
+ * Agent Variables:
+ *   {{AGENT_NAME}}        - Agent name
+ *   {{AGENT_PATH}}        - Agent home directory path (full path to project)
+ *   {{AGENT_GROUP}}       - Agent's group name (if grouped)
  *   {{AGENT_SESSION_ID}}  - Agent session ID (for conversation continuity)
  *   {{TOOL_TYPE}}         - Agent type (claude-code, aider, etc.)
- *   {{AGENT_NAME}}        - Agent name (same as session name)
- *   {{AGENT_GROUP}}       - Agent's group name (if grouped)
  *
- * Project Variables:
- *   {{PROJECT_PATH}}      - Full path to project directory
- *   {{PROJECT_NAME}}      - Project folder name (last segment of path)
- *   {{CWD}}               - Current working directory (alias for PROJECT_PATH)
+ * Path Variables:
+ *   {{CWD}}               - Current working directory
  *   {{AUTORUN_FOLDER}}    - Auto Run documents folder path
  *
  * Auto Run Variables:
@@ -74,6 +71,7 @@ export interface TemplateContext {
 export const TEMPLATE_VARIABLES = [
   { variable: '{{AGENT_GROUP}}', description: 'Agent group name' },
   { variable: '{{AGENT_NAME}}', description: 'Agent name' },
+  { variable: '{{AGENT_PATH}}', description: 'Agent home directory path' },
   { variable: '{{AGENT_SESSION_ID}}', description: 'Agent session ID' },
   { variable: '{{AUTORUN_FOLDER}}', description: 'Auto Run folder path', autoRunOnly: true },
   { variable: '{{CONTEXT_USAGE}}', description: 'Context usage %' },
@@ -88,10 +86,6 @@ export const TEMPLATE_VARIABLES = [
   { variable: '{{IS_GIT_REPO}}', description: 'Is git repo (true/false)' },
   { variable: '{{LOOP_NUMBER}}', description: 'Loop iteration (00001, 00002...)', autoRunOnly: true },
   { variable: '{{MONTH}}', description: 'Month (01-12)' },
-  { variable: '{{PROJECT_NAME}}', description: 'Project folder name' },
-  { variable: '{{PROJECT_PATH}}', description: 'Project directory path' },
-  { variable: '{{SESSION_ID}}', description: 'Maestro session ID' },
-  { variable: '{{SESSION_NAME}}', description: 'Session name' },
   { variable: '{{TIME}}', description: 'Time (HH:MM:SS)' },
   { variable: '{{TIMESTAMP}}', description: 'Unix timestamp (ms)' },
   { variable: '{{TIME_SHORT}}', description: 'Time (HH:MM)' },
@@ -115,19 +109,22 @@ export function substituteTemplateVariables(
 
   // Build replacements map
   const replacements: Record<string, string> = {
-    // Session variables
-    'SESSION_ID': session.id,
-    'SESSION_NAME': session.name,
+    // Agent variables
+    'AGENT_NAME': session.name,
+    'AGENT_PATH': session.fullPath || session.projectRoot || session.cwd,
+    'AGENT_GROUP': groupName || '',
     'AGENT_SESSION_ID': session.claudeSessionId || '',
     'TOOL_TYPE': session.toolType,
-    'AGENT_NAME': session.name,
-    'AGENT_GROUP': groupName || '',
 
-    // Project variables
-    'PROJECT_PATH': session.fullPath || session.projectRoot || session.cwd,
-    'PROJECT_NAME': (session.fullPath || session.projectRoot || session.cwd).split('/').pop() || '',
+    // Path variables
     'CWD': session.cwd,
     'AUTORUN_FOLDER': autoRunFolder || session.autoRunFolderPath || '',
+
+    // Legacy aliases (deprecated - kept for backwards compatibility)
+    'SESSION_ID': session.id,
+    'SESSION_NAME': session.name,
+    'PROJECT_PATH': session.fullPath || session.projectRoot || session.cwd,
+    'PROJECT_NAME': (session.fullPath || session.projectRoot || session.cwd).split('/').pop() || '',
 
     // Document variables (for Auto Run)
     'DOCUMENT_NAME': documentName || '',

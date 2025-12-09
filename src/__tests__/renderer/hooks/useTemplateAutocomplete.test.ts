@@ -970,10 +970,10 @@ describe('useTemplateAutocomplete', () => {
       onChangeMock.mockClear();
 
       act(() => {
-        result.current.selectVariable('{{PROJECT_NAME}}');
+        result.current.selectVariable('{{AGENT_NAME}}');
       });
 
-      expect(onChangeMock).toHaveBeenCalledWith('{{PROJECT_NAME}} world');
+      expect(onChangeMock).toHaveBeenCalledWith('{{AGENT_NAME}} world');
     });
 
     it('should close autocomplete after selection', () => {
@@ -1307,14 +1307,12 @@ describe('useTemplateAutocomplete', () => {
 
       const variables = result.current.autocompleteState.filteredVariables;
 
-      // Session variables
-      expect(variables.some(v => v.variable === '{{SESSION_ID}}')).toBe(true);
-      expect(variables.some(v => v.variable === '{{SESSION_NAME}}')).toBe(true);
+      // Agent variables
+      expect(variables.some(v => v.variable === '{{AGENT_NAME}}')).toBe(true);
+      expect(variables.some(v => v.variable === '{{AGENT_PATH}}')).toBe(true);
       expect(variables.some(v => v.variable === '{{AGENT_SESSION_ID}}')).toBe(true);
 
-      // Project variables
-      expect(variables.some(v => v.variable === '{{PROJECT_PATH}}')).toBe(true);
-      expect(variables.some(v => v.variable === '{{PROJECT_NAME}}')).toBe(true);
+      // Path variables
       expect(variables.some(v => v.variable === '{{CWD}}')).toBe(true);
 
       // Date/time variables

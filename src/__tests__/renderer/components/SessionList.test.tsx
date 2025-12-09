@@ -50,6 +50,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash" />,
   Edit3: () => <span data-testid="icon-edit" />,
   FolderInput: () => <span data-testid="icon-folder-input" />,
+  Download: () => <span data-testid="icon-download" />,
 }));
 
 // Mock gitService
@@ -590,10 +591,13 @@ describe('SessionList', () => {
 
     it('creates new group when button clicked', () => {
       const createNewGroup = vi.fn();
+      // Note: "New Group" button is inside the Ungrouped section, which only shows when groups exist
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [createMockSession({ id: 's1', name: 'Ungrouped' })];
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         createNewGroup,
       });
@@ -609,13 +613,32 @@ describe('SessionList', () => {
   // ============================================================================
 
   describe('Ungrouped Sessions', () => {
-    it('renders ungrouped section with sessions', () => {
+    it('does not show Ungrouped header when no groups exist', () => {
+      const sessions = [
+        createMockSession({ id: 's1', name: 'Direct Session' }),
+      ];
+      const props = createDefaultProps({
+        sessions,
+        sortedSessions: sessions,
+        groups: [], // No groups defined
+        leftSidebarOpen: true,
+      });
+      render(<SessionList {...props} />);
+
+      // Session should be visible directly without "Ungrouped" header
+      expect(screen.getByText('Direct Session')).toBeInTheDocument();
+      expect(screen.queryByText('Ungrouped')).not.toBeInTheDocument();
+    });
+
+    it('renders ungrouped section with sessions when groups exist', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({ id: 's1', name: 'Ungrouped Session' }),
       ];
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup], // At least one group exists, so Ungrouped header shows
         leftSidebarOpen: true,
       });
       render(<SessionList {...props} />);
@@ -1227,13 +1250,18 @@ describe('SessionList', () => {
   // ============================================================================
 
   describe('Session Renaming', () => {
+    // Note: Tests using "ungrouped-" prefix for editingSessionId require at least one group
+    // to be present, since the Ungrouped section only renders when groups exist.
+
     it('shows rename input when editingSessionId matches ungrouped session', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({ id: 's1', name: 'Original Session' }),
       ];
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         editingSessionId: 'ungrouped-s1',
       });
@@ -1244,6 +1272,7 @@ describe('SessionList', () => {
     });
 
     it('calls finishRenamingSession on blur', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const finishRenamingSession = vi.fn();
       const sessions = [
         createMockSession({ id: 's1', name: 'Original' }),
@@ -1251,6 +1280,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         editingSessionId: 'ungrouped-s1',
         finishRenamingSession,
@@ -1265,6 +1295,7 @@ describe('SessionList', () => {
     });
 
     it('starts renaming on double-click', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const startRenamingSession = vi.fn();
       const sessions = [
         createMockSession({ id: 's1', name: 'Double Click Me' }),
@@ -1272,6 +1303,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         startRenamingSession,
       });
@@ -1282,6 +1314,7 @@ describe('SessionList', () => {
     });
 
     it('calls finishRenamingSession on Enter key', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const finishRenamingSession = vi.fn();
       const sessions = [
         createMockSession({ id: 's1', name: 'Original' }),
@@ -1289,6 +1322,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         editingSessionId: 'ungrouped-s1',
         finishRenamingSession,
@@ -1303,6 +1337,7 @@ describe('SessionList', () => {
     });
 
     it('stops click propagation when clicking rename input', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const setActiveSessionId = vi.fn();
       const sessions = [
         createMockSession({ id: 's1', name: 'Original' }),
@@ -1310,6 +1345,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         editingSessionId: 'ungrouped-s1',
         setActiveSessionId,
@@ -2103,7 +2139,11 @@ describe('SessionList', () => {
   // ============================================================================
 
   describe('Ungrouped Collapsed Palette', () => {
+    // Note: "Ungrouped" header only shows when at least one group exists.
+    // These tests need a group defined to make the Ungrouped section visible.
+
     it('toggles ungrouped section collapse', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({ id: 's1', name: 'Ungrouped 1' }),
         createMockSession({ id: 's2', name: 'Ungrouped 2' }),
@@ -2111,6 +2151,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
       });
       render(<SessionList {...props} />);
@@ -2122,6 +2163,7 @@ describe('SessionList', () => {
     });
 
     it('shows tooltip with session details on ungrouped collapsed indicator hover', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({
           id: 's1',
@@ -2133,6 +2175,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
       });
       const { container } = render(<SessionList {...props} />);
@@ -2151,6 +2194,7 @@ describe('SessionList', () => {
     });
 
     it('clears tooltip position on mouse leave from ungrouped collapsed indicator', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({
           id: 's1',
@@ -2160,6 +2204,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
       });
       const { container } = render(<SessionList {...props} />);
@@ -2182,6 +2227,7 @@ describe('SessionList', () => {
     });
 
     it('selects session when clicking indicator in ungrouped collapsed palette', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const setActiveSessionId = vi.fn();
       const sessions = [
         createMockSession({ id: 's1', name: 'Click Me' }),
@@ -2189,6 +2235,7 @@ describe('SessionList', () => {
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
         setActiveSessionId,
       });
@@ -2206,12 +2253,14 @@ describe('SessionList', () => {
     });
 
     it('expands ungrouped section when clicking collapsed palette container', () => {
+      const emptyGroup = createMockGroup({ id: 'g-empty', name: 'Other Group' });
       const sessions = [
         createMockSession({ id: 's1', name: 'Session 1' }),
       ];
       const props = createDefaultProps({
         sessions,
         sortedSessions: sessions,
+        groups: [emptyGroup],
         leftSidebarOpen: true,
       });
       const { container } = render(<SessionList {...props} />);
