@@ -3,7 +3,7 @@
  *
  * TabSwitcherModal provides quick navigation between AI tabs with:
  * - Fuzzy search filtering
- * - Two view modes: "Open Tabs" and "All Named Sessions"
+ * - Two view modes: "Open Tabs" and "All Named" (named sessions only)
  * - Context gauge visualization for token usage
  * - Keyboard navigation (Arrow keys, Enter, Tab to switch modes)
  * - Number hotkeys (Cmd+1-9, Cmd+0) for quick selection
@@ -633,7 +633,7 @@ describe('TabSwitcherModal', () => {
       );
 
       expect(screen.getByText(/Open Tabs/)).toBeInTheDocument();
-      expect(screen.getByText(/All Sessions/)).toBeInTheDocument();
+      expect(screen.getByText(/All Named/)).toBeInTheDocument();
       expect(screen.getByText('Tab to switch')).toBeInTheDocument();
     });
 
@@ -892,8 +892,8 @@ describe('TabSwitcherModal', () => {
         expect(window.maestro.claude.getAllNamedSessions).toHaveBeenCalled();
       });
 
-      // Click All Sessions pill
-      fireEvent.click(screen.getByText(/All Sessions/));
+      // Click All Named pill
+      fireEvent.click(screen.getByText(/All Named/));
 
       // Should now show named sessions
       await waitFor(() => {
@@ -920,8 +920,8 @@ describe('TabSwitcherModal', () => {
       const input = screen.getByPlaceholderText('Search open tabs...');
       fireEvent.keyDown(input, { key: 'Tab' });
 
-      // Placeholder should change to indicate All Sessions mode
-      expect(screen.getByPlaceholderText('Search all sessions...')).toBeInTheDocument();
+      // Placeholder should change to indicate All Named mode
+      expect(screen.getByPlaceholderText('Search named sessions...')).toBeInTheDocument();
     });
 
     it('shows "Closed" badge for closed named sessions', async () => {
@@ -950,7 +950,7 @@ describe('TabSwitcherModal', () => {
         expect(window.maestro.claude.getAllNamedSessions).toHaveBeenCalled();
       });
 
-      fireEvent.click(screen.getByText(/All Sessions/));
+      fireEvent.click(screen.getByText(/All Named/));
 
       await waitFor(() => {
         expect(screen.getByText('Closed')).toBeInTheDocument();
@@ -987,7 +987,7 @@ describe('TabSwitcherModal', () => {
         expect(window.maestro.claude.getAllNamedSessions).toHaveBeenCalled();
       });
 
-      fireEvent.click(screen.getByText(/All Sessions/));
+      fireEvent.click(screen.getByText(/All Named/));
 
       await waitFor(() => {
         expect(screen.getByText('Same Project Session')).toBeInTheDocument();
@@ -1442,7 +1442,7 @@ describe('TabSwitcherModal', () => {
         expect(window.maestro.claude.getAllNamedSessions).toHaveBeenCalled();
       });
 
-      fireEvent.click(screen.getByText(/All Sessions/));
+      fireEvent.click(screen.getByText(/All Named/));
 
       await waitFor(() => {
         expect(screen.getByText('Closed Session')).toBeInTheDocument();
@@ -1923,7 +1923,7 @@ describe('TabSwitcherModal', () => {
       expect(screen.getByText('1 tabs')).toBeInTheDocument();
     });
 
-    it('shows "sessions" in All Sessions mode', () => {
+    it('shows "sessions" in All Named mode', () => {
       const tabs = [createTestTab({ name: 'TestTab', claudeSessionId: 'test-session-123' })];
 
       renderWithLayerStack(
@@ -1938,9 +1938,9 @@ describe('TabSwitcherModal', () => {
         />
       );
 
-      fireEvent.click(screen.getByText(/All Sessions/));
+      fireEvent.click(screen.getByText(/All Named/));
 
-      // In All Sessions mode, footer shows "sessions"
+      // In All Named mode, footer shows "sessions"
       expect(screen.getByText('1 sessions')).toBeInTheDocument();
     });
   });

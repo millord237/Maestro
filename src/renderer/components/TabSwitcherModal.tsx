@@ -411,7 +411,7 @@ export function TabSwitcherModal({
           <input
             ref={inputRef}
             className="flex-1 bg-transparent outline-none text-lg placeholder-opacity-50"
-            placeholder={viewMode === 'open' ? "Search open tabs..." : "Search all sessions..."}
+            placeholder={viewMode === 'open' ? "Search open tabs..." : "Search named sessions..."}
             style={{ color: theme.colors.textMain }}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -452,7 +452,7 @@ export function TabSwitcherModal({
               color: viewMode === 'all-named' ? theme.colors.accentForeground : theme.colors.textDim
             }}
           >
-            All Sessions ({tabs.filter(t => t.claudeSessionId).length + namedSessions.filter(s => !openTabSessionIds.has(s.claudeSessionId)).length})
+            All Named ({tabs.filter(t => t.name && t.claudeSessionId).length + namedSessions.filter(s => s.projectPath === projectRoot && !openTabSessionIds.has(s.claudeSessionId)).length})
           </button>
           <span className="text-[10px] opacity-50 ml-auto" style={{ color: theme.colors.textDim }}>
             Tab to switch
