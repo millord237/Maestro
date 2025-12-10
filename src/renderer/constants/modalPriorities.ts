@@ -41,6 +41,9 @@ export const MODAL_PRIORITIES = {
   /** Create new group modal */
   CREATE_GROUP: 800,
 
+  /** Wizard exit confirmation dialog - appears above wizard when exiting mid-flow */
+  WIZARD_EXIT_CONFIRM: 770,
+
   /** Wizard resume dialog - appears above wizard to ask about resuming */
   WIZARD_RESUME: 765,
 

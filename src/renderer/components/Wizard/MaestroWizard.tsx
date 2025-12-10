@@ -6,10 +6,11 @@
  * Handles modal presentation, screen transitions, and LayerStack registration.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useWizard, WIZARD_TOTAL_STEPS, type WizardStep } from './WizardContext';
 import { useLayerStack } from '../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
+import { WizardExitConfirmModal } from './WizardExitConfirmModal';
 import type { Theme } from '../../types';
 
 // Screen components - will be implemented in subsequent tasks
@@ -62,6 +63,9 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
 
   const { registerLayer, unregisterLayer } = useLayerStack();
 
+  // State for exit confirmation modal
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
   // Refs for stable callbacks
   const closeWizardRef = useRef(closeWizard);
   closeWizardRef.current = closeWizard;
@@ -69,31 +73,52 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
   saveStateForResumeRef.current = saveStateForResume;
 
   /**
-   * Handle wizard close with optional confirmation and state saving
-   * Confirmation is shown if user has progressed past step 1
+   * Handle wizard close request
+   * Shows confirmation if past step 1, otherwise closes directly
    */
-  const handleClose = useCallback(() => {
+  const handleCloseRequest = useCallback(() => {
     const currentStepNum = getCurrentStepNumber();
 
     if (currentStepNum > 1) {
-      // Save state for resume before closing
-      saveStateForResumeRef.current();
+      // Show confirmation dialog
+      setShowExitConfirm(true);
+    } else {
+      // On step 1, close directly without saving (no progress to save)
+      closeWizardRef.current();
     }
-
-    closeWizardRef.current();
   }, [getCurrentStepNumber]);
+
+  /**
+   * Handle confirmed exit - saves state and closes wizard
+   */
+  const handleConfirmExit = useCallback(() => {
+    saveStateForResumeRef.current();
+    setShowExitConfirm(false);
+    closeWizardRef.current();
+  }, []);
+
+  /**
+   * Handle cancel exit - close confirmation and stay in wizard
+   */
+  const handleCancelExit = useCallback(() => {
+    setShowExitConfirm(false);
+  }, []);
 
   // Register with layer stack for Escape handling
   useEffect(() => {
-    if (state.isOpen) {
+    if (state.isOpen && !showExitConfirm) {
       const id = registerLayer({
         type: 'modal',
         priority: MODAL_PRIORITIES.WIZARD,
-        onEscape: handleClose,
+        blocksLowerLayers: true,
+        capturesFocus: true,
+        focusTrap: 'strict',
+        ariaLabel: 'Setup Wizard',
+        onEscape: handleCloseRequest,
       });
       return () => unregisterLayer(id);
     }
-  }, [state.isOpen, registerLayer, unregisterLayer, handleClose]);
+  }, [state.isOpen, showExitConfirm, registerLayer, unregisterLayer, handleCloseRequest]);
 
   // Don't render if wizard is not open
   if (!state.isOpen) {
@@ -133,7 +158,7 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
       onClick={(e) => {
         // Close on backdrop click
         if (e.target === e.currentTarget) {
-          handleClose();
+          handleCloseRequest();
         }
       }}
     >
@@ -210,7 +235,7 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
 
           {/* Close button */}
           <button
-            onClick={handleClose}
+            onClick={handleCloseRequest}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors"
             style={{ color: theme.colors.textDim }}
             title="Close wizard (Escape)"
@@ -281,6 +306,17 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
           }
         }
       `}</style>
+
+      {/* Exit confirmation modal */}
+      {showExitConfirm && (
+        <WizardExitConfirmModal
+          theme={theme}
+          currentStep={currentStepNumber}
+          totalSteps={WIZARD_TOTAL_STEPS}
+          onConfirmExit={handleConfirmExit}
+          onCancel={handleCancelExit}
+        />
+      )}
     </div>
   );
 }
