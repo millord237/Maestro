@@ -7228,12 +7228,25 @@ export default function MaestroConsole() {
         <WizardResumeModal
           theme={theme}
           resumeState={wizardResumeState}
-          onResume={(directoryInvalid?: boolean) => {
+          onResume={(options?: { directoryInvalid?: boolean; agentInvalid?: boolean }) => {
             // Close the resume modal
             setWizardResumeModalOpen(false);
 
-            // If directory is invalid, redirect to directory selection step with error
-            if (directoryInvalid) {
+            const { directoryInvalid = false, agentInvalid = false } = options || {};
+
+            // If agent is invalid, redirect to agent selection step with error
+            // This takes priority since it's the first step
+            if (agentInvalid) {
+              const modifiedState = {
+                ...wizardResumeState,
+                currentStep: 'agent-selection' as const,
+                // Clear the agent selection so user must select a new one
+                selectedAgent: null,
+                // Keep other state for resume after agent selection
+              };
+              restoreWizardState(modifiedState);
+            } else if (directoryInvalid) {
+              // If directory is invalid, redirect to directory selection step with error
               const modifiedState = {
                 ...wizardResumeState,
                 currentStep: 'directory-selection' as const,

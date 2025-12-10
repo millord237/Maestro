@@ -6,8 +6,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, RotateCcw, FolderOpen, AlertTriangle } from 'lucide-react';
-import type { Theme } from '../../types';
+import { RefreshCw, RotateCcw, FolderOpen, AlertTriangle, Bot } from 'lucide-react';
+import type { Theme, AgentConfig } from '../../types';
 import { useLayerStack } from '../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
 import type { SerializableWizardState, WizardStep } from './WizardContext';
@@ -16,7 +16,7 @@ import { STEP_INDEX } from './WizardContext';
 interface WizardResumeModalProps {
   theme: Theme;
   resumeState: SerializableWizardState;
-  onResume: (directoryInvalid?: boolean) => void;
+  onResume: (options?: { directoryInvalid?: boolean; agentInvalid?: boolean }) => void;
   onStartFresh: () => void;
   onClose: () => void;
 }
@@ -58,40 +58,56 @@ export function WizardResumeModal({
   const resumeButtonRef = useRef<HTMLButtonElement>(null);
   const [focusedButton, setFocusedButton] = useState<'resume' | 'fresh'>('resume');
   const [directoryValid, setDirectoryValid] = useState<boolean | null>(null);
+  const [agentValid, setAgentValid] = useState<boolean | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
-  // Validate directory path on mount if present
+  // Validate directory path and agent availability on mount
   useEffect(() => {
     let mounted = true;
 
-    async function validateDirectory() {
-      if (!resumeState.directoryPath) {
-        // No directory to validate
-        setDirectoryValid(true);
-        return;
+    async function validateResumeState() {
+      setIsValidating(true);
+
+      // Validate directory if present
+      let dirValid = true;
+      if (resumeState.directoryPath) {
+        try {
+          // Use git.isRepo which will fail if directory doesn't exist
+          await window.maestro.git.isRepo(resumeState.directoryPath);
+        } catch {
+          // Directory doesn't exist or is inaccessible
+          dirValid = false;
+        }
       }
 
-      setIsValidating(true);
-      try {
-        // Use git.isRepo which will fail if directory doesn't exist
-        await window.maestro.git.isRepo(resumeState.directoryPath);
-        if (mounted) {
-          setDirectoryValid(true);
-        }
-      } catch {
-        // Directory doesn't exist or is inaccessible
-        if (mounted) {
-          setDirectoryValid(false);
+      // Validate agent is still available
+      let agentAvailable = true;
+      if (resumeState.selectedAgent) {
+        try {
+          const agents = await window.maestro.agents.detect();
+          // Filter out hidden agents (like terminal)
+          const visibleAgents = agents.filter((a: AgentConfig) => !a.hidden);
+          // Check if the selected agent is available
+          const selectedAgentConfig = visibleAgents.find(
+            (a: AgentConfig) => a.id === resumeState.selectedAgent && a.available
+          );
+          agentAvailable = !!selectedAgentConfig;
+        } catch {
+          // If agent detection fails, assume agent is not available
+          agentAvailable = false;
         }
       }
+
       if (mounted) {
+        setDirectoryValid(dirValid);
+        setAgentValid(agentAvailable);
         setIsValidating(false);
       }
     }
 
-    validateDirectory();
+    validateResumeState();
     return () => { mounted = false; };
-  }, [resumeState.directoryPath]);
+  }, [resumeState.directoryPath, resumeState.selectedAgent]);
 
   // Focus resume button on mount
   useEffect(() => {
@@ -125,9 +141,12 @@ export function WizardResumeModal({
     }
   }, [onClose, updateLayerHandler]);
 
-  // Handle resume click with directory validation status
+  // Handle resume click with validation status
   const handleResume = () => {
-    onResume(directoryValid === false);
+    onResume({
+      directoryInvalid: directoryValid === false,
+      agentInvalid: agentValid === false,
+    });
   };
 
   // Handle keyboard navigation between buttons
@@ -242,6 +261,42 @@ export function WizardResumeModal({
                   <p className="text-sm" style={{ color: theme.colors.textMain }}>
                     {resumeState.agentName || 'Unnamed Project'}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {resumeState.selectedAgent && (
+              <div className="flex items-start gap-3">
+                <div className="w-8" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs" style={{ color: theme.colors.textDim }}>
+                      AI Agent
+                    </p>
+                    {isValidating && (
+                      <div
+                        className="w-3 h-3 border border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: theme.colors.accent, borderTopColor: 'transparent' }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-3.5 h-3.5" style={{ color: agentValid === false ? theme.colors.error : theme.colors.accent }} />
+                    <p
+                      className="text-sm"
+                      style={{ color: agentValid === false ? theme.colors.error : theme.colors.textMain }}
+                    >
+                      {resumeState.selectedAgent === 'claude-code' ? 'Claude Code' : resumeState.selectedAgent}
+                    </p>
+                  </div>
+                  {agentValid === false && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0" style={{ color: theme.colors.warning }} />
+                      <p className="text-xs" style={{ color: theme.colors.warning }}>
+                        Agent no longer available — you'll need to select a different agent
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
