@@ -2188,7 +2188,8 @@ export default function MaestroConsole() {
   // Helper to spawn a Claude agent and wait for completion (for a specific session)
   // cwdOverride allows running in a different directory (e.g., for worktree mode)
   const spawnAgentForSession = useCallback(async (sessionId: string, prompt: string, cwdOverride?: string): Promise<{ success: boolean; response?: string; claudeSessionId?: string; usageStats?: UsageStats }> => {
-    const session = sessions.find(s => s.id === sessionId);
+    // Use sessionsRef to get latest sessions (fixes stale closure when called right after session creation)
+    const session = sessionsRef.current.find(s => s.id === sessionId);
     if (!session) return { success: false };
 
     // Use override cwd if provided (worktree mode), otherwise use session's cwd
@@ -2401,7 +2402,7 @@ export default function MaestroConsole() {
       console.error('Error spawning agent:', error);
       return { success: false };
     }
-  }, [sessions]);
+  }, []); // Uses sessionsRef for latest sessions, no closure dependencies needed
 
   // Wrapper for slash commands that need to spawn an agent with just a prompt
   const spawnAgentWithPrompt = useCallback(async (prompt: string) => {

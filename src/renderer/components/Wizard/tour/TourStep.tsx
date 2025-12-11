@@ -41,14 +41,14 @@ function calculateTooltipPosition(
   spotlight: SpotlightInfo | null,
   preferredPosition: TourStepConfig['position']
 ): {
-  position: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  position: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'center-overlay';
   style: React.CSSProperties;
 } {
   const tooltipWidth = 360;
   const tooltipHeight = 240; // Estimated max height
   const margin = 16;
 
-  // If no spotlight, center the tooltip
+  // If no spotlight, center the tooltip on screen
   if (!spotlight?.rect) {
     return {
       position: 'center',
@@ -67,6 +67,22 @@ function calculateTooltipPosition(
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
+  // If center-overlay is requested, center the tooltip over the spotlight element
+  if (preferredPosition === 'center-overlay') {
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    return {
+      position: 'center-overlay',
+      style: {
+        position: 'fixed',
+        top: centerY,
+        left: centerX,
+        transform: 'translate(-50%, -50%)',
+        width: tooltipWidth,
+      },
+    };
+  }
+
   // Calculate available space in each direction
   const spaceTop = y - padding;
   const spaceBottom = viewportHeight - (y + height + padding);
@@ -74,7 +90,7 @@ function calculateTooltipPosition(
   const spaceRight = viewportWidth - (x + width + padding);
 
   // Determine best position based on preference and available space
-  let position = preferredPosition || 'bottom';
+  let position: 'top' | 'bottom' | 'left' | 'right' | 'center' = (preferredPosition as any) || 'bottom';
 
   // Check if preferred position has enough space, otherwise find best
   const minSpace = tooltipHeight + margin * 2;
@@ -141,9 +157,9 @@ function TooltipArrow({
   position,
 }: {
   theme: Theme;
-  position: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  position: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'center-overlay';
 }) {
-  if (position === 'center') return null;
+  if (position === 'center' || position === 'center-overlay') return null;
 
   const arrowStyles: Record<string, React.CSSProperties> = {
     top: {

@@ -118,7 +118,7 @@ export const tourSteps: TourStepConfig[] = [
     descriptionGeneric:
       'This is the AI Terminal where you communicate with your AI assistant. In "AI" mode, messages go to the AI. Switch to "Terminal" mode for direct shell commands.',
     selector: '[data-tour="main-terminal"]',
-    position: 'center',
+    position: 'center-overlay',
     uiActions: [],
   },
   {
