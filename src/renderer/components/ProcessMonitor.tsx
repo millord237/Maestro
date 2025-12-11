@@ -302,6 +302,9 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
           label = `AI Agent (${proc.toolType})`;
         }
 
+        // Get session name for process label
+        const sessionName = session.name;
+
         // Look up Claude session ID from the tab if this is an AI process
         let claudeSessionId: string | undefined;
         let tabId: string | undefined;
@@ -329,7 +332,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
         sessionNode.children!.push({
           id: `process-${proc.sessionId}`,
           type: 'process',
-          label,
+          label: `${sessionName} - ${label}`,
           pid: proc.pid,
           processType,
           sessionId: session.id,
