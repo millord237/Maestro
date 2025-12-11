@@ -210,15 +210,16 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
         <div className="p-6 space-y-5">
           {/* Agent Name */}
           <div>
-            <label className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
+            <label htmlFor="agent-name-input" className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
               Agent Name
             </label>
             <input
+              id="agent-name-input"
               ref={nameInputRef}
               type="text"
               value={instanceName}
               onChange={(e) => setInstanceName(e.target.value)}
-              placeholder="My Project Session"
+              placeholder=""
               className="w-full p-2 rounded border bg-transparent outline-none"
               style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
             />
@@ -227,7 +228,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
           {/* Agent Selection */}
           <div>
             <label className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
-              AI Agent / Tool
+              Agent Provider
             </label>
             {loading ? (
               <div className="text-sm opacity-50">Loading agents...</div>

@@ -92,6 +92,7 @@ export interface HistoryEntry {
   success?: boolean; // For AUTO entries: whether the task completed successfully (true) or failed (false)
   elapsedTimeMs?: number; // Time taken to complete this task in milliseconds
   validated?: boolean; // For AUTO entries: whether a human has validated the task completion
+  achievementAction?: 'openAbout'; // If set, this entry has an action button to open the About/achievements panel
 }
 
 // Document entry in the batch run queue (supports duplicates)
@@ -257,11 +258,11 @@ export interface OnboardingStats {
   averageConversationExchanges: number;  // Average exchanges per completed wizard
   totalConversationsCompleted: number;   // Number of wizard conversations that reached ready state
 
-  // Phase generation statistics
-  totalPhasesGenerated: number;          // Total phase documents generated
-  averagePhasesPerWizard: number;        // Average phases per completed wizard
-  totalTasksGenerated: number;           // Total tasks generated across all phases
-  averageTasksPerPhase: number;          // Average tasks per phase
+  // Auto Run document generation statistics
+  totalPhasesGenerated: number;          // Total Auto Run documents generated
+  averagePhasesPerWizard: number;        // Average documents per completed wizard
+  totalTasksGenerated: number;           // Total tasks generated across all documents
+  averageTasksPerPhase: number;          // Average tasks per document
 }
 
 // AI Tab for multi-tab support within a Maestro session

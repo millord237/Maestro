@@ -24,6 +24,8 @@ interface TourOverlayProps {
   onClose: () => void;
   /** Optional starting step index */
   startStep?: number;
+  /** Whether tour was launched from the wizard (affects step descriptions) */
+  fromWizard?: boolean;
   /** Analytics callback: Called when tour starts */
   onTourStart?: () => void;
   /** Analytics callback: Called when tour completes all steps */
@@ -85,6 +87,7 @@ export function TourOverlay({
   isOpen,
   onClose,
   startStep = 0,
+  fromWizard = false,
   onTourStart,
   onTourComplete,
   onTourSkip,
@@ -263,6 +266,7 @@ export function TourOverlay({
         onSkip={skipTour}
         isLastStep={isLastStep}
         isTransitioning={isTransitioning}
+        fromWizard={fromWizard}
       />
 
       {/* Animation styles */}

@@ -362,10 +362,10 @@ export function FirstRunCelebration({
                   <FileText className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: theme.colors.success }} />
                   <div>
                     <p className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
-                      Explore the additional phase documents
+                      Explore the additional Auto Run documents
                     </p>
                     <p className="text-xs" style={{ color: theme.colors.textDim }}>
-                      We created multiple phases that build on each other
+                      We created multiple documents that build on each other
                     </p>
                   </div>
                 </div>

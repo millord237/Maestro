@@ -83,6 +83,7 @@ interface RightPanelProps {
   onJumpToClaudeSession?: (claudeSessionId: string) => void;
   onResumeSession?: (claudeSessionId: string) => void;
   onOpenSessionAsTab?: (claudeSessionId: string) => void;
+  onOpenAboutModal?: () => void;  // For opening About/achievements panel from history entries
 }
 
 export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function RightPanel(props, ref) {
@@ -97,7 +98,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     onAutoRunContentChange, onAutoRunModeChange, onAutoRunStateChange,
     onAutoRunSelectDocument, onAutoRunCreateDocument, onAutoRunRefresh, onAutoRunOpenSetup,
     batchRunState, currentSessionBatchState, onOpenBatchRunner, onStopBatchRun, onJumpToClaudeSession, onResumeSession,
-    onOpenSessionAsTab
+    onOpenSessionAsTab, onOpenAboutModal
   } = props;
 
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
@@ -298,6 +299,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
               onJumpToClaudeSession={onJumpToClaudeSession}
               onResumeSession={onResumeSession}
               onOpenSessionAsTab={onOpenSessionAsTab}
+              onOpenAboutModal={onOpenAboutModal}
             />
           </div>
         )}

@@ -29,7 +29,6 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
     state,
     setDirectoryPath,
     setIsGitRepo,
-    setDetectedAgentPath,
     setDirectoryError,
     nextStep,
     previousStep,
@@ -40,10 +39,34 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
   const [isValidating, setIsValidating] = useState(false);
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [isDetecting, setIsDetecting] = useState(true);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
 
   // Screen reader announcement state
   const [announcement, setAnnouncement] = useState('');
   const [announcementKey, setAnnouncementKey] = useState(0);
+
+  /**
+   * Extract the YOLO/permission-skip flag from agent args
+   */
+  const getYoloFlag = useCallback((): string | null => {
+    if (!agentConfig?.args) return null;
+    // Look for permission-related flags
+    const yoloPatterns = [
+      /--dangerously-skip-permissions/,
+      /--yolo/,
+      /--no-confirm/,
+      /--yes/,
+      /-y\b/,
+    ];
+    for (const arg of agentConfig.args) {
+      for (const pattern of yoloPatterns) {
+        if (pattern.test(arg)) {
+          return arg;
+        }
+      }
+    }
+    return null;
+  }, [agentConfig]);
 
   // Refs for focus management
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,45 +75,34 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
   const containerRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Detect agent path on mount using the selected agent configuration
+   * Fetch agent config when selected agent changes
    */
   useEffect(() => {
     let mounted = true;
 
-    async function detectAgentPath() {
-      if (!state.selectedAgent) {
-        setIsDetecting(false);
-        return;
-      }
-
+    async function fetchAgentConfig() {
+      if (!state.selectedAgent) return;
       try {
-        const agentConfig: AgentConfig | null = await window.maestro.agents.get(state.selectedAgent);
-        if (mounted && agentConfig?.path) {
-          setDetectedAgentPath(agentConfig.path);
-          // If no directory is currently selected, use the detected path
-          if (!state.directoryPath) {
-            setDirectoryPath(agentConfig.path);
-            // Also validate this path (announce with detection message)
-            validateDirectory(agentConfig.path, false);
-            // Announce detection complete
-            setAnnouncement(`Project location detected: ${agentConfig.path}`);
-            setAnnouncementKey((prev) => prev + 1);
-          }
+        const config = await window.maestro.agents.get(state.selectedAgent);
+        if (mounted && config) {
+          setAgentConfig(config);
         }
       } catch (error) {
-        console.error('Failed to detect agent path:', error);
-      }
-
-      if (mounted) {
-        setIsDetecting(false);
+        console.error('Failed to fetch agent config:', error);
       }
     }
 
-    detectAgentPath();
+    fetchAgentConfig();
     return () => { mounted = false; };
-    // Intentionally not including validateDirectory - we only want this to run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedAgent, setDetectedAgentPath, setDirectoryPath]);
+  }, [state.selectedAgent]);
+
+  /**
+   * Mark detection as complete on mount
+   */
+  useEffect(() => {
+    // No pre-fill - user should browse to select their project folder
+    setIsDetecting(false);
+  }, []);
 
   /**
    * Validate directory and check Git repo status
@@ -230,7 +242,7 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
   if (isDetecting) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-full p-8"
+        className="flex-1 flex flex-col items-center justify-center p-8"
         style={{ color: theme.colors.textMain }}
       >
         <div
@@ -250,7 +262,7 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full p-8"
+      className="flex flex-col flex-1 min-h-0 p-8 overflow-y-auto outline-none"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -263,25 +275,49 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
 
       {/* Header */}
       <div className="text-center mb-8">
+        {/* Agent greeting - prominent at top */}
+        <h2
+          className="text-3xl font-bold mb-6"
+          style={{ color: theme.colors.accent }}
+        >
+          Howdy, I'm {state.agentName || 'your agent'}
+        </h2>
         <h3
-          className="text-2xl font-semibold mb-2"
+          className="text-xl font-semibold mb-4"
           style={{ color: theme.colors.textMain }}
         >
           Where Should We Work?
         </h3>
         <p
-          className="text-sm"
+          className="text-sm mb-4"
           style={{ color: theme.colors.textDim }}
         >
           Choose the folder where your project lives (or will live).
-          {state.agentName && (
-            <span
-              className="block mt-1"
-              style={{ color: theme.colors.accent }}
-            >
-              Project: {state.agentName}
-            </span>
+        </p>
+        <p
+          className="text-xs max-w-lg mx-auto"
+          style={{ color: theme.colors.textDim, opacity: 0.8 }}
+        >
+          Do note, as a matter of design I operate in{' '}
+          <code
+            className="px-1.5 py-0.5 rounded text-xs"
+            style={{ backgroundColor: theme.colors.warning, color: theme.colors.bgMain }}
+          >
+            YOLO
+          </code>
+          {' '}mode, aka:
+          {getYoloFlag() && (
+            <>
+              <br />
+              <code
+                className="px-1.5 py-0.5 rounded text-xs"
+                style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.warning }}
+              >
+                {getYoloFlag()}
+              </code>
+            </>
           )}
+          {' '}— I do my best to only make changes within this directory... that said, Caveat Emptor.
         </p>
       </div>
 
@@ -289,7 +325,7 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="w-full max-w-xl">
           {/* Directory path input with browse button */}
-          <div className="mb-6">
+          <div className="mb-8">
             <label
               htmlFor="directory-path"
               className="block text-sm mb-2 font-medium"
@@ -473,6 +509,17 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
             </div>
           )}
 
+          {/* Git explanation - shown after directory status */}
+          {state.directoryPath.trim() && !state.directoryError && !isValidating && (
+            <p
+              className="text-xs text-center mb-6"
+              style={{ color: theme.colors.textDim }}
+            >
+              Git repositories get extra features like branch tracking and change detection.
+              Regular folders work too!
+            </p>
+          )}
+
           {/* Validating indicator */}
           {isValidating && (
             <div
@@ -495,25 +542,6 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
             </div>
           )}
 
-          {/* Detected path hint */}
-          {state.detectedAgentPath && state.detectedAgentPath !== state.directoryPath && (
-            <p
-              className="text-xs mb-4"
-              style={{ color: theme.colors.textDim }}
-            >
-              Detected location:{' '}
-              <button
-                onClick={() => {
-                  setDirectoryPath(state.detectedAgentPath!);
-                  validateDirectory(state.detectedAgentPath!);
-                }}
-                className="underline hover:opacity-80 transition-opacity"
-                style={{ color: theme.colors.accent }}
-              >
-                Use {state.detectedAgentPath}
-              </button>
-            </p>
-          )}
         </div>
       </div>
 
@@ -611,7 +639,7 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
           >
             Esc
           </kbd>
-          Go back
+          Exit Wizard
         </span>
       </div>
     </div>

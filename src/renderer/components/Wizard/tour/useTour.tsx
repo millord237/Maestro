@@ -31,14 +31,18 @@ export interface TourStepConfig {
   id: string;
   /** Title displayed in the tooltip */
   title: string;
-  /** Description/explanation text */
+  /** Description/explanation text (wizard context - Auto Run active) */
   description: string;
+  /** Generic description (hamburger menu context - general overview) */
+  descriptionGeneric?: string;
   /** CSS selector for the element to spotlight, or null for no spotlight */
   selector: string | null;
   /** Preferred tooltip position relative to spotlight */
   position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
   /** UI actions to perform before showing this step */
   uiActions?: TourUIAction[];
+  /** Computed spotlight info (set at runtime) */
+  spotlight?: SpotlightInfo;
 }
 
 /**

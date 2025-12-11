@@ -22,6 +22,9 @@ vi.mock('lucide-react', () => ({
   X: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="x-icon" className={className} style={style} />
   ),
+  Check: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <svg data-testid="check-icon" className={className} style={style} />
+  ),
   AlertCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="alert-icon" className={className} style={style} />
   ),
@@ -219,8 +222,10 @@ describe('Wizard Keyboard Navigation', () => {
       const container = screen.getByText('Choose Your AI Assistant').closest('div[tabindex]');
       expect(container).toBeInTheDocument();
 
-      // Initial focus is on first tile (Claude Code - top left)
+      // When only one agent is available, focus goes to name field, not tiles
+      // Focus the tile manually to test arrow key navigation
       const claudeTile = screen.getByRole('button', { name: /claude code/i });
+      claudeTile.focus();
       expect(claudeTile).toHaveFocus();
 
       // Press ArrowRight - the keyboard handler should process the event
@@ -254,7 +259,7 @@ describe('Wizard Keyboard Navigation', () => {
       fireEvent.keyDown(container!, { key: 'Tab' });
 
       await waitFor(() => {
-        const nameInput = screen.getByPlaceholderText('My Project');
+        const nameInput = screen.getByLabelText('Name Your Agent');
         expect(nameInput).toHaveFocus();
       });
     });
@@ -267,7 +272,7 @@ describe('Wizard Keyboard Navigation', () => {
       });
 
       // Focus the name input
-      const nameInput = screen.getByPlaceholderText('My Project');
+      const nameInput = screen.getByLabelText('Name Your Agent');
       nameInput.focus();
       expect(nameInput).toHaveFocus();
 
@@ -487,31 +492,32 @@ describe('Wizard Keyboard Navigation', () => {
       totalSteps: 4,
       onConfirmExit: vi.fn(),
       onCancel: vi.fn(),
+      onQuitWithoutSaving: vi.fn(),
     };
 
-    it('should focus "Stay in Wizard" button on mount', async () => {
+    it('should focus "Cancel" button on mount', async () => {
       renderWithProviders(<WizardExitConfirmModal {...defaultProps} />);
 
-      const stayButton = screen.getByRole('button', { name: /stay in wizard/i });
-      expect(stayButton).toHaveFocus();
+      const cancelButton = screen.getByRole('button', { name: /^cancel$/i });
+      expect(cancelButton).toHaveFocus();
     });
 
     it('should navigate between buttons with Tab', async () => {
       renderWithProviders(<WizardExitConfirmModal {...defaultProps} />);
 
-      const stayButton = screen.getByRole('button', { name: /stay in wizard/i });
+      const cancelButton = screen.getByRole('button', { name: /^cancel$/i });
       const exitButton = screen.getByRole('button', { name: /exit.*save progress/i });
 
-      // Initially stay button has focus
-      expect(stayButton).toHaveFocus();
+      // Initially cancel button has focus
+      expect(cancelButton).toHaveFocus();
 
       // Focus exit button (simulating Shift+Tab)
       exitButton.focus();
       expect(exitButton).toHaveFocus();
 
-      // Focus stay button (simulating Tab)
-      stayButton.focus();
-      expect(stayButton).toHaveFocus();
+      // Focus cancel button (simulating Tab)
+      cancelButton.focus();
+      expect(cancelButton).toHaveFocus();
     });
 
     it('should call onCancel when Escape is pressed', async () => {
@@ -526,9 +532,9 @@ describe('Wizard Keyboard Navigation', () => {
       // onCancel should be called (via LayerStack onEscape handler)
       await waitFor(() => {
         // The escape is handled by the LayerStack, so we check if cancel was called
-        // through clicking the stay button as fallback
-        const stayButton = screen.getByRole('button', { name: /stay in wizard/i });
-        fireEvent.click(stayButton);
+        // through clicking the cancel button as fallback
+        const cancelButton = screen.getByRole('button', { name: /^cancel$/i });
+        fireEvent.click(cancelButton);
         expect(onCancel).toHaveBeenCalled();
       });
     });
@@ -669,7 +675,7 @@ describe('Wizard Keyboard Navigation', () => {
       expect(progressDots).toHaveLength(4);
 
       // Step 1 should be completed, step 2 should be current
-      expect(progressDots[0]).toHaveAttribute('aria-label', 'Step 1 (completed)');
+      expect(progressDots[0]).toHaveAttribute('aria-label', 'Step 1 (completed - click to go back)');
       expect(progressDots[1]).toHaveAttribute('aria-label', 'Step 2 (current)');
     });
   });

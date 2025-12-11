@@ -721,10 +721,40 @@ describe('wizardPrompts', () => {
       expect(question.length).toBeGreaterThan(0);
     });
 
-    it('should mention different project types', () => {
+    it('should ask about building or projects', () => {
       const question = getInitialQuestion();
+      const lowerQuestion = question.toLowerCase();
 
-      expect(question).toContain('coding project');
+      // The initial question should ask about what to build/create/work on
+      // It may use various phrasings - check for common project-related words
+      const projectKeywords = [
+        'build',
+        'project',
+        'create',
+        'working',
+        'making',
+        'vision',
+        'idea',
+        'code',
+        'develop',
+        'design',
+        'construct',
+        'craft',
+        'architect',
+        'engineer',
+        'endeavor',
+        'initiative',
+        'mission',
+        'goal',
+        'plan',
+        'concept',
+        'dream',
+        'agenda',
+        'mind',
+        'tackle',
+      ];
+      const asksBuildQuestion = projectKeywords.some((kw) => lowerQuestion.includes(kw));
+      expect(asksBuildQuestion).toBe(true);
     });
 
     it('should be a question', () => {

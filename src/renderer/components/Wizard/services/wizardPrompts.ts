@@ -5,6 +5,8 @@
  * AI-driven project discovery conversation.
  */
 
+import { getRandomInitialQuestion } from './fillerPhrases';
+
 /**
  * Structured response format expected from the agent
  */
@@ -112,7 +114,7 @@ Through a brief, focused conversation:
 1. Understand what type of project this is (coding project, research notes, documentation, analysis, creative writing, etc.)
 2. Learn the key goals or deliverables
 3. Identify any specific technologies, frameworks, or constraints
-4. Gather enough clarity to create a phased action plan
+4. Gather enough clarity to create an action plan
 
 ## Conversation Guidelines
 
@@ -138,7 +140,7 @@ You MUST respond with valid JSON in this exact format:
 
 **ready** (true/false): Set to true ONLY when:
 - confidence >= ${READY_CONFIDENCE_THRESHOLD}
-- You have enough information to create a meaningful phased action plan
+- You have enough information to create a meaningful action plan
 - Key goals and deliverables are clear
 
 **message**: Your conversational response to the user. This should:
@@ -164,7 +166,7 @@ Ready to proceed (high confidence):
 - Keep confidence scores realistic and progressive
 - Don't set ready=true until confidence >= ${READY_CONFIDENCE_THRESHOLD}
 - If the user is vague, ask specific questions to build clarity
-- Remember: the goal is to gather enough info for a practical, phased action plan`;
+- Remember: the goal is to gather enough info for a practical action plan`;
 }
 
 /**
@@ -330,10 +332,11 @@ function createFallbackResponse(rawText: string): ParsedResponse {
 }
 
 /**
- * Get the initial question to display before the first agent response
+ * Get the initial question to display before the first agent response.
+ * Returns a randomly selected variant for variety.
  */
 export function getInitialQuestion(): string {
-  return "What would you like to build? A coding project? Research notes? Something else entirely?";
+  return getRandomInitialQuestion();
 }
 
 /**

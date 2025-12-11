@@ -7,11 +7,13 @@
  *
  * Features:
  * - Tiled grid view of agent logos (Claude Code highlighted, others ghosted)
+ * - Detection status indicators (checkmark for found, X for not found)
  * - Optional Name field with placeholder "My Project"
  * - Keyboard navigation (arrow keys to move between tiles, Tab to Name field, Enter to proceed)
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Check, X } from 'lucide-react';
 import type { Theme, AgentConfig } from '../../../types';
 import { useWizard } from '../WizardContext';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
@@ -26,136 +28,200 @@ interface AgentSelectionScreenProps {
 interface AgentTile {
   id: string;
   name: string;
-  available: boolean;
+  supported: boolean; // Whether Maestro supports this agent (only Claude for now)
   description: string;
+  brandColor?: string; // Brand color for the logo
 }
 
 /**
  * Define the agents to display in the grid
- * Claude Code is the only currently available agent; others are shown ghosted
+ * Claude Code is the only currently supported agent; others are shown ghosted
  */
 const AGENT_TILES: AgentTile[] = [
   {
     id: 'claude-code',
     name: 'Claude Code',
-    available: true,
+    supported: true,
     description: 'Anthropic\'s AI coding assistant',
+    brandColor: '#D97757', // Claude's orange/coral color
   },
   {
     id: 'openai-codex',
     name: 'OpenAI Codex',
-    available: false,
+    supported: false,
     description: 'Coming soon',
+    brandColor: '#10A37F', // OpenAI green
   },
   {
     id: 'gemini-cli',
     name: 'Gemini CLI',
-    available: false,
+    supported: false,
     description: 'Coming soon',
+    brandColor: '#4285F4', // Google blue
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    supported: false,
+    description: 'Coming soon',
+    brandColor: '#F97316', // Orange
   },
   {
     id: 'qwen3-coder',
     name: 'Qwen3 Coder',
-    available: false,
+    supported: false,
     description: 'Coming soon',
+    brandColor: '#6366F1', // Indigo/purple
   },
 ];
 
-// Grid dimensions for keyboard navigation (2x2 grid)
-const GRID_COLS = 2;
+// Grid dimensions for keyboard navigation (3 cols for 5 items)
+const GRID_COLS = 3;
 const GRID_ROWS = 2;
 
 /**
- * Get SVG logo for an agent
+ * Get SVG logo for an agent with brand colors
  */
-function AgentLogo({ agentId, available, theme }: { agentId: string; available: boolean; theme: Theme }): JSX.Element {
-  const baseColor = available ? theme.colors.accent : theme.colors.textDim;
-  const opacity = available ? 1 : 0.4;
+function AgentLogo({ agentId, supported, detected, brandColor, theme }: {
+  agentId: string;
+  supported: boolean;
+  detected: boolean;
+  brandColor?: string;
+  theme: Theme;
+}): JSX.Element {
+  // Use brand color for supported+detected, dimmed for others
+  const color = supported && detected ? (brandColor || theme.colors.accent) : theme.colors.textDim;
+  const opacity = supported ? 1 : 0.35;
 
   // Return appropriate icon based on agent ID
   switch (agentId) {
     case 'claude-code':
-      // Claude Code - Anthropic's logo representation
+      // Claude Code - Anthropic's iconic spark/A logo
       return (
         <svg
-          className="w-16 h-16"
-          viewBox="0 0 64 64"
+          className="w-12 h-12"
+          viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           style={{ opacity }}
         >
-          <circle cx="32" cy="32" r="28" stroke={baseColor} strokeWidth="2" fill="none" />
+          {/* Anthropic spark logo - simplified iconic version */}
           <path
-            d="M20 24 L32 44 L44 24"
-            stroke={baseColor}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
+            d="M28.5 8L17 40h5.5l2.3-7h10.4l2.3 7H43L31.5 8h-3zm1.5 6.5L34.2 28h-8.4l4.2-13.5z"
+            fill={color}
           />
-          <circle cx="32" cy="20" r="4" fill={baseColor} />
+          <path
+            d="M5 40l8-20h5l-8 20H5z"
+            fill={color}
+          />
         </svg>
       );
 
     case 'openai-codex':
-      // OpenAI Codex - simplified representation
+      // OpenAI - hexagonal/circular logo
       return (
         <svg
-          className="w-16 h-16"
-          viewBox="0 0 64 64"
+          className="w-12 h-12"
+          viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           style={{ opacity }}
         >
-          <circle cx="32" cy="32" r="28" stroke={baseColor} strokeWidth="2" fill="none" />
-          <circle cx="32" cy="32" r="12" stroke={baseColor} strokeWidth="2" fill="none" />
+          {/* OpenAI hexagon-inspired logo */}
           <path
-            d="M32 8 L32 20 M32 44 L32 56 M8 32 L20 32 M44 32 L56 32"
-            stroke={baseColor}
+            d="M24 6L40 15v18l-16 9-16-9V15l16-9z"
+            stroke={color}
             strokeWidth="2"
-            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M24 6v36M40 15L8 33M8 15l32 18"
+            stroke={color}
+            strokeWidth="2"
           />
         </svg>
       );
 
     case 'gemini-cli':
-      // Gemini CLI - star/sparkle representation
+      // Gemini - Google's sparkle/star logo
       return (
         <svg
-          className="w-16 h-16"
-          viewBox="0 0 64 64"
+          className="w-12 h-12"
+          viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           style={{ opacity }}
         >
+          {/* Gemini sparkle logo */}
           <path
-            d="M32 8 L36 28 L56 32 L36 36 L32 56 L28 36 L8 32 L28 28 Z"
-            stroke={baseColor}
+            d="M24 4C24 4 24 20 24 24C24 28 4 24 4 24C4 24 20 24 24 24C28 24 24 44 24 44C24 44 24 28 24 24C24 20 44 24 44 24C44 24 28 24 24 24"
+            fill={color}
+          />
+        </svg>
+      );
+
+    case 'opencode':
+      // OpenCode - terminal/code brackets
+      return (
+        <svg
+          className="w-12 h-12"
+          viewBox="0 0 48 48"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ opacity }}
+        >
+          {/* OpenCode - terminal prompt style */}
+          <rect
+            x="4"
+            y="8"
+            width="40"
+            height="32"
+            rx="4"
+            stroke={color}
             strokeWidth="2"
-            strokeLinejoin="round"
             fill="none"
+          />
+          <path
+            d="M12 20l6 4-6 4M22 28h10"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         </svg>
       );
 
     case 'qwen3-coder':
-      // Qwen3 Coder - code bracket representation
+      // Qwen - Alibaba cloud inspired
       return (
         <svg
-          className="w-16 h-16"
-          viewBox="0 0 64 64"
+          className="w-12 h-12"
+          viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           style={{ opacity }}
         >
-          <circle cx="32" cy="32" r="28" stroke={baseColor} strokeWidth="2" fill="none" />
+          {/* Qwen - Q with code element */}
+          <circle
+            cx="24"
+            cy="22"
+            r="14"
+            stroke={color}
+            strokeWidth="2.5"
+            fill="none"
+          />
           <path
-            d="M24 20 L16 32 L24 44 M40 20 L48 32 L40 44"
-            stroke={baseColor}
+            d="M30 30l8 10"
+            stroke={color}
             strokeWidth="2.5"
             strokeLinecap="round"
+          />
+          <path
+            d="M18 22l4 4 6-8"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
             strokeLinejoin="round"
-            fill="none"
           />
         </svg>
       );
@@ -163,8 +229,8 @@ function AgentLogo({ agentId, available, theme }: { agentId: string; available: 
     default:
       return (
         <div
-          className="w-16 h-16 rounded-full border-2"
-          style={{ borderColor: baseColor, opacity }}
+          className="w-12 h-12 rounded-full border-2"
+          style={{ borderColor: color, opacity }}
         />
       );
   }
@@ -254,31 +320,46 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     return () => { mounted = false; };
   }, [setAvailableAgents, setSelectedAgent, state.selectedAgent]);
 
-  // Focus the appropriate tile on mount (selected tile or first available)
+  // Focus on mount - currently focus name field since only Claude is supported
+  // TODO: When multiple agents are supported, focus the tiles instead
   useEffect(() => {
     if (!isDetecting) {
-      // Find the index of the selected agent, or first available agent
-      let focusIndex = 0;
-      if (state.selectedAgent) {
-        const selectedIndex = AGENT_TILES.findIndex(t => t.id === state.selectedAgent);
-        if (selectedIndex !== -1) {
-          focusIndex = selectedIndex;
-          setFocusedTileIndex(selectedIndex);
-        }
-      } else {
-        // Find first available agent
-        const firstAvailableIndex = AGENT_TILES.findIndex(tile => {
-          const detected = detectedAgents.find(a => a.id === tile.id);
-          return detected?.available;
-        });
-        if (firstAvailableIndex !== -1) {
-          focusIndex = firstAvailableIndex;
-          setFocusedTileIndex(firstAvailableIndex);
-        }
-      }
+      // Count how many agents are both supported AND detected
+      const supportedAndDetectedCount = AGENT_TILES.filter(tile => {
+        if (!tile.supported) return false;
+        const detected = detectedAgents.find(a => a.id === tile.id);
+        return detected?.available;
+      }).length;
 
-      // Focus the appropriate tile
-      tileRefs.current[focusIndex]?.focus();
+      // If only one agent is selectable, focus the name field
+      // Otherwise focus the tiles for selection
+      if (supportedAndDetectedCount <= 1) {
+        // Focus name field since there's only one choice
+        setIsNameFieldFocused(true);
+        nameInputRef.current?.focus();
+      } else {
+        // Multiple agents available - focus the tiles
+        let focusIndex = 0;
+        if (state.selectedAgent) {
+          const selectedIndex = AGENT_TILES.findIndex(t => t.id === state.selectedAgent);
+          if (selectedIndex !== -1) {
+            focusIndex = selectedIndex;
+            setFocusedTileIndex(selectedIndex);
+          }
+        } else {
+          // Find first supported and available agent
+          const firstAvailableIndex = AGENT_TILES.findIndex(tile => {
+            if (!tile.supported) return false;
+            const detected = detectedAgents.find(a => a.id === tile.id);
+            return detected?.available;
+          });
+          if (firstAvailableIndex !== -1) {
+            focusIndex = firstAvailableIndex;
+            setFocusedTileIndex(firstAvailableIndex);
+          }
+        }
+        tileRefs.current[focusIndex]?.focus();
+      }
     }
   }, [isDetecting, state.selectedAgent, detectedAgents]);
 
@@ -357,10 +438,10 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
       case 'Enter':
       case ' ':
         e.preventDefault();
-        // Select the focused tile if available
+        // Select the focused tile if supported and detected
         const tile = AGENT_TILES[currentIndex];
         const detected = detectedAgents.find(a => a.id === tile.id);
-        if (detected?.available) {
+        if (tile.supported && detected?.available) {
           setSelectedAgent(tile.id as any);
           // If Enter, also proceed to next step if valid
           if (e.key === 'Enter' && canProceedToNext()) {
@@ -383,7 +464,8 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
    */
   const handleTileClick = useCallback((tile: AgentTile, index: number) => {
     const detected = detectedAgents.find(a => a.id === tile.id);
-    if (detected?.available) {
+    // Only allow selection if agent is both supported by Maestro AND detected on system
+    if (tile.supported && detected?.available) {
       setSelectedAgent(tile.id as any);
       setFocusedTileIndex(index);
       // Announce agent selection
@@ -411,7 +493,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   if (isDetecting) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-full p-8"
+        className="flex-1 flex flex-col items-center justify-center p-8"
         style={{ color: theme.colors.textMain }}
       >
         <div
@@ -428,7 +510,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full p-8"
+      className="flex flex-col flex-1 min-h-0 p-8 overflow-y-auto"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -451,15 +533,17 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
           className="text-sm"
           style={{ color: theme.colors.textDim }}
         >
-          Select an agent to power your project. Use arrow keys to navigate, Enter to select.
+          Select the provider that will power your agent. Use arrow keys to navigate, Enter to select.
         </p>
       </div>
 
       {/* Agent Grid */}
       <div className="flex-1 flex items-center justify-center">
-        <div className="grid grid-cols-2 gap-6 max-w-2xl">
+        <div className="grid grid-cols-3 gap-4 max-w-3xl">
           {AGENT_TILES.map((tile, index) => {
-            const isAvailable = isAgentAvailable(tile.id);
+            const isDetected = isAgentAvailable(tile.id);
+            const isSupported = tile.supported;
+            const canSelect = isSupported && isDetected;
             const isSelected = state.selectedAgent === tile.id;
             const isFocused = focusedTileIndex === index && !isNameFieldFocused;
 
@@ -472,78 +556,91 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                   setFocusedTileIndex(index);
                   setIsNameFieldFocused(false);
                 }}
-                disabled={!isAvailable}
+                disabled={!canSelect}
                 className={`
-                  relative flex flex-col items-center justify-center p-8 rounded-xl
-                  border-2 transition-all duration-200 outline-none
-                  ${isAvailable ? 'cursor-pointer' : 'cursor-not-allowed'}
+                  relative flex flex-col items-center justify-center p-6 rounded-xl
+                  border-2 transition-all duration-200 outline-none min-w-[160px]
+                  ${canSelect ? 'cursor-pointer' : 'cursor-not-allowed'}
                 `}
                 style={{
                   backgroundColor: isSelected
-                    ? `${theme.colors.accent}15`
+                    ? `${tile.brandColor || theme.colors.accent}15`
                     : theme.colors.bgSidebar,
                   borderColor: isSelected
-                    ? theme.colors.accent
-                    : isFocused
+                    ? tile.brandColor || theme.colors.accent
+                    : isFocused && canSelect
                     ? theme.colors.accent
                     : theme.colors.border,
-                  opacity: isAvailable ? 1 : 0.5,
+                  opacity: isSupported ? 1 : 0.5,
                   boxShadow: isSelected
-                    ? `0 0 0 3px ${theme.colors.accent}30`
-                    : isFocused
+                    ? `0 0 0 3px ${tile.brandColor || theme.colors.accent}30`
+                    : isFocused && canSelect
                     ? `0 0 0 2px ${theme.colors.accent}40`
                     : 'none',
                 }}
-                aria-label={`${tile.name}${isAvailable ? '' : ' (coming soon)'}`}
+                aria-label={`${tile.name}${canSelect ? '' : isSupported ? ' (not installed)' : ' (coming soon)'}`}
                 aria-pressed={isSelected}
               >
                 {/* Selection indicator */}
                 {isSelected && (
                   <div
-                    className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center"
-                    style={{ backgroundColor: theme.colors.accent }}
+                    className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: tile.brandColor || theme.colors.accent }}
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke={theme.colors.accentForeground}
-                      viewBox="0 0 24 24"
-                      strokeWidth={3}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
+                    <Check className="w-3 h-3" style={{ color: '#fff' }} />
+                  </div>
+                )}
+
+                {/* Detection status indicator for supported agents */}
+                {isSupported && !isSelected && (
+                  <div
+                    className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: isDetected ? '#22c55e20' : '#ef444420',
+                    }}
+                    title={isDetected ? 'Installed' : 'Not found'}
+                  >
+                    {isDetected ? (
+                      <Check className="w-3 h-3" style={{ color: '#22c55e' }} />
+                    ) : (
+                      <X className="w-3 h-3" style={{ color: '#ef4444' }} />
+                    )}
                   </div>
                 )}
 
                 {/* Agent Logo */}
-                <div className="mb-4">
-                  <AgentLogo agentId={tile.id} available={isAvailable} theme={theme} />
+                <div className="mb-3">
+                  <AgentLogo
+                    agentId={tile.id}
+                    supported={isSupported}
+                    detected={isDetected}
+                    brandColor={tile.brandColor}
+                    theme={theme}
+                  />
                 </div>
 
                 {/* Agent Name */}
                 <h4
-                  className="text-lg font-medium mb-1"
-                  style={{ color: isAvailable ? theme.colors.textMain : theme.colors.textDim }}
+                  className="text-base font-medium mb-0.5"
+                  style={{ color: isSupported ? theme.colors.textMain : theme.colors.textDim }}
                 >
                   {tile.name}
                 </h4>
 
                 {/* Description / Status */}
                 <p
-                  className="text-xs"
+                  className="text-xs text-center"
                   style={{ color: theme.colors.textDim }}
                 >
-                  {isAvailable ? tile.description : 'Coming soon'}
+                  {isSupported
+                    ? (isDetected ? tile.description : 'Not installed')
+                    : 'Coming soon'}
                 </p>
 
-                {/* Availability badge for unavailable agents */}
-                {!isAvailable && (
+                {/* "Soon" badge for unsupported agents */}
+                {!isSupported && (
                   <span
-                    className="absolute top-3 left-3 px-2 py-0.5 text-xs rounded-full"
+                    className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] rounded-full font-medium"
                     style={{
                       backgroundColor: theme.colors.border,
                       color: theme.colors.textDim,
@@ -558,14 +655,14 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
         </div>
       </div>
 
-      {/* Project Name Input */}
-      <div className="mt-8 flex flex-col items-center">
+      {/* Project Name Input and Continue Button - horizontal layout */}
+      <div className="mt-8 flex items-center justify-center gap-4">
         <label
           htmlFor="project-name"
-          className="text-sm mb-2"
+          className="text-sm whitespace-nowrap"
           style={{ color: theme.colors.textDim }}
         >
-          Project Name (optional)
+          Name Your Agent
         </label>
         <input
           ref={nameInputRef}
@@ -575,8 +672,8 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
           onChange={(e) => setAgentName(e.target.value)}
           onFocus={() => setIsNameFieldFocused(true)}
           onBlur={() => setIsNameFieldFocused(false)}
-          placeholder="My Project"
-          className="w-64 px-4 py-2 rounded-lg border text-center outline-none transition-all"
+          placeholder=""
+          className="w-64 px-4 py-2 rounded-lg border outline-none transition-all"
           style={{
             backgroundColor: theme.colors.bgMain,
             borderColor: isNameFieldFocused ? theme.colors.accent : theme.colors.border,
@@ -584,14 +681,10 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
             boxShadow: isNameFieldFocused ? `0 0 0 2px ${theme.colors.accent}40` : 'none',
           }}
         />
-      </div>
-
-      {/* Footer with Continue Button */}
-      <div className="mt-8 flex justify-center">
         <button
           onClick={handleContinue}
           disabled={!canProceedToNext()}
-          className="px-8 py-3 rounded-lg font-medium transition-all outline-none"
+          className="px-8 py-2 rounded-lg font-medium transition-all outline-none whitespace-nowrap"
           style={{
             backgroundColor: canProceedToNext() ? theme.colors.accent : theme.colors.border,
             color: canProceedToNext() ? theme.colors.accentForeground : theme.colors.textDim,

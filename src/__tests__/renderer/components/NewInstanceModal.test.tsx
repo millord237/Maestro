@@ -541,10 +541,10 @@ describe('NewInstanceModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('My Project Session')).toBeInTheDocument();
+        expect(screen.getByLabelText('Agent Name')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'My Custom Session' } });
       expect(nameInput).toHaveValue('My Custom Session');
     });
@@ -589,7 +589,7 @@ describe('NewInstanceModal', () => {
       );
 
       await waitFor(() => {
-        const nameInput = screen.getByPlaceholderText('My Project Session');
+        const nameInput = screen.getByLabelText('Agent Name');
         expect(document.activeElement).toBe(nameInput);
       });
     });
@@ -681,7 +681,7 @@ describe('NewInstanceModal', () => {
         expect(screen.getByPlaceholderText('Select directory...')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'My Session' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');
@@ -715,7 +715,7 @@ describe('NewInstanceModal', () => {
         expect(screen.getByPlaceholderText('Select directory...')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'Home Session' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');
@@ -749,7 +749,7 @@ describe('NewInstanceModal', () => {
         expect(screen.getByPlaceholderText('Select directory...')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'Tilde Test' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');
@@ -781,10 +781,10 @@ describe('NewInstanceModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('My Project Session')).toBeInTheDocument();
+        expect(screen.getByLabelText('Agent Name')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'My Session' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');
@@ -891,10 +891,10 @@ describe('NewInstanceModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('My Project Session')).toBeInTheDocument();
+        expect(screen.getByLabelText('Agent Name')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'Test Session' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');
@@ -917,7 +917,7 @@ describe('NewInstanceModal', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('My Project Session')).toHaveValue('');
+        expect(screen.getByLabelText('Agent Name')).toHaveValue('');
         expect(screen.getByPlaceholderText('Select directory...')).toHaveValue('');
       });
     });
@@ -1047,7 +1047,7 @@ describe('NewInstanceModal', () => {
         expect(screen.getByPlaceholderText('Select directory...')).toBeInTheDocument();
       });
 
-      const nameInput = screen.getByPlaceholderText('My Project Session');
+      const nameInput = screen.getByLabelText('Agent Name');
       fireEvent.change(nameInput, { target: { value: 'Test Session' } });
 
       const dirInput = screen.getByPlaceholderText('Select directory...');

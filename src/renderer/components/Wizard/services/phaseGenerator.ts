@@ -1,7 +1,7 @@
 /**
  * phaseGenerator.ts
  *
- * Service for generating phased markdown documents based on the wizard's
+ * Service for generating Auto Run documents based on the wizard's
  * project discovery conversation. Creates actionable task lists organized
  * into phases, with Phase 1 designed to be completable without user input.
  */
@@ -38,6 +38,16 @@ export interface GenerationResult {
 }
 
 /**
+ * Info about a file being created
+ */
+export interface CreatedFileInfo {
+  filename: string;
+  size: number;
+  path: string;
+  timestamp: number;
+}
+
+/**
  * Callbacks for generation progress
  */
 export interface GenerationCallbacks {
@@ -47,10 +57,14 @@ export interface GenerationCallbacks {
   onProgress?: (message: string) => void;
   /** Called with output chunks (for streaming display) */
   onChunk?: (chunk: string) => void;
+  /** Called when a file is created/saved */
+  onFileCreated?: (file: CreatedFileInfo) => void;
   /** Called when generation completes */
   onComplete?: (result: GenerationResult) => void;
   /** Called on error */
   onError?: (error: string) => void;
+  /** Called when activity occurs (data chunk or file change) - allows external timeout reset */
+  onActivity?: () => void;
 }
 
 /**
@@ -68,15 +82,15 @@ interface ParsedDocument {
 export const AUTO_RUN_FOLDER_NAME = 'Auto Run Docs';
 
 /**
- * Generation timeout in milliseconds (2.5 minutes)
+ * Generation timeout in milliseconds (5 minutes - generation can take a while for complex projects)
  */
-const GENERATION_TIMEOUT = 150000;
+const GENERATION_TIMEOUT = 300000;
 
 /**
  * Generate the system prompt for document generation
  *
  * This prompt instructs the agent to:
- * - Create multiple phased markdown documents
+ * - Create multiple Auto Run documents
  * - Make Phase 1 achievable without user input
  * - Make Phase 1 deliver a working prototype
  * - Use checkbox task format
@@ -99,7 +113,7 @@ export function generateDocumentGenerationPrompt(config: GenerationConfig): stri
 
 ## Your Task
 
-Based on the project discovery conversation below, create a series of phased markdown documents that will guide an AI coding assistant through building this project step by step.
+Based on the project discovery conversation below, create a series of Auto Run documents that will guide an AI coding assistant through building this project step by step.
 
 ## Working Directory
 
@@ -125,7 +139,7 @@ Phase 1 is the MOST IMPORTANT phase. It MUST:
 
 ## Document Format
 
-Each phase document MUST follow this exact format:
+Each Auto Run document MUST follow this exact format:
 
 \`\`\`markdown
 # Phase XX: [Brief Title]
@@ -190,7 +204,7 @@ ${conversationSummary}
 
 ## Now Generate the Documents
 
-Based on the conversation above, create the phased documents. Start with Phase 1 (the working prototype), then create additional phases as needed. Remember: Phase 1 must be completely autonomous and deliver something that works!`;
+Based on the conversation above, create the Auto Run documents. Start with Phase 1 (the working prototype), then create additional phases as needed. Remember: Phase 1 must be completely autonomous and deliver something that works!`;
 }
 
 /**
@@ -367,9 +381,10 @@ class PhaseGenerator {
   private outputBuffer = '';
   private dataListenerCleanup?: () => void;
   private exitListenerCleanup?: () => void;
+  private currentWatchPath?: string;
 
   /**
-   * Generate phase documents based on the project discovery conversation
+   * Generate Auto Run documents based on the project discovery conversation
    */
   async generateDocuments(
     config: GenerationConfig,
@@ -398,7 +413,7 @@ class PhaseGenerator {
       // Generate the prompt
       const prompt = generateDocumentGenerationPrompt(config);
 
-      callbacks?.onProgress?.('Generating phased documents...');
+      callbacks?.onProgress?.('Generating Auto Run documents...');
 
       // Spawn the agent and wait for completion
       const result = await this.runAgent(agent, config, prompt, callbacks);
@@ -442,7 +457,7 @@ class PhaseGenerator {
         taskCount: countTasks(doc.content),
       }));
 
-      callbacks?.onProgress?.(`Generated ${generatedDocs.length} phase document(s)`);
+      callbacks?.onProgress?.(`Generated ${generatedDocs.length} Auto Run document(s)`);
 
       const finalResult: GenerationResult = {
         success: true,
@@ -477,16 +492,73 @@ class PhaseGenerator {
     callbacks?: GenerationCallbacks
   ): Promise<GenerationResult> {
     const sessionId = `wizard-gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+
+    console.log('[PhaseGenerator] Starting agent run:', {
+      sessionId,
+      agentType: config.agentType,
+      cwd: config.directoryPath,
+      promptLength: prompt.length,
+      timeoutMs: GENERATION_TIMEOUT,
+    });
 
     return new Promise<GenerationResult>((resolve) => {
       let timeoutId: ReturnType<typeof setTimeout>;
+      let lastDataTime = Date.now();
+      let dataChunks = 0;
+      let fileWatcherCleanup: (() => void) | undefined;
+
+      /**
+       * Reset the inactivity timeout - called on any activity (data chunk or file change)
+       * This ensures the timeout only fires after 5 minutes of NO activity
+       */
+      const resetTimeout = () => {
+        clearTimeout(timeoutId);
+        lastDataTime = Date.now();
+
+        timeoutId = setTimeout(() => {
+          const elapsed = Date.now() - startTime;
+          const timeSinceLastActivity = Date.now() - lastDataTime;
+          console.error('[PhaseGenerator] TIMEOUT after', elapsed, 'ms total');
+          console.error('[PhaseGenerator] Time since last activity:', timeSinceLastActivity, 'ms');
+          console.error('[PhaseGenerator] Total chunks received:', dataChunks);
+          console.error('[PhaseGenerator] Buffer size:', this.outputBuffer.length);
+          console.error('[PhaseGenerator] Buffer preview:', this.outputBuffer.slice(-500));
+
+          this.cleanup();
+          if (fileWatcherCleanup) {
+            fileWatcherCleanup();
+          }
+          window.maestro.process.kill(sessionId).catch(() => {});
+          resolve({
+            success: false,
+            error: 'Generation timed out after 5 minutes of inactivity. Please try again.',
+            rawOutput: this.outputBuffer,
+          });
+        }, GENERATION_TIMEOUT);
+      };
 
       // Set up data listener
       this.dataListenerCleanup = window.maestro.process.onData(
         (sid: string, data: string) => {
           if (sid === sessionId) {
             this.outputBuffer += data;
+            dataChunks++;
             callbacks?.onChunk?.(data);
+
+            // Reset timeout on activity - any data chunk means the agent is working
+            resetTimeout();
+            callbacks?.onActivity?.();
+
+            // Log progress every 10 chunks
+            if (dataChunks % 10 === 0) {
+              console.log('[PhaseGenerator] Progress:', {
+                chunks: dataChunks,
+                bufferSize: this.outputBuffer.length,
+                elapsedMs: Date.now() - startTime,
+                timeSinceLastData: Date.now() - lastDataTime,
+              });
+            }
           }
         }
       );
@@ -497,17 +569,36 @@ class PhaseGenerator {
           if (sid === sessionId) {
             clearTimeout(timeoutId);
             this.cleanup();
+            if (fileWatcherCleanup) {
+              fileWatcherCleanup();
+            }
+
+            const elapsed = Date.now() - startTime;
+            console.log('[PhaseGenerator] Agent exited:', {
+              sessionId,
+              exitCode: code,
+              elapsedMs: elapsed,
+              totalChunks: dataChunks,
+              bufferSize: this.outputBuffer.length,
+            });
 
             if (code === 0) {
               // Try to extract result from stream-json format
               const extracted = extractResultFromStreamJson(this.outputBuffer);
               const output = extracted || this.outputBuffer;
 
+              console.log('[PhaseGenerator] Extraction result:', {
+                hadExtraction: !!extracted,
+                outputLength: output.length,
+              });
+
               resolve({
                 success: true,
                 rawOutput: output,
               });
             } else {
+              console.error('[PhaseGenerator] Agent failed with code:', code);
+              console.error('[PhaseGenerator] Output buffer preview:', this.outputBuffer.slice(0, 500));
               resolve({
                 success: false,
                 error: `Agent exited with code ${code}`,
@@ -518,18 +609,56 @@ class PhaseGenerator {
         }
       );
 
-      // Set up timeout
-      timeoutId = setTimeout(() => {
-        this.cleanup();
-        window.maestro.process.kill(sessionId).catch(() => {});
-        resolve({
-          success: false,
-          error: 'Generation timed out. Please try again.',
-          rawOutput: this.outputBuffer,
-        });
-      }, GENERATION_TIMEOUT);
+      // Set up file system watcher for Auto Run Docs folder
+      // This detects when the agent creates files and resets the timeout
+      const autoRunPath = `${config.directoryPath}/${AUTO_RUN_FOLDER_NAME}`;
+
+      // Start watching the folder for file changes
+      window.maestro.autorun.watchFolder(autoRunPath).then((result) => {
+        if (result.success) {
+          console.log('[PhaseGenerator] Started watching folder:', autoRunPath);
+          this.currentWatchPath = autoRunPath;
+
+          // Set up file change listener
+          fileWatcherCleanup = window.maestro.autorun.onFileChanged((data) => {
+            if (data.folderPath === autoRunPath) {
+              console.log('[PhaseGenerator] File system activity:', data.filename, data.eventType);
+
+              // Reset timeout on file activity
+              resetTimeout();
+              callbacks?.onActivity?.();
+
+              // If a .md file was created/changed, notify about it
+              if (data.filename?.endsWith('.md') && (data.eventType === 'rename' || data.eventType === 'change')) {
+                // Read the file to get its size for display
+                const fullPath = `${autoRunPath}/${data.filename}`;
+                window.maestro.fs.readFile(fullPath).then((content) => {
+                  if (content && typeof content === 'string') {
+                    callbacks?.onFileCreated?.({
+                      filename: data.filename,
+                      size: new Blob([content]).size,
+                      path: fullPath,
+                      timestamp: Date.now(),
+                    });
+                  }
+                }).catch(() => {
+                  // File might still be being written, ignore errors
+                });
+              }
+            }
+          });
+        } else {
+          console.warn('[PhaseGenerator] Could not watch folder:', result.error);
+        }
+      }).catch((err) => {
+        console.warn('[PhaseGenerator] Error setting up folder watcher:', err);
+      });
+
+      // Initialize the timeout
+      resetTimeout();
 
       // Spawn the agent using the secure IPC channel
+      console.log('[PhaseGenerator] Spawning agent...');
       window.maestro.process
         .spawn({
           sessionId,
@@ -539,9 +668,16 @@ class PhaseGenerator {
           args: [...(agent.args || [])],
           prompt,
         })
+        .then(() => {
+          console.log('[PhaseGenerator] Agent spawned successfully');
+        })
         .catch((error: Error) => {
+          console.error('[PhaseGenerator] Spawn failed:', error.message);
           clearTimeout(timeoutId);
           this.cleanup();
+          if (fileWatcherCleanup) {
+            fileWatcherCleanup();
+          }
           resolve({
             success: false,
             error: `Failed to spawn agent: ${error.message}`,
@@ -551,7 +687,7 @@ class PhaseGenerator {
   }
 
   /**
-   * Clean up listeners
+   * Clean up listeners and file watcher
    */
   private cleanup(): void {
     if (this.dataListenerCleanup) {
@@ -562,6 +698,11 @@ class PhaseGenerator {
       this.exitListenerCleanup();
       this.exitListenerCleanup = undefined;
     }
+    // Stop watching the Auto Run folder
+    if (this.currentWatchPath) {
+      window.maestro.autorun.unwatchFolder(this.currentWatchPath).catch(() => {});
+      this.currentWatchPath = undefined;
+    }
   }
 
   /**
@@ -571,7 +712,8 @@ class PhaseGenerator {
    */
   async saveDocuments(
     directoryPath: string,
-    documents: GeneratedDocument[]
+    documents: GeneratedDocument[],
+    onFileCreated?: (file: CreatedFileInfo) => void
   ): Promise<{ success: boolean; savedPaths: string[]; error?: string }> {
     const autoRunPath = `${directoryPath}/${AUTO_RUN_FOLDER_NAME}`;
     const savedPaths: string[] = [];
@@ -583,6 +725,8 @@ class PhaseGenerator {
         const filename = doc.filename.endsWith('.md')
           ? doc.filename
           : `${doc.filename}.md`;
+
+        console.log('[PhaseGenerator] Saving document:', filename);
 
         // Write the document (autorun:writeDoc creates the folder if needed)
         const result = await window.maestro.autorun.writeDoc(
@@ -597,6 +741,18 @@ class PhaseGenerator {
 
           // Update the document with the saved path
           doc.savedPath = fullPath;
+
+          // Notify about file creation
+          if (onFileCreated) {
+            onFileCreated({
+              filename,
+              size: new Blob([doc.content]).size,
+              path: fullPath,
+              timestamp: Date.now(),
+            });
+          }
+
+          console.log('[PhaseGenerator] Saved:', fullPath, 'size:', doc.content.length);
         } else {
           throw new Error(
             result.error || `Failed to save ${filename}`
@@ -608,6 +764,7 @@ class PhaseGenerator {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to save documents';
+      console.error('[PhaseGenerator] Save error:', errorMessage);
       return { success: false, savedPaths, error: errorMessage };
     }
   }

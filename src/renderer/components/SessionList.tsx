@@ -781,7 +781,7 @@ export function SessionList(props: SessionListProps) {
                   title={isLiveMode ? "Web interface active - Click to show URL" : "Click to enable web interface"}
                 >
                   <Radio className={`w-3 h-3 ${isLiveMode ? 'animate-pulse' : ''}`} />
-                  {isLiveMode ? 'LIVE' : 'OFFLINE'}
+                  {leftSidebarWidthState >= 300 && (isLiveMode ? 'LIVE' : 'OFFLINE')}
                 </button>
 
                 {/* LIVE Overlay with URL and QR Code - Single QR with pill selector */}
@@ -1064,12 +1064,10 @@ export function SessionList(props: SessionListProps) {
               {/* Menu Overlay */}
               {menuOpen && (
                 <div
-                  className="absolute top-full mt-2 w-72 rounded-lg shadow-2xl z-50 overflow-hidden"
+                  className="absolute top-full left-0 mt-2 w-72 rounded-lg shadow-2xl z-50 overflow-hidden"
                   style={{
                     backgroundColor: theme.colors.bgSidebar,
                     border: `1px solid ${theme.colors.border}`,
-                    left: leftSidebarWidthState < 300 ? '0' : undefined,
-                    right: leftSidebarWidthState >= 300 ? '0' : undefined,
                   }}
                 >
                   <div className="p-1">
@@ -2375,19 +2373,19 @@ export function SessionList(props: SessionListProps) {
         </button>
 
         {leftSidebarOpen && (
-          <button onClick={addNewSession} className="flex-1 flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors" style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}>
-            <Plus className="w-3 h-3" /> New Agent
+          <button onClick={addNewSession} className="flex-1 flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors hover:opacity-90" style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}>
+            <Bot className="w-3 h-3" /> New Agent
           </button>
         )}
 
         {leftSidebarOpen && openWizard && (
           <button
             onClick={openWizard}
-            className="flex items-center justify-center p-2 rounded hover:bg-white/10 transition-colors w-8 h-8 shrink-0"
-            style={{ color: theme.colors.accent }}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-colors hover:opacity-90"
+            style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
             title="Get started with AI wizard"
           >
-            <Wand2 className="w-4 h-4" />
+            <Wand2 className="w-3 h-3" /> Wizard
           </button>
         )}
       </div>

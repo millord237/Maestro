@@ -27,7 +27,7 @@ import { StandingOvationOverlay } from './components/StandingOvationOverlay';
 import { FirstRunCelebration } from './components/FirstRunCelebration';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
 import { AutoRunSetupModal } from './components/AutoRunSetupModal';
-import { MaestroWizard, useWizard, WizardResumeModal, SerializableWizardState } from './components/Wizard';
+import { MaestroWizard, useWizard, WizardResumeModal, SerializableWizardState, AUTO_RUN_FOLDER_NAME } from './components/Wizard';
 import { TourOverlay } from './components/Wizard/tour';
 import { CONDUCTOR_BADGES } from './constants/conductorBadges';
 
@@ -127,10 +127,13 @@ export default function MaestroConsole() {
 
   // --- WIZARD (onboarding wizard for new users) ---
   const {
+    state: wizardState,
     openWizard: openWizardModal,
     restoreState: restoreWizardState,
     loadResumeState,
     clearResumeState,
+    completeWizard,
+    closeWizard: closeWizardModal,
   } = useWizard();
 
   // --- SETTINGS (from useSettings hook) ---
@@ -222,6 +225,7 @@ export default function MaestroConsole() {
 
   // Tour Overlay State
   const [tourOpen, setTourOpen] = useState(false);
+  const [tourFromWizard, setTourFromWizard] = useState(false);
 
   // Git Log Viewer State
   const [gitLogOpen, setGitLogOpen] = useState(false);
@@ -2584,6 +2588,8 @@ export default function MaestroConsole() {
     // TTS settings for speaking synopsis after each auto-run task
     audioFeedbackEnabled,
     audioFeedbackCommand,
+    // Pass autoRunStats for achievement progress in final summary
+    autoRunStats,
     onComplete: (info) => {
       // Find group name for the session
       const session = sessions.find(s => s.id === info.sessionId);
@@ -2883,17 +2889,14 @@ export default function MaestroConsole() {
       // Use provided messages or fetch them
       let messages: LogEntry[];
       if (providedMessages && providedMessages.length > 0) {
-        console.log('[handleResumeSession] Using provided messages:', providedMessages.length);
         messages = providedMessages;
       } else {
-        console.log('[handleResumeSession] Loading messages for:', claudeSessionId, 'cwd:', activeSession.cwd);
         // Load the session messages
         const result = await window.maestro.claude.readSessionMessages(
           activeSession.cwd,
           claudeSessionId,
           { offset: 0, limit: 100 }
         );
-        console.log('[handleResumeSession] Loaded result:', result);
 
         // Convert to log entries
         messages = result.messages.map((msg: { type: string; content: string; timestamp: string; uuid: string }) => ({
@@ -2902,7 +2905,6 @@ export default function MaestroConsole() {
           source: msg.type === 'user' ? 'user' as const : 'stdout' as const,
           text: msg.content || ''
         }));
-        console.log('[handleResumeSession] Converted to', messages.length, 'log entries');
       }
 
       // Look up starred status and session name from stores if not provided
@@ -2929,12 +2931,11 @@ export default function MaestroConsole() {
 
       // Update the session and switch to AI mode
       // IMPORTANT: Use functional update to get fresh session state and avoid race conditions
-      console.log('[handleResumeSession] Creating tab with', messages.length, 'logs, name:', name, 'starred:', isStarred);
       setSessions(prev => prev.map(s => {
         if (s.id !== activeSession.id) return s;
 
         // Create tab from the CURRENT session state (not stale closure value)
-        const { session: updatedSession, tab: newTab } = createTab(s, {
+        const { session: updatedSession } = createTab(s, {
           claudeSessionId,
           logs: messages,
           name,
@@ -2942,7 +2943,6 @@ export default function MaestroConsole() {
           saveToHistory: defaultSaveToHistory
         });
 
-        console.log('[handleResumeSession] Created tab:', newTab.id, 'with', newTab.logs.length, 'logs, activeTabId:', updatedSession.activeTabId);
         return { ...updatedSession, inputMode: 'ai' };
       }));
       setActiveClaudeSessionId(claudeSessionId);
@@ -4095,6 +4095,7 @@ export default function MaestroConsole() {
         fileTree: [],
         fileExplorerExpanded: [],
         fileExplorerScrollPos: 0,
+        fileTreeAutoRefreshInterval: 180, // Default: auto-refresh every 3 minutes
         shellCwd: workingDir,
         aiCommandHistory: [],
         shellCommandHistory: [],
@@ -4118,6 +4119,154 @@ export default function MaestroConsole() {
       // TODO: Show error to user
     }
   };
+
+  /**
+   * Handle wizard completion - create session with Auto Run configured
+   * Called when user clicks "I'm Ready to Go" or "Walk Me Through the Interface"
+   */
+  const handleWizardLaunchSession = useCallback(async (wantsTour: boolean) => {
+    // Get wizard state
+    const { selectedAgent, directoryPath, agentName, generatedDocuments } = wizardState;
+
+    if (!selectedAgent || !directoryPath) {
+      console.error('Wizard launch failed: missing agent or directory');
+      throw new Error('Missing required wizard data');
+    }
+
+    // Create the session
+    const newId = generateId();
+    const sessionName = agentName || `${selectedAgent} Session`;
+
+    // Get agent definition
+    const agent = await window.maestro.agents.get(selectedAgent);
+    if (!agent) {
+      throw new Error(`Agent not found: ${selectedAgent}`);
+    }
+
+    // Spawn AI process
+    const aiSpawnResult = await window.maestro.process.spawn({
+      sessionId: `${newId}-ai`,
+      toolType: selectedAgent,
+      cwd: directoryPath,
+      command: agent.path || agent.command,
+      args: agent.args || []
+    });
+
+    if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
+      throw new Error('Failed to spawn AI agent process');
+    }
+
+    // Check git repo status
+    const isGitRepo = await gitService.isRepo(directoryPath);
+    let gitBranches: string[] | undefined;
+    let gitTags: string[] | undefined;
+    let gitRefsCacheTime: number | undefined;
+    if (isGitRepo) {
+      [gitBranches, gitTags] = await Promise.all([
+        gitService.getBranches(directoryPath),
+        gitService.getTags(directoryPath)
+      ]);
+      gitRefsCacheTime = Date.now();
+    }
+
+    // Create initial tab
+    const initialTabId = generateId();
+    const initialTab: AITab = {
+      id: initialTabId,
+      claudeSessionId: null,
+      name: null,
+      starred: false,
+      logs: [],
+      inputValue: '',
+      stagedImages: [],
+      createdAt: Date.now(),
+      state: 'idle',
+      saveToHistory: defaultSaveToHistory
+    };
+
+    // Build Auto Run folder path
+    const autoRunFolderPath = `${directoryPath}/${AUTO_RUN_FOLDER_NAME}`;
+    const firstDoc = generatedDocuments[0];
+    const autoRunSelectedFile = firstDoc ? firstDoc.filename.replace(/\.md$/, '') : undefined;
+
+    // Create the session with Auto Run configured
+    const newSession: Session = {
+      id: newId,
+      name: sessionName,
+      toolType: selectedAgent as ToolType,
+      state: 'idle',
+      cwd: directoryPath,
+      fullPath: directoryPath,
+      projectRoot: directoryPath,
+      isGitRepo,
+      gitBranches,
+      gitTags,
+      gitRefsCacheTime,
+      aiLogs: [],
+      shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
+      workLog: [],
+      contextUsage: 0,
+      inputMode: 'ai',
+      aiPid: aiSpawnResult.pid,
+      terminalPid: 0,
+      port: 3000 + Math.floor(Math.random() * 100),
+      isLive: false,
+      changedFiles: [],
+      fileTree: [],
+      fileExplorerExpanded: [],
+      fileExplorerScrollPos: 0,
+      fileTreeAutoRefreshInterval: 180,
+      shellCwd: directoryPath,
+      aiCommandHistory: [],
+      shellCommandHistory: [],
+      executionQueue: [],
+      activeTimeMs: 0,
+      aiTabs: [initialTab],
+      activeTabId: initialTabId,
+      closedTabHistory: [],
+      // Auto Run configuration from wizard
+      autoRunFolderPath,
+      autoRunSelectedFile,
+    };
+
+    // Add session and make it active
+    setSessions(prev => [...prev, newSession]);
+    setActiveSessionId(newId);
+    updateGlobalStats({ totalSessions: 1 });
+
+    // Clear wizard resume state since we completed successfully
+    clearResumeState();
+
+    // Complete and close the wizard
+    completeWizard(newId);
+
+    // Switch to Auto Run tab so user sees their generated docs
+    setActiveRightTab('autorun');
+
+    // Start tour if requested
+    if (wantsTour) {
+      // Small delay to let the UI settle before starting tour
+      setTimeout(() => {
+        setTourFromWizard(true);
+        setTourOpen(true);
+      }, 300);
+    }
+
+    // Focus input
+    setActiveFocus('main');
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [
+    wizardState,
+    defaultSaveToHistory,
+    setSessions,
+    setActiveSessionId,
+    updateGlobalStats,
+    clearResumeState,
+    completeWizard,
+    setActiveRightTab,
+    setTourOpen,
+    setActiveFocus,
+  ]);
 
   const toggleInputMode = () => {
     setSessions(prev => prev.map(s => {
@@ -6574,7 +6723,10 @@ export default function MaestroConsole() {
             visibleSessions={visibleSessions}
             autoRunStats={autoRunStats}
             openWizard={openWizardModal}
-            startTour={() => setTourOpen(true)}
+            startTour={() => {
+              setTourFromWizard(false);
+              setTourOpen(true);
+            }}
           />
         </ErrorBoundary>
       )}
@@ -6618,7 +6770,6 @@ export default function MaestroConsole() {
         setActiveClaudeSessionId={setActiveClaudeSessionId}
         onResumeClaudeSession={(claudeSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean) => {
           // Opens the Claude session as a new tab (or switches to existing tab if duplicate)
-          console.log('[onResumeClaudeSession] Called with:', claudeSessionId, 'messages:', messages.length, 'name:', sessionName, 'starred:', starred);
           handleResumeSession(claudeSessionId, messages, sessionName, starred);
         }}
         onNewClaudeSession={() => {
@@ -7044,6 +7195,7 @@ export default function MaestroConsole() {
             onJumpToClaudeSession={handleJumpToClaudeSession}
             onResumeSession={handleResumeSession}
             onOpenSessionAsTab={handleResumeSession}
+            onOpenAboutModal={() => setAboutModalOpen(true)}
           />
         </ErrorBoundary>
       )}
@@ -7100,7 +7252,6 @@ export default function MaestroConsole() {
           }}
           onNamedSessionSelect={(claudeSessionId, _projectPath, sessionName, starred) => {
             // Open a closed named session as a new tab - use handleResumeSession to properly load messages
-            console.log('[onNamedSessionSelect] Opening session:', claudeSessionId, 'name:', sessionName, 'starred:', starred);
             handleResumeSession(claudeSessionId, [], sessionName, starred);
             // Focus input so user can start interacting immediately
             setActiveFocus('main');
@@ -7318,6 +7469,7 @@ export default function MaestroConsole() {
       {/* --- MAESTRO WIZARD (onboarding wizard for new users) --- */}
       <MaestroWizard
         theme={theme}
+        onLaunchSession={handleWizardLaunchSession}
         onWizardStart={recordWizardStart}
         onWizardResume={recordWizardResume}
         onWizardAbandon={recordWizardAbandon}
@@ -7328,6 +7480,7 @@ export default function MaestroConsole() {
       <TourOverlay
         theme={theme}
         isOpen={tourOpen}
+        fromWizard={tourFromWizard}
         onClose={() => {
           setTourOpen(false);
           setTourCompleted(true);

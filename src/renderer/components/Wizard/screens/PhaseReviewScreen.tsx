@@ -34,9 +34,19 @@ import {
 } from 'lucide-react';
 import type { Theme } from '../../../types';
 import { useWizard } from '../WizardContext';
-import { phaseGenerator, AUTO_RUN_FOLDER_NAME } from '../services/phaseGenerator';
+import { phaseGenerator, AUTO_RUN_FOLDER_NAME, type CreatedFileInfo } from '../services/phaseGenerator';
 import { MermaidRenderer } from '../../MermaidRenderer';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
+import { getNextAustinFact } from '../services/austinFacts';
+
+/**
+ * Format file size in human-readable format
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // Memoize remarkPlugins array - it never changes
 const REMARK_PLUGINS = [remarkGfm];
@@ -59,64 +69,216 @@ interface PhaseReviewScreenProps {
 }
 
 /**
+ * Austin Fact Typewriter - displays random Austin facts with typing effect
+ */
+function AustinFactTypewriter({ theme }: { theme: Theme }): JSX.Element {
+  const [currentFact, setCurrentFact] = useState(() => getNextAustinFact());
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTypingComplete, setIsTypingComplete] = useState(false);
+
+  // Typewriter effect
+  useEffect(() => {
+    let currentIndex = 0;
+    setDisplayedText('');
+    setIsTypingComplete(false);
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex < currentFact.length) {
+        setDisplayedText(currentFact.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        setIsTypingComplete(true);
+        clearInterval(typeInterval);
+      }
+    }, 25); // 25ms per character for readable typing speed
+
+    return () => clearInterval(typeInterval);
+  }, [currentFact]);
+
+  // Rotate to new fact 20 seconds after typing completes
+  useEffect(() => {
+    if (!isTypingComplete) return;
+
+    const rotateTimer = setTimeout(() => {
+      setCurrentFact(getNextAustinFact());
+    }, 20000); // 20 seconds
+
+    return () => clearTimeout(rotateTimer);
+  }, [isTypingComplete]);
+
+  return (
+    <div
+      className="mt-8 mx-auto max-w-lg px-6 py-4 rounded-lg"
+      style={{
+        backgroundColor: `${theme.colors.accent}10`,
+        border: `1px solid ${theme.colors.accent}30`,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-lg shrink-0">🤠</span>
+        <div>
+          <p
+            className="text-xs font-medium uppercase tracking-wide mb-1"
+            style={{ color: theme.colors.accent }}
+          >
+            Did you know?
+          </p>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: theme.colors.textMain }}
+          >
+            {displayedText}
+            {!isTypingComplete && (
+              <span
+                className="inline-block w-0.5 h-4 ml-0.5 animate-pulse"
+                style={{ backgroundColor: theme.colors.accent }}
+              />
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * File list display for showing created files during generation
+ */
+function CreatedFilesList({
+  files,
+  theme,
+}: {
+  files: CreatedFileInfo[];
+  theme: Theme;
+}): JSX.Element | null {
+  if (files.length === 0) return null;
+
+  return (
+    <div
+      className="mt-6 w-full max-w-md mx-auto rounded-lg overflow-hidden"
+      style={{
+        backgroundColor: theme.colors.bgActivity,
+        border: `1px solid ${theme.colors.border}`,
+      }}
+    >
+      <div
+        className="px-4 py-2 border-b flex items-center gap-2"
+        style={{
+          backgroundColor: `${theme.colors.success}15`,
+          borderColor: theme.colors.border,
+        }}
+      >
+        <FileText className="w-4 h-4" style={{ color: theme.colors.success }} />
+        <span
+          className="text-xs font-medium uppercase tracking-wide"
+          style={{ color: theme.colors.success }}
+        >
+          Files Created ({files.length})
+        </span>
+      </div>
+      <div className="max-h-40 overflow-y-auto">
+        {files.map((file, index) => (
+          <div
+            key={file.path}
+            className="px-4 py-2 flex items-center justify-between text-sm"
+            style={{
+              borderBottom: index < files.length - 1 ? `1px solid ${theme.colors.border}` : undefined,
+              animation: 'fadeSlideIn 0.3s ease-out',
+            }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span style={{ color: theme.colors.success }}>✓</span>
+              <span
+                className="truncate"
+                style={{ color: theme.colors.textMain }}
+                title={file.filename}
+              >
+                {file.filename}
+              </span>
+            </div>
+            <span
+              className="text-xs shrink-0 ml-2"
+              style={{ color: theme.colors.textDim }}
+            >
+              {formatFileSize(file.size)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Loading indicator with animated spinner and message
  */
 function LoadingIndicator({
   message,
   theme,
+  createdFiles = [],
 }: {
   message: string;
   theme: Theme;
+  createdFiles?: CreatedFileInfo[];
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
-      {/* Animated spinner */}
-      <div className="relative mb-6">
-        <div
-          className="w-16 h-16 rounded-full border-4 border-t-transparent animate-spin"
-          style={{
-            borderColor: `${theme.colors.border}`,
-            borderTopColor: theme.colors.accent,
-          }}
-        />
-        {/* Inner pulsing circle */}
-        <div className="absolute inset-0 flex items-center justify-center">
+    <div className="flex-1 flex flex-col p-8">
+      {/* Main loading content - pushed up from center */}
+      <div className="flex flex-col items-center pt-8">
+        {/* Animated spinner */}
+        <div className="relative mb-4">
           <div
-            className="w-8 h-8 rounded-full animate-pulse"
-            style={{ backgroundColor: `${theme.colors.accent}30` }}
-          />
-        </div>
-      </div>
-
-      {/* Message */}
-      <h3
-        className="text-xl font-semibold mb-2 text-center"
-        style={{ color: theme.colors.textMain }}
-      >
-        {message}
-      </h3>
-
-      {/* Subtitle */}
-      <p
-        className="text-sm text-center max-w-md"
-        style={{ color: theme.colors.textDim }}
-      >
-        This may take a minute or two. We're creating detailed task documents
-        based on your project requirements.
-      </p>
-
-      {/* Animated dots */}
-      <div className="flex items-center gap-1 mt-4">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="w-2 h-2 rounded-full"
+            className="w-14 h-14 rounded-full border-4 border-t-transparent animate-spin"
             style={{
-              backgroundColor: theme.colors.accent,
-              animation: `bounce-dot 0.8s infinite ${i * 150}ms`,
+              borderColor: `${theme.colors.border}`,
+              borderTopColor: theme.colors.accent,
             }}
           />
-        ))}
+          {/* Inner pulsing circle */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="w-7 h-7 rounded-full animate-pulse"
+              style={{ backgroundColor: `${theme.colors.accent}30` }}
+            />
+          </div>
+        </div>
+
+        {/* Message */}
+        <h3
+          className="text-lg font-semibold mb-1 text-center"
+          style={{ color: theme.colors.textMain }}
+        >
+          {message}
+        </h3>
+
+        {/* Subtitle */}
+        <p
+          className="text-sm text-center max-w-md"
+          style={{ color: theme.colors.textDim }}
+        >
+          This may take a minute or two. We're creating detailed task documents
+          based on your project requirements.
+        </p>
+
+        {/* Animated dots */}
+        <div className="flex items-center gap-1 mt-3">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-2 h-2 rounded-full"
+              style={{
+                backgroundColor: theme.colors.accent,
+                animation: `bounce-dot 0.8s infinite ${i * 150}ms`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Created files list */}
+        <CreatedFilesList files={createdFiles} theme={theme} />
+
+        {/* Austin Fact */}
+        <AustinFactTypewriter theme={theme} />
       </div>
 
       {/* Animation styles */}
@@ -127,6 +289,16 @@ function LoadingIndicator({
           }
           50% {
             transform: translateY(-6px);
+          }
+        }
+        @keyframes fadeSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
       `}</style>
@@ -149,7 +321,7 @@ function ErrorDisplay({
   theme: Theme;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
+    <div className="flex-1 flex flex-col items-center justify-center p-8">
       {/* Error icon */}
       <div
         className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
@@ -697,7 +869,7 @@ function DocumentEditor({
   );
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Mode toggle and controls */}
       <div className="flex gap-2 mb-3 justify-center">
         <button
@@ -804,7 +976,7 @@ function DocumentEditor({
       )}
 
       {/* Content area */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col">
         {mode === 'edit' ? (
           <textarea
             ref={textareaRef}
@@ -814,18 +986,19 @@ function DocumentEditor({
             onPaste={handlePaste}
             readOnly={isLocked}
             placeholder="Your task document will appear here..."
-            className={`w-full h-full border rounded p-4 bg-transparent outline-none resize-none font-mono text-sm ${
+            className={`w-full flex-1 border rounded p-4 bg-transparent outline-none resize-none font-mono text-sm ${
               isLocked ? 'cursor-not-allowed opacity-70' : ''
             }`}
             style={{
               borderColor: theme.colors.border,
               color: theme.colors.textMain,
+              minHeight: 0,
             }}
           />
         ) : (
           <div
             ref={previewRef}
-            className="h-full overflow-y-auto border rounded p-4 prose prose-sm max-w-none outline-none"
+            className="flex-1 overflow-y-auto border rounded p-4 prose prose-sm max-w-none outline-none"
             tabIndex={0}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
@@ -838,6 +1011,7 @@ function DocumentEditor({
               borderColor: theme.colors.border,
               color: theme.colors.textMain,
               fontSize: '13px',
+              minHeight: 0,
             }}
           >
             <style>{proseStyles}</style>
@@ -898,7 +1072,8 @@ function DocumentReview({
   const [attachments, setAttachments] = useState<
     Array<{ filename: string; dataUrl: string }>
   >([]);
-  const [isLaunching, setIsLaunching] = useState(false);
+  // Track which button is launching: 'ready', 'tour', or null (not launching)
+  const [launchingButton, setLaunchingButton] = useState<'ready' | 'tour' | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
   // Refs for button focus
@@ -909,6 +1084,8 @@ function DocumentReview({
   // Auto-save timer ref
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedContentRef = useRef<string>(localContent);
+  const isSavingRef = useRef<boolean>(false);
+  const pendingSaveContentRef = useRef<string | null>(null);
 
   // Auto-focus the ready button on mount
   useEffect(() => {
@@ -917,7 +1094,7 @@ function DocumentReview({
     }, 100);
   }, []);
 
-  // Auto-save with debounce
+  // Auto-save with debounce and locking to prevent race conditions
   useEffect(() => {
     if (localContent === lastSavedContentRef.current) return;
 
@@ -926,7 +1103,14 @@ function DocumentReview({
     }
 
     autoSaveTimeoutRef.current = setTimeout(async () => {
+      // If already saving, queue this content for after current save completes
+      if (isSavingRef.current) {
+        pendingSaveContentRef.current = localContent;
+        return;
+      }
+
       if (localContent !== lastSavedContentRef.current && phase1) {
+        isSavingRef.current = true;
         try {
           await window.maestro.autorun.writeDoc(
             folderPath,
@@ -937,6 +1121,32 @@ function DocumentReview({
           setEditedPhase1Content(localContent);
         } catch (err) {
           console.error('Auto-save failed:', err);
+        } finally {
+          isSavingRef.current = false;
+
+          // Check if there's pending content to save
+          if (
+            pendingSaveContentRef.current !== null &&
+            pendingSaveContentRef.current !== lastSavedContentRef.current
+          ) {
+            const pendingContent = pendingSaveContentRef.current;
+            pendingSaveContentRef.current = null;
+            // Trigger another save for pending content
+            try {
+              isSavingRef.current = true;
+              await window.maestro.autorun.writeDoc(
+                folderPath,
+                phase1.filename,
+                pendingContent
+              );
+              lastSavedContentRef.current = pendingContent;
+              setEditedPhase1Content(pendingContent);
+            } catch (err) {
+              console.error('Auto-save (pending) failed:', err);
+            } finally {
+              isSavingRef.current = false;
+            }
+          }
         }
       }
     }, AUTO_SAVE_DELAY);
@@ -985,7 +1195,7 @@ function DocumentReview({
   // Handle launch
   const handleLaunch = useCallback(
     async (wantsTour: boolean) => {
-      setIsLaunching(true);
+      setLaunchingButton(wantsTour ? 'tour' : 'ready');
       setLaunchError(null);
       setWantsTour(wantsTour);
 
@@ -1032,7 +1242,7 @@ function DocumentReview({
         const errorMessage =
           err instanceof Error ? err.message : 'Failed to launch session';
         setLaunchError(errorMessage);
-        setIsLaunching(false);
+        setLaunchingButton(null);
       }
     },
     [
@@ -1064,7 +1274,7 @@ function DocumentReview({
         }
       }
       // Enter to activate focused button
-      if (e.key === 'Enter' && !isLaunching) {
+      if (e.key === 'Enter' && !launchingButton) {
         const focusedElement = document.activeElement;
         if (focusedElement === readyButtonRef.current) {
           handleLaunch(false);
@@ -1073,7 +1283,7 @@ function DocumentReview({
         }
       }
     },
-    [handleLaunch, isLaunching]
+    [handleLaunch, launchingButton]
   );
 
   // Task count
@@ -1085,7 +1295,7 @@ function DocumentReview({
 
   if (!phase1) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex-1 flex items-center justify-center">
         <p style={{ color: theme.colors.textDim }}>No documents generated</p>
       </div>
     );
@@ -1094,7 +1304,7 @@ function DocumentReview({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full outline-none"
+      className="flex flex-col flex-1 min-h-0 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
@@ -1152,7 +1362,7 @@ function DocumentReview({
           onAddAttachment={handleAddAttachment}
           onRemoveAttachment={handleRemoveAttachment}
           theme={theme}
-          isLocked={isLaunching}
+          isLocked={launchingButton !== null}
         />
       </div>
 
@@ -1205,9 +1415,9 @@ function DocumentReview({
           <button
             ref={readyButtonRef}
             onClick={() => handleLaunch(false)}
-            disabled={isLaunching}
+            disabled={launchingButton !== null}
             className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg font-semibold text-base transition-all ${
-              isLaunching ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'
+              launchingButton !== null ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'
             }`}
             style={{
               backgroundColor: theme.colors.accent,
@@ -1215,21 +1425,21 @@ function DocumentReview({
               boxShadow: `0 4px 14px ${theme.colors.accent}40`,
             }}
           >
-            {isLaunching ? (
+            {launchingButton === 'ready' ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Rocket className="w-5 h-5" />
             )}
-            {isLaunching ? 'Launching...' : "I'm Ready to Go"}
+            {launchingButton === 'ready' ? 'Launching...' : "I'm Ready to Go"}
           </button>
 
           {/* Secondary button - Walk Me Through */}
           <button
             ref={tourButtonRef}
             onClick={() => handleLaunch(true)}
-            disabled={isLaunching}
+            disabled={launchingButton !== null}
             className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg font-medium text-base transition-all ${
-              isLaunching ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'
+              launchingButton !== null ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'
             }`}
             style={{
               backgroundColor: theme.colors.bgActivity,
@@ -1237,12 +1447,12 @@ function DocumentReview({
               border: `2px solid ${theme.colors.border}`,
             }}
           >
-            {isLaunching ? (
+            {launchingButton === 'tour' ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Compass className="w-5 h-5" />
             )}
-            {isLaunching ? 'Launching...' : "Walk Me Through the Interface"}
+            {launchingButton === 'tour' ? 'Launching...' : "Walk Me Through the Interface"}
           </button>
         </div>
 
@@ -1319,6 +1529,11 @@ export function PhaseReviewScreen({
   );
   const generationStartedRef = useRef(false);
 
+  // Track files as they are created (from FS watcher or saveDocuments callback)
+  const [createdFiles, setCreatedFiles] = useState<CreatedFileInfo[]>([]);
+  // Track filenames we've already seen to avoid duplicates
+  const seenFilesRef = useRef<Set<string>>(new Set());
+
   // Screen reader announcement state
   const [announcement, setAnnouncement] = useState('');
   const [announcementKey, setAnnouncementKey] = useState(0);
@@ -1335,10 +1550,28 @@ export function PhaseReviewScreen({
     setGeneratingDocuments(true);
     setGenerationError(null);
     setProgressMessage('Creating your action plan...');
+    setCreatedFiles([]); // Reset files list
+    seenFilesRef.current.clear(); // Reset seen files tracking
 
     // Announce generation start
     setAnnouncement('Creating your action plan. This may take a minute or two.');
     setAnnouncementKey((prev) => prev + 1);
+
+    /**
+     * Helper to add a file to the created files list, avoiding duplicates
+     */
+    const addCreatedFile = (file: CreatedFileInfo) => {
+      // Use filename as the unique key to avoid duplicates
+      if (!seenFilesRef.current.has(file.filename)) {
+        seenFilesRef.current.add(file.filename);
+        setCreatedFiles((prev) => [...prev, file]);
+      } else {
+        // Update the existing file entry (e.g., if size changed)
+        setCreatedFiles((prev) =>
+          prev.map((f) => (f.filename === file.filename ? file : f))
+        );
+      }
+    };
 
     try {
       // Generate documents
@@ -1359,13 +1592,27 @@ export function PhaseReviewScreen({
           onChunk: () => {
             // Could show streaming output here in the future
           },
+          // Called when a file is detected by FS watcher or saveDocuments
+          onFileCreated: (file) => {
+            addCreatedFile(file);
+          },
+          // Called on any activity (data chunk or file change) - for future use
+          onActivity: () => {
+            // Activity occurred, timeout was reset in phaseGenerator
+            // Could update UI to show "activity" indicator if desired
+          },
           onComplete: async (genResult) => {
             if (genResult.success && genResult.documents) {
               // Save documents to disk
               setProgressMessage('Saving documents...');
               const saveResult = await phaseGenerator.saveDocuments(
                 state.directoryPath,
-                genResult.documents
+                genResult.documents,
+                (file) => {
+                  // Add file to the created files list as it's saved
+                  // This may be redundant with FS watcher, but addCreatedFile handles dedup
+                  addCreatedFile(file);
+                }
               );
 
               if (saveResult.success) {
@@ -1439,6 +1686,10 @@ export function PhaseReviewScreen({
   }, [previousStep, setGenerationError]);
 
   // Start generation when screen mounts (only once)
+  // NOTE: We intentionally exclude startGeneration from deps to prevent re-runs
+  // when it changes (which happens when its dependencies change). The ref guard
+  // ensures we only start once, and the documents check prevents re-generation
+  // if we already have documents (e.g., from a previous session).
   useEffect(() => {
     // Only start if we haven't started yet and don't already have documents
     if (
@@ -1448,7 +1699,8 @@ export function PhaseReviewScreen({
       generationStartedRef.current = true;
       startGeneration();
     }
-  }, [startGeneration, state.generatedDocuments.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.generatedDocuments.length]);
 
   // Render based on current state
   // Note: We wrap each return to include the screen reader announcement component
@@ -1478,7 +1730,7 @@ export function PhaseReviewScreen({
     return (
       <>
         {announcementElement}
-        <LoadingIndicator message={progressMessage} theme={theme} />
+        <LoadingIndicator message={progressMessage} theme={theme} createdFiles={createdFiles} />
       </>
     );
   }

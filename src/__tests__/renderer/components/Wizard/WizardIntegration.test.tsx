@@ -32,6 +32,9 @@ vi.mock('lucide-react', () => ({
   X: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="x-icon" className={className} style={style} />
   ),
+  Check: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <svg data-testid="check-icon" className={className} style={style} />
+  ),
   AlertCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="alert-icon" className={className} style={style} />
   ),
@@ -440,8 +443,8 @@ describe('Wizard Integration Tests', () => {
         expect(progressDots).toHaveLength(4);
 
         // Steps 1 and 2 should be completed, step 3 should be current
-        expect(progressDots[0]).toHaveAttribute('aria-label', 'Step 1 (completed)');
-        expect(progressDots[1]).toHaveAttribute('aria-label', 'Step 2 (completed)');
+        expect(progressDots[0]).toHaveAttribute('aria-label', 'Step 1 (completed - click to go back)');
+        expect(progressDots[1]).toHaveAttribute('aria-label', 'Step 2 (completed - click to go back)');
         expect(progressDots[2]).toHaveAttribute('aria-label', 'Step 3 (current)');
         expect(progressDots[3]).toHaveAttribute('aria-label', 'Step 4');
       });
@@ -557,8 +560,8 @@ describe('Wizard Integration Tests', () => {
         expect(screen.getByText('Exit Setup Wizard?')).toBeInTheDocument();
       });
 
-      // Click "Stay in Wizard"
-      fireEvent.click(screen.getByRole('button', { name: /stay in wizard/i }));
+      // Click "Cancel" to stay in wizard
+      fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
       // Should still show the wizard
       await waitFor(() => {

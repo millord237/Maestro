@@ -91,6 +91,8 @@ interface ConversationSession {
   dataListenerCleanup?: () => void;
   /** Cleanup function for exit listener */
   exitListenerCleanup?: () => void;
+  /** Timeout ID for response timeout (for cleanup) */
+  responseTimeoutId?: NodeJS.Timeout;
 }
 
 /**
@@ -194,18 +196,16 @@ class ConversationManager {
         conversationHistory
       );
 
-      // Spawn the agent process
-      const spawnResult = await this.spawnAgentForMessage(agent, fullPrompt);
+      // Spawn the agent process and wait for completion
+      // spawnAgentForMessage returns when the agent exits with parsed response
+      const result = await this.spawnAgentForMessage(agent, fullPrompt);
 
-      if (!spawnResult.success) {
-        callbacks?.onError?.(spawnResult.error || 'Failed to spawn agent');
-        return spawnResult;
+      if (!result.success) {
+        callbacks?.onError?.(result.error || 'Failed to get response from agent');
+        return result;
       }
 
-      // Wait for the response
-      const result = await this.waitForResponse();
-
-      // Notify complete
+      // Notify complete with the result
       callbacks?.onComplete?.(result);
 
       return result;
@@ -265,6 +265,23 @@ class ConversationManager {
     }
 
     return new Promise<SendMessageResult>((resolve) => {
+      console.log('[Wizard] Setting up listeners for session:', this.session!.sessionId);
+
+      // Set up timeout (5 minutes for wizard's complex prompts)
+      const timeoutId = setTimeout(() => {
+        console.log('[Wizard] TIMEOUT fired! Session:', this.session?.sessionId, 'Buffer length:', this.session?.outputBuffer?.length);
+        this.cleanupListeners();
+        resolve({
+          success: false,
+          error: 'Response timeout - agent did not complete in time',
+          rawOutput: this.session?.outputBuffer,
+        });
+      }, 300000);
+
+      if (this.session) {
+        this.session.responseTimeoutId = timeoutId;
+      }
+
       // Set up data listener
       this.session!.dataListenerCleanup = window.maestro.process.onData(
         (sessionId: string, data: string) => {
@@ -278,12 +295,21 @@ class ConversationManager {
       // Set up exit listener
       this.session!.exitListenerCleanup = window.maestro.process.onExit(
         (sessionId: string, code: number) => {
+          console.log('[Wizard] Exit event received:', { receivedId: sessionId, expectedId: this.session?.sessionId, code });
           if (sessionId === this.session?.sessionId) {
+            console.log('[Wizard] Session ID matched! Processing exit...');
+            // Clear timeout since we got a response
+            clearTimeout(timeoutId);
+            if (this.session) {
+              this.session.responseTimeoutId = undefined;
+            }
+
             // Agent finished - resolve with parsed output
             this.cleanupListeners();
 
             if (code === 0) {
               const parsedResponse = this.parseAgentOutput();
+              console.log('[Wizard] Parsed response:', parsedResponse);
               resolve({
                 success: true,
                 response: parsedResponse,
@@ -296,6 +322,8 @@ class ConversationManager {
                 rawOutput: this.session?.outputBuffer,
               });
             }
+          } else {
+            console.log('[Wizard] Session ID mismatch, ignoring exit event');
           }
         }
       );
@@ -304,13 +332,19 @@ class ConversationManager {
       this.session!.pendingResolve = resolve;
 
       // Spawn the agent with the prompt
+      // Add --include-partial-messages for real-time streaming text display
+      const argsWithStreaming = [...(agent.args || [])];
+      if (!argsWithStreaming.includes('--include-partial-messages')) {
+        argsWithStreaming.push('--include-partial-messages');
+      }
+
       window.maestro.process
         .spawn({
           sessionId: this.session!.sessionId,
           toolType: this.session!.agentType,
           cwd: this.session!.directoryPath,
           command: agent.command,
-          args: [...(agent.args || [])],
+          args: argsWithStreaming,
           prompt: prompt,
         })
         .then(() => {
@@ -327,39 +361,6 @@ class ConversationManager {
     });
   }
 
-  /**
-   * Wait for the agent response to complete
-   * (Used for additional waiting if needed)
-   */
-  private waitForResponse(): Promise<SendMessageResult> {
-    if (!this.session?.pendingResolve) {
-      return Promise.resolve({
-        success: false,
-        error: 'No pending response to wait for',
-      });
-    }
-
-    // The response is handled by the exit listener set up in spawnAgentForMessage
-    return new Promise((resolve) => {
-      // This is a fallback - normally resolved by exit listener
-      const timeout = setTimeout(() => {
-        this.cleanupListeners();
-        resolve({
-          success: false,
-          error: 'Response timeout - agent did not complete in time',
-          rawOutput: this.session?.outputBuffer,
-        });
-      }, 120000); // 2 minute timeout
-
-      // Store cleanup for timeout
-      const originalResolve = this.session!.pendingResolve;
-      this.session!.pendingResolve = (result) => {
-        clearTimeout(timeout);
-        originalResolve?.(result);
-        resolve(result);
-      };
-    });
-  }
 
   /**
    * Parse the accumulated agent output to extract the structured response
@@ -375,12 +376,26 @@ class ConversationManager {
     }
 
     const output = this.session.outputBuffer;
+    console.log('[Wizard] Raw output buffer length:', output.length);
+    console.log('[Wizard] Raw output preview (last 500):', output.slice(-500));
 
     // Try to extract the result from stream-json format
     const extractedResult = this.extractResultFromStreamJson(output);
     const textToParse = extractedResult || output;
 
-    return parseStructuredOutput(textToParse);
+    console.log('[Wizard] Extracted result:', extractedResult ? 'YES' : 'NO (using raw)');
+    console.log('[Wizard] Text to parse:', textToParse.slice(0, 300));
+
+    const parsed = parseStructuredOutput(textToParse);
+    console.log('[Wizard] Parse result:', {
+      parseSuccess: parsed.parseSuccess,
+      hasStructured: !!parsed.structured,
+      confidence: parsed.structured?.confidence,
+      ready: parsed.structured?.ready,
+      parseError: parsed.parseError,
+    });
+
+    return parsed;
   }
 
   /**
@@ -408,7 +423,7 @@ class ConversationManager {
   }
 
   /**
-   * Clean up event listeners
+   * Clean up event listeners and any pending timeouts
    */
   private cleanupListeners(): void {
     if (this.session?.dataListenerCleanup) {
@@ -418,6 +433,10 @@ class ConversationManager {
     if (this.session?.exitListenerCleanup) {
       this.session.exitListenerCleanup();
       this.session.exitListenerCleanup = undefined;
+    }
+    if (this.session?.responseTimeoutId) {
+      clearTimeout(this.session.responseTimeoutId);
+      this.session.responseTimeoutId = undefined;
     }
   }
 

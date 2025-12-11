@@ -24,6 +24,9 @@ vi.mock('lucide-react', () => ({
   X: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="x-icon" className={className} style={style} />
   ),
+  Check: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <svg data-testid="check-icon" className={className} style={style} />
+  ),
   AlertCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <svg data-testid="alert-icon" className={className} style={style} />
   ),
@@ -354,6 +357,7 @@ describe('Wizard Theme Styles', () => {
             totalSteps={4}
             onConfirmExit={vi.fn()}
             onCancel={vi.fn()}
+            onQuitWithoutSaving={vi.fn()}
           />
         </LayerStackProvider>
       );
@@ -377,13 +381,14 @@ describe('Wizard Theme Styles', () => {
             totalSteps={4}
             onConfirmExit={vi.fn()}
             onCancel={vi.fn()}
+            onQuitWithoutSaving={vi.fn()}
           />
         </LayerStackProvider>
       );
 
       // Primary button should use accent colors
-      const stayButton = screen.getByText('Stay in Wizard');
-      expect(stayButton).toHaveStyle({ backgroundColor: theme.colors.accent });
+      const cancelButton = screen.getByText('Cancel');
+      expect(cancelButton).toHaveStyle({ backgroundColor: theme.colors.accent });
     });
   });
 

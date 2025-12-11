@@ -13,6 +13,7 @@ import {
   useReducer,
   useEffect,
   useRef,
+  useMemo,
   ReactNode,
 } from 'react';
 import type { ToolType, AgentConfig } from '../../types';
@@ -117,7 +118,7 @@ export interface WizardState {
   conversationError: string | null;
 
   // Phase Review (Step 4)
-  /** Generated phase documents */
+  /** Generated Auto Run documents */
   generatedDocuments: GeneratedDocument[];
   /** Index of the currently displayed document (Phase 1 = 0) */
   currentDocumentIndex: number;
@@ -468,9 +469,6 @@ function generateMessageId(): string {
 export function WizardProvider({ children }: WizardProviderProps) {
   const [state, dispatch] = useReducer(wizardReducer, initialState);
 
-  // Track previous step to detect step changes
-  const prevStepRef = useRef<WizardStep>(state.currentStep);
-
   // Wizard lifecycle
   const openWizard = useCallback(() => {
     dispatch({ type: 'OPEN_WIZARD' });
@@ -520,7 +518,14 @@ export function WizardProvider({ children }: WizardProviderProps) {
       default:
         return false;
     }
-  }, [state]);
+  }, [
+    state.currentStep,
+    state.selectedAgent,
+    state.directoryPath,
+    state.directoryError,
+    state.isReadyToProceed,
+    state.generatedDocuments.length,
+  ]);
 
   const getCurrentStepNumber = useCallback((): number => {
     return STEP_INDEX[state.currentStep];
@@ -646,7 +651,19 @@ export function WizardProvider({ children }: WizardProviderProps) {
       editedPhase1Content: state.editedPhase1Content,
       wantsTour: state.wantsTour,
     };
-  }, [state]);
+  }, [
+    state.currentStep,
+    state.selectedAgent,
+    state.agentName,
+    state.directoryPath,
+    state.isGitRepo,
+    state.conversationHistory,
+    state.confidenceLevel,
+    state.isReadyToProceed,
+    state.generatedDocuments,
+    state.editedPhase1Content,
+    state.wantsTour,
+  ]);
 
   const saveStateForResume = useCallback(() => {
     const serializableState = getSerializableState();
@@ -689,23 +706,37 @@ export function WizardProvider({ children }: WizardProviderProps) {
     window.maestro.settings.set('wizardResumeState', null);
   }, []);
 
+  // Store full state in a ref so we can access current values without triggering effect re-runs
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   // Auto-save state when step changes (only for steps past the first)
+  // PERF: Only depends on state.currentStep to avoid running on every state change
   useEffect(() => {
-    // Check if step has changed
-    if (prevStepRef.current !== state.currentStep) {
-      prevStepRef.current = state.currentStep;
-
-      // Save state when advancing past the first step
-      // This ensures user progress is preserved for resume
-      if (STEP_INDEX[state.currentStep] > 1) {
-        const serializableState = getSerializableState();
-        window.maestro.settings.set('wizardResumeState', serializableState);
-      }
+    // Save state when advancing past the first step
+    // This ensures user progress is preserved for resume
+    if (STEP_INDEX[state.currentStep] > 1) {
+      // Access current state via ref to get latest values
+      const currentState = stateRef.current;
+      const serializableState: SerializableWizardState = {
+        currentStep: currentState.currentStep,
+        selectedAgent: currentState.selectedAgent,
+        agentName: currentState.agentName,
+        directoryPath: currentState.directoryPath,
+        isGitRepo: currentState.isGitRepo,
+        conversationHistory: currentState.conversationHistory,
+        confidenceLevel: currentState.confidenceLevel,
+        isReadyToProceed: currentState.isReadyToProceed,
+        generatedDocuments: currentState.generatedDocuments,
+        editedPhase1Content: currentState.editedPhase1Content,
+        wantsTour: currentState.wantsTour,
+      };
+      window.maestro.settings.set('wizardResumeState', serializableState);
     }
-  }, [state.currentStep, getSerializableState]);
+  }, [state.currentStep]);
 
-  // Build the context value
-  const contextValue: WizardContextAPI = {
+  // Build the context value - memoized to prevent unnecessary re-renders
+  const contextValue: WizardContextAPI = useMemo(() => ({
     state,
 
     // Lifecycle
@@ -760,7 +791,44 @@ export function WizardProvider({ children }: WizardProviderProps) {
     hasResumeState,
     loadResumeState,
     clearResumeState,
-  };
+  }), [
+    state,
+    openWizard,
+    closeWizard,
+    resetWizard,
+    goToStep,
+    nextStep,
+    previousStep,
+    canProceedToNext,
+    getCurrentStepNumber,
+    setSelectedAgent,
+    setAvailableAgents,
+    setAgentName,
+    setDirectoryPath,
+    setIsGitRepo,
+    setDetectedAgentPath,
+    setDirectoryError,
+    addMessage,
+    setConversationHistory,
+    setConfidenceLevel,
+    setIsReadyToProceed,
+    setConversationLoading,
+    setConversationError,
+    setGeneratedDocuments,
+    setCurrentDocumentIndex,
+    setGeneratingDocuments,
+    setGenerationError,
+    setEditedPhase1Content,
+    getPhase1Content,
+    setWantsTour,
+    completeWizard,
+    saveStateForResume,
+    restoreState,
+    getSerializableState,
+    hasResumeState,
+    loadResumeState,
+    clearResumeState,
+  ]);
 
   return (
     <WizardContext.Provider value={contextValue}>

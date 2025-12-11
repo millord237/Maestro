@@ -27,6 +27,8 @@ interface TourStepProps {
   isLastStep: boolean;
   /** Whether currently transitioning between steps */
   isTransitioning: boolean;
+  /** Whether tour was launched from wizard (uses wizard-specific descriptions) */
+  fromWizard?: boolean;
 }
 
 /**
@@ -207,8 +209,14 @@ export function TourStep({
   onSkip,
   isLastStep,
   isTransitioning,
+  fromWizard = false,
 }: TourStepProps): JSX.Element {
   const { position, style } = calculateTooltipPosition(spotlight, step.position);
+
+  // Use wizard-specific description if fromWizard, otherwise use generic (or fall back to description)
+  const description = fromWizard
+    ? step.description
+    : (step.descriptionGeneric || step.description);
 
   return (
     <div
@@ -277,7 +285,7 @@ export function TourStep({
           className="text-sm leading-relaxed mb-5"
           style={{ color: theme.colors.textDim }}
         >
-          {step.description}
+          {description}
         </p>
 
         {/* Navigation buttons */}

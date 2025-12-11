@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useWizard, WIZARD_TOTAL_STEPS, STEP_INDEX, type WizardStep } from './WizardContext';
+import { useWizard, WIZARD_TOTAL_STEPS, STEP_INDEX, INDEX_TO_STEP, type WizardStep } from './WizardContext';
 import { useLayerStack } from '../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
 import { WizardExitConfirmModal } from './WizardExitConfirmModal';
@@ -84,6 +84,9 @@ export function MaestroWizard({
     state,
     closeWizard,
     saveStateForResume,
+    clearResumeState,
+    resetWizard,
+    goToStep,
     getCurrentStepNumber,
   } = useWizard();
 
@@ -114,6 +117,10 @@ export function MaestroWizard({
   closeWizardRef.current = closeWizard;
   const saveStateForResumeRef = useRef(saveStateForResume);
   saveStateForResumeRef.current = saveStateForResume;
+  const clearResumeStateRef = useRef(clearResumeState);
+  clearResumeStateRef.current = clearResumeState;
+  const resetWizardRef = useRef(resetWizard);
+  resetWizardRef.current = resetWizard;
 
   /**
    * Handle wizard close request
@@ -151,9 +158,23 @@ export function MaestroWizard({
     setShowExitConfirm(false);
   }, []);
 
+  /**
+   * Handle quit without saving - clears state, resets wizard, and closes
+   */
+  const handleQuitWithoutSaving = useCallback(() => {
+    clearResumeStateRef.current();
+    resetWizardRef.current(); // Reset in-memory state so next open starts fresh
+    setShowExitConfirm(false);
+    // Record wizard abandonment for analytics
+    if (onWizardAbandon) {
+      onWizardAbandon();
+    }
+    closeWizardRef.current();
+  }, [onWizardAbandon]);
+
   // Handle step transitions with fade animation
   useEffect(() => {
-    // Only animate if step has actually changed
+    // Only animate if step has actually changed and we're not already transitioning
     if (state.currentStep !== displayedStep && !isTransitioning) {
       // Determine direction based on step indices
       const currentIndex = STEP_INDEX[state.currentStep];
@@ -166,23 +187,28 @@ export function MaestroWizard({
       // After fade-out completes, update the displayed step
       const fadeOutTimer = setTimeout(() => {
         setDisplayedStep(state.currentStep);
-
-        // After a brief moment, end the transition (allows fade-in to complete)
-        const fadeInTimer = setTimeout(() => {
-          setIsTransitioning(false);
-        }, FADE_IN_DURATION);
-
-        return () => clearTimeout(fadeInTimer);
       }, FADE_OUT_DURATION);
 
       return () => clearTimeout(fadeOutTimer);
     }
   }, [state.currentStep, displayedStep, isTransitioning]);
 
+  // End transition after displayedStep updates
+  useEffect(() => {
+    if (isTransitioning && state.currentStep === displayedStep) {
+      const fadeInTimer = setTimeout(() => {
+        setIsTransitioning(false);
+      }, FADE_IN_DURATION);
+
+      return () => clearTimeout(fadeInTimer);
+    }
+  }, [isTransitioning, state.currentStep, displayedStep]);
+
   // Sync displayedStep when wizard opens (in case state was restored)
   useEffect(() => {
     if (state.isOpen) {
       setDisplayedStep(state.currentStep);
+      setIsTransitioning(false); // Ensure we're not stuck in transitioning state
     }
   }, [state.isOpen, state.currentStep]);
 
@@ -336,17 +362,29 @@ export function MaestroWizard({
             </div>
           </div>
 
-          {/* Progress dots */}
+          {/* Progress dots - clickable for completed steps */}
           <div className="flex items-center gap-2">
             {Array.from({ length: WIZARD_TOTAL_STEPS }, (_, i) => {
               const stepNum = i + 1;
               const isActive = stepNum === currentStepNumber;
               const isCompleted = stepNum < currentStepNumber;
+              const canNavigate = isCompleted; // Can only go back to completed steps
 
               return (
-                <div
+                <button
                   key={stepNum}
-                  className="w-2.5 h-2.5 rounded-full transition-all duration-300"
+                  onClick={() => {
+                    if (canNavigate) {
+                      const targetStep = INDEX_TO_STEP[stepNum];
+                      if (targetStep) {
+                        goToStep(targetStep);
+                      }
+                    }
+                  }}
+                  disabled={!canNavigate}
+                  className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                    canNavigate ? 'cursor-pointer hover:scale-150' : 'cursor-default'
+                  }`}
                   style={{
                     backgroundColor: isActive
                       ? theme.colors.accent
@@ -355,7 +393,8 @@ export function MaestroWizard({
                       : theme.colors.border,
                     transform: isActive ? 'scale(1.2)' : 'scale(1)',
                   }}
-                  aria-label={`Step ${stepNum}${isActive ? ' (current)' : isCompleted ? ' (completed)' : ''}`}
+                  aria-label={`Step ${stepNum}${isActive ? ' (current)' : isCompleted ? ' (completed - click to go back)' : ''}`}
+                  title={canNavigate ? `Go back to step ${stepNum}` : undefined}
                 />
               );
             })}
@@ -387,7 +426,7 @@ export function MaestroWizard({
 
         {/* Content area - renders the current screen with transition animations */}
         <div
-          className={`flex-1 overflow-hidden wizard-content ${
+          className={`flex-1 min-h-0 flex flex-col overflow-hidden wizard-content ${
             isTransitioning ? 'wizard-content-exiting' : 'wizard-content-entering'
           } ${transitionDirection === 'forward' ? 'wizard-forward' : 'wizard-backward'}`}
           key={displayedStep}
@@ -517,6 +556,7 @@ export function MaestroWizard({
           totalSteps={WIZARD_TOTAL_STEPS}
           onConfirmExit={handleConfirmExit}
           onCancel={handleCancelExit}
+          onQuitWithoutSaving={handleQuitWithoutSaving}
         />
       )}
     </div>

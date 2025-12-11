@@ -401,7 +401,7 @@ src/renderer/components/Wizard/
 3. **Conversation** → AI asks clarifying questions, builds confidence score (0-100)
 4. **Phase Review** → View/edit generated Phase 1 document, choose to start tour
 
-When confidence reaches 80+ and agent signals "ready", user proceeds to Phase Review where phased markdown documents are generated and saved to `Auto Run Docs/`.
+When confidence reaches 80+ and agent signals "ready", user proceeds to Phase Review where Auto Run documents are generated and saved to `Auto Run Docs/`.
 
 ### Triggering the Wizard
 
@@ -462,7 +462,7 @@ The tour highlights UI elements with spotlight cutouts:
 | Modify AI prompts | `services/wizardPrompts.ts` |
 | Change confidence threshold | `READY_CONFIDENCE_THRESHOLD` in wizardPrompts.ts (default: 80) |
 | Add tour step | `tour/tourSteps.ts` array |
-| Modify phase document format | `services/phaseGenerator.ts` |
+| Modify Auto Run document format | `services/phaseGenerator.ts` |
 | Change wizard keyboard shortcut | `shortcuts.ts` → `openWizard` |
 
 ### Related Settings

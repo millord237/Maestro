@@ -14,6 +14,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { Theme } from '../../../types';
 import { useWizard, type WizardMessage } from '../WizardContext';
 import {
@@ -26,10 +28,27 @@ import {
   createUserMessage,
   createAssistantMessage,
 } from '../services/conversationManager';
+import { getNextFillerPhrase } from '../services/fillerPhrases';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 
 interface ConversationScreenProps {
   theme: Theme;
+}
+
+/**
+ * Check if a string contains an emoji
+ */
+function containsEmoji(str: string): boolean {
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]/u;
+  return emojiRegex.test(str);
+}
+
+/**
+ * Format agent name with robot emoji prefix if no emoji present
+ */
+function formatAgentName(name: string): string {
+  if (!name) return '🤖 Agent';
+  return containsEmoji(name) ? name : `🤖 ${name}`;
 }
 
 /**
@@ -97,9 +116,11 @@ function ConfidenceMeter({
 function MessageBubble({
   message,
   theme,
+  agentName,
 }: {
   message: WizardMessage;
   theme: Theme;
+  agentName: string;
 }): JSX.Element {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -127,7 +148,7 @@ function MessageBubble({
             className="text-xs font-medium mb-1 flex items-center gap-2"
             style={{ color: isSystem ? theme.colors.warning : theme.colors.accent }}
           >
-            <span>{isSystem ? '🎼 System' : '🎼 Maestro'}</span>
+            <span>{isSystem ? '🎼 System' : formatAgentName(agentName)}</span>
             {message.confidence !== undefined && (
               <span
                 className="text-xs px-1.5 py-0.5 rounded"
@@ -143,8 +164,68 @@ function MessageBubble({
         )}
 
         {/* Message content */}
-        <div className="text-sm whitespace-pre-wrap break-words">
-          {message.content}
+        <div className="text-sm break-words wizard-markdown">
+          {isUser ? (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Style markdown elements to match theme
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                code: ({ children, className }) => {
+                  const isInline = !className;
+                  return isInline ? (
+                    <code
+                      className="px-1 py-0.5 rounded text-xs font-mono"
+                      style={{ backgroundColor: `${theme.colors.bgMain}80` }}
+                    >
+                      {children}
+                    </code>
+                  ) : (
+                    <code className={className}>{children}</code>
+                  );
+                },
+                pre: ({ children }) => (
+                  <pre
+                    className="p-2 rounded text-xs font-mono overflow-x-auto mb-2"
+                    style={{ backgroundColor: theme.colors.bgMain }}
+                  >
+                    {children}
+                  </pre>
+                ),
+                a: ({ href, children }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                    style={{ color: theme.colors.accent }}
+                  >
+                    {children}
+                  </a>
+                ),
+                h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                blockquote: ({ children }) => (
+                  <blockquote
+                    className="border-l-2 pl-2 mb-2 italic"
+                    style={{ borderColor: theme.colors.border }}
+                  >
+                    {children}
+                  </blockquote>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          )}
         </div>
 
         {/* Timestamp */}
@@ -160,9 +241,54 @@ function MessageBubble({
 }
 
 /**
- * TypingIndicator - Shows when agent is "thinking"
+ * TypingIndicator - Shows when agent is "thinking" with a typewriter effect filler phrase
+ * Rotates to a new phrase every 5 seconds after typing completes
  */
-function TypingIndicator({ theme }: { theme: Theme }): JSX.Element {
+function TypingIndicator({
+  theme,
+  agentName,
+  fillerPhrase,
+  onRequestNewPhrase
+}: {
+  theme: Theme;
+  agentName: string;
+  fillerPhrase: string;
+  onRequestNewPhrase: () => void;
+}): JSX.Element {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTypingComplete, setIsTypingComplete] = useState(false);
+
+  // Typewriter effect
+  useEffect(() => {
+    const text = fillerPhrase || 'Thinking...';
+    let currentIndex = 0;
+    setDisplayedText('');
+    setIsTypingComplete(false);
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex < text.length) {
+        setDisplayedText(text.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        setIsTypingComplete(true);
+        clearInterval(typeInterval);
+      }
+    }, 30); // 30ms per character for a natural typing speed
+
+    return () => clearInterval(typeInterval);
+  }, [fillerPhrase]);
+
+  // Rotate to new phrase 5 seconds after typing completes
+  useEffect(() => {
+    if (!isTypingComplete) return;
+
+    const rotateTimer = setTimeout(() => {
+      onRequestNewPhrase();
+    }, 5000);
+
+    return () => clearTimeout(rotateTimer);
+  }, [isTypingComplete, onRequestNewPhrase]);
+
   return (
     <div className="flex justify-start mb-4">
       <div
@@ -173,30 +299,35 @@ function TypingIndicator({ theme }: { theme: Theme }): JSX.Element {
           className="text-xs font-medium mb-2"
           style={{ color: theme.colors.accent }}
         >
-          🎼 Maestro
+          {formatAgentName(agentName)}
         </div>
-        <div className="flex items-center gap-1">
-          <div
-            className="w-2 h-2 rounded-full animate-bounce"
-            style={{
-              backgroundColor: theme.colors.accent,
-              animationDelay: '0ms',
-            }}
-          />
-          <div
-            className="w-2 h-2 rounded-full animate-bounce"
-            style={{
-              backgroundColor: theme.colors.accent,
-              animationDelay: '150ms',
-            }}
-          />
-          <div
-            className="w-2 h-2 rounded-full animate-bounce"
-            style={{
-              backgroundColor: theme.colors.accent,
-              animationDelay: '300ms',
-            }}
-          />
+        <div className="text-sm" style={{ color: theme.colors.textMain }}>
+          <span className="italic" style={{ color: theme.colors.textDim }}>
+            {displayedText}
+          </span>
+          <span className={`ml-1 inline-flex items-center gap-0.5 ${isTypingComplete ? 'opacity-100' : 'opacity-50'}`}>
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-bounce inline-block"
+              style={{
+                backgroundColor: theme.colors.accent,
+                animationDelay: '0ms',
+              }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-bounce inline-block"
+              style={{
+                backgroundColor: theme.colors.accent,
+                animationDelay: '150ms',
+              }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-bounce inline-block"
+              style={{
+                backgroundColor: theme.colors.accent,
+                animationDelay: '300ms',
+              }}
+            />
+          </span>
         </div>
       </div>
     </div>
@@ -221,8 +352,13 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
   // Local state
   const [inputValue, setInputValue] = useState('');
   const [conversationStarted, setConversationStarted] = useState(false);
-  const [showInitialQuestion, setShowInitialQuestion] = useState(true);
+  // Only show initial question if history is empty (prevents showing twice when resumed)
+  const [showInitialQuestion, setShowInitialQuestion] = useState(
+    state.conversationHistory.length === 0
+  );
   const [errorRetryCount, setErrorRetryCount] = useState(0);
+  const [streamingText, setStreamingText] = useState('');
+  const [fillerPhrase, setFillerPhrase] = useState('');
 
   // Screen reader announcement state
   const [announcement, setAnnouncement] = useState('');
@@ -230,6 +366,9 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
 
   // Track previous ready state to avoid duplicate announcements
   const prevReadyRef = useRef(state.isReadyToProceed);
+
+  // Ref to prevent double-adding the initial question (React StrictMode protection)
+  const initialQuestionAddedRef = useRef(false);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -281,9 +420,12 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
     if (!conversationStarted && state.conversationHistory.length === 0) {
       initConversation();
     } else {
-      // Resume from existing state
+      // Resume from existing state - don't show initial question if history exists
       setConversationStarted(true);
-      setShowInitialQuestion(state.conversationHistory.length === 0);
+      if (state.conversationHistory.length > 0) {
+        setShowInitialQuestion(false);
+        initialQuestionAddedRef.current = true; // Already in history
+      }
     }
 
     return () => {
@@ -328,8 +470,22 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
 
     // Clear input immediately
     setInputValue('');
-    setShowInitialQuestion(false);
     setConversationError(null);
+    setStreamingText('');
+    setFillerPhrase(getNextFillerPhrase());
+
+    // If this is the first message, add the initial question to history first
+    // so the conversation makes sense in the history
+    // Use ref to prevent double-adding (React StrictMode can double-invoke)
+    if (showInitialQuestion && !initialQuestionAddedRef.current) {
+      initialQuestionAddedRef.current = true;
+      addMessage({
+        role: 'assistant',
+        content: getInitialQuestion(),
+      });
+      // Hide the direct JSX render immediately - the message is now in history
+      setShowInitialQuestion(false);
+    }
 
     // Add user message to history
     addMessage(createUserMessage(trimmedInput));
@@ -344,8 +500,15 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
     try {
       // Re-initialize conversation if needed
       if (!conversationManager.isConversationActive()) {
+        // Safety check: selectedAgent should always be set at this point
+        // but we guard against null to prevent crashes
+        if (!state.selectedAgent) {
+          setConversationError('No agent selected. Please go back and select an agent.');
+          setConversationLoading(false);
+          return;
+        }
         await conversationManager.startConversation({
-          agentType: state.selectedAgent!,
+          agentType: state.selectedAgent,
           directoryPath: state.directoryPath,
           projectName: state.agentName || 'My Project',
         });
@@ -362,10 +525,47 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
           onReceiving: () => {
             // Agent is responding
           },
-          onChunk: (_chunk) => {
-            // Could show streaming response here in the future
+          onChunk: (chunk) => {
+            // Show streaming response - extract text from stream-json format
+            // Claude Code with --include-partial-messages outputs:
+            // - stream_event with event.type === 'content_block_delta' and event.delta.text
+            // - assistant message with message.content[].text (complete message)
+            try {
+              const lines = chunk.split('\n').filter((line) => line.trim());
+              for (const line of lines) {
+                try {
+                  const msg = JSON.parse(line);
+
+                  // Handle stream_event with content_block_delta (real-time streaming)
+                  if (
+                    msg.type === 'stream_event' &&
+                    msg.event?.type === 'content_block_delta' &&
+                    msg.event?.delta?.text
+                  ) {
+                    setStreamingText((prev) => prev + msg.event.delta.text);
+                  }
+                  // Note: We intentionally skip the 'assistant' message type here
+                  // because it contains the complete message, not incremental updates.
+                  // The final text will be added via onComplete callback.
+                } catch {
+                  // Ignore non-JSON lines
+                }
+              }
+            } catch {
+              // Ignore parse errors
+            }
           },
           onComplete: (sendResult) => {
+            // Clear streaming text when response is complete
+            setStreamingText('');
+
+            console.log('[ConversationScreen] onComplete:', {
+              success: sendResult.success,
+              hasResponse: !!sendResult.response,
+              parseSuccess: sendResult.response?.parseSuccess,
+              hasStructured: !!sendResult.response?.structured,
+            });
+
             if (sendResult.success && sendResult.response) {
               // Add assistant response to history
               addMessage(createAssistantMessage(sendResult.response));
@@ -373,11 +573,13 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
               // Update confidence level
               if (sendResult.response.structured) {
                 const newConfidence = sendResult.response.structured.confidence;
+                console.log('[ConversationScreen] Setting confidence to:', newConfidence);
                 setConfidenceLevel(newConfidence);
 
                 const isReady =
                   sendResult.response.structured.ready &&
                   newConfidence >= READY_CONFIDENCE_THRESHOLD;
+                console.log('[ConversationScreen] isReady:', isReady, 'ready flag:', sendResult.response.structured.ready);
                 setIsReadyToProceed(isReady);
 
                 // Announce response received with confidence (ready state will be announced by effect)
@@ -389,6 +591,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
                 }
               } else {
                 // No structured data - just announce response received
+                console.log('[ConversationScreen] No structured data in response');
                 setAnnouncement('Response received from AI assistant.');
                 setAnnouncementKey((prev) => prev + 1);
               }
@@ -424,6 +627,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
     }
   }, [
     inputValue,
+    showInitialQuestion,
     state.isConversationLoading,
     state.conversationHistory,
     state.selectedAgent,
@@ -445,26 +649,25 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
   }, [setConversationError]);
 
   /**
-   * Handle keyboard events
+   * Handle request for new filler phrase (called every 5 seconds while waiting)
+   */
+  const handleRequestNewPhrase = useCallback(() => {
+    setFillerPhrase(getNextFillerPhrase());
+  }, []);
+
+  /**
+   * Handle keyboard events at container level
+   * Note: Cmd+Enter is handled by the textarea directly to avoid double-firing
    */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Enter to send (without shift for newline)
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Escape to go back to previous step
+      if (e.key === 'Escape') {
         e.preventDefault();
-        handleSendMessage();
-      }
-      // Escape to go back (with confirmation if conversation started)
-      else if (e.key === 'Escape') {
-        if (state.conversationHistory.length === 0) {
-          previousStep();
-        } else {
-          // Could add confirmation modal here
-          previousStep();
-        }
+        previousStep();
       }
     },
-    [handleSendMessage, previousStep, state.conversationHistory.length]
+    [previousStep]
   );
 
   /**
@@ -479,7 +682,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full"
+      className="flex flex-col flex-1 min-h-0"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
@@ -517,7 +720,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
                 className="text-xs font-medium mb-2"
                 style={{ color: theme.colors.accent }}
               >
-                🎼 Maestro
+                {formatAgentName(state.agentName || '')}
               </div>
               <div className="text-sm" style={{ color: theme.colors.textMain }}>
                 {getInitialQuestion()}
@@ -528,11 +731,38 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
 
         {/* Conversation History */}
         {state.conversationHistory.map((message) => (
-          <MessageBubble key={message.id} message={message} theme={theme} />
+          <MessageBubble key={message.id} message={message} theme={theme} agentName={state.agentName || 'Agent'} />
         ))}
 
-        {/* Typing Indicator */}
-        {state.isConversationLoading && <TypingIndicator theme={theme} />}
+        {/* Streaming Response or Typing Indicator */}
+        {state.isConversationLoading && (
+          streamingText ? (
+            <div className="flex justify-start mb-4">
+              <div
+                className="max-w-[80%] rounded-lg rounded-bl-none px-4 py-3"
+                style={{ backgroundColor: theme.colors.bgActivity }}
+              >
+                <div
+                  className="text-xs font-medium mb-2"
+                  style={{ color: theme.colors.accent }}
+                >
+                  {formatAgentName(state.agentName || '')}
+                </div>
+                <div className="text-sm whitespace-pre-wrap" style={{ color: theme.colors.textMain }}>
+                  {streamingText}
+                  <span className="animate-pulse">▊</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <TypingIndicator
+              theme={theme}
+              agentName={state.agentName || 'Agent'}
+              fillerPhrase={fillerPhrase}
+              onRequestNewPhrase={handleRequestNewPhrase}
+            />
+          )
+        )}
 
         {/* Error Message */}
         {state.conversationError && (
@@ -585,6 +815,12 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
             >
               Let's Get Started! 🚀
             </button>
+            <p
+              className="text-xs mt-3"
+              style={{ color: theme.colors.textDim }}
+            >
+              Or continue chatting below to add more details
+            </p>
           </div>
         )}
 
@@ -607,25 +843,26 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
-                // Enter to send (without shift for newline)
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // Cmd+Enter (Mac) or Ctrl+Enter (Windows) to send
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
                   handleSendMessage();
                 }
+                // Plain Enter adds newline (default textarea behavior)
               }}
               placeholder="Describe your project..."
               disabled={state.isConversationLoading}
               rows={1}
-              className="w-full px-4 py-3 rounded-lg border resize-none outline-none transition-all"
+              className="w-full px-4 py-2.5 rounded-lg border resize-none outline-none transition-all"
               style={{
                 backgroundColor: theme.colors.bgMain,
                 borderColor: theme.colors.border,
                 color: theme.colors.textMain,
-                minHeight: '48px',
                 maxHeight: '120px',
+                lineHeight: '1.4',
               }}
               onInput={(e) => {
-                // Auto-resize textarea
+                // Auto-resize textarea - start at natural height, grow as needed
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = 'auto';
                 target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
@@ -635,7 +872,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
           <button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || state.isConversationLoading}
-            className="px-4 py-3 rounded-lg font-medium transition-all flex items-center gap-2"
+            className="px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2"
             style={{
               backgroundColor:
                 inputValue.trim() && !state.isConversationLoading
@@ -685,7 +922,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
               className="px-1.5 py-0.5 rounded text-xs"
               style={{ backgroundColor: theme.colors.border }}
             >
-              Enter
+              ⌘+Enter
             </kbd>
             Send
           </span>
@@ -697,7 +934,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
               className="px-1.5 py-0.5 rounded text-xs"
               style={{ backgroundColor: theme.colors.border }}
             >
-              Shift+Enter
+              Enter
             </kbd>
             New line
           </span>
@@ -711,7 +948,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
             >
               Esc
             </kbd>
-            Back
+            Exit Wizard
           </span>
         </div>
       </div>

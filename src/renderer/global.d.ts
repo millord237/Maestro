@@ -399,6 +399,10 @@ interface MaestroAPI {
     saveImage: (folderPath: string, docName: string, base64Data: string, extension: string) => Promise<{ success: boolean; relativePath?: string; error?: string }>;
     deleteImage: (folderPath: string, relativePath: string) => Promise<{ success: boolean; error?: string }>;
     listImages: (folderPath: string, docName: string) => Promise<{ success: boolean; images?: Array<{ filename: string; relativePath: string }>; error?: string }>;
+    // File watching for live updates
+    watchFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
+    unwatchFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
+    onFileChanged: (handler: (data: { folderPath: string; filename: string; eventType: string }) => void) => () => void;
   };
   // Playbooks API (saved batch run configurations)
   playbooks: {

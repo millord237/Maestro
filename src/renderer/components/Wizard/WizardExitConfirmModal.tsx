@@ -22,6 +22,8 @@ interface WizardExitConfirmModalProps {
   onConfirmExit: () => void;
   /** Callback when user cancels and wants to stay in wizard */
   onCancel: () => void;
+  /** Callback when user wants to quit without saving progress */
+  onQuitWithoutSaving: () => void;
 }
 
 /**
@@ -36,6 +38,7 @@ export function WizardExitConfirmModal({
   totalSteps,
   onConfirmExit,
   onCancel,
+  onQuitWithoutSaving,
 }: WizardExitConfirmModalProps): JSX.Element {
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
@@ -190,6 +193,16 @@ export function WizardExitConfirmModal({
               Exit & Save Progress
             </button>
             <button
+              onClick={onQuitWithoutSaving}
+              className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-white/5 transition-colors"
+              style={{
+                borderColor: theme.colors.border,
+                color: theme.colors.textMain,
+              }}
+            >
+              Just Quit
+            </button>
+            <button
               ref={stayButtonRef}
               onClick={onCancel}
               className="px-4 py-2 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-offset-1 transition-colors"
@@ -198,7 +211,7 @@ export function WizardExitConfirmModal({
                 color: theme.colors.accentForeground,
               }}
             >
-              Stay in Wizard
+              Cancel
             </button>
           </div>
 
@@ -218,7 +231,7 @@ export function WizardExitConfirmModal({
             <kbd className="px-1.5 py-0.5 rounded border" style={{ borderColor: theme.colors.border }}>
               Esc
             </kbd>
-            {' '}to stay
+            {' '}to cancel
           </div>
         </div>
       </div>
