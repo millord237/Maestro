@@ -221,7 +221,7 @@ describe('Wizard Keyboard Navigation', () => {
       });
 
       // Get the container with keyboard handler
-      const container = screen.getByText('Choose Your AI Assistant').closest('div[tabindex]');
+      const container = screen.getByText('Choose Your Provider').closest('div[tabindex]');
       expect(container).toBeInTheDocument();
 
       // When only one agent is available, focus goes to name field, not tiles
@@ -255,7 +255,7 @@ describe('Wizard Keyboard Navigation', () => {
         expect(screen.queryByText('Detecting available agents...')).not.toBeInTheDocument();
       });
 
-      const container = screen.getByText('Choose Your AI Assistant').closest('div[tabindex]');
+      const container = screen.getByText('Choose Your Provider').closest('div[tabindex]');
 
       // Press Tab to move to name field
       fireEvent.keyDown(container!, { key: 'Tab' });
@@ -279,7 +279,7 @@ describe('Wizard Keyboard Navigation', () => {
       expect(nameInput).toHaveFocus();
 
       // Get the container with keyboard handler
-      const container = screen.getByText('Choose Your AI Assistant').closest('div[tabindex]');
+      const container = screen.getByText('Choose Your Provider').closest('div[tabindex]');
 
       // Press Shift+Tab to go back to tiles
       // Note: This triggers the keyboard handler but disabled buttons can't receive focus
@@ -297,7 +297,7 @@ describe('Wizard Keyboard Navigation', () => {
         expect(screen.queryByText('Detecting available agents...')).not.toBeInTheDocument();
       });
 
-      const container = screen.getByText('Choose Your AI Assistant').closest('div[tabindex]');
+      const container = screen.getByText('Choose Your Provider').closest('div[tabindex]');
       const claudeTile = screen.getByRole('button', { name: /claude code/i });
 
       // Claude Code should be auto-selected (available agent)

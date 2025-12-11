@@ -3490,7 +3490,12 @@ export default function MaestroConsole() {
 
 
       // General shortcuts
-      if (ctx.isShortcut(e, 'toggleSidebar')) ctx.setLeftSidebarOpen(p => !p);
+      // Only allow collapsing left sidebar when there are sessions (prevent collapse on empty state)
+      if (ctx.isShortcut(e, 'toggleSidebar')) {
+        if (ctx.sessions.length > 0 || !ctx.leftSidebarOpen) {
+          ctx.setLeftSidebarOpen(p => !p);
+        }
+      }
       else if (ctx.isShortcut(e, 'toggleRightPanel')) ctx.setRightPanelOpen(p => !p);
       else if (ctx.isShortcut(e, 'newInstance')) ctx.addNewSession();
       else if (ctx.isShortcut(e, 'killInstance')) ctx.deleteSession(ctx.activeSessionId);

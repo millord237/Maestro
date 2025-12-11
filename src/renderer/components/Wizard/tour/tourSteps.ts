@@ -101,9 +101,9 @@ export const tourSteps: TourStepConfig[] = [
     id: 'session-list',
     title: 'Sessions & Groups',
     description:
-      'The session list shows all your AI assistant sessions. You can have multiple projects running simultaneously, organize them into groups, and quickly switch between them.',
+      'The session list shows all your AI assistant sessions. You can have multiple projects running simultaneously, organize them into groups, and quickly switch between them. Watch for the pulsing green dot—it indicates unread messages from an agent.',
     descriptionGeneric:
-      'The session list shows all your AI assistant sessions. You can have multiple projects running simultaneously, organize them into groups, and quickly switch between them.',
+      'The session list shows all your AI assistant sessions. You can have multiple projects running simultaneously, organize them into groups, and quickly switch between them. A pulsing green dot indicates unread messages.',
     selector: '[data-tour="session-list"]',
     position: 'right',
     uiActions: [
@@ -136,9 +136,9 @@ export const tourSteps: TourStepConfig[] = [
     id: 'header-controls',
     title: 'Status & Controls',
     description:
-      'The header shows session status, context usage, and quick controls. The colored indicator shows if the AI is ready (green), thinking (yellow), or disconnected (red). Click the stop button to interrupt long operations.',
+      'The header shows session status, context usage, and quick controls. The colored indicator shows if the AI is ready (green), thinking (yellow), or disconnected (red). A pulsing green dot appears next to sessions with unread messages. Click the stop button to interrupt long operations.',
     descriptionGeneric:
-      'The header shows session status, context usage, and quick controls. The colored indicator shows if the AI is ready (green), thinking (yellow), or disconnected (red).',
+      'The header shows session status, context usage, and quick controls. The colored indicator shows if the AI is ready (green), thinking (yellow), or disconnected (red). A pulsing green dot appears next to sessions with unread messages.',
     selector: '[data-tour="header-controls"]',
     position: 'bottom',
     uiActions: [],

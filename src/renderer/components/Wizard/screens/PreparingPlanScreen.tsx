@@ -23,7 +23,7 @@ import type { Theme } from '../../../types';
 import { useWizard } from '../WizardContext';
 import { phaseGenerator, AUTO_RUN_FOLDER_NAME, type CreatedFileInfo } from '../services/phaseGenerator';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
-import { getNextAustinFact } from '../services/austinFacts';
+import { getNextAustinFact, parseFactWithLinks, type FactSegment } from '../services/austinFacts';
 
 /**
  * Format file size in human-readable format
@@ -64,23 +64,110 @@ function TexasFlag({ className, style }: { className?: string; style?: React.CSS
 }
 
 /**
+ * Get the plain text version of a fact (for typewriter character counting)
+ */
+function getFactPlainText(fact: string): string {
+  // Replace [text](url) with just text
+  return fact.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+}
+
+/**
+ * Render fact segments with proper link handling
+ * Links open in system browser via Electron shell.openExternal
+ */
+function FactContent({
+  segments,
+  displayLength,
+  theme,
+}: {
+  segments: FactSegment[];
+  displayLength: number;
+  theme: Theme;
+}): JSX.Element {
+  let charCount = 0;
+  const elements: JSX.Element[] = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment.type === 'text') {
+      const segmentLength = segment.content.length;
+      const startChar = charCount;
+      const endChar = charCount + segmentLength;
+
+      if (displayLength > startChar) {
+        const visibleChars = Math.min(displayLength - startChar, segmentLength);
+        elements.push(
+          <span key={i}>{segment.content.slice(0, visibleChars)}</span>
+        );
+      }
+      charCount = endChar;
+    } else if (segment.type === 'link') {
+      const segmentLength = segment.text.length;
+      const startChar = charCount;
+      const endChar = charCount + segmentLength;
+
+      if (displayLength > startChar) {
+        const visibleChars = Math.min(displayLength - startChar, segmentLength);
+        const isFullyVisible = visibleChars === segmentLength;
+
+        if (isFullyVisible) {
+          // Render as clickable link
+          elements.push(
+            <a
+              key={i}
+              href={segment.url}
+              onClick={(e) => {
+                e.preventDefault();
+                // Open in system browser
+                window.maestro?.shell?.openExternal?.(segment.url) ||
+                  window.open(segment.url, '_blank');
+              }}
+              className="underline hover:opacity-80 cursor-pointer transition-opacity"
+              style={{ color: theme.colors.accent }}
+            >
+              {segment.text}
+            </a>
+          );
+        } else {
+          // Still typing - show as regular text
+          elements.push(
+            <span key={i} style={{ color: theme.colors.accent }}>
+              {segment.text.slice(0, visibleChars)}
+            </span>
+          );
+        }
+      }
+      charCount = endChar;
+    }
+  }
+
+  return <>{elements}</>;
+}
+
+/**
  * Austin Fact Typewriter - displays random Austin facts with typing effect
+ * Supports markdown-style links: [text](url)
  */
 function AustinFactTypewriter({ theme }: { theme: Theme }): JSX.Element {
   const [currentFact, setCurrentFact] = useState(() => getNextAustinFact());
-  const [displayedText, setDisplayedText] = useState('');
+  const [displayLength, setDisplayLength] = useState(0);
   const [isTypingComplete, setIsTypingComplete] = useState(false);
+
+  // Parse the fact into segments (text and links)
+  const segments = parseFactWithLinks(currentFact);
+  const plainText = getFactPlainText(currentFact);
 
   // Typewriter effect
   useEffect(() => {
     let currentIndex = 0;
-    setDisplayedText('');
+    setDisplayLength(0);
     setIsTypingComplete(false);
 
     const typeInterval = setInterval(() => {
-      if (currentIndex < currentFact.length) {
-        setDisplayedText(currentFact.slice(0, currentIndex + 1));
+      if (currentIndex < plainText.length) {
         currentIndex++;
+        setDisplayLength(currentIndex);
       } else {
         setIsTypingComplete(true);
         clearInterval(typeInterval);
@@ -88,7 +175,7 @@ function AustinFactTypewriter({ theme }: { theme: Theme }): JSX.Element {
     }, 25); // 25ms per character for readable typing speed
 
     return () => clearInterval(typeInterval);
-  }, [currentFact]);
+  }, [currentFact, plainText.length]);
 
   // Rotate to new fact 20 seconds after typing completes
   useEffect(() => {
@@ -127,7 +214,11 @@ function AustinFactTypewriter({ theme }: { theme: Theme }): JSX.Element {
               minHeight: '3em',
             }}
           >
-            {displayedText}
+            <FactContent
+              segments={segments}
+              displayLength={displayLength}
+              theme={theme}
+            />
             {!isTypingComplete && (
               <span
                 className="inline-block w-0.5 h-4 ml-0.5 animate-pulse"

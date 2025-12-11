@@ -365,8 +365,8 @@ export function MainPanel(props: MainPanelProps) {
           <p className="text-sm" style={{ color: theme.colors.textDim }}>No agents. Create one to get started.</p>
         </div>
         <div
-          className="w-96 border-l opacity-30"
-          style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+          className="w-96 opacity-30"
+          style={{ backgroundColor: theme.colors.bgSidebar }}
         />
       </>
     );

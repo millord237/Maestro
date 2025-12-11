@@ -781,7 +781,7 @@ export function SessionList(props: SessionListProps) {
                   title={isLiveMode ? "Web interface active - Click to show URL" : "Click to enable web interface"}
                 >
                   <Radio className={`w-3 h-3 ${isLiveMode ? 'animate-pulse' : ''}`} />
-                  {leftSidebarWidthState >= 300 && (isLiveMode ? 'LIVE' : 'OFFLINE')}
+                  {leftSidebarWidthState >= 200 && (isLiveMode ? 'LIVE' : 'OFFLINE')}
                 </button>
 
                 {/* LIVE Overlay with URL and QR Code - Single QR with pill selector */}
@@ -1458,6 +1458,14 @@ export function SessionList(props: SessionListProps) {
                               'Waiting for input'
                             }
                           />
+                          {/* Unread Message Indicator */}
+                          {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                            <div
+                              className="w-2 h-2 rounded-full animate-pulse"
+                              style={{ backgroundColor: theme.colors.success }}
+                              title="Unread messages"
+                            />
+                          )}
                         </div>
                       </div>
                     );
@@ -1746,6 +1754,14 @@ export function SessionList(props: SessionListProps) {
                                 'Waiting for input'
                               }
                             />
+                            {/* Unread Message Indicator */}
+                            {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                              <div
+                                className="w-2 h-2 rounded-full animate-pulse"
+                                style={{ backgroundColor: theme.colors.success }}
+                                title="Unread messages"
+                              />
+                            )}
                           </div>
                         </div>
                       );
@@ -1981,6 +1997,14 @@ export function SessionList(props: SessionListProps) {
                         }
                         title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
                       />
+                      {/* Unread Message Indicator */}
+                      {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                        <div
+                          className="w-2 h-2 rounded-full animate-pulse"
+                          style={{ backgroundColor: theme.colors.success }}
+                          title="Unread messages"
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -2134,6 +2158,14 @@ export function SessionList(props: SessionListProps) {
                       }
                       title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
                     />
+                    {/* Unread Message Indicator */}
+                    {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                      <div
+                        className="w-2 h-2 rounded-full animate-pulse"
+                        style={{ backgroundColor: theme.colors.success }}
+                        title="Unread messages"
+                      />
+                    )}
                   </div>
                 </div>
                   );
@@ -2365,9 +2397,14 @@ export function SessionList(props: SessionListProps) {
       {/* SIDEBAR BOTTOM ACTIONS */}
       <div className="p-2 border-t flex gap-2 items-center" style={{ borderColor: theme.colors.border }}>
         <button
-          onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-          className="flex items-center justify-center p-2 rounded hover:bg-white/5 transition-colors w-8 h-8 shrink-0"
-          title={`${leftSidebarOpen ? "Collapse" : "Expand"} Sidebar (${formatShortcutKeys(shortcuts.toggleSidebar.keys)})`}
+          onClick={() => {
+            // Only allow collapsing when there are sessions (prevent collapse on empty state)
+            if (sessions.length > 0 || !leftSidebarOpen) {
+              setLeftSidebarOpen(!leftSidebarOpen);
+            }
+          }}
+          className={`flex items-center justify-center p-2 rounded transition-colors w-8 h-8 shrink-0 ${sessions.length === 0 && leftSidebarOpen ? 'opacity-20 cursor-not-allowed' : 'hover:bg-white/5'}`}
+          title={sessions.length === 0 && leftSidebarOpen ? "Add an agent first to collapse sidebar" : `${leftSidebarOpen ? "Collapse" : "Expand"} Sidebar (${formatShortcutKeys(shortcuts.toggleSidebar.keys)})`}
         >
           {leftSidebarOpen ? <PanelLeftClose className="w-4 h-4 opacity-50" /> : <PanelLeftOpen className="w-4 h-4 opacity-50" />}
         </button>

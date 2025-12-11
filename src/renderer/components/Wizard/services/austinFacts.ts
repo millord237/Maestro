@@ -3,9 +3,20 @@
  *
  * Collection of interesting, unique facts about Austin, Texas.
  * Used to entertain users during loading screens.
+ *
+ * Link syntax: [link text](url) - will be rendered as clickable links
+ * that open in the system browser.
  */
 
 const AUSTIN_FACTS = [
+  // Pedram's Picks - Weekly Specials
+  "Sunday is half priced bottles of wine at Jeffrey's.",
+  "Monday is steak night at Josephine's with a 3-course prix fixe and \"Unlimited wine\".",
+  "Tuesday is half priced bottles of wine at Boa Steakhouse.",
+  "Wednesday is half price bottles of wine at Mongers.",
+  "Check out some of Pedram's favorite spots in Austin on [Google Maps](https://www.google.com/maps/@/data=!3m1!4b1!4m3!11m2!2s1azIgXGVoByyyoq1OxDbWzP91dgc!3e3?shorturl=1).",
+
+
   // Iconic Austin
   "Austin's official slogan 'Keep Austin Weird' was coined in 2000 by a local librarian during a radio pledge drive.",
   "The Texas State Capitol building is actually 14 feet taller than the U.S. Capitol in Washington, D.C.",
@@ -157,6 +168,71 @@ export function getNextAustinFact(): string {
  */
 export function resetAustinFactQueue(): void {
   austinFactQueue = [];
+}
+
+/**
+ * Parse a fact string and extract any markdown-style links.
+ * Returns an array of segments that are either plain text or link objects.
+ *
+ * Example: "Check out [Google Maps](https://example.com) for more."
+ * Returns: [
+ *   { type: 'text', content: 'Check out ' },
+ *   { type: 'link', text: 'Google Maps', url: 'https://example.com' },
+ *   { type: 'text', content: ' for more.' }
+ * ]
+ */
+export type FactSegment =
+  | { type: 'text'; content: string }
+  | { type: 'link'; text: string; url: string };
+
+export function parseFactWithLinks(fact: string): FactSegment[] {
+  const segments: FactSegment[] = [];
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+  let lastIndex = 0;
+  let match;
+
+  // Use RegExp.prototype.exec to find all matches
+  while ((match = linkRegex.exec(fact)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      segments.push({
+        type: 'text',
+        content: fact.slice(lastIndex, match.index),
+      });
+    }
+
+    // Add the link
+    segments.push({
+      type: 'link',
+      text: match[1],
+      url: match[2],
+    });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last link
+  if (lastIndex < fact.length) {
+    segments.push({
+      type: 'text',
+      content: fact.slice(lastIndex),
+    });
+  }
+
+  // If no segments were added (no links found), return the whole fact as text
+  if (segments.length === 0) {
+    segments.push({ type: 'text', content: fact });
+  }
+
+  return segments;
+}
+
+/**
+ * Check if a fact contains any links
+ */
+export function factHasLinks(fact: string): boolean {
+  return /\[([^\]]+)\]\(([^)]+)\)/.test(fact);
 }
 
 export { AUSTIN_FACTS };

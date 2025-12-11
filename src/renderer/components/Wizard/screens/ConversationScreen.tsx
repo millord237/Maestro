@@ -895,8 +895,8 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
           borderColor: theme.colors.border,
         }}
       >
-        <div className="flex items-end gap-3">
-          <div className="flex-1 relative">
+        <div className="flex gap-3">
+          <div className="flex-1 relative flex items-center">
             <textarea
               ref={inputRef}
               value={inputValue}
@@ -912,13 +912,14 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
               placeholder="Describe your project..."
               disabled={state.isConversationLoading}
               rows={1}
-              className="w-full px-4 py-2.5 rounded-lg border resize-none outline-none transition-all"
+              className="w-full px-4 py-3 rounded-lg border resize-none outline-none transition-all"
               style={{
                 backgroundColor: theme.colors.bgMain,
                 borderColor: theme.colors.border,
                 color: theme.colors.textMain,
                 maxHeight: '120px',
-                lineHeight: '1.4',
+                lineHeight: '1.5',
+                minHeight: '48px',
               }}
               onInput={(e) => {
                 // Auto-resize textarea - start at natural height, grow as needed
@@ -931,7 +932,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
           <button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || state.isConversationLoading}
-            className="px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 shrink-0"
+            className="px-4 rounded-lg font-medium transition-all flex items-center gap-2 shrink-0 self-stretch"
             style={{
               backgroundColor:
                 inputValue.trim() && !state.isConversationLoading
@@ -945,6 +946,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
                 inputValue.trim() && !state.isConversationLoading
                   ? 'pointer'
                   : 'not-allowed',
+              minHeight: '48px',
             }}
           >
             {state.isConversationLoading ? (
@@ -963,7 +965,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  d="M5 10l7-7m0 0l7 7m-7-7v18"
                 />
               </svg>
             )}

@@ -283,11 +283,11 @@ describe('Wizard Theme Styles', () => {
 
       // Wait for agent detection to complete
       await vi.waitFor(() => {
-        expect(screen.getByText('Choose Your AI Assistant')).toBeInTheDocument();
+        expect(screen.getByText('Choose Your Provider')).toBeInTheDocument();
       });
 
       // Check that theme colors are applied to key elements
-      const header = screen.getByText('Choose Your AI Assistant');
+      const header = screen.getByText('Choose Your Provider');
       expect(header).toHaveStyle({ color: theme.colors.textMain });
     });
 
