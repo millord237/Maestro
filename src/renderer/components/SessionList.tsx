@@ -1468,31 +1468,33 @@ export function SessionList(props: SessionListProps) {
                               AUTO
                             </div>
                           )}
-                          {/* AI Status Indicator */}
-                          <div
-                            className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
-                            style={
-                              session.toolType === 'claude' && !session.claudeSessionId
-                                ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                                : { backgroundColor: getStatusColor(session.state, theme) }
-                            }
-                            title={
-                              session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' :
-                              session.state === 'idle' ? 'Ready and waiting' :
-                              session.state === 'busy' ? (session.cliActivity ? `CLI: Running playbook "${session.cliActivity.playbookName}"` : 'Agent is thinking') :
-                              session.state === 'connecting' ? 'Attempting to establish connection' :
-                              session.state === 'error' ? 'No connection with agent' :
-                              'Waiting for input'
-                            }
-                          />
-                          {/* Unread Message Indicator */}
-                          {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                          {/* AI Status Indicator with Unread Badge */}
+                          <div className="relative">
                             <div
-                              className="w-2 h-2 rounded-full animate-pulse"
-                              style={{ backgroundColor: theme.colors.success }}
-                              title="Unread messages"
+                              className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
+                              style={
+                                session.toolType === 'claude' && !session.claudeSessionId
+                                  ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
+                                  : { backgroundColor: getStatusColor(session.state, theme) }
+                              }
+                              title={
+                                session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' :
+                                session.state === 'idle' ? 'Ready and waiting' :
+                                session.state === 'busy' ? (session.cliActivity ? `CLI: Running playbook "${session.cliActivity.playbookName}"` : 'Agent is thinking') :
+                                session.state === 'connecting' ? 'Attempting to establish connection' :
+                                session.state === 'error' ? 'No connection with agent' :
+                                'Waiting for input'
+                              }
                             />
-                          )}
+                            {/* Unread Notification Badge */}
+                            {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                              <div
+                                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                                style={{ backgroundColor: theme.colors.error }}
+                                title="Unread messages"
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1764,31 +1766,33 @@ export function SessionList(props: SessionListProps) {
                                 AUTO
                               </div>
                             )}
-                            {/* AI Status Indicator */}
-                            <div
-                              className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
-                              style={
-                                session.toolType === 'claude' && !session.claudeSessionId
-                                  ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                                  : { backgroundColor: getStatusColor(session.state, theme) }
-                              }
-                              title={
-                                session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' :
-                                session.state === 'idle' ? 'Ready and waiting' :
-                                session.state === 'busy' ? (session.cliActivity ? `CLI: Running playbook "${session.cliActivity.playbookName}"` : 'Agent is thinking') :
-                                session.state === 'connecting' ? 'Attempting to establish connection' :
-                                session.state === 'error' ? 'No connection with agent' :
-                                'Waiting for input'
-                              }
-                            />
-                            {/* Unread Message Indicator */}
-                            {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                            {/* AI Status Indicator with Unread Badge */}
+                            <div className="relative">
                               <div
-                                className="w-2 h-2 rounded-full animate-pulse"
-                                style={{ backgroundColor: theme.colors.success }}
-                                title="Unread messages"
+                                className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ''}`}
+                                style={
+                                  session.toolType === 'claude' && !session.claudeSessionId
+                                    ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
+                                    : { backgroundColor: getStatusColor(session.state, theme) }
+                                }
+                                title={
+                                  session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' :
+                                  session.state === 'idle' ? 'Ready and waiting' :
+                                  session.state === 'busy' ? (session.cliActivity ? `CLI: Running playbook "${session.cliActivity.playbookName}"` : 'Agent is thinking') :
+                                  session.state === 'connecting' ? 'Attempting to establish connection' :
+                                  session.state === 'error' ? 'No connection with agent' :
+                                  'Waiting for input'
+                                }
                               />
-                            )}
+                              {/* Unread Notification Badge */}
+                              {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                                <div
+                                  className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                                  style={{ backgroundColor: theme.colors.error }}
+                                  title="Unread messages"
+                                />
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -2014,24 +2018,26 @@ export function SessionList(props: SessionListProps) {
                           AUTO
                         </div>
                       )}
-                      {/* AI Status Indicator */}
-                      <div
-                        className={`w-2 h-2 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
-                        style={
-                          session.toolType === 'claude' && !session.claudeSessionId
-                            ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                            : { backgroundColor: getStatusColor(session.state, theme) }
-                        }
-                        title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
-                      />
-                      {/* Unread Message Indicator */}
-                      {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                      {/* AI Status Indicator with Unread Badge */}
+                      <div className="relative">
                         <div
-                          className="w-2 h-2 rounded-full animate-pulse"
-                          style={{ backgroundColor: theme.colors.success }}
-                          title="Unread messages"
+                          className={`w-2 h-2 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
+                          style={
+                            session.toolType === 'claude' && !session.claudeSessionId
+                              ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
+                              : { backgroundColor: getStatusColor(session.state, theme) }
+                          }
+                          title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
                         />
-                      )}
+                        {/* Unread Notification Badge */}
+                        {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                          <div
+                            className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: theme.colors.error }}
+                            title="Unread messages"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -2175,24 +2181,26 @@ export function SessionList(props: SessionListProps) {
                         AUTO
                       </div>
                     )}
-                    {/* AI Status Indicator */}
-                    <div
-                      className={`w-2 h-2 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
-                      style={
-                        session.toolType === 'claude' && !session.claudeSessionId
-                          ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                          : { backgroundColor: getStatusColor(session.state, theme) }
-                      }
-                      title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
-                    />
-                    {/* Unread Message Indicator */}
-                    {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                    {/* AI Status Indicator with Unread Badge */}
+                    <div className="relative">
                       <div
-                        className="w-2 h-2 rounded-full animate-pulse"
-                        style={{ backgroundColor: theme.colors.success }}
-                        title="Unread messages"
+                        className={`w-2 h-2 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
+                        style={
+                          session.toolType === 'claude' && !session.claudeSessionId
+                            ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
+                            : { backgroundColor: getStatusColor(session.state, theme) }
+                        }
+                        title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
                       />
-                    )}
+                      {/* Unread Notification Badge */}
+                      {activeSessionId !== session.id && session.aiTabs?.some(tab => tab.hasUnread) && (
+                        <div
+                          className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: theme.colors.error }}
+                          title="Unread messages"
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
                   );
