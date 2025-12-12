@@ -60,6 +60,7 @@ import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWr
 import { TAB_SHORTCUTS } from './constants/shortcuts';
 import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree, compareFileTrees, FileTreeChanges } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
+import { validateNewSession } from './utils/sessionValidation';
 
 // Strip leading emojis from a string for alphabetical sorting
 // Matches common emoji patterns at the start of the string
@@ -1593,6 +1594,16 @@ export default function MaestroConsole() {
       : '',
     [activeSession?.inputMode, activeSession?.shellCwd, activeSession?.cwd]
   );
+
+  // PERF: Memoize sessions for NewInstanceModal validation (only recompute when modal is open)
+  // This prevents re-renders of the modal's validation logic on every session state change
+  const sessionsForValidation = useMemo(() =>
+    newInstanceModalOpen ? sessions : [],
+    [newInstanceModalOpen, sessions]
+  );
+
+  // PERF: Memoize hasNoAgents check for SettingsModal (only depends on session count)
+  const hasNoAgents = useMemo(() => sessions.length === 0, [sessions.length]);
 
   // Tab completion hook for terminal mode
   const { getSuggestions: getTabCompletionSuggestions } = useTabCompletion(activeSession);
@@ -4062,6 +4073,14 @@ export default function MaestroConsole() {
   };
 
   const createNewSession = async (agentId: string, workingDir: string, name: string) => {
+    // Validate uniqueness before creating
+    const validation = validateNewSession(name, workingDir, agentId as ToolType, sessions);
+    if (!validation.valid) {
+      console.error(`Session validation failed: ${validation.error}`);
+      showToast(validation.error || 'Cannot create duplicate session', 'error');
+      return;
+    }
+
     const newId = generateId();
 
     // Get agent definition to get correct command
@@ -4187,6 +4206,14 @@ export default function MaestroConsole() {
     // Create the session
     const newId = generateId();
     const sessionName = agentName || `${selectedAgent} Session`;
+
+    // Validate uniqueness before creating
+    const validation = validateNewSession(sessionName, directoryPath, selectedAgent as ToolType, sessions);
+    if (!validation.valid) {
+      console.error(`Wizard session validation failed: ${validation.error}`);
+      showToast(validation.error || 'Cannot create duplicate session', 'error');
+      throw new Error(validation.error || 'Session validation failed');
+    }
 
     // Get agent definition
     const agent = await window.maestro.agents.get(selectedAgent);
@@ -6758,7 +6785,7 @@ export default function MaestroConsole() {
           theme={theme}
           shortcuts={shortcuts}
           onClose={() => setShortcutsHelpOpen(false)}
-          hasNoAgents={sessions.length === 0}
+          hasNoAgents={hasNoAgents}
         />
       )}
 
@@ -7643,6 +7670,7 @@ export default function MaestroConsole() {
         onCreate={createNewSession}
         theme={theme}
         defaultAgent={defaultAgent}
+        existingSessions={sessionsForValidation}
       />
 
       {/* --- SETTINGS MODAL (New Component) --- */}
@@ -7698,7 +7726,7 @@ export default function MaestroConsole() {
         customAICommands={customAICommands}
         setCustomAICommands={setCustomAICommands}
         initialTab={settingsTab}
-        hasNoAgents={sessions.length === 0}
+        hasNoAgents={hasNoAgents}
       />
 
       {/* --- WIZARD RESUME MODAL (asks if user wants to resume incomplete wizard) --- */}
@@ -7764,28 +7792,34 @@ export default function MaestroConsole() {
       )}
 
       {/* --- MAESTRO WIZARD (onboarding wizard for new users) --- */}
-      <MaestroWizard
-        theme={theme}
-        onLaunchSession={handleWizardLaunchSession}
-        onWizardStart={recordWizardStart}
-        onWizardResume={recordWizardResume}
-        onWizardAbandon={recordWizardAbandon}
-        onWizardComplete={recordWizardComplete}
-      />
+      {/* PERF: Only mount wizard component when open to avoid running hooks/effects */}
+      {wizardState.isOpen && (
+        <MaestroWizard
+          theme={theme}
+          onLaunchSession={handleWizardLaunchSession}
+          onWizardStart={recordWizardStart}
+          onWizardResume={recordWizardResume}
+          onWizardAbandon={recordWizardAbandon}
+          onWizardComplete={recordWizardComplete}
+        />
+      )}
 
       {/* --- TOUR OVERLAY (onboarding tour for interface guidance) --- */}
-      <TourOverlay
-        theme={theme}
-        isOpen={tourOpen}
-        fromWizard={tourFromWizard}
-        onClose={() => {
-          setTourOpen(false);
-          setTourCompleted(true);
-        }}
-        onTourStart={recordTourStart}
-        onTourComplete={recordTourComplete}
-        onTourSkip={recordTourSkip}
-      />
+      {/* PERF: Only mount tour component when open to avoid running hooks/effects */}
+      {tourOpen && (
+        <TourOverlay
+          theme={theme}
+          isOpen={tourOpen}
+          fromWizard={tourFromWizard}
+          onClose={() => {
+            setTourOpen(false);
+            setTourCompleted(true);
+          }}
+          onTourStart={recordTourStart}
+          onTourComplete={recordTourComplete}
+          onTourSkip={recordTourSkip}
+        />
+      )}
 
       {/* --- FLASH NOTIFICATION (centered, auto-dismiss) --- */}
       {flashNotification && (
