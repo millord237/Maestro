@@ -8,7 +8,19 @@ Maestro is a cross-platform desktop app for orchestrating your fleet of AI agent
 
 Collaborate with AI to create detailed specification documents, then let Auto Run execute them automatically - each task in a fresh session with clean context. Run multiple agents in parallel with a Linear/Superhuman-level responsive interface. Currently supporting Claude Code with plans for additional agentic coding tools (OpenAI Codex, Gemini CLI, Qwen3 Coder) based on user demand.
 
-**[Watch the Introduction Video](https://youtu.be/fmwwTOg7cyA?si=dJ89K54tGflKa5G4)**
+<div align="center">
+  <a href="https://youtu.be/fmwwTOg7cyA?si=dJ89K54tGflKa5G4">
+    <img src="https://github.com/user-attachments/assets/deaf601d-1898-4ede-bf5a-42e46874ebb3"
+         alt="Maestro Video Thumbnail"
+         width="650" />
+  </a>
+
+  <div>
+    <a href="https://youtu.be/fmwwTOg7cyA?si=VOkjO6oYjCSQvM0A">~27m Walkthrough and Demo</a>
+    &nbsp;|&nbsp;
+    <a href="https://youtu.be/3wX5Q1I0sgI?si=oJkJDxgAWUvBXX4D">~6m Onboarding Demo</a>
+  </div>
+</div>
 
 ## Installation
 
