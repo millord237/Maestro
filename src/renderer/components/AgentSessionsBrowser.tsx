@@ -731,11 +731,32 @@ export function AgentSessionsBrowser({
     return date.toLocaleDateString();
   };
 
-  // Activity entries for the graph - derived from filteredSessions so filters apply
-  // Since we auto-load all sessions in background, this will eventually include all data
-  const activityEntries = useMemo<ActivityEntry[]>(() => {
-    return filteredSessions.map(s => ({ timestamp: s.modifiedAt }));
-  }, [filteredSessions]);
+  // Activity entries for the graph - cached in state to prevent re-renders during pagination
+  // Only updates when: switching TO graph view, or filters change while graph is visible
+  const [activityEntries, setActivityEntries] = useState<ActivityEntry[]>([]);
+  const prevFiltersRef = useRef({ namedOnly, showAllSessions, showSearchPanel });
+
+  useEffect(() => {
+    const filtersChanged =
+      prevFiltersRef.current.namedOnly !== namedOnly ||
+      prevFiltersRef.current.showAllSessions !== showAllSessions;
+    const switchingToGraph = prevFiltersRef.current.showSearchPanel && !showSearchPanel;
+
+    prevFiltersRef.current = { namedOnly, showAllSessions, showSearchPanel };
+
+    // Update graph entries when:
+    // 1. Switching TO graph view (from search panel)
+    // 2. Filters change while graph is visible
+    // 3. Initial load when graph is visible and we have data
+    const shouldUpdate =
+      (switchingToGraph && filteredSessions.length > 0) ||
+      (filtersChanged && !showSearchPanel && filteredSessions.length > 0) ||
+      (!showSearchPanel && activityEntries.length === 0 && filteredSessions.length > 0);
+
+    if (shouldUpdate) {
+      setActivityEntries(filteredSessions.map(s => ({ timestamp: s.modifiedAt })));
+    }
+  }, [showSearchPanel, namedOnly, showAllSessions, filteredSessions, activityEntries.length]);
 
   // Handle activity graph bar click - scroll to first session in that time range
   const handleGraphBarClick = useCallback((bucketStart: number, bucketEnd: number) => {

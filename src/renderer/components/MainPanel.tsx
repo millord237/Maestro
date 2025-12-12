@@ -205,7 +205,7 @@ export function MainPanel(props: MainPanelProps) {
     return Math.min(Math.round((contextTokens / contextWindow) * 100), 100);
   }, [activeTab?.usageStats]);
 
-  // Track panel width for responsive widget hiding
+  // PERF: Track panel width for responsive widget hiding with throttled updates
   useEffect(() => {
     const header = headerRef.current;
     if (!header) return;
@@ -213,14 +213,32 @@ export function MainPanel(props: MainPanelProps) {
     // Get initial width immediately
     setPanelWidth(header.offsetWidth);
 
+    // Throttle resize updates to avoid layout thrashing during animations
+    let rafId: number | null = null;
+    let pendingWidth: number | null = null;
+
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setPanelWidth(entry.contentRect.width);
+        pendingWidth = entry.contentRect.width;
+      }
+      // Use requestAnimationFrame to batch updates
+      if (rafId === null && pendingWidth !== null) {
+        rafId = requestAnimationFrame(() => {
+          if (pendingWidth !== null) {
+            setPanelWidth(pendingWidth);
+          }
+          rafId = null;
+        });
       }
     });
 
     resizeObserver.observe(header);
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
   }, []);
 
   // Responsive breakpoints for hiding widgets

@@ -3,6 +3,7 @@ import { Bot, User, ExternalLink, Check, X, Clock, HelpCircle, Award } from 'luc
 import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
 import { HistoryHelpModal } from './HistoryHelpModal';
+import { useThrottledCallback } from '../hooks/useThrottle';
 
 // Double checkmark SVG component for validated entries
 const DoubleCheck = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
@@ -619,9 +620,15 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     }
   }, [historyEntries, allFilteredEntries, displayCount]);
 
+  // PERF: Store scroll target ref for throttled handler
+  const scrollTargetRef = useRef<HTMLDivElement | null>(null);
+
   // Handle scroll to load more entries AND update graph reference time
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
+  // PERF: Inner handler contains the actual logic
+  const handleScrollInner = useCallback(() => {
+    const target = scrollTargetRef.current;
+    if (!target) return;
+
     const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
     // Save scroll position to module-level cache (persists across session switches)
@@ -657,6 +664,15 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
       setGraphReferenceTime(topmostVisibleEntry.timestamp);
     }
   }, [session.id, hasMore, allFilteredEntries.length, filteredEntries]);
+
+  // PERF: Throttle scroll handler to 16ms (~60fps) to reduce layout thrashing
+  const throttledScrollHandler = useThrottledCallback(handleScrollInner, 16);
+
+  // Wrapper to capture scroll target and call throttled handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    scrollTargetRef.current = e.currentTarget;
+    throttledScrollHandler();
+  }, [throttledScrollHandler]);
 
   // Restore scroll position when loading completes (switching sessions or initial load)
   useEffect(() => {
