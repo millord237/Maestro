@@ -11,6 +11,7 @@ export { useSessionNavigation } from './useSessionNavigation';
 export { useAutoRunUndo } from './useAutoRunUndo';
 export { useAutoRunImageHandling, imageCache } from './useAutoRunImageHandling';
 export { useGitStatusPolling } from './useGitStatusPolling';
+export { useLiveOverlay } from './useLiveOverlay';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -23,3 +24,4 @@ export type { UseSessionNavigationReturn, UseSessionNavigationDeps } from './use
 export type { UseAutoRunUndoReturn, UseAutoRunUndoDeps, UndoState } from './useAutoRunUndo';
 export type { UseAutoRunImageHandlingReturn, UseAutoRunImageHandlingDeps } from './useAutoRunImageHandling';
 export type { UseGitStatusPollingReturn, UseGitStatusPollingOptions } from './useGitStatusPolling';
+export type { UseLiveOverlayReturn, TunnelStatus, UrlTab } from './useLiveOverlay';

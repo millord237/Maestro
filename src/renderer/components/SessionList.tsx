@@ -10,7 +10,7 @@ import { CONDUCTOR_BADGES, getBadgeForTime } from '../constants/conductorBadges'
 import { getStatusColor, getContextColor, formatActiveTime } from '../utils/theme';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { SessionItem } from './SessionItem';
-import { useGitStatusPolling } from '../hooks';
+import { useGitStatusPolling, useLiveOverlay } from '../hooks';
 
 // ============================================================================
 // SessionContextMenu - Right-click context menu for session items
@@ -329,96 +329,29 @@ export function SessionList(props: SessionListProps) {
   const [filterModeBookmarksCollapsed, setFilterModeBookmarksCollapsed] = useState<boolean | null>(null);
   const [filterModeInitialized, setFilterModeInitialized] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [liveOverlayOpen, setLiveOverlayOpen] = useState(false);
 
-  // Cloudflared installation status (cached after first check)
-  const [cloudflaredInstalled, setCloudflaredInstalled] = useState<boolean | null>(null);
-  const [cloudflaredChecked, setCloudflaredChecked] = useState(false);
-
-  // Tunnel state
-  const [tunnelStatus, setTunnelStatus] = useState<'off' | 'starting' | 'connected' | 'error'>('off');
-  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
-  const [tunnelError, setTunnelError] = useState<string | null>(null);
-  const [activeUrlTab, setActiveUrlTab] = useState<'local' | 'remote'>('local');
-  const [copyFlash, setCopyFlash] = useState<string | null>(null);
+  // Live overlay state (extracted hook)
+  const {
+    liveOverlayOpen,
+    setLiveOverlayOpen,
+    liveOverlayRef,
+    cloudflaredInstalled,
+    cloudflaredChecked,
+    tunnelStatus,
+    tunnelUrl,
+    tunnelError,
+    activeUrlTab,
+    setActiveUrlTab,
+    copyFlash,
+    setCopyFlash,
+    handleTunnelToggle,
+  } = useLiveOverlay(isLiveMode);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
   const contextMenuSession = contextMenu ? sessions.find(s => s.id === contextMenu.sessionId) : null;
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const liveOverlayRef = useRef<HTMLDivElement>(null);
-
-
-  // Close live overlay when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (liveOverlayRef.current && !liveOverlayRef.current.contains(e.target as Node)) {
-        setLiveOverlayOpen(false);
-      }
-    };
-    if (liveOverlayOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [liveOverlayOpen]);
-
-  // Check for cloudflared installation when Live overlay opens
-  useEffect(() => {
-    if (isLiveMode && liveOverlayOpen && !cloudflaredChecked) {
-      window.maestro.tunnel.isCloudflaredInstalled().then((installed: boolean) => {
-        setCloudflaredInstalled(installed);
-        setCloudflaredChecked(true);
-      });
-    }
-  }, [isLiveMode, liveOverlayOpen, cloudflaredChecked]);
-
-  // Reset tunnel state when live mode is disabled
-  useEffect(() => {
-    if (!isLiveMode) {
-      setTunnelStatus('off');
-      setTunnelUrl(null);
-      setTunnelError(null);
-      setActiveUrlTab('local');
-    }
-  }, [isLiveMode]);
-
-  // Handle tunnel toggle (start/stop remote access)
-  const handleTunnelToggle = async () => {
-    if (tunnelStatus === 'connected') {
-      // Turn off tunnel
-      try {
-        await window.maestro.tunnel.stop();
-      } catch (error) {
-        console.error('[handleTunnelToggle] Failed to stop tunnel:', error);
-        // Continue anyway - we still want to update UI state
-      }
-      setTunnelStatus('off');
-      setTunnelUrl(null);
-      setTunnelError(null);
-      setActiveUrlTab('local'); // Switch back to local tab
-    } else if (tunnelStatus === 'off') {
-      // Turn on tunnel
-      setTunnelStatus('starting');
-      setTunnelError(null);
-
-      try {
-        const result = await window.maestro.tunnel.start();
-        if (result.success && result.url) {
-          setTunnelStatus('connected');
-          setTunnelUrl(result.url);
-          setActiveUrlTab('remote'); // Auto-switch to remote tab
-        } else {
-          setTunnelStatus('error');
-          setTunnelError(result.error || 'Failed to start tunnel');
-        }
-      } catch (error) {
-        console.error('[handleTunnelToggle] Failed to start tunnel:', error);
-        setTunnelStatus('error');
-        setTunnelError(error instanceof Error ? error.message : 'Failed to start tunnel');
-      }
-    }
-  };
 
   // Toggle bookmark for a session
   const toggleBookmark = (sessionId: string) => {
@@ -840,7 +773,6 @@ export function SessionList(props: SessionListProps) {
                               if (url) {
                                 navigator.clipboard.writeText(url);
                                 setCopyFlash(activeUrlTab === 'local' ? 'Local URL copied!' : 'Remote URL copied!');
-                                setTimeout(() => setCopyFlash(null), 2000);
                               }
                             }}
                             className="p-1.5 rounded hover:bg-white/10 transition-colors shrink-0"
