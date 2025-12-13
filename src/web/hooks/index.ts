@@ -159,3 +159,13 @@ export {
 export type {
   UseKeyboardVisibilityReturn,
 } from './useKeyboardVisibility';
+
+export {
+  useSlashCommandAutocomplete,
+  default as useSlashCommandAutocompleteDefault,
+} from './useSlashCommandAutocomplete';
+
+export type {
+  UseSlashCommandAutocompleteOptions,
+  UseSlashCommandAutocompleteReturn,
+} from './useSlashCommandAutocomplete';

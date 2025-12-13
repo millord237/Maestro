@@ -28,6 +28,7 @@ import { useThemeColors } from '../components/ThemeProvider';
 import { useSwipeUp } from '../hooks/useSwipeUp';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useKeyboardVisibility } from '../hooks/useKeyboardVisibility';
+import { useSlashCommandAutocomplete } from '../hooks/useSlashCommandAutocomplete';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
 import { QuickActionsMenu, type QuickAction } from './QuickActionsMenu';
@@ -215,9 +216,33 @@ export function CommandInputBar({
   const [internalValue, setInternalValue] = useState('');
   const value = controlledValue !== undefined ? controlledValue : internalValue;
 
-  // Slash command autocomplete state
-  const [slashCommandOpen, setSlashCommandOpen] = useState(false);
-  const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
+  // Determine if input should be disabled (must be before hooks that use it)
+  // In AI mode: NEVER disable the input - user can always prep next message
+  // The send button will show X (interrupt) when AI is busy
+  // For terminal mode: do NOT disable when session is busy - terminal commands use a different pathway
+  const isDisabled = externalDisabled || isOffline || !isConnected;
+
+  // Slash command autocomplete hook
+  const {
+    isOpen: slashCommandOpen,
+    selectedIndex: selectedSlashCommandIndex,
+    setSelectedIndex: setSelectedSlashCommandIndex,
+    openAutocomplete: openSlashCommandAutocomplete,
+    handleInputChange: handleSlashCommandInputChange,
+    handleSelectCommand: handleSelectSlashCommand,
+    handleClose: handleCloseSlashCommand,
+  } = useSlashCommandAutocomplete({
+    inputValue: value,
+    isControlled: controlledValue !== undefined,
+    onChange: (newValue: string) => {
+      if (controlledValue === undefined) {
+        setInternalValue(newValue);
+      }
+      onChange?.(newValue);
+    },
+    onSubmit,
+    inputRef: textareaRef as React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>,
+  });
 
   // Voice input hook - handles speech recognition
   const handleVoiceTranscription = useCallback((newText: string) => {
@@ -239,12 +264,6 @@ export function CommandInputBar({
   const [quickActionsAnchor, setQuickActionsAnchor] = useState<{ x: number; y: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Determine if input should be disabled
-  // In AI mode: NEVER disable the input - user can always prep next message
-  // The send button will show X (interrupt) when AI is busy
-  // For terminal mode: do NOT disable when session is busy - terminal commands use a different pathway
-  const isDisabled = externalDisabled || isOffline || !isConnected;
 
   // Separate flag for whether send is blocked (AI thinking)
   // When true, shows X button instead of send button
@@ -294,7 +313,7 @@ export function CommandInputBar({
 
   /**
    * Handle textarea change
-   * Also detects slash commands and shows autocomplete
+   * Also detects slash commands and shows autocomplete via hook
    */
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -304,59 +323,11 @@ export function CommandInputBar({
       }
       onChange?.(newValue);
 
-      // Show slash command autocomplete when typing / at the start
-      // Only show if input starts with / and doesn't contain spaces (still typing command)
-      if (newValue.startsWith('/') && !newValue.includes(' ')) {
-        setSlashCommandOpen(true);
-        setSelectedSlashCommandIndex(0);
-      } else {
-        setSlashCommandOpen(false);
-      }
+      // Delegate slash command detection to the hook
+      handleSlashCommandInputChange(newValue);
     },
-    [controlledValue, onChange]
+    [controlledValue, onChange, handleSlashCommandInputChange]
   );
-
-  /**
-   * Handle slash command selection from autocomplete
-   */
-  const handleSelectSlashCommand = useCallback(
-    (command: string) => {
-      if (controlledValue === undefined) {
-        setInternalValue(command);
-      }
-      onChange?.(command);
-      setSlashCommandOpen(false);
-
-      // Focus back on textarea
-      textareaRef.current?.focus();
-
-      // Auto-submit the slash command after a brief delay
-      setTimeout(() => {
-        onSubmit?.(command);
-        // Clear input after submit (for uncontrolled mode)
-        if (controlledValue === undefined) {
-          setInternalValue('');
-        }
-        onChange?.('');
-      }, 50);
-    },
-    [controlledValue, onChange, onSubmit]
-  );
-
-  /**
-   * Close slash command autocomplete
-   * Also clears the input if it only contains a partial slash command (no spaces)
-   */
-  const handleCloseSlashCommand = useCallback(() => {
-    setSlashCommandOpen(false);
-    // If input only contains a slash command prefix (no spaces), clear it
-    if (value.startsWith('/') && !value.includes(' ')) {
-      if (controlledValue === undefined) {
-        setInternalValue('');
-      }
-      onChange?.('');
-    }
-  }, [value, controlledValue, onChange]);
 
   /**
    * Handle form submission
@@ -1004,8 +975,7 @@ export function CommandInputBar({
             onClick={() => {
               // Just open autocomplete without adding slash to input
               // The slash will be added when a command is selected
-              setSlashCommandOpen(true);
-              setSelectedSlashCommandIndex(0);
+              openSlashCommandAutocomplete();
               // Don't focus textarea - we want to show slash commands without expanding the input
               // User can tap the input separately if they want to type
             }}
