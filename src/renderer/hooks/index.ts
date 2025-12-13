@@ -21,6 +21,7 @@ export { useKeyboardShortcutHelpers } from './useKeyboardShortcutHelpers';
 export { useKeyboardNavigation } from './useKeyboardNavigation';
 export { useMainKeyboardHandler } from './useMainKeyboardHandler';
 export { useRemoteIntegration } from './useRemoteIntegration';
+export { useClaudeSessionManagement } from './useClaudeSessionManagement';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -59,3 +60,8 @@ export type {
   UseRemoteIntegrationDeps,
   UseRemoteIntegrationReturn,
 } from './useRemoteIntegration';
+export type {
+  UseClaudeSessionManagementDeps,
+  UseClaudeSessionManagementReturn,
+  HistoryEntryInput,
+} from './useClaudeSessionManagement';

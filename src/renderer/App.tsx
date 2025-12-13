@@ -44,6 +44,7 @@ import { useKeyboardShortcutHelpers } from './hooks/useKeyboardShortcutHelpers';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useMainKeyboardHandler } from './hooks/useMainKeyboardHandler';
 import { useRemoteIntegration } from './hooks/useRemoteIntegration';
+import { useClaudeSessionManagement } from './hooks/useClaudeSessionManagement';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -1557,9 +1558,8 @@ export default function MaestroConsole() {
 
   // Refs for slash command functions (to access latest values in remote command handler)
   const spawnBackgroundSynopsisRef = useRef<typeof spawnBackgroundSynopsis | null>(null);
-  const addHistoryEntryRef = useRef<typeof addHistoryEntry | null>(null);
   const spawnAgentWithPromptRef = useRef<typeof spawnAgentWithPrompt | null>(null);
-  const startNewClaudeSessionRef = useRef<typeof startNewClaudeSession | null>(null);
+  // Note: addHistoryEntryRef and startNewClaudeSessionRef are now provided by useClaudeSessionManagement hook
   // Ref for processQueuedMessage - allows batch exit handler to process queued messages
   const processQueuedItemRef = useRef<((sessionId: string, item: QueuedItem) => Promise<void>) | null>(null);
 
@@ -2251,86 +2251,28 @@ export default function MaestroConsole() {
     setTimeout(() => setSuccessFlashNotification(null), 2000);
   }, []);
 
-  // Helper to add history entry
-  // Note: usageStats should be passed explicitly for per-task tracking (e.g., batch runs)
-  // Do NOT use cumulative session stats here - they represent lifetime totals, not per-entry metrics
-  // IMPORTANT: For background operations (like synopsis), pass explicit sessionId/projectPath to avoid
-  // cross-agent bleed when the user switches agents while the background task is running
-  const addHistoryEntry = useCallback(async (entry: {
-    type: 'AUTO' | 'USER';
-    summary: string;
-    fullResponse?: string;
-    claudeSessionId?: string;
-    usageStats?: UsageStats;
-    // Optional overrides for background operations (prevents cross-agent bleed)
-    sessionId?: string;
-    projectPath?: string;
-    sessionName?: string;
-  }) => {
-    // Use provided values or fall back to activeSession
-    const targetSessionId = entry.sessionId || activeSession?.id;
-    const targetProjectPath = entry.projectPath || activeSession?.cwd;
-
-    if (!targetSessionId || !targetProjectPath) return;
-
-    // Get session name from entry, or from active tab if using activeSession
-    let sessionName = entry.sessionName;
-    if (!sessionName && activeSession && !entry.sessionId) {
-      const activeTab = getActiveTab(activeSession);
-      sessionName = activeTab?.name;
-    }
-
-    await window.maestro.history.add({
-      id: generateId(),
-      type: entry.type,
-      timestamp: Date.now(),
-      summary: entry.summary,
-      fullResponse: entry.fullResponse,
-      claudeSessionId: entry.claudeSessionId,
-      sessionId: targetSessionId,
-      sessionName: sessionName,
-      projectPath: targetProjectPath,
-      contextUsage: activeSession?.contextUsage,
-      // Only include usageStats if explicitly provided (per-task tracking)
-      // Never use cumulative session stats - they're lifetime totals
-      usageStats: entry.usageStats
-    });
-
-    // Refresh history panel to show the new entry
-    rightPanelRef.current?.refreshHistoryPanel();
-  }, [activeSession]);
-
-  // Helper to start a new Claude session
-  const startNewClaudeSession = useCallback(() => {
-    if (!activeSession) return;
-
-    // Block clearing when there are queued items
-    if (activeSession.executionQueue.length > 0) {
-      addLogToActiveTab(activeSession.id, {
-        source: 'system',
-        text: 'Cannot clear session while items are queued. Remove queued items first.'
-      });
-      return;
-    }
-
-    setSessions(prev => prev.map(s => {
-      if (s.id !== activeSession.id) return s;
-      // Reset active tab's state to 'idle' for write-mode tracking
-      const updatedAiTabs = s.aiTabs?.length > 0
-        ? s.aiTabs.map(tab =>
-            tab.id === s.activeTabId ? { ...tab, state: 'idle' as const, thinkingStartTime: undefined } : tab
-          )
-        : s.aiTabs;
-      return { ...s, claudeSessionId: undefined, aiLogs: [], state: 'idle' as SessionState, busySource: undefined, thinkingStartTime: undefined, aiTabs: updatedAiTabs };
-    }));
-    setActiveClaudeSessionId(null);
-  }, [activeSession]);
+  // --- CLAUDE SESSION MANAGEMENT ---
+  // Extracted hook for Claude-specific session operations (history, session clear, resume)
+  const {
+    addHistoryEntry,
+    addHistoryEntryRef,
+    startNewClaudeSession,
+    startNewClaudeSessionRef,
+    handleJumpToClaudeSession,
+    handleResumeSession,
+  } = useClaudeSessionManagement({
+    activeSession,
+    setSessions,
+    setActiveClaudeSessionId,
+    setAgentSessionsOpen,
+    addLogToActiveTab,
+    rightPanelRef,
+    defaultSaveToHistory,
+  });
 
   // Update refs for slash command functions (so remote command handler can access latest versions)
   spawnBackgroundSynopsisRef.current = spawnBackgroundSynopsis;
-  addHistoryEntryRef.current = addHistoryEntry;
   spawnAgentWithPromptRef.current = spawnAgentWithPrompt;
-  startNewClaudeSessionRef.current = startNewClaudeSession;
 
   // Initialize batch processor (supports parallel batches per session)
   const {
@@ -2664,16 +2606,6 @@ export default function MaestroConsole() {
     setConfirmModalOpen(true);
   }, [activeBatchSessionIds, activeSession, stopBatchRun]);
 
-  // Handler to jump to a Claude session from history
-  const handleJumpToClaudeSession = useCallback((claudeSessionId: string) => {
-    // Set the Claude session ID and load its messages
-    if (activeSession) {
-      setActiveClaudeSessionId(claudeSessionId);
-      // Open the agent sessions browser to show the selected session
-      setAgentSessionsOpen(true);
-    }
-  }, [activeSession]);
-
   // Handler for toast navigation - switches to session and optionally to a specific tab
   const handleToastSessionClick = useCallback((sessionId: string, tabId?: string) => {
     // Switch to the session
@@ -2690,94 +2622,6 @@ export default function MaestroConsole() {
       }));
     }
   }, [setActiveSessionId]);
-
-  // Handler to resume a Claude session - opens as a new tab (or switches to existing tab)
-  const handleResumeSession = useCallback(async (
-    claudeSessionId: string,
-    providedMessages?: LogEntry[],
-    sessionName?: string,
-    starred?: boolean
-  ) => {
-    if (!activeSession?.cwd) return;
-
-    // Check if a tab with this claudeSessionId already exists
-    const existingTab = activeSession.aiTabs?.find(tab => tab.claudeSessionId === claudeSessionId);
-    if (existingTab) {
-      // Switch to the existing tab instead of creating a duplicate
-      setSessions(prev => prev.map(s =>
-        s.id === activeSession.id
-          ? { ...s, activeTabId: existingTab.id, inputMode: 'ai' }
-          : s
-      ));
-      setActiveClaudeSessionId(claudeSessionId);
-      return;
-    }
-
-    try {
-      // Use provided messages or fetch them
-      let messages: LogEntry[];
-      if (providedMessages && providedMessages.length > 0) {
-        messages = providedMessages;
-      } else {
-        // Load the session messages
-        const result = await window.maestro.claude.readSessionMessages(
-          activeSession.cwd,
-          claudeSessionId,
-          { offset: 0, limit: 100 }
-        );
-
-        // Convert to log entries
-        messages = result.messages.map((msg: { type: string; content: string; timestamp: string; uuid: string }) => ({
-          id: msg.uuid || generateId(),
-          timestamp: new Date(msg.timestamp).getTime(),
-          source: msg.type === 'user' ? 'user' as const : 'stdout' as const,
-          text: msg.content || ''
-        }));
-      }
-
-      // Look up starred status and session name from stores if not provided
-      let isStarred = starred ?? false;
-      let name = sessionName ?? null;
-
-      if (!starred && !sessionName) {
-        try {
-          // Look up session metadata from Claude session origins (name and starred)
-          const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
-          const originData = origins[claudeSessionId];
-          if (originData && typeof originData === 'object') {
-            if (originData.sessionName) {
-              name = originData.sessionName;
-            }
-            if (originData.starred !== undefined) {
-              isStarred = originData.starred;
-            }
-          }
-        } catch (error) {
-          console.warn('[handleResumeSession] Failed to lookup starred/named status:', error);
-        }
-      }
-
-      // Update the session and switch to AI mode
-      // IMPORTANT: Use functional update to get fresh session state and avoid race conditions
-      setSessions(prev => prev.map(s => {
-        if (s.id !== activeSession.id) return s;
-
-        // Create tab from the CURRENT session state (not stale closure value)
-        const { session: updatedSession } = createTab(s, {
-          claudeSessionId,
-          logs: messages,
-          name,
-          starred: isStarred,
-          saveToHistory: defaultSaveToHistory
-        });
-
-        return { ...updatedSession, inputMode: 'ai' };
-      }));
-      setActiveClaudeSessionId(claudeSessionId);
-    } catch (error) {
-      console.error('Failed to resume session:', error);
-    }
-  }, [activeSession?.cwd, activeSession?.id, activeSession?.aiTabs]);
 
   // Handler to open lightbox with optional context images for navigation
   const handleSetLightboxImage = useCallback((image: string | null, contextImages?: string[]) => {
