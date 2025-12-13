@@ -23,6 +23,7 @@ export { useMainKeyboardHandler } from './useMainKeyboardHandler';
 export { useRemoteIntegration } from './useRemoteIntegration';
 export { useClaudeSessionManagement } from './useClaudeSessionManagement';
 export { useAgentExecution } from './useAgentExecution';
+export { useFileTreeManagement } from './useFileTreeManagement';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -71,3 +72,8 @@ export type {
   UseAgentExecutionReturn,
   AgentSpawnResult,
 } from './useAgentExecution';
+export type {
+  UseFileTreeManagementDeps,
+  UseFileTreeManagementReturn,
+  RightPanelHandle,
+} from './useFileTreeManagement';

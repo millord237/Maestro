@@ -46,6 +46,7 @@ import { useMainKeyboardHandler } from './hooks/useMainKeyboardHandler';
 import { useRemoteIntegration } from './hooks/useRemoteIntegration';
 import { useClaudeSessionManagement } from './hooks/useClaudeSessionManagement';
 import { useAgentExecution } from './hooks/useAgentExecution';
+import { useFileTreeManagement } from './hooks/useFileTreeManagement';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -63,10 +64,9 @@ import type {
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
-import { fuzzyMatch } from './utils/search';
 import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab } from './utils/tabHelpers';
 import { TAB_SHORTCUTS } from './constants/shortcuts';
-import { shouldOpenExternally, loadFileTree, getAllFolderPaths, flattenTree, compareFileTrees, FileTreeChanges } from './utils/fileExplorer';
+import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import { substituteTemplateVariables } from './utils/templateVariables';
 import { validateNewSession } from './utils/sessionValidation';
 
@@ -4742,144 +4742,21 @@ export default function MaestroConsole() {
     }));
   };
 
-  // Refresh file tree for a session and return the changes detected
-  const refreshFileTree = useCallback(async (sessionId: string): Promise<FileTreeChanges | undefined> => {
-    // Use sessionsRef to avoid dependency on sessions state (prevents timer reset on every session change)
-    const session = sessionsRef.current.find(s => s.id === sessionId);
-    if (!session) return undefined;
-
-    try {
-      const oldTree = session.fileTree || [];
-      const newTree = await loadFileTree(session.cwd);
-      const changes = compareFileTrees(oldTree, newTree);
-
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? { ...s, fileTree: newTree, fileTreeError: undefined } : s
-      ));
-
-      return changes;
-    } catch (error) {
-      console.error('File tree refresh error:', error);
-      const errorMsg = (error as Error)?.message || 'Unknown error';
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? {
-          ...s,
-          fileTree: [],
-          fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`
-        } : s
-      ));
-      return undefined;
-    }
-  }, []);
-
-  // Refresh both file tree and git state for a session
-  const refreshGitFileState = useCallback(async (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (!session) return;
-
-    const cwd = session.inputMode === 'terminal' ? (session.shellCwd || session.cwd) : session.cwd;
-
-    try {
-      // Refresh file tree, git repo status, branches, and tags in parallel
-      const [tree, isGitRepo] = await Promise.all([
-        loadFileTree(cwd),
-        gitService.isRepo(cwd)
-      ]);
-
-      let gitBranches: string[] | undefined;
-      let gitTags: string[] | undefined;
-      let gitRefsCacheTime: number | undefined;
-
-      if (isGitRepo) {
-        [gitBranches, gitTags] = await Promise.all([
-          gitService.getBranches(cwd),
-          gitService.getTags(cwd)
-        ]);
-        gitRefsCacheTime = Date.now();
-      }
-
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? {
-          ...s,
-          fileTree: tree,
-          fileTreeError: undefined,
-          isGitRepo,
-          gitBranches,
-          gitTags,
-          gitRefsCacheTime
-        } : s
-      ));
-
-      // Also refresh history panel (reload from disk first to bypass electron-store cache)
-      await window.maestro.history.reload();
-      rightPanelRef.current?.refreshHistoryPanel();
-    } catch (error) {
-      console.error('Git/file state refresh error:', error);
-      const errorMsg = (error as Error)?.message || 'Unknown error';
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? {
-          ...s,
-          fileTree: [],
-          fileTreeError: `Cannot access directory: ${cwd}\n${errorMsg}`
-        } : s
-      ));
-    }
-  }, [sessions]);
-
-  // Load file tree when active session changes
-  useEffect(() => {
-    const session = sessions.find(s => s.id === activeSessionId);
-    if (!session) return;
-
-    // Only load if file tree is empty
-    if (!session.fileTree || session.fileTree.length === 0) {
-      loadFileTree(session.cwd).then(tree => {
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? { ...s, fileTree: tree, fileTreeError: undefined } : s
-        ));
-      }).catch(error => {
-        console.error('File tree error:', error);
-        const errorMsg = error?.message || 'Unknown error';
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? {
-            ...s,
-            fileTree: [],
-            fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`
-          } : s
-        ));
-      });
-    }
-  }, [activeSessionId, sessions]);
-
-  // Filter file tree based on search query
-  const filteredFileTree = useMemo(() => {
-    if (!activeSession || !fileTreeFilter || !activeSession.fileTree) {
-      return activeSession?.fileTree || [];
-    }
-
-    const filterTree = (nodes: any[]): any[] => {
-      return nodes.reduce((acc: any[], node) => {
-        const matchesFilter = fuzzyMatch(node.name, fileTreeFilter);
-
-        if (node.type === 'folder' && node.children) {
-          const filteredChildren = filterTree(node.children);
-          // Include folder if it matches or has matching children
-          if (matchesFilter || filteredChildren.length > 0) {
-            acc.push({
-              ...node,
-              children: filteredChildren
-            });
-          }
-        } else if (node.type === 'file' && matchesFilter) {
-          acc.push(node);
-        }
-
-        return acc;
-      }, []);
-    };
-
-    return filterTree(activeSession.fileTree);
-  }, [activeSession?.fileTree, fileTreeFilter]);
+  // --- FILE TREE MANAGEMENT ---
+  // Extracted hook for file tree operations (refresh, git state, filtering)
+  const {
+    refreshFileTree,
+    refreshGitFileState,
+    filteredFileTree,
+  } = useFileTreeManagement({
+    sessions,
+    sessionsRef,
+    setSessions,
+    activeSessionId,
+    activeSession,
+    fileTreeFilter,
+    rightPanelRef,
+  });
 
   // Update flat file list when active session's tree, expanded folders, or filter changes
   useEffect(() => {
