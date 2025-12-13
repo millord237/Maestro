@@ -24,6 +24,7 @@ export { useRemoteIntegration } from './useRemoteIntegration';
 export { useClaudeSessionManagement } from './useClaudeSessionManagement';
 export { useAgentExecution } from './useAgentExecution';
 export { useFileTreeManagement } from './useFileTreeManagement';
+export { useGroupManagement } from './useGroupManagement';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -77,3 +78,8 @@ export type {
   UseFileTreeManagementReturn,
   RightPanelHandle,
 } from './useFileTreeManagement';
+export type {
+  UseGroupManagementDeps,
+  UseGroupManagementReturn,
+  GroupModalState,
+} from './useGroupManagement';

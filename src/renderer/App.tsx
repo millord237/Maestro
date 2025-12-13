@@ -47,6 +47,7 @@ import { useRemoteIntegration } from './hooks/useRemoteIntegration';
 import { useClaudeSessionManagement } from './hooks/useClaudeSessionManagement';
 import { useAgentExecution } from './hooks/useAgentExecution';
 import { useFileTreeManagement } from './hooks/useFileTreeManagement';
+import { useGroupManagement } from './hooks/useGroupManagement';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -290,11 +291,6 @@ export default function MaestroConsole() {
   const [processMonitorOpen, setProcessMonitorOpen] = useState(false);
   const [playgroundOpen, setPlaygroundOpen] = useState(false);
   const [debugWizardModalOpen, setDebugWizardModalOpen] = useState(false);
-  const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupEmoji, setNewGroupEmoji] = useState('📂');
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-  const [moveSessionToNewGroup, setMoveSessionToNewGroup] = useState(false);
 
   // Confirmation Modal State
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -3123,19 +3119,6 @@ export default function MaestroConsole() {
     handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
   };
 
-  const toggleGroup = (groupId: string) => {
-    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, collapsed: !g.collapsed } : g));
-  };
-
-  const startRenamingGroup = (groupId: string) => {
-    setEditingGroupId(groupId);
-  };
-
-  const finishRenamingGroup = (groupId: string, newName: string) => {
-    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: newName.toUpperCase() } : g));
-    setEditingGroupId(null);
-  };
-
   // startRenamingSession now accepts a unique key (e.g., 'bookmark-id', 'group-gid-id', 'ungrouped-id')
   // to support renaming the same session from different UI locations (bookmarks vs groups)
   const startRenamingSession = (editKey: string) => {
@@ -3163,55 +3146,6 @@ export default function MaestroConsole() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-  };
-
-  const handleDropOnGroup = (groupId: string) => {
-    if (draggingSessionId) {
-      setSessions(prev => prev.map(s =>
-        s.id === draggingSessionId ? { ...s, groupId } : s
-      ));
-      setDraggingSessionId(null);
-    }
-  };
-
-  const handleDropOnUngrouped = () => {
-    if (draggingSessionId) {
-      setSessions(prev => prev.map(s =>
-        s.id === draggingSessionId ? { ...s, groupId: undefined } : s
-      ));
-      setDraggingSessionId(null);
-    }
-  };
-
-  const createNewGroup = () => {
-    setNewGroupName('');
-    setNewGroupEmoji('📂');
-    setMoveSessionToNewGroup(false);
-    setCreateGroupModalOpen(true);
-  };
-
-  const handleCreateGroupConfirm = () => {
-    if (newGroupName.trim()) {
-      const newGroup: Group = {
-        id: `group-${Date.now()}`,
-        name: newGroupName.trim().toUpperCase(),
-        emoji: newGroupEmoji,
-        collapsed: false
-      };
-      setGroups([...groups, newGroup]);
-
-      // If we should move the session to the new group
-      if (moveSessionToNewGroup) {
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? { ...s, groupId: newGroup.id } : s
-        ));
-      }
-
-      setCreateGroupModalOpen(false);
-      setNewGroupName('');
-      setNewGroupEmoji('📂');
-      setEmojiPickerOpen(false);
-    }
   };
 
   const processInput = async (overrideInputValue?: string) => {
@@ -4757,6 +4691,42 @@ export default function MaestroConsole() {
     fileTreeFilter,
     rightPanelRef,
   });
+
+  // --- GROUP MANAGEMENT ---
+  // Extracted hook for group CRUD operations (toggle, rename, create, drag-drop)
+  const {
+    toggleGroup,
+    startRenamingGroup,
+    finishRenamingGroup,
+    createNewGroup,
+    handleCreateGroupConfirm,
+    handleDropOnGroup,
+    handleDropOnUngrouped,
+    modalState: groupModalState,
+  } = useGroupManagement({
+    groups,
+    setGroups,
+    setSessions,
+    activeSessionId,
+    draggingSessionId,
+    setDraggingSessionId,
+    editingGroupId,
+    setEditingGroupId,
+  });
+
+  // Destructure group modal state for use in JSX
+  const {
+    createGroupModalOpen,
+    newGroupName,
+    newGroupEmoji,
+    emojiPickerOpen,
+    moveSessionToNewGroup,
+    setCreateGroupModalOpen,
+    setNewGroupName,
+    setNewGroupEmoji,
+    setEmojiPickerOpen,
+    setMoveSessionToNewGroup,
+  } = groupModalState;
 
   // Update flat file list when active session's tree, expanded folders, or filter changes
   useEffect(() => {
