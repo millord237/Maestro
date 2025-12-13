@@ -4,6 +4,7 @@ import type { Theme, Session, LogEntry } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { SessionActivityGraph, type ActivityEntry } from './SessionActivityGraph';
+import { formatSize, formatNumber, formatTokens, formatRelativeTime } from '../utils/formatters';
 
 type SearchMode = 'title' | 'user' | 'assistant' | 'all';
 
@@ -546,14 +547,6 @@ export function AgentSessionsBrowser({
     };
   }, [aggregateStats]);
 
-  // Format token count with K/M/B suffix (approximate)
-  const formatTokens = (tokens: number): string => {
-    if (tokens >= 1_000_000_000) return `~${Math.round(tokens / 1_000_000_000)}B`;
-    if (tokens >= 1_000_000) return `~${Math.round(tokens / 1_000_000)}M`;
-    if (tokens >= 1_000) return `~${Math.round(tokens / 1_000)}K`;
-    return tokens.toString();
-  };
-
   // Filter sessions by search - use different strategies based on search mode
   const filteredSessions = useMemo(() => {
     // First filter by showAllSessions
@@ -690,39 +683,6 @@ export function AgentSessionsBrowser({
     onResumeSession(session.sessionId, [], session.sessionName, isStarred);
     onClose();
   }, [starredSessions, onResumeSession, onClose]);
-
-  // Format file size with proper KB/MB/GB/TB scaling
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB`;
-  };
-
-  // Format large numbers with k/M/B suffixes
-  const formatNumber = (num: number): string => {
-    if (num < 1000) return num.toFixed(1);
-    if (num < 1000000) return `${(num / 1000).toFixed(1)}k`;
-    if (num < 1000000000) return `${(num / 1000000).toFixed(1)}M`;
-    return `${(num / 1000000000).toFixed(1)}B`;
-  };
-
-  // Format relative time
-  const formatRelativeTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
 
   // Activity entries for the graph - cached in state to prevent re-renders during pagination
   // Only updates when: switching TO graph view, or filters change while graph is visible
