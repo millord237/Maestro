@@ -14,7 +14,7 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import { checkForUpdates } from './update-checker';
 import Store from 'electron-store';
-import { registerGitHandlers, registerAutorunHandlers } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerHistoryHandlers } from './ipc/handlers';
 
 // Demo mode: use a separate data directory for fresh demos
 const DEMO_MODE = process.argv.includes('--demo') || !!process.env.MAESTRO_DEMO_DIR;
@@ -1191,6 +1191,13 @@ function setupIpcHandlers() {
     mainWindow,
     getMainWindow: () => mainWindow,
     app,
+  });
+
+  // History operations - extracted to src/main/ipc/handlers/history.ts
+  registerHistoryHandlers({
+    historyStore,
+    getHistoryNeedsReload: () => historyNeedsReload,
+    setHistoryNeedsReload: (value: boolean) => { historyNeedsReload = value; },
   });
 
   // File system operations
@@ -3189,110 +3196,7 @@ function setupIpcHandlers() {
     }
   });
 
-  // History persistence (per-project and optionally per-session)
-  ipcMain.handle('history:getAll', async (_event, projectPath?: string, sessionId?: string) => {
-    // If external changes were detected, reload from disk
-    let allEntries: HistoryEntry[];
-    if (historyNeedsReload) {
-      try {
-        const historyFilePath = historyStore.path;
-        const fileContent = fsSync.readFileSync(historyFilePath, 'utf-8');
-        const data = JSON.parse(fileContent);
-        allEntries = data.entries || [];
-        // Update the in-memory store with fresh data
-        historyStore.set('entries', allEntries);
-        historyNeedsReload = false;
-        logger.debug('Reloaded history from disk after external change', 'History');
-      } catch (error) {
-        logger.warn(`Failed to reload history from disk: ${error}`, 'History');
-        allEntries = historyStore.get('entries', []);
-      }
-    } else {
-      allEntries = historyStore.get('entries', []);
-    }
-    let filteredEntries = allEntries;
-
-    if (projectPath) {
-      // Filter by project path
-      filteredEntries = filteredEntries.filter(entry => entry.projectPath === projectPath);
-    }
-
-    if (sessionId) {
-      // Filter by session ID, but also include legacy entries without a sessionId
-      filteredEntries = filteredEntries.filter(entry => entry.sessionId === sessionId || !entry.sessionId);
-    }
-
-    return filteredEntries;
-  });
-
-  // Force reload history from disk (for manual refresh)
-  ipcMain.handle('history:reload', async () => {
-    try {
-      const historyFilePath = historyStore.path;
-      const fileContent = fsSync.readFileSync(historyFilePath, 'utf-8');
-      const data = JSON.parse(fileContent);
-      const entries = data.entries || [];
-      historyStore.set('entries', entries);
-      historyNeedsReload = false;
-      logger.debug('Force reloaded history from disk', 'History');
-      return true;
-    } catch (error) {
-      logger.warn(`Failed to force reload history from disk: ${error}`, 'History');
-      return false;
-    }
-  });
-
-  ipcMain.handle('history:add', async (_event, entry: HistoryEntry) => {
-    const entries = historyStore.get('entries', []);
-    entries.unshift(entry); // Add to beginning (most recent first)
-    // Keep only last 1000 entries to prevent unbounded growth
-    const trimmedEntries = entries.slice(0, 1000);
-    historyStore.set('entries', trimmedEntries);
-    logger.info(`Added history entry: ${entry.type}`, 'History', { summary: entry.summary });
-    return true;
-  });
-
-  ipcMain.handle('history:clear', async (_event, projectPath?: string) => {
-    if (projectPath) {
-      // Clear only entries for this project
-      const entries = historyStore.get('entries', []);
-      const filtered = entries.filter(entry => entry.projectPath !== projectPath);
-      historyStore.set('entries', filtered);
-      logger.info(`Cleared history for project: ${projectPath}`, 'History');
-    } else {
-      // Clear all entries
-      historyStore.set('entries', []);
-      logger.info('Cleared all history', 'History');
-    }
-    return true;
-  });
-
-  ipcMain.handle('history:delete', async (_event, entryId: string) => {
-    const entries = historyStore.get('entries', []);
-    const filtered = entries.filter(entry => entry.id !== entryId);
-    if (filtered.length === entries.length) {
-      logger.warn(`History entry not found: ${entryId}`, 'History');
-      return false;
-    }
-    historyStore.set('entries', filtered);
-    logger.info(`Deleted history entry: ${entryId}`, 'History');
-    return true;
-  });
-
-  // Update a history entry (for setting validated flag, etc.)
-  ipcMain.handle('history:update', async (_event, entryId: string, updates: Partial<HistoryEntry>) => {
-    const entries = historyStore.get('entries', []);
-    const index = entries.findIndex(entry => entry.id === entryId);
-    if (index === -1) {
-      logger.warn(`History entry not found for update: ${entryId}`, 'History');
-      return false;
-    }
-    // Merge updates into the existing entry
-    entries[index] = { ...entries[index], ...updates };
-    historyStore.set('entries', entries);
-    logger.info(`Updated history entry: ${entryId}`, 'History', { updates });
-    return true;
-  });
+  // History persistence - extracted to src/main/ipc/handlers/history.ts
 
   // Claude session origins tracking (distinguishes Maestro-created sessions from CLI sessions)
   ipcMain.handle('claude:registerSessionOrigin', async (_event, projectPath: string, claudeSessionId: string, origin: 'user' | 'auto', sessionName?: string) => {
