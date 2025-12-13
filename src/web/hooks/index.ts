@@ -150,3 +150,12 @@ export type {
   UseVoiceInputOptions,
   UseVoiceInputReturn,
 } from './useVoiceInput';
+
+export {
+  useKeyboardVisibility,
+  default as useKeyboardVisibilityDefault,
+} from './useKeyboardVisibility';
+
+export type {
+  UseKeyboardVisibilityReturn,
+} from './useKeyboardVisibility';

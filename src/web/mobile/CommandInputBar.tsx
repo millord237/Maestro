@@ -27,6 +27,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useSwipeUp } from '../hooks/useSwipeUp';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useKeyboardVisibility } from '../hooks/useKeyboardVisibility';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
 import { QuickActionsMenu, type QuickAction } from './QuickActionsMenu';
@@ -204,9 +205,8 @@ export function CommandInputBar({
     enabled: !!onHistoryOpen,
   });
 
-  // Track keyboard visibility for positioning
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  // Track keyboard visibility for positioning (using Visual Viewport API)
+  const { keyboardOffset, isKeyboardVisible } = useKeyboardVisibility();
 
   // Track textarea height for auto-expansion
   const [textareaHeight, setTextareaHeight] = useState(MIN_INPUT_HEIGHT);
@@ -291,50 +291,6 @@ export function CommandInputBar({
     setTextareaHeight(newHeight);
     textarea.style.height = `${newHeight}px`;
   }, [value]);
-
-  /**
-   * Handle Visual Viewport resize for keyboard detection
-   * This is the modern way to handle mobile keyboard appearance
-   */
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    const handleResize = () => {
-      // Calculate the offset caused by keyboard
-      const windowHeight = window.innerHeight;
-      const viewportHeight = viewport.height;
-      const offset = windowHeight - viewportHeight - viewport.offsetTop;
-
-      // Only update if there's a significant change (keyboard appearing/disappearing)
-      if (offset > 50) {
-        setKeyboardOffset(offset);
-        setIsKeyboardVisible(true);
-      } else {
-        setKeyboardOffset(0);
-        setIsKeyboardVisible(false);
-      }
-    };
-
-    const handleScroll = () => {
-      // Re-adjust on scroll to keep the bar in view
-      if (containerRef.current && isKeyboardVisible) {
-        // Force the container to stay at the bottom of the visible area
-        handleResize();
-      }
-    };
-
-    viewport.addEventListener('resize', handleResize);
-    viewport.addEventListener('scroll', handleScroll);
-
-    // Initial check
-    handleResize();
-
-    return () => {
-      viewport.removeEventListener('resize', handleResize);
-      viewport.removeEventListener('scroll', handleScroll);
-    };
-  }, [isKeyboardVisible]);
 
   /**
    * Handle textarea change
