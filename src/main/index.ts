@@ -2875,6 +2875,7 @@ function setupIpcHandlers() {
         totalRuns: number;
         longestRunMs?: number;
         longestRunDate?: string;
+        theme?: string;
       }
     ): Promise<{
       success: boolean;

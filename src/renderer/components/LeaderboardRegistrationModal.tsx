@@ -107,6 +107,7 @@ export function LeaderboardRegistrationModal({
         totalRuns: autoRunStats.totalRuns,
         longestRunMs: autoRunStats.longestRunMs || undefined,
         longestRunDate,
+        theme: theme.id,
       });
 
       if (result.success) {

@@ -2723,6 +2723,7 @@ export default function MaestroConsole() {
             totalRuns: updatedTotalRuns,
             longestRunMs: updatedLongestRunMs,
             longestRunDate,
+            theme: activeThemeId,
           }).then(result => {
             if (result.success) {
               // Update last submission timestamp

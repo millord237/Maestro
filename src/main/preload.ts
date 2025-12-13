@@ -656,6 +656,7 @@ contextBridge.exposeInMainWorld('maestro', {
       totalRuns: number;
       longestRunMs?: number;
       longestRunDate?: string;
+      theme?: string;
     }) => ipcRenderer.invoke('leaderboard:submit', data),
     get: (options?: { limit?: number }) =>
       ipcRenderer.invoke('leaderboard:get', options),
