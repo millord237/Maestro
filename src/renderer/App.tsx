@@ -40,6 +40,7 @@ import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHisto
 import type { AutoRunTreeNode } from './hooks';
 import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from './hooks/useTabCompletion';
 import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
+import { useKeyboardShortcutHelpers } from './hooks/useKeyboardShortcutHelpers';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -186,6 +187,9 @@ export default function MaestroConsole() {
     recordTourStart, recordTourComplete, recordTourSkip,
     leaderboardRegistration, setLeaderboardRegistration, isLeaderboardRegistered,
   } = settings;
+
+  // --- KEYBOARD SHORTCUT HELPERS ---
+  const { isShortcut, isTabShortcut } = useKeyboardShortcutHelpers({ shortcuts });
 
   // --- STATE ---
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -3173,86 +3177,7 @@ export default function MaestroConsole() {
   }, []);
 
   // --- KEYBOARD MANAGEMENT ---
-  const isShortcut = (e: KeyboardEvent, actionId: string) => {
-    const sc = shortcuts[actionId];
-    if (!sc) return false;
-    const keys = sc.keys.map(k => k.toLowerCase());
-
-    const metaPressed = e.metaKey || e.ctrlKey;
-    const shiftPressed = e.shiftKey;
-    const altPressed = e.altKey;
-    const key = e.key.toLowerCase();
-
-    const configMeta = keys.includes('meta') || keys.includes('ctrl') || keys.includes('command');
-    const configShift = keys.includes('shift');
-    const configAlt = keys.includes('alt');
-
-    if (metaPressed !== configMeta) return false;
-    if (shiftPressed !== configShift) return false;
-    if (altPressed !== configAlt) return false;
-
-    const mainKey = keys[keys.length - 1];
-    if (mainKey === '/' && key === '/') return true;
-    if (mainKey === 'arrowleft' && key === 'arrowleft') return true;
-    if (mainKey === 'arrowright' && key === 'arrowright') return true;
-    if (mainKey === 'arrowup' && key === 'arrowup') return true;
-    if (mainKey === 'arrowdown' && key === 'arrowdown') return true;
-    if (mainKey === 'backspace' && key === 'backspace') return true;
-    // Handle Shift+[ producing { and Shift+] producing }
-    if (mainKey === '[' && (key === '[' || key === '{')) return true;
-    if (mainKey === ']' && (key === ']' || key === '}')) return true;
-    // Handle Shift+number producing symbol (US keyboard layout)
-    // Shift+1='!', Shift+2='@', Shift+3='#', etc.
-    const shiftNumberMap: Record<string, string> = {
-      '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-      '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
-    };
-    if (shiftNumberMap[key] === mainKey) return true;
-
-    // For Alt+Meta shortcuts on macOS, e.key produces special characters (e.g., Alt+p = π, Alt+l = ¬)
-    // Use e.code to get the physical key pressed instead
-    if (altPressed && e.code) {
-      const codeKey = e.code.replace('Key', '').toLowerCase();
-      return codeKey === mainKey;
-    }
-
-    return key === mainKey;
-  };
-
-  // Check if a key event matches a tab shortcut (AI mode only)
-  // Checks both TAB_SHORTCUTS and editable shortcuts (for prevTab/nextTab)
-  const isTabShortcut = (e: KeyboardEvent, actionId: string) => {
-    const sc = TAB_SHORTCUTS[actionId] || shortcuts[actionId];
-    if (!sc) return false;
-    const keys = sc.keys.map(k => k.toLowerCase());
-
-    const metaPressed = e.metaKey || e.ctrlKey;
-    const shiftPressed = e.shiftKey;
-    const altPressed = e.altKey;
-    const key = e.key.toLowerCase();
-
-    const configMeta = keys.includes('meta') || keys.includes('ctrl') || keys.includes('command');
-    const configShift = keys.includes('shift');
-    const configAlt = keys.includes('alt');
-
-    if (metaPressed !== configMeta) return false;
-    if (shiftPressed !== configShift) return false;
-    if (altPressed !== configAlt) return false;
-
-    const mainKey = keys[keys.length - 1];
-    // Handle Shift+[ producing { and Shift+] producing }
-    if (mainKey === '[' && (key === '[' || key === '{')) return true;
-    if (mainKey === ']' && (key === ']' || key === '}')) return true;
-
-    // For Alt+Meta shortcuts on macOS, e.key produces special characters (e.g., Alt+t = †)
-    // Use e.code to get the physical key pressed instead
-    if (altPressed && e.code) {
-      const codeKey = e.code.replace('Key', '').toLowerCase();
-      return codeKey === mainKey;
-    }
-
-    return key === mainKey;
-  };
+  // isShortcut and isTabShortcut are now provided by useKeyboardShortcutHelpers hook
 
   // Ref to hold all keyboard handler dependencies - avoids re-attaching listener on every state change
   // This is a critical performance optimization: the keyboard handler was being removed and re-added
