@@ -203,3 +203,26 @@ export type {
   MobileSessionHandlers,
   UseMobileSessionManagementReturn,
 } from './useMobileSessionManagement';
+
+export {
+  useMobileViewState,
+  default as useMobileViewStateDefault,
+} from './useMobileViewState';
+
+export type {
+  ViewOverlayState,
+  HistoryPanelState,
+  SessionSelectionState,
+  UseMobileViewStateReturn,
+} from './useMobileViewState';
+
+export {
+  useMobileAutoReconnect,
+  default as useMobileAutoReconnectDefault,
+} from './useMobileAutoReconnect';
+
+export type {
+  ConnectionState,
+  UseMobileAutoReconnectDeps,
+  UseMobileAutoReconnectReturn,
+} from './useMobileAutoReconnect';

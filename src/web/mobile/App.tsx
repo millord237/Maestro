@@ -30,12 +30,11 @@ import { AutoRunIndicator } from './AutoRunIndicator';
 import { TabBar } from './TabBar';
 import { TabSearchModal } from './TabSearchModal';
 import type { Session, LastResponsePreview } from '../hooks/useSessions';
-import {
-  loadViewState,
-  debouncedSaveViewState,
-  loadScrollState,
-} from '../utils/viewState';
+// View state utilities are now accessed through useMobileViewState hook
+// Keeping import for TypeScript types only if needed
 import { useMobileKeyboardHandler } from '../hooks/useMobileKeyboardHandler';
+import { useMobileViewState } from '../hooks/useMobileViewState';
+import { useMobileAutoReconnect } from '../hooks/useMobileAutoReconnect';
 
 
 /**
@@ -284,9 +283,15 @@ export default function MobileApp() {
   const isOffline = useOfflineStatus();
   const { setDesktopTheme } = useDesktopTheme();
 
-  // Load saved view state on initial render
-  const savedState = useMemo(() => loadViewState(), []);
-  const savedScrollState = useMemo(() => loadScrollState(), []);
+  // View state persistence and screen tracking (hook consolidates multiple effects)
+  const {
+    isSmallScreen,
+    savedState,
+    savedScrollState,
+    persistViewState,
+    persistHistoryState,
+    persistSessionSelection,
+  } = useMobileViewState();
 
   // UI state (not part of session management)
   const [showAllSessions, setShowAllSessions] = useState(savedState.showAllSessions);
@@ -303,28 +308,10 @@ export default function MobileApp() {
   // AutoRun state per session (batch processing on desktop)
   const [autoRunStates, setAutoRunStates] = useState<Record<string, AutoRunState | null>>({});
 
-  // Countdown timer for auto-reconnect (in seconds)
-  const [reconnectCountdown, setReconnectCountdown] = useState(30);
-
   // History panel state (persisted)
   const [historyFilter, setHistoryFilter] = useState<'all' | 'AUTO' | 'USER'>(savedState.historyFilter);
   const [historySearchQuery, setHistorySearchQuery] = useState(savedState.historySearchQuery);
   const [historySearchOpen, setHistorySearchOpen] = useState(savedState.historySearchOpen);
-
-  // Detect if on a small screen (phone vs tablet/iPad)
-  // Use 768px as breakpoint - below this is considered "small"
-  const [isSmallScreen, setIsSmallScreen] = useState(
-    typeof window !== 'undefined' ? window.innerHeight < 700 : false
-  );
-
-  // Track screen size changes
-  useEffect(() => {
-    const handleResize = () => {
-      setIsSmallScreen(window.innerHeight < 700);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Notification permission hook - requests permission on first visit
   const {
@@ -357,23 +344,15 @@ export default function MobileApp() {
   // Reference to send function for offline queue (will be set after useWebSocket)
   const sendRef = useRef<((sessionId: string, command: string) => boolean) | null>(null);
 
-  // Save view state when overlays change
+  // Save view state when overlays change (using hook's persistence function)
   useEffect(() => {
-    debouncedSaveViewState({
-      showAllSessions,
-      showHistoryPanel,
-      showTabSearch,
-    });
-  }, [showAllSessions, showHistoryPanel, showTabSearch]);
+    persistViewState({ showAllSessions, showHistoryPanel, showTabSearch });
+  }, [showAllSessions, showHistoryPanel, showTabSearch, persistViewState]);
 
-  // Save history panel state when it changes
+  // Save history panel state when it changes (using hook's persistence function)
   useEffect(() => {
-    debouncedSaveViewState({
-      historyFilter,
-      historySearchQuery,
-      historySearchOpen,
-    });
-  }, [historyFilter, historySearchQuery, historySearchOpen]);
+    persistHistoryState({ historyFilter, historySearchQuery, historySearchOpen });
+  }, [historyFilter, historySearchQuery, historySearchOpen, persistHistoryState]);
 
 
   /**
@@ -488,13 +467,10 @@ export default function MobileApp() {
     },
   });
 
-  // Save session selection when it changes
+  // Save session selection when it changes (using hook's persistence function)
   useEffect(() => {
-    debouncedSaveViewState({
-      activeSessionId,
-      activeTabId,
-    });
-  }, [activeSessionId, activeTabId]);
+    persistSessionSelection({ activeSessionId, activeTabId });
+  }, [activeSessionId, activeTabId, persistSessionSelection]);
 
   const { state: connectionState, connect, send, error, reconnectAttempts } = useWebSocket({
     autoReconnect: false, // Only retry manually via the retry button
@@ -568,33 +544,12 @@ export default function MobileApp() {
     connect();
   }, [connect]);
 
-  // Auto-reconnect every 30 seconds when disconnected with countdown
-  useEffect(() => {
-    // Only auto-reconnect if disconnected and not offline
-    if (connectionState !== 'disconnected' || isOffline) {
-      // Reset countdown when not disconnected
-      setReconnectCountdown(30);
-      return;
-    }
-
-    // Reset countdown to 30 when entering disconnected state
-    setReconnectCountdown(30);
-
-    // Countdown timer - decrements every second
-    const countdownId = setInterval(() => {
-      setReconnectCountdown((prev) => {
-        if (prev <= 1) {
-          // Time to reconnect
-          webLogger.info('Auto-reconnecting...', 'MobileApp');
-          connect();
-          return 30; // Reset for next cycle
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(countdownId);
-  }, [connectionState, isOffline, connect]);
+  // Auto-reconnect with countdown timer (extracted to hook)
+  const { reconnectCountdown } = useMobileAutoReconnect({
+    connectionState,
+    isOffline,
+    connect,
+  });
 
   // Handle opening All Sessions view
   const handleOpenAllSessions = useCallback(() => {
