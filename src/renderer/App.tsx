@@ -50,6 +50,7 @@ import { useFileTreeManagement } from './hooks/useFileTreeManagement';
 import { useGroupManagement } from './hooks/useGroupManagement';
 import { useWebBroadcasting } from './hooks/useWebBroadcasting';
 import { useCliActivityMonitoring } from './hooks/useCliActivityMonitoring';
+import { useThemeStyles } from './hooks/useThemeStyles';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -1640,6 +1641,11 @@ export default function MaestroConsole() {
     setSessions,
   });
 
+  // Theme styles hook - manages CSS variables and scrollbar fade animations
+  useThemeStyles({
+    themeColors: theme.colors,
+  });
+
   // Combine built-in slash commands with custom AI commands AND Claude Code commands for autocomplete
   const allSlashCommands = useMemo(() => {
     const customCommandsAsSlash = customAICommands
@@ -2357,68 +2363,7 @@ export default function MaestroConsole() {
     }
   }, [groups]);
 
-  // Set CSS variables for theme colors (for scrollbar styling)
-  useEffect(() => {
-    document.documentElement.style.setProperty('--accent-color', theme.colors.accent);
-    document.documentElement.style.setProperty('--highlight-color', theme.colors.accent);
-  }, [theme.colors.accent]);
-
-  // Add scroll listeners to highlight scrollbars during active scrolling
-  useEffect(() => {
-    const scrollTimeouts = new Map<Element, NodeJS.Timeout>();
-    const fadeTimeouts = new Map<Element, NodeJS.Timeout>();
-
-    const handleScroll = (e: Event) => {
-      const target = e.target as Element;
-      if (!target.classList.contains('scrollbar-thin')) return;
-
-      // Cancel any pending fade completion
-      const existingFadeTimeout = fadeTimeouts.get(target);
-      if (existingFadeTimeout) {
-        clearTimeout(existingFadeTimeout);
-        fadeTimeouts.delete(target);
-      }
-
-      // Add scrolling class, remove fading if present
-      target.classList.remove('fading');
-      target.classList.add('scrolling');
-
-      // Clear existing timeout for this element
-      const existingTimeout = scrollTimeouts.get(target);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-      }
-
-      // Start fade-out after 1 second of no scrolling
-      const timeout = setTimeout(() => {
-        // Add fading class to trigger CSS transition
-        target.classList.add('fading');
-        target.classList.remove('scrolling');
-        scrollTimeouts.delete(target);
-
-        // Remove fading class after transition completes (500ms)
-        const fadeTimeout = setTimeout(() => {
-          target.classList.remove('fading');
-          fadeTimeouts.delete(target);
-        }, 500);
-        fadeTimeouts.set(target, fadeTimeout);
-      }, 1000);
-
-      scrollTimeouts.set(target, timeout);
-    };
-
-    // Add listener to capture scroll events
-    document.addEventListener('scroll', handleScroll, true);
-
-    return () => {
-      document.removeEventListener('scroll', handleScroll, true);
-      scrollTimeouts.forEach(timeout => clearTimeout(timeout));
-      scrollTimeouts.clear();
-      fadeTimeouts.forEach(timeout => clearTimeout(timeout));
-      fadeTimeouts.clear();
-    };
-  }, []);
-
+  // NOTE: Theme CSS variables and scrollbar fade animations are now handled by useThemeStyles hook
   // NOTE: Main keyboard handler is now provided by useMainKeyboardHandler hook
   // NOTE: Sync selectedSidebarIndex with activeSessionId is now handled by useKeyboardNavigation hook
 

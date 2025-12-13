@@ -27,6 +27,7 @@ export { useFileTreeManagement } from './useFileTreeManagement';
 export { useGroupManagement } from './useGroupManagement';
 export { useWebBroadcasting } from './useWebBroadcasting';
 export { useCliActivityMonitoring } from './useCliActivityMonitoring';
+export { useThemeStyles } from './useThemeStyles';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -94,3 +95,8 @@ export type {
   UseCliActivityMonitoringDeps,
   UseCliActivityMonitoringReturn,
 } from './useCliActivityMonitoring';
+export type {
+  UseThemeStylesDeps,
+  UseThemeStylesReturn,
+  ThemeColors,
+} from './useThemeStyles';
