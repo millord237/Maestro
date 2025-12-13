@@ -179,3 +179,14 @@ export type {
   UseLongPressMenuOptions,
   UseLongPressMenuReturn,
 } from './useLongPressMenu';
+
+export {
+  useMobileKeyboardHandler,
+  default as useMobileKeyboardHandlerDefault,
+} from './useMobileKeyboardHandler';
+
+export type {
+  MobileKeyboardSession,
+  MobileInputMode,
+  UseMobileKeyboardHandlerDeps,
+} from './useMobileKeyboardHandler';
