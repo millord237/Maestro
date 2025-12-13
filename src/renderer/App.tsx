@@ -36,7 +36,8 @@ import { EmptyStateView } from './components/EmptyStateView';
 
 // Import custom hooks
 import { useBatchProcessor } from './hooks/useBatchProcessor';
-import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory } from './hooks';
+import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers } from './hooks';
+import type { AutoRunTreeNode } from './hooks';
 import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from './hooks/useTabCompletion';
 import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
 
@@ -367,7 +368,7 @@ export default function MaestroConsole() {
 
   // Auto Run document management state
   const [autoRunDocumentList, setAutoRunDocumentList] = useState<string[]>([]);
-  const [autoRunDocumentTree, setAutoRunDocumentTree] = useState<Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }>>([]);
+  const [autoRunDocumentTree, setAutoRunDocumentTree] = useState<AutoRunTreeNode[]>([]);
   const [autoRunContent, setAutoRunContent] = useState<string>('');
   const [autoRunContentVersion, setAutoRunContentVersion] = useState(0);  // Incremented on external file changes
   const [autoRunIsLoadingDocuments, setAutoRunIsLoadingDocuments] = useState(false);
@@ -2888,68 +2889,42 @@ export default function MaestroConsole() {
     }
   }, [activeSession]);
 
-  // Handler for auto run folder selection from setup modal
-  const handleAutoRunFolderSelected = useCallback(async (folderPath: string) => {
+  // Auto Run handlers (extracted to useAutoRunHandlers hook)
+  const {
+    handleAutoRunFolderSelected,
+    handleStartBatchRun,
+    getDocumentTaskCount,
+    handleAutoRunContentChange,
+    handleAutoRunModeChange,
+    handleAutoRunStateChange,
+    handleAutoRunSelectDocument,
+    handleAutoRunRefresh,
+    handleAutoRunOpenSetup,
+    handleAutoRunCreateDocument,
+  } = useAutoRunHandlers(activeSession, {
+    setSessions,
+    setAutoRunDocumentList,
+    setAutoRunDocumentTree,
+    setAutoRunContent,
+    setAutoRunIsLoadingDocuments,
+    setAutoRunSetupModalOpen,
+    setBatchRunnerModalOpen,
+    setActiveRightTab,
+    setRightPanelOpen,
+    setActiveFocus,
+    setSuccessFlashNotification,
+    autoRunContent,
+    autoRunDocumentList,
+    startBatchRun,
+  });
+
+  // File tree auto-refresh interval change handler (kept in App.tsx as it's not Auto Run specific)
+  const handleAutoRefreshChange = useCallback((interval: number) => {
     if (!activeSession) return;
-
-    // Load the document list from the folder
-    const result = await window.maestro.autorun.listDocs(folderPath);
-    if (result.success) {
-      setAutoRunDocumentList(result.files || []);
-      setAutoRunDocumentTree((result.tree as Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }>) || []);
-      // Auto-select first document if available
-      const firstFile = result.files?.[0];
-      setSessions(prev => prev.map(s =>
-        s.id === activeSession.id
-          ? {
-              ...s,
-              autoRunFolderPath: folderPath,
-              autoRunSelectedFile: firstFile,
-            }
-          : s
-      ));
-      // Load content of first document
-      if (firstFile) {
-        const contentResult = await window.maestro.autorun.readDoc(folderPath, firstFile + '.md');
-        if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-        }
-      }
-    } else {
-      setSessions(prev => prev.map(s =>
-        s.id === activeSession.id
-          ? { ...s, autoRunFolderPath: folderPath }
-          : s
-      ));
-    }
-    setAutoRunSetupModalOpen(false);
-    // Switch to the autorun tab now that folder is configured
-    setActiveRightTab('autorun');
-    setRightPanelOpen(true);
-    setActiveFocus('right');
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id ? { ...s, fileTreeAutoRefreshInterval: interval } : s
+    ));
   }, [activeSession]);
-
-  // Handler to start batch run from modal with multi-document support
-  const handleStartBatchRun = useCallback((config: BatchRunConfig) => {
-    console.log('[App] handleStartBatchRun called with config:', config);
-    if (!activeSession || !activeSession.autoRunFolderPath) {
-      console.log('[App] handleStartBatchRun early return - no active session or autoRunFolderPath');
-      return;
-    }
-    console.log('[App] Starting batch run for session:', activeSession.id, 'folder:', activeSession.autoRunFolderPath);
-    setBatchRunnerModalOpen(false);
-    startBatchRun(activeSession.id, config, activeSession.autoRunFolderPath);
-  }, [activeSession, startBatchRun]);
-
-  // Memoized function to get task count for a document (used by BatchRunnerModal)
-  const getDocumentTaskCount = useCallback(async (filename: string) => {
-    if (!activeSession?.autoRunFolderPath) return 0;
-    const result = await window.maestro.autorun.readDoc(activeSession.autoRunFolderPath, filename + '.md');
-    if (!result.success || !result.content) return 0;
-    // Count unchecked tasks: - [ ] pattern
-    const matches = result.content.match(/^[\s]*-\s*\[\s*\]\s*.+$/gm);
-    return matches ? matches.length : 0;
-  }, [activeSession?.autoRunFolderPath]);
 
   // Handler to stop batch run (with confirmation)
   // Stops the first active batch run, or falls back to active session
@@ -4707,161 +4682,6 @@ export default function MaestroConsole() {
       setEmojiPickerOpen(false);
     }
   };
-
-  // Auto Run document content change handler
-  const handleAutoRunContentChange = useCallback(async (content: string) => {
-    setAutoRunContent(content);
-    // Auto-save to file
-    if (activeSession?.autoRunFolderPath && activeSession?.autoRunSelectedFile) {
-      await window.maestro.autorun.writeDoc(
-        activeSession.autoRunFolderPath,
-        activeSession.autoRunSelectedFile + '.md',
-        content
-      );
-    }
-  }, [activeSession?.autoRunFolderPath, activeSession?.autoRunSelectedFile]);
-
-  // Auto Run mode change handler
-  const handleAutoRunModeChange = useCallback((mode: 'edit' | 'preview') => {
-    if (!activeSession) return;
-    setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? { ...s, autoRunMode: mode } : s
-    ));
-  }, [activeSession]);
-
-  // File tree auto-refresh interval change handler
-  const handleAutoRefreshChange = useCallback((interval: number) => {
-    if (!activeSession) return;
-    setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? { ...s, fileTreeAutoRefreshInterval: interval } : s
-    ));
-  }, [activeSession]);
-
-  // Auto Run state change handler (scroll/cursor positions)
-  const handleAutoRunStateChange = useCallback((state: {
-    mode: 'edit' | 'preview';
-    cursorPosition: number;
-    editScrollPos: number;
-    previewScrollPos: number;
-  }) => {
-    if (!activeSession) return;
-    setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? {
-        ...s,
-        autoRunMode: state.mode,
-        autoRunCursorPosition: state.cursorPosition,
-        autoRunEditScrollPos: state.editScrollPos,
-        autoRunPreviewScrollPos: state.previewScrollPos,
-      } : s
-    ));
-  }, [activeSession]);
-
-  // Auto Run document selection handler
-  const handleAutoRunSelectDocument = useCallback(async (filename: string) => {
-    if (!activeSession?.autoRunFolderPath) return;
-
-    // Save current document first if there's content
-    if (activeSession.autoRunSelectedFile && autoRunContent) {
-      await window.maestro.autorun.writeDoc(
-        activeSession.autoRunFolderPath,
-        activeSession.autoRunSelectedFile + '.md',
-        autoRunContent
-      );
-    }
-
-    // Load new document content FIRST (before updating selectedFile)
-    // This ensures content prop updates atomically with the file selection
-    const result = await window.maestro.autorun.readDoc(
-      activeSession.autoRunFolderPath,
-      filename + '.md'
-    );
-    const newContent = result.success ? (result.content || '') : '';
-
-    // Update content first, then selected file
-    // This prevents the AutoRun component from seeing mismatched file/content
-    setAutoRunContent(newContent);
-
-    // Then update the selected file
-    setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? { ...s, autoRunSelectedFile: filename } : s
-    ));
-  }, [activeSession, autoRunContent]);
-
-  // Auto Run refresh handler - reload document list and show flash notification
-  const handleAutoRunRefresh = useCallback(async () => {
-    if (!activeSession?.autoRunFolderPath) return;
-    const previousCount = autoRunDocumentList.length;
-    setAutoRunIsLoadingDocuments(true);
-    const result = await window.maestro.autorun.listDocs(activeSession.autoRunFolderPath);
-    if (result.success) {
-      const newFiles = result.files || [];
-      setAutoRunDocumentList(newFiles);
-      setAutoRunDocumentTree((result.tree as Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }>) || []);
-      setAutoRunIsLoadingDocuments(false);
-
-      // Show flash notification with result
-      const diff = newFiles.length - previousCount;
-      let message: string;
-      if (diff > 0) {
-        message = `Found ${diff} new document${diff === 1 ? '' : 's'}`;
-      } else if (diff < 0) {
-        message = `${Math.abs(diff)} document${Math.abs(diff) === 1 ? '' : 's'} removed`;
-      } else {
-        message = 'Refresh complete, no new documents';
-      }
-      setSuccessFlashNotification(message);
-      setTimeout(() => setSuccessFlashNotification(null), 2000);
-      return;
-    }
-    setAutoRunIsLoadingDocuments(false);
-  }, [activeSession?.autoRunFolderPath, autoRunDocumentList.length]);
-
-  // Auto Run open setup handler
-  const handleAutoRunOpenSetup = useCallback(() => {
-    setAutoRunSetupModalOpen(true);
-  }, []);
-
-  // Auto Run create new document handler
-  const handleAutoRunCreateDocument = useCallback(async (filename: string): Promise<boolean> => {
-    if (!activeSession?.autoRunFolderPath) return false;
-
-    try {
-      // Create the document with empty content so placeholder hint shows
-      const result = await window.maestro.autorun.writeDoc(
-        activeSession.autoRunFolderPath,
-        filename + '.md',
-        ''
-      );
-
-      if (result.success) {
-        // Refresh the document list
-        const listResult = await window.maestro.autorun.listDocs(activeSession.autoRunFolderPath);
-        if (listResult.success) {
-          setAutoRunDocumentList(listResult.files || []);
-        }
-
-        // Select the new document and switch to edit mode
-        setSessions(prev => prev.map(s =>
-          s.id === activeSession.id ? { ...s, autoRunSelectedFile: filename, autoRunMode: 'edit' } : s
-        ));
-
-        // Load the new document content
-        const contentResult = await window.maestro.autorun.readDoc(
-          activeSession.autoRunFolderPath,
-          filename + '.md'
-        );
-        if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-        }
-
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Failed to create document:', error);
-      return false;
-    }
-  }, [activeSession]);
 
   const processInput = async (overrideInputValue?: string) => {
     const effectiveInputValue = overrideInputValue ?? inputValue;
