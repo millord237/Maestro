@@ -3,12 +3,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronUp, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2 } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2 } from 'lucide-react';
 import type { BatchRunState, SessionState, Theme } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { AutoRunDocumentSelector } from './AutoRunDocumentSelector';
 import { AutoRunLightbox } from './AutoRunLightbox';
+import { AutoRunSearchBar } from './AutoRunSearchBar';
 import { useTemplateAutocomplete } from '../hooks/useTemplateAutocomplete';
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 
@@ -665,7 +666,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   const matchElementsRef = useRef<HTMLElement[]>([]);
   // Refresh animation state for empty state button
   const [isRefreshingEmpty, setIsRefreshingEmpty] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -884,7 +884,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Open search function
   const openSearch = useCallback(() => {
     setSearchOpen(true);
-    setTimeout(() => searchInputRef.current?.focus(), 0);
   }, []);
 
   // Close search function
@@ -1696,68 +1695,16 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 
       {/* Search Bar */}
       {searchOpen && (
-        <div
-          className="mx-2 mb-2 flex items-center gap-2 px-3 py-2 rounded"
-          style={{ backgroundColor: theme.colors.bgActivity, border: `1px solid ${theme.colors.accent}` }}
-        >
-          <Search className="w-4 h-4 shrink-0" style={{ color: theme.colors.accent }} />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                closeSearch();
-              } else if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                goToNextMatch();
-              } else if (e.key === 'Enter' && e.shiftKey) {
-                e.preventDefault();
-                goToPrevMatch();
-              }
-            }}
-            placeholder="Search... (⌘F to open, Enter: next, Shift+Enter: prev)"
-            className="flex-1 bg-transparent outline-none text-sm"
-            style={{ color: theme.colors.textMain }}
-            autoFocus
-          />
-          {searchQuery.trim() && (
-            <>
-              <span className="text-xs whitespace-nowrap" style={{ color: theme.colors.textDim }}>
-                {totalMatches > 0 ? `${currentMatchIndex + 1}/${totalMatches}` : 'No matches'}
-              </span>
-              <button
-                onClick={goToPrevMatch}
-                disabled={totalMatches === 0}
-                className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-                style={{ color: theme.colors.textDim }}
-                title="Previous match (Shift+Enter)"
-              >
-                <ChevronUp className="w-4 h-4" />
-              </button>
-              <button
-                onClick={goToNextMatch}
-                disabled={totalMatches === 0}
-                className="p-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30"
-                style={{ color: theme.colors.textDim }}
-                title="Next match (Enter)"
-              >
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          <button
-            onClick={closeSearch}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
-            style={{ color: theme.colors.textDim }}
-            title="Close search (Esc)"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <AutoRunSearchBar
+          theme={theme}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          currentMatchIndex={currentMatchIndex}
+          totalMatches={totalMatches}
+          onNextMatch={goToNextMatch}
+          onPrevMatch={goToPrevMatch}
+          onClose={closeSearch}
+        />
       )}
 
       {/* Content Area */}
