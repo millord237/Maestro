@@ -131,3 +131,22 @@ export type {
   ColorSchemePreference,
   UseDeviceColorSchemeReturn,
 } from './useDeviceColorScheme';
+
+export {
+  useVoiceInput,
+  default as useVoiceInputDefault,
+  isSpeechRecognitionSupported,
+  getSpeechRecognition,
+} from './useVoiceInput';
+
+export type {
+  SpeechRecognitionEvent,
+  SpeechRecognitionResultList,
+  SpeechRecognitionResult,
+  SpeechRecognitionAlternative,
+  SpeechRecognitionErrorEvent,
+  SpeechRecognition,
+  SpeechRecognitionConstructor,
+  UseVoiceInputOptions,
+  UseVoiceInputReturn,
+} from './useVoiceInput';

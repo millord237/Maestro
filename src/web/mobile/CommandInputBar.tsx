@@ -26,91 +26,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { useSwipeUp } from '../hooks/useSwipeUp';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import { RecentCommandChips } from './RecentCommandChips';
 import { SlashCommandAutocomplete, type SlashCommand, DEFAULT_SLASH_COMMANDS } from './SlashCommandAutocomplete';
 import { QuickActionsMenu, type QuickAction } from './QuickActionsMenu';
 import type { CommandHistoryEntry } from '../hooks/useCommandHistory';
-import { webLogger } from '../utils/logger';
-
-/**
- * Web Speech API type declarations
- * These are needed because TypeScript doesn't include these by default
- */
-interface SpeechRecognitionEvent extends Event {
-  readonly resultIndex: number;
-  readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-  readonly message: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  onaudioend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onaudiostart: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
-  onnomatch: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
-  onsoundend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
-  abort(): void;
-  start(): void;
-  stop(): void;
-}
-
-interface SpeechRecognitionConstructor {
-  new(): SpeechRecognition;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
-/**
- * Check if speech recognition is supported in the current browser
- */
-function isSpeechRecognitionSupported(): boolean {
-  return typeof window !== 'undefined' &&
-    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
-}
-
-/**
- * Get the SpeechRecognition constructor (with vendor prefix fallback)
- */
-function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  if (typeof window === 'undefined') return null;
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
-}
 
 /** Minimum touch target size per Apple HIG guidelines (44pt) */
 const MIN_TOUCH_TARGET = 44;
@@ -299,10 +219,20 @@ export function CommandInputBar({
   const [slashCommandOpen, setSlashCommandOpen] = useState(false);
   const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
 
-  // Voice input state
-  const [isListening, setIsListening] = useState(false);
-  const [voiceSupported] = useState(() => isSpeechRecognitionSupported());
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // Voice input hook - handles speech recognition
+  const handleVoiceTranscription = useCallback((newText: string) => {
+    if (controlledValue === undefined) {
+      setInternalValue(newText);
+    }
+    onChange?.(newText);
+  }, [controlledValue, onChange]);
+
+  const { isListening, voiceSupported, toggleVoiceInput: handleVoiceToggle } = useVoiceInput({
+    currentValue: value,
+    disabled: isDisabled,
+    onTranscriptionChange: handleVoiceTranscription,
+    focusRef: textareaRef as React.RefObject<HTMLTextAreaElement>,
+  });
 
   // Quick actions menu state
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
@@ -549,111 +479,6 @@ export function CommandInputBar({
   }, [onInterrupt]);
 
   /**
-   * Initialize speech recognition when voice input starts
-   */
-  const startVoiceInput = useCallback(() => {
-    if (!voiceSupported || isDisabled) return;
-
-    const SpeechRecognitionClass = getSpeechRecognition();
-    if (!SpeechRecognitionClass) return;
-
-    // Create new recognition instance
-    const recognition = new SpeechRecognitionClass();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || 'en-US';
-    recognition.maxAlternatives = 1;
-
-    // Store reference for cleanup
-    recognitionRef.current = recognition;
-
-    // Track interim results to update input in real-time
-    let finalTranscript = '';
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      triggerHapticFeedback('medium');
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-        } else {
-          interimTranscript += result[0].transcript;
-        }
-      }
-
-      // Update input with current transcription (append to existing value)
-      const currentText = value.trim();
-      const separator = currentText ? ' ' : '';
-      const newText = currentText + separator + (finalTranscript || interimTranscript);
-
-      if (controlledValue === undefined) {
-        setInternalValue(newText);
-      }
-      onChange?.(newText);
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      webLogger.warn('Speech recognition error', 'VoiceInput', event.error);
-      setIsListening(false);
-      recognitionRef.current = null;
-
-      // Haptic feedback on error
-      if (event.error !== 'aborted' && event.error !== 'no-speech') {
-        triggerHapticFeedback('strong');
-      }
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-      triggerHapticFeedback('light');
-
-      // Focus textarea after voice input ends
-      textareaRef.current?.focus();
-    };
-
-    try {
-      recognition.start();
-    } catch (err) {
-      webLogger.warn('Failed to start speech recognition', 'VoiceInput', err);
-      setIsListening(false);
-      recognitionRef.current = null;
-    }
-  }, [voiceSupported, isDisabled, value, controlledValue, onChange]);
-
-  /**
-   * Stop voice input
-   */
-  const stopVoiceInput = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // Ignore errors when stopping
-      }
-      recognitionRef.current = null;
-    }
-    setIsListening(false);
-  }, []);
-
-  /**
-   * Toggle voice input on/off
-   */
-  const handleVoiceToggle = useCallback(() => {
-    if (isListening) {
-      stopVoiceInput();
-    } else {
-      startVoiceInput();
-    }
-  }, [isListening, startVoiceInput, stopVoiceInput]);
-
-  /**
    * Clear long-press timer (used when touch ends or moves)
    */
   const clearLongPressTimer = useCallback(() => {
@@ -742,18 +567,10 @@ export function CommandInputBar({
   }, []);
 
   /**
-   * Cleanup recognition and timers on unmount
+   * Cleanup timers on unmount
    */
   useEffect(() => {
     return () => {
-      // Clean up speech recognition
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // Ignore errors during cleanup
-        }
-      }
       // Clean up long-press timer
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
