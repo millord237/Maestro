@@ -2370,8 +2370,8 @@ export default function MaestroConsole() {
     return counts;
   }, [countTasksInContent]);
 
-  // Load Auto Run document list when session changes or autorun folder changes
-  // Note: Content is stored per-session, so we only load it if session doesn't already have it
+  // Load Auto Run document list and content when session changes
+  // Always reload content from disk when switching sessions to ensure fresh data
   useEffect(() => {
     const loadAutoRunData = async () => {
       if (!activeSession?.autoRunFolderPath) {
@@ -2395,9 +2395,9 @@ export default function MaestroConsole() {
       }
       setAutoRunIsLoadingDocuments(false);
 
-      // Load content of selected document if session doesn't already have content loaded
-      // (content is already per-session, so we only need to load if it's undefined/empty and a file is selected)
-      if (activeSession.autoRunSelectedFile && activeSession.autoRunContent === undefined) {
+      // Always load content from disk when switching sessions
+      // This ensures we have fresh data and prevents stale content from showing
+      if (activeSession.autoRunSelectedFile) {
         const contentResult = await window.maestro.autorun.readDoc(
           activeSession.autoRunFolderPath,
           activeSession.autoRunSelectedFile + '.md'
