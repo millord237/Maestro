@@ -435,6 +435,12 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   const prevSwitchFolderRef = useRef(folderPath);
   const prevSwitchFileRef = useRef(selectedFile);
 
+  // Track the folder/file that the current localContent belongs to
+  // CRITICAL: These refs track where localContent should be saved, independent of current props.
+  // This prevents saving old session's content to new session's folder when switching sessions.
+  const localContentFolderRef = useRef(folderPath);
+  const localContentFileRef = useRef(selectedFile);
+
   // Sync local content from prop when session changes (switching sessions)
   // or when document changes within the same session
   // or when content changes externally (e.g., batch run modifying tasks)
@@ -479,6 +485,10 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       prevSwitchFolderRef.current = folderPath;
       prevSwitchFileRef.current = selectedFile;
       lastSavedContentRef.current = content;
+      // Update localContent tracking refs to match the new document
+      // This ensures future saves go to the correct file
+      localContentFolderRef.current = folderPath;
+      localContentFileRef.current = selectedFile;
     } else if (versionChanged) {
       // External file change detected (disk watcher) - force sync regardless of editing state
       // This is authoritative - the file on disk is the source of truth
@@ -488,10 +498,16 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       prevContentVersionRef.current = contentVersion;
       // Also update lastSavedContentRef to prevent auto-save from overwriting
       lastSavedContentRef.current = content;
+      // Keep localContent tracking refs in sync
+      localContentFolderRef.current = folderPath;
+      localContentFileRef.current = selectedFile;
     } else if (contentChanged && !isEditingRef.current) {
       // Content changed externally (batch run, etc.) - sync if not editing
       setLocalContent(content);
       prevContentForSyncRef.current = content;
+      // Keep localContent tracking refs in sync
+      localContentFolderRef.current = folderPath;
+      localContentFileRef.current = selectedFile;
     }
   }, [sessionId, content, contentVersion, folderPath, selectedFile, localContent]);
 
@@ -502,20 +518,28 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       handleContentChange(localContent);
     }
     // Save to disk immediately on blur (don't wait for 5-second auto-save)
-    // Use current folderPath/selectedFile props which are the correct session's paths
-    if (folderPath && selectedFile && localContent !== lastSavedContentRef.current && localContent) {
-      window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent)
+    // CRITICAL: Use the tracked folder/file refs, NOT the current props!
+    // When switching sessions by clicking, the blur event fires after props update
+    // but before state updates, causing content to be saved to the wrong session.
+    // The refs track where localContent belongs, ensuring correct file targeting.
+    const targetFolder = localContentFolderRef.current;
+    const targetFile = localContentFileRef.current;
+    if (targetFolder && targetFile && localContent !== lastSavedContentRef.current && localContent) {
+      window.maestro.autorun.writeDoc(targetFolder, targetFile + '.md', localContent)
         .then(() => {
           lastSavedContentRef.current = localContent;
         })
         .catch(err => console.error('Failed to save on blur:', err));
     }
-  }, [localContent, content, handleContentChange, folderPath, selectedFile]);
+  }, [localContent, content, handleContentChange]);
 
   // Auto-save to disk with 5-second debounce
   useEffect(() => {
-    // Only save if we have a folder and selected file
-    if (!folderPath || !selectedFile) return;
+    // Only save if we have a folder and selected file tracked
+    // Use refs to ensure we save to the correct file for the current localContent
+    const targetFolder = localContentFolderRef.current;
+    const targetFile = localContentFileRef.current;
+    if (!targetFolder || !targetFile) return;
 
     // Never auto-save empty content - this prevents wiping files during load
     if (!localContent) return;
@@ -529,11 +553,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     }
 
     // Schedule save after 5 seconds of inactivity
+    // Capture the target folder/file from refs at schedule time to ensure correct targeting
+    const saveFolder = targetFolder;
+    const saveFile = targetFile;
     autoSaveTimeoutRef.current = setTimeout(async () => {
       // Double-check content hasn't been externally synced
       if (localContent !== lastSavedContentRef.current) {
         try {
-          await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent);
+          await window.maestro.autorun.writeDoc(saveFolder, saveFile + '.md', localContent);
           lastSavedContentRef.current = localContent;
           // Also sync to parent state so UI stays consistent
           handleContentChange(localContent);
@@ -549,7 +576,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [localContent, folderPath, selectedFile, handleContentChange]);
+  // Note: folderPath/selectedFile removed from deps since we use refs now
+  // This prevents unnecessary re-scheduling when props change but localContent is still valid
+  }, [localContent, handleContentChange]);
 
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
