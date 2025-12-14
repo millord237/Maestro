@@ -662,6 +662,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('leaderboard:get', options),
     getLongestRuns: (options?: { limit?: number }) =>
       ipcRenderer.invoke('leaderboard:getLongestRuns', options),
+    optOut: (email: string) =>
+      ipcRenderer.invoke('leaderboard:optOut', email),
   },
 });
 
@@ -1201,6 +1203,11 @@ export interface MaestroAPI {
         longestRunMs: number;
         runDate: string;
       }>;
+      error?: string;
+    }>;
+    optOut: (email: string) => Promise<{
+      success: boolean;
+      message?: string;
       error?: string;
     }>;
   };

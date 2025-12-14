@@ -3077,6 +3077,60 @@ function setupIpcHandlers() {
       }
     }
   );
+
+  // Opt out from leaderboard (request removal)
+  ipcMain.handle(
+    'leaderboard:optOut',
+    async (
+      _event,
+      email: string
+    ): Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }> => {
+      try {
+        logger.info('Requesting leaderboard opt-out', 'Leaderboard', {
+          email: email.substring(0, 3) + '***',
+        });
+
+        const response = await fetch('https://runmaestro.ai/api/leaderboard/opt-out', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': `Maestro/${app.getVersion()}`,
+          },
+          body: JSON.stringify({ email }),
+        });
+
+        if (response.ok) {
+          const result = await response.json() as { message?: string };
+          return {
+            success: true,
+            message: result.message || 'Successfully opted out from leaderboard',
+          };
+        } else {
+          // Even if API fails, we still want to clear local registration
+          // So we return success but with a note
+          logger.warn('Leaderboard opt-out API returned error', 'Leaderboard', {
+            status: response.status,
+          });
+          return {
+            success: true, // Still consider it "success" locally
+            message: 'Local registration cleared. Server removal may be pending.',
+          };
+        }
+      } catch (error) {
+        logger.error('Error opting out from leaderboard', 'Leaderboard', error);
+        // Still return success to clear local registration
+        return {
+          success: true,
+          message: 'Local registration cleared. Could not reach server.',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    }
+  );
 }
 
 // Handle process output streaming (set up after initialization)

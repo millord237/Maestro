@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Trophy, Mail, User, Loader2, Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { X, Trophy, Mail, User, Loader2, Check, AlertCircle, ExternalLink, UserX } from 'lucide-react';
 import type { Theme, AutoRunStats, LeaderboardRegistration } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -38,9 +38,10 @@ interface LeaderboardRegistrationModalProps {
   existingRegistration: LeaderboardRegistration | null;
   onClose: () => void;
   onSave: (registration: LeaderboardRegistration) => void;
+  onOptOut: () => void;
 }
 
-type SubmitState = 'idle' | 'submitting' | 'success' | 'awaiting_confirmation' | 'error';
+type SubmitState = 'idle' | 'submitting' | 'success' | 'awaiting_confirmation' | 'error' | 'opting_out' | 'opted_out';
 
 export function LeaderboardRegistrationModal({
   theme,
@@ -48,6 +49,7 @@ export function LeaderboardRegistrationModal({
   existingRegistration,
   onClose,
   onSave,
+  onOptOut,
 }: LeaderboardRegistrationModalProps) {
   const { registerLayer, unregisterLayer } = useLayerStack();
   const layerIdRef = useRef<string>();
@@ -66,6 +68,7 @@ export function LeaderboardRegistrationModal({
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showOptOutConfirm, setShowOptOutConfirm] = useState(false);
 
   // Get current badge info
   const currentBadge = getBadgeForTime(autoRunStats.cumulativeTimeMs);
@@ -140,6 +143,29 @@ export function LeaderboardRegistrationModal({
       setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
   }, [isFormValid, email, displayName, githubUsername, twitterHandle, linkedinHandle, badgeLevel, badgeName, autoRunStats, onSave]);
+
+  // Handle opt-out
+  const handleOptOut = useCallback(async () => {
+    setSubmitState('opting_out');
+    setErrorMessage('');
+
+    try {
+      // Call API to request removal (uses registered email)
+      if (existingRegistration?.email) {
+        await window.maestro.leaderboard.optOut(existingRegistration.email);
+      }
+
+      // Clear local registration regardless of API result
+      onOptOut();
+      setSubmitState('opted_out');
+      setSuccessMessage('You have been removed from the leaderboard. Your local stats are preserved.');
+    } catch (error) {
+      // Still clear local registration even if API call fails
+      onOptOut();
+      setSubmitState('opted_out');
+      setSuccessMessage('Local registration cleared. If you were on the leaderboard, email support@runmaestro.ai to request removal.');
+    }
+  }, [existingRegistration?.email, onOptOut]);
 
   // Register layer on mount
   useEffect(() => {
@@ -366,7 +392,7 @@ export function LeaderboardRegistrationModal({
             </div>
           )}
 
-          {(submitState === 'success' || submitState === 'awaiting_confirmation') && (
+          {(submitState === 'success' || submitState === 'awaiting_confirmation' || submitState === 'opted_out') && (
             <div
               className="flex items-start gap-2 p-3 rounded-lg"
               style={{ backgroundColor: `${theme.colors.success}15`, border: `1px solid ${theme.colors.success}30` }}
@@ -375,41 +401,95 @@ export function LeaderboardRegistrationModal({
               <p className="text-xs" style={{ color: theme.colors.success }}>{successMessage}</p>
             </div>
           )}
+
+          {/* Opt-out confirmation */}
+          {showOptOutConfirm && submitState === 'idle' && (
+            <div
+              className="p-3 rounded-lg"
+              style={{ backgroundColor: `${theme.colors.error}10`, border: `1px solid ${theme.colors.error}30` }}
+            >
+              <p className="text-xs mb-3" style={{ color: theme.colors.textMain }}>
+                Are you sure you want to remove yourself from the leaderboard? This will request removal of your entry from runmaestro.ai.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setShowOptOutConfirm(false)}
+                  className="px-3 py-1.5 text-xs rounded hover:bg-white/10 transition-colors"
+                  style={{ color: theme.colors.textDim }}
+                >
+                  Keep Registration
+                </button>
+                <button
+                  onClick={handleOptOut}
+                  className="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5"
+                  style={{
+                    backgroundColor: theme.colors.error,
+                    color: '#fff',
+                  }}
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  Yes, Remove Me
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t flex justify-end gap-2" style={{ borderColor: theme.colors.border }}>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded hover:bg-white/10 transition-colors"
-            style={{ color: theme.colors.textDim }}
-            disabled={submitState === 'submitting'}
-          >
-            {submitState === 'success' || submitState === 'awaiting_confirmation' ? 'Close' : 'Cancel'}
-          </button>
-          {submitState !== 'success' && submitState !== 'awaiting_confirmation' && (
+        <div className="p-4 border-t flex justify-between" style={{ borderColor: theme.colors.border }}>
+          {/* Left side - Opt Out (only for existing registrations) */}
+          <div>
+            {existingRegistration && !showOptOutConfirm && submitState === 'idle' && (
+              <button
+                onClick={() => setShowOptOutConfirm(true)}
+                className="px-3 py-2 text-xs rounded hover:bg-white/10 transition-colors flex items-center gap-1.5"
+                style={{ color: theme.colors.error }}
+              >
+                <UserX className="w-3.5 h-3.5" />
+                Opt Out
+              </button>
+            )}
+          </div>
+
+          {/* Right side - Cancel/Close and Submit */}
+          <div className="flex gap-2">
             <button
-              onClick={handleSubmit}
-              disabled={!isFormValid || submitState === 'submitting'}
-              className="px-4 py-2 text-sm font-medium rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: theme.colors.accent,
-                color: '#fff',
-              }}
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded hover:bg-white/10 transition-colors"
+              style={{ color: theme.colors.textDim }}
+              disabled={submitState === 'submitting' || submitState === 'opting_out'}
             >
-              {submitState === 'submitting' ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Trophy className="w-4 h-4" />
-                  {existingRegistration ? 'Update & Submit' : 'Register'}
-                </>
-              )}
+              {submitState === 'success' || submitState === 'awaiting_confirmation' || submitState === 'opted_out' ? 'Close' : 'Cancel'}
             </button>
-          )}
+            {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'opted_out' && (
+              <button
+                onClick={handleSubmit}
+                disabled={!isFormValid || submitState === 'submitting' || submitState === 'opting_out' || showOptOutConfirm}
+                className="px-4 py-2 text-sm font-medium rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  backgroundColor: theme.colors.accent,
+                  color: '#fff',
+                }}
+              >
+                {submitState === 'submitting' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : submitState === 'opting_out' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="w-4 h-4" />
+                    {existingRegistration ? 'Update & Submit' : 'Register'}
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

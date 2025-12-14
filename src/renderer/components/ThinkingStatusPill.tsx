@@ -437,30 +437,32 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
               </span>
             </div>
 
-            {/* Expanded dropdown */}
+            {/* Expanded dropdown - uses padding to create hover bridge between trigger and dropdown */}
             {isExpanded && (
-              <div
-                className="absolute right-0 top-full mt-1 min-w-[320px] rounded-lg shadow-xl overflow-hidden z-50"
-                style={{
-                  backgroundColor: theme.colors.bgSidebar,
-                  border: `1px solid ${theme.colors.border}`
-                }}
-              >
+              <div className="absolute right-0 top-full pt-1 z-50">
                 <div
-                  className="px-3 py-1.5 text-[10px] uppercase tracking-wide font-semibold"
-                  style={{ color: theme.colors.textDim, backgroundColor: theme.colors.bgActivity }}
+                  className="min-w-[320px] rounded-lg shadow-xl overflow-hidden"
+                  style={{
+                    backgroundColor: theme.colors.bgSidebar,
+                    border: `1px solid ${theme.colors.border}`
+                  }}
                 >
-                  All Thinking Sessions
+                  <div
+                    className="px-3 py-1.5 text-[10px] uppercase tracking-wide font-semibold"
+                    style={{ color: theme.colors.textDim, backgroundColor: theme.colors.bgActivity }}
+                  >
+                    All Thinking Sessions
+                  </div>
+                  {thinkingSessions.map(session => (
+                    <SessionRow
+                      key={session.id}
+                      session={session}
+                      theme={theme}
+                      namedSessions={namedSessions}
+                      onSessionClick={onSessionClick}
+                    />
+                  ))}
                 </div>
-                {thinkingSessions.map(session => (
-                  <SessionRow
-                    key={session.id}
-                    session={session}
-                    theme={theme}
-                    namedSessions={namedSessions}
-                    onSessionClick={onSessionClick}
-                  />
-                ))}
               </div>
             )}
           </div>

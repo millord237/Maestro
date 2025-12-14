@@ -402,10 +402,48 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     }
   }, [file?.content, file?.path]);
 
-  // Focus textarea when entering edit mode
+  // Focus appropriate element and sync scroll position when mode changes
+  const prevMarkdownEditModeRef = useRef(markdownEditMode);
   useEffect(() => {
+    const wasEditMode = prevMarkdownEditModeRef.current;
+    prevMarkdownEditModeRef.current = markdownEditMode;
+
     if (markdownEditMode && textareaRef.current) {
+      // Entering edit mode - focus textarea and sync scroll from preview
+      if (!wasEditMode && contentRef.current) {
+        // Calculate scroll percentage from preview mode
+        const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
+        const maxScroll = scrollHeight - clientHeight;
+        const scrollPercent = maxScroll > 0 ? scrollTop / maxScroll : 0;
+
+        // Apply scroll percentage to textarea after it renders
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            const { scrollHeight: textareaScrollHeight, clientHeight: textareaClientHeight } = textareaRef.current;
+            const textareaMaxScroll = textareaScrollHeight - textareaClientHeight;
+            textareaRef.current.scrollTop = Math.round(scrollPercent * textareaMaxScroll);
+          }
+        });
+      }
       textareaRef.current.focus();
+    } else if (!markdownEditMode && wasEditMode && containerRef.current) {
+      // Exiting edit mode - focus container and sync scroll from textarea
+      if (textareaRef.current && contentRef.current) {
+        // Calculate scroll percentage from edit mode
+        const { scrollTop, scrollHeight, clientHeight } = textareaRef.current;
+        const maxScroll = scrollHeight - clientHeight;
+        const scrollPercent = maxScroll > 0 ? scrollTop / maxScroll : 0;
+
+        // Apply scroll percentage to preview after it renders
+        requestAnimationFrame(() => {
+          if (contentRef.current) {
+            const { scrollHeight: previewScrollHeight, clientHeight: previewClientHeight } = contentRef.current;
+            const previewMaxScroll = previewScrollHeight - previewClientHeight;
+            contentRef.current.scrollTop = Math.round(scrollPercent * previewMaxScroll);
+          }
+        });
+      }
+      containerRef.current.focus();
     }
   }, [markdownEditMode]);
 

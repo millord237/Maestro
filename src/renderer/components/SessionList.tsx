@@ -296,6 +296,9 @@ interface SessionListProps {
 
   // Tour props
   startTour?: () => void;
+
+  // Ref for the sidebar container (for focus management)
+  sidebarContainerRef?: React.RefObject<HTMLDivElement>;
 }
 
 export function SessionList(props: SessionListProps) {
@@ -317,7 +320,8 @@ export function SessionList(props: SessionListProps) {
     visibleSessions = [],
     autoRunStats,
     openWizard,
-    startTour
+    startTour,
+    sidebarContainerRef
   } = props;
 
   const [sessionFilter, setSessionFilter] = useState('');
@@ -560,6 +564,7 @@ export function SessionList(props: SessionListProps) {
 
   return (
     <div
+      ref={sidebarContainerRef}
       tabIndex={0}
       className={`border-r flex flex-col shrink-0 transition-all duration-300 outline-none relative z-20 ${activeFocus === 'sidebar' ? 'ring-1 ring-inset' : ''}`}
       style={{

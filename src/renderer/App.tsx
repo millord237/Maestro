@@ -1523,6 +1523,7 @@ export default function MaestroConsole() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const terminalOutputRef = useRef<HTMLDivElement>(null);
+  const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
   const fileTreeFilterInputRef = useRef<HTMLInputElement>(null);
   const fileTreeKeyboardNavRef = useRef(false); // Track if selection change came from keyboard
@@ -2937,29 +2938,6 @@ export default function MaestroConsole() {
     }
   };
 
-  // Update keyboardHandlerRef synchronously during render (before effects run)
-  // This must be placed after all handler functions are defined to avoid TDZ errors
-  // The ref is provided by useMainKeyboardHandler hook
-  keyboardHandlerRef.current = {
-    shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId,
-    quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen,
-    processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen,
-    renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview,
-    gitLogOpen, lightboxImage, hasOpenLayers, hasOpenModal, visibleSessions, sortedSessions, groups,
-    bookmarksCollapsed, leftSidebarOpen, editingSessionId, editingGroupId, markdownEditMode, defaultSaveToHistory,
-    setLeftSidebarOpen, setRightPanelOpen, addNewSession, deleteSession, setQuickActionInitialMode,
-    setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
-    setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
-    setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveClaudeSessionId,
-    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef,
-    setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
-    setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
-    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
-    setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownEditMode,
-    toggleTabStar, setPromptComposerOpen, openWizardModal,
-    // Navigation handlers from useKeyboardNavigation hook
-    handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
-  };
 
   // startRenamingSession now accepts a unique key (e.g., 'bookmark-id', 'group-gid-id', 'ungrouped-id')
   // to support renaming the same session from different UI locations (bookmarks vs groups)
@@ -4214,6 +4192,13 @@ export default function MaestroConsole() {
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    // Cmd+F opens output search from input field - handle first, before any modal logic
+    if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      setOutputSearchOpen(true);
+      return;
+    }
+
     // Handle command history modal
     if (commandHistoryOpen) {
       return; // Let the modal handle keys
@@ -4570,6 +4555,30 @@ export default function MaestroConsole() {
     setMoveSessionToNewGroup,
   } = groupModalState;
 
+  // Update keyboardHandlerRef synchronously during render (before effects run)
+  // This must be placed after all handler functions and state are defined to avoid TDZ errors
+  // The ref is provided by useMainKeyboardHandler hook
+  keyboardHandlerRef.current = {
+    shortcuts, activeFocus, activeRightTab, sessions, selectedSidebarIndex, activeSessionId,
+    quickActionOpen, settingsModalOpen, shortcutsHelpOpen, newInstanceModalOpen, aboutModalOpen,
+    processMonitorOpen, logViewerOpen, createGroupModalOpen, confirmModalOpen, renameInstanceModalOpen,
+    renameGroupModalOpen, activeSession, previewFile, fileTreeFilter, fileTreeFilterOpen, gitDiffPreview,
+    gitLogOpen, lightboxImage, hasOpenLayers, hasOpenModal, visibleSessions, sortedSessions, groups,
+    bookmarksCollapsed, leftSidebarOpen, editingSessionId, editingGroupId, markdownEditMode, defaultSaveToHistory,
+    setLeftSidebarOpen, setRightPanelOpen, addNewSession, deleteSession, setQuickActionInitialMode,
+    setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
+    setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
+    setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveClaudeSessionId,
+    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
+    setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
+    setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
+    setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
+    setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownEditMode,
+    toggleTabStar, setPromptComposerOpen, openWizardModal,
+    // Navigation handlers from useKeyboardNavigation hook
+    handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
+  };
+
   // Update flat file list when active session's tree, expanded folders, or filter changes
   useEffect(() => {
     if (!activeSession || !activeSession.fileExplorerExpanded) {
@@ -4648,6 +4657,9 @@ export default function MaestroConsole() {
   // File Explorer keyboard navigation
   useEffect(() => {
     const handleFileExplorerKeys = (e: KeyboardEvent) => {
+      // Skip when a modal is open (let textarea/input in modal handle arrow keys)
+      if (hasOpenModal()) return;
+
       // Only handle when right panel is focused and on files tab
       if (activeFocus !== 'right' || activeRightTab !== 'files' || flatFileList.length === 0) return;
 
@@ -4722,7 +4734,7 @@ export default function MaestroConsole() {
 
     window.addEventListener('keydown', handleFileExplorerKeys);
     return () => window.removeEventListener('keydown', handleFileExplorerKeys);
-  }, [activeFocus, activeRightTab, flatFileList, selectedFileIndex, activeSession?.fileExplorerExpanded, activeSessionId, setSessions, toggleFolder, handleFileClick]);
+  }, [activeFocus, activeRightTab, flatFileList, selectedFileIndex, activeSession?.fileExplorerExpanded, activeSessionId, setSessions, toggleFolder, handleFileClick, hasOpenModal]);
 
   return (
       <div className={`flex h-screen w-full font-mono overflow-hidden transition-colors duration-300 ${isMobileLandscape ? 'pt-0' : 'pt-10'}`}
@@ -4939,6 +4951,9 @@ export default function MaestroConsole() {
           onClose={() => setLeaderboardRegistrationOpen(false)}
           onSave={(registration) => {
             setLeaderboardRegistration(registration);
+          }}
+          onOptOut={() => {
+            setLeaderboardRegistration(null);
           }}
         />
       )}
@@ -5189,6 +5204,7 @@ export default function MaestroConsole() {
               setTourFromWizard(false);
               setTourOpen(true);
             }}
+            sidebarContainerRef={sidebarContainerRef}
           />
         </ErrorBoundary>
       )}

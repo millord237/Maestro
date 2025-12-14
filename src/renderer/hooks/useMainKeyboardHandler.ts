@@ -209,8 +209,16 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'focusInput')) {
         e.preventDefault();
-        ctx.setActiveFocus('main');
-        setTimeout(() => ctx.inputRef.current?.focus(), 0);
+        // Toggle between input and main panel output for keyboard scrolling
+        if (document.activeElement === ctx.inputRef.current) {
+          // Input is focused - blur and focus main panel output
+          ctx.inputRef.current?.blur();
+          ctx.terminalOutputRef.current?.focus();
+        } else {
+          // Main panel output (or elsewhere) - focus input
+          ctx.setActiveFocus('main');
+          setTimeout(() => ctx.inputRef.current?.focus(), 0);
+        }
       }
       else if (ctx.isShortcut(e, 'focusSidebar')) {
         e.preventDefault();
@@ -218,8 +226,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         if (!ctx.leftSidebarOpen) {
           ctx.setLeftSidebarOpen(true);
         }
-        // Focus the sidebar
+        // Focus the sidebar (both logical state and DOM focus for keyboard events like Cmd+F)
         ctx.setActiveFocus('sidebar');
+        setTimeout(() => ctx.sidebarContainerRef?.current?.focus(), 0);
       }
       else if (ctx.isShortcut(e, 'viewGitDiff')) {
         e.preventDefault();

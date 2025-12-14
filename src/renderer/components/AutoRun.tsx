@@ -74,6 +74,7 @@ interface AutoRunProps {
 
 export interface AutoRunHandle {
   focus: () => void;
+  switchMode: (mode: 'edit' | 'preview') => void;
 }
 
 // Custom image component that loads images from the Auto Run folder or external URLs
@@ -588,7 +589,57 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     lastUndoSnapshotRef,
   });
 
-  // Expose focus method to parent via ref
+  // Switch mode with scroll position synchronization
+  const switchMode = useCallback((newMode: 'edit' | 'preview') => {
+    if (newMode === mode) return;
+
+    // Calculate scroll percentage from current mode to apply to new mode
+    let scrollPercent = 0;
+    if (mode === 'edit' && textareaRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = textareaRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      scrollPercent = maxScroll > 0 ? scrollTop / maxScroll : 0;
+    } else if (mode === 'preview' && previewRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = previewRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      scrollPercent = maxScroll > 0 ? scrollTop / maxScroll : 0;
+    }
+
+    setMode(newMode);
+
+    // Apply scroll percentage to the new mode after it renders
+    requestAnimationFrame(() => {
+      if (newMode === 'preview' && previewRef.current) {
+        const { scrollHeight, clientHeight } = previewRef.current;
+        const maxScroll = scrollHeight - clientHeight;
+        const newScrollTop = Math.round(scrollPercent * maxScroll);
+        previewRef.current.scrollTop = newScrollTop;
+        previewScrollPosRef.current = newScrollTop;
+      } else if (newMode === 'edit' && textareaRef.current) {
+        const { scrollHeight, clientHeight } = textareaRef.current;
+        const maxScroll = scrollHeight - clientHeight;
+        const newScrollTop = Math.round(scrollPercent * maxScroll);
+        textareaRef.current.scrollTop = newScrollTop;
+        editScrollPosRef.current = newScrollTop;
+      }
+    });
+
+    if (onStateChange) {
+      onStateChange({
+        mode: newMode,
+        cursorPosition: textareaRef.current?.selectionStart || 0,
+        editScrollPos: textareaRef.current?.scrollTop || 0,
+        previewScrollPos: previewRef.current?.scrollTop || 0
+      });
+    }
+  }, [mode, onStateChange]);
+
+  // Toggle between edit and preview modes
+  const toggleMode = useCallback(() => {
+    switchMode(mode === 'edit' ? 'preview' : 'edit');
+  }, [mode, switchMode]);
+
+  // Expose focus and switchMode methods to parent via ref
   useImperativeHandle(ref, () => ({
     focus: () => {
       // Focus the appropriate element based on current mode
@@ -597,8 +648,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       } else if (mode === 'preview' && previewRef.current) {
         previewRef.current.focus();
       }
-    }
-  }), [mode]);
+    },
+    switchMode
+  }), [mode, switchMode]);
 
   // Auto-switch to preview mode when auto-run starts, restore when it ends
   useEffect(() => {
@@ -638,21 +690,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       });
     }
   }, [localContent, mode, searchOpen, searchQuery]);
-
-  // Notify parent when mode changes
-  const toggleMode = () => {
-    const newMode = mode === 'edit' ? 'preview' : 'edit';
-    setMode(newMode);
-
-    if (onStateChange) {
-      onStateChange({
-        mode: newMode,
-        cursorPosition: textareaRef.current?.selectionStart || 0,
-        editScrollPos: textareaRef.current?.scrollTop || 0,
-        previewScrollPos: previewRef.current?.scrollTop || 0
-      });
-    }
-  };
 
   // Auto-focus the active element after mode change
   useEffect(() => {
@@ -1027,6 +1064,17 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Uses shared utility from markdownConfig.ts
   const proseStyles = useMemo(() => generateAutoRunProseStyles(theme), [theme]);
 
+  // Parse task counts from markdown content
+  const taskCounts = useMemo(() => {
+    const completedRegex = /^[\s]*[-*]\s*\[x\]/gim;
+    const uncheckedRegex = /^[\s]*[-*]\s*\[\s\]/gim;
+    const completedMatches = localContent.match(completedRegex) || [];
+    const uncheckedMatches = localContent.match(uncheckedRegex) || [];
+    const completed = completedMatches.length;
+    const total = completed + uncheckedMatches.length;
+    return { completed, total };
+  }, [localContent]);
+
   // Memoize ReactMarkdown components - only regenerate when dependencies change
   // Uses shared utility from markdownConfig.ts with custom image renderer
   const markdownComponents = useMemo(() => {
@@ -1109,7 +1157,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           </button>
         )}
         <button
-          onClick={() => !isLocked && setMode('edit')}
+          onClick={() => !isLocked && switchMode('edit')}
           disabled={isLocked}
           className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors ${
             mode === 'edit' && !isLocked ? 'font-semibold' : ''
@@ -1125,7 +1173,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           Edit
         </button>
         <button
-          onClick={() => setMode('preview')}
+          onClick={() => switchMode('preview')}
           className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors ${
             mode === 'preview' || isLocked ? 'font-semibold' : ''
           }`}
@@ -1418,6 +1466,20 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           </div>
         )}
       </div>
+
+      {/* Task Count Panel - shown when there are tasks */}
+      {taskCounts.total > 0 && (
+        <div
+          className="flex-shrink-0 px-3 py-2 text-xs border-t"
+          style={{
+            backgroundColor: theme.colors.bgActivity,
+            borderColor: theme.colors.border,
+            color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim,
+          }}
+        >
+          {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
+        </div>
+      )}
 
       {/* Help Modal */}
       {helpModalOpen && (

@@ -97,8 +97,13 @@ export function AutoRunExpandedModal({
     return () => clearTimeout(timer);
   }, []);
 
+  // Use the AutoRun's switchMode for scroll sync, falling back to direct mode change
   const setMode = useCallback((newMode: 'edit' | 'preview') => {
-    onModeChange(newMode);
+    if (autoRunRef.current?.switchMode) {
+      autoRunRef.current.switchMode(newMode);
+    } else {
+      onModeChange(newMode);
+    }
   }, [onModeChange]);
 
   return createPortal(

@@ -940,7 +940,17 @@ export function useSettings(): UseSettingsReturn {
           window.maestro.settings.set('shortcuts', migratedShortcuts);
         }
 
-        setShortcutsState({ ...DEFAULT_SHORTCUTS, ...migratedShortcuts });
+        // Merge: use default labels (in case they changed) but preserve user's custom keys
+        const mergedShortcuts: Record<string, Shortcut> = {};
+        for (const [id, defaultShortcut] of Object.entries(DEFAULT_SHORTCUTS)) {
+          const savedShortcut = migratedShortcuts[id];
+          mergedShortcuts[id] = {
+            ...defaultShortcut,
+            // Preserve user's custom keys if they exist
+            keys: savedShortcut?.keys ?? defaultShortcut.keys,
+          };
+        }
+        setShortcutsState(mergedShortcuts);
       }
 
       // Merge saved AI commands with defaults (ensure built-in commands always exist)
