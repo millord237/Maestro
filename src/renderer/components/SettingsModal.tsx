@@ -74,6 +74,8 @@ interface SettingsModalProps {
   setCustomAICommands: (commands: CustomAICommand[]) => void;
   initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands';
   hasNoAgents?: boolean;
+  onThemeImportError?: (message: string) => void;
+  onThemeImportSuccess?: (message: string) => void;
 }
 
 export const SettingsModal = memo(function SettingsModal(props: SettingsModalProps) {
@@ -527,6 +529,8 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
           setCustomThemeBaseId={props.setCustomThemeBaseId}
           isSelected={props.activeThemeId === 'custom'}
           onSelect={() => props.setActiveThemeId('custom')}
+          onImportError={props.onThemeImportError}
+          onImportSuccess={props.onThemeImportSuccess}
         />
       </div>
     </div>

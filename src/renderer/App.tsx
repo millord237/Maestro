@@ -5510,6 +5510,8 @@ export default function MaestroConsole() {
         setCustomAICommands={setCustomAICommands}
         initialTab={settingsTab}
         hasNoAgents={hasNoAgents}
+        onThemeImportError={(msg) => setFlashNotification(msg)}
+        onThemeImportSuccess={(msg) => setFlashNotification(msg)}
       />
 
       {/* --- WIZARD RESUME MODAL (asks if user wants to resume incomplete wizard) --- */}

@@ -3,6 +3,20 @@ import { Palette, Download, Upload, RotateCcw, Check, ChevronDown } from 'lucide
 import type { Theme, ThemeColors, ThemeId } from '../types';
 import { THEMES, DEFAULT_CUSTOM_THEME_COLORS } from '../constants/themes';
 
+/**
+ * Validates that a string is a valid CSS color value
+ */
+function isValidColor(color: string): boolean {
+  // Handle empty strings
+  if (!color || typeof color !== 'string') return false;
+
+  // Use the DOM to validate - create an option element and try to set its color
+  const testElement = new Option().style;
+  testElement.color = color;
+  // If the browser accepts the color, it will be non-empty
+  return testElement.color !== '';
+}
+
 interface CustomThemeBuilderProps {
   theme: Theme; // Current active theme for styling the builder
   customThemeColors: ThemeColors;
@@ -11,6 +25,8 @@ interface CustomThemeBuilderProps {
   setCustomThemeBaseId: (id: ThemeId) => void;
   isSelected: boolean;
   onSelect: () => void;
+  onImportError?: (message: string) => void;
+  onImportSuccess?: (message: string) => void;
 }
 
 // Color picker labels with descriptions
@@ -254,7 +270,9 @@ export function CustomThemeBuilder({
   customThemeBaseId,
   setCustomThemeBaseId,
   isSelected,
-  onSelect
+  onSelect,
+  onImportError,
+  onImportSuccess
 }: CustomThemeBuilderProps) {
   const [showBaseSelector, setShowBaseSelector] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -313,17 +331,32 @@ export function CustomThemeBuilder({
           const requiredKeys = COLOR_CONFIG.map(c => c.key);
           const hasAllKeys = requiredKeys.every(key => key in data.colors);
 
-          if (hasAllKeys) {
-            setCustomThemeColors(data.colors);
-            if (data.baseTheme && THEMES[data.baseTheme as ThemeId]) {
-              setCustomThemeBaseId(data.baseTheme);
-            }
-          } else {
-            console.error('Invalid theme file: missing required color keys');
+          if (!hasAllKeys) {
+            const missing = requiredKeys.filter(key => !(key in data.colors));
+            const errorMsg = `Invalid theme file: missing color keys (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''})`;
+            onImportError?.(errorMsg);
+            return;
           }
+
+          // Validate all color values are valid CSS colors
+          const invalidColors = requiredKeys.filter(key => !isValidColor(data.colors[key]));
+          if (invalidColors.length > 0) {
+            const errorMsg = `Invalid theme file: invalid color values for ${invalidColors.slice(0, 3).join(', ')}${invalidColors.length > 3 ? '...' : ''}`;
+            onImportError?.(errorMsg);
+            return;
+          }
+
+          // All validations passed - apply the theme
+          setCustomThemeColors(data.colors);
+          if (data.baseTheme && THEMES[data.baseTheme as ThemeId]) {
+            setCustomThemeBaseId(data.baseTheme);
+          }
+          onImportSuccess?.('Theme imported successfully');
+        } else {
+          onImportError?.('Invalid theme file: missing colors object');
         }
       } catch (err) {
-        console.error('Failed to parse theme file:', err);
+        onImportError?.('Failed to parse theme file: invalid JSON format');
       }
     };
     reader.readAsText(file);
@@ -332,7 +365,7 @@ export function CustomThemeBuilder({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [setCustomThemeColors, setCustomThemeBaseId]);
+  }, [setCustomThemeColors, setCustomThemeBaseId, onImportError, onImportSuccess]);
 
   return (
     <div>

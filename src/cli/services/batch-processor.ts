@@ -16,30 +16,10 @@ import { substituteTemplateVariables, TemplateContext } from '../../shared/templ
 import { registerCliActivity, updateCliActivity, unregisterCliActivity } from '../../shared/cli-activity';
 import { logger } from '../../main/utils/logger';
 import { autorunSynopsisPrompt } from '../../prompts';
+import { parseSynopsis } from '../../shared/synopsis';
 
 // Synopsis prompt for batch tasks
 const BATCH_SYNOPSIS_PROMPT = autorunSynopsisPrompt;
-
-/**
- * Parse a synopsis response into short summary and full synopsis
- */
-function parseSynopsis(response: string): { shortSummary: string; fullSynopsis: string } {
-  const clean = response
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/─+/g, '')
-    .replace(/[│┌┐└┘├┤┬┴┼]/g, '')
-    .trim();
-
-  const summaryMatch = clean.match(/\*\*Summary:\*\*\s*(.+?)(?=\*\*Details:\*\*|$)/is);
-  const detailsMatch = clean.match(/\*\*Details:\*\*\s*(.+?)$/is);
-
-  const shortSummary = summaryMatch?.[1]?.trim() || clean.split('\n')[0]?.trim() || 'Task completed';
-  const details = detailsMatch?.[1]?.trim() || '';
-
-  const fullSynopsis = details ? `${shortSummary}\n\n${details}` : shortSummary;
-
-  return { shortSummary, fullSynopsis };
-}
 
 /**
  * Generate a UUID (simple implementation without uuid package)

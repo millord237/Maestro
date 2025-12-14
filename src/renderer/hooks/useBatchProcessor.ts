@@ -3,6 +3,7 @@ import type { BatchRunState, BatchRunConfig, BatchDocumentEntry, Session, Histor
 import { substituteTemplateVariables, TemplateContext } from '../utils/templateVariables';
 import { getBadgeForTime, getNextBadge, formatTimeRemaining } from '../constants/conductorBadges';
 import { autorunSynopsisPrompt } from '../../prompts';
+import { parseSynopsis } from '../../shared/synopsis';
 
 // Regex to count unchecked markdown checkboxes: - [ ] task
 const UNCHECKED_TASK_REGEX = /^[\s]*-\s*\[\s*\]\s*.+$/gm;
@@ -198,33 +199,6 @@ export function uncheckAllTasks(content: string): string {
  */
 // Synopsis prompt for batch tasks - requests a two-part response
 const BATCH_SYNOPSIS_PROMPT = autorunSynopsisPrompt;
-
-/**
- * Parse a synopsis response into short summary and full synopsis
- * Expected format:
- *   **Summary:** Short 1-2 sentence summary
- *   **Details:** Detailed paragraph...
- */
-function parseSynopsis(response: string): { shortSummary: string; fullSynopsis: string } {
-  // Clean up ANSI codes and box drawing characters
-  const clean = response
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/─+/g, '')
-    .replace(/[│┌┐└┘├┤┬┴┼]/g, '')
-    .trim();
-
-  // Try to extract Summary and Details sections
-  const summaryMatch = clean.match(/\*\*Summary:\*\*\s*(.+?)(?=\*\*Details:\*\*|$)/is);
-  const detailsMatch = clean.match(/\*\*Details:\*\*\s*(.+?)$/is);
-
-  const shortSummary = summaryMatch?.[1]?.trim() || clean.split('\n')[0]?.trim() || 'Task completed';
-  const details = detailsMatch?.[1]?.trim() || '';
-
-  // Full synopsis includes both parts
-  const fullSynopsis = details ? `${shortSummary}\n\n${details}` : shortSummary;
-
-  return { shortSummary, fullSynopsis };
-}
 
 export function useBatchProcessor({
   sessions,
