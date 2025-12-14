@@ -154,6 +154,8 @@ export default function MaestroConsole() {
     fontFamily, setFontFamily,
     fontSize, setFontSize,
     activeThemeId, setActiveThemeId,
+    customThemeColors, setCustomThemeColors,
+    customThemeBaseId, setCustomThemeBaseId,
     enterToSendAI, setEnterToSendAI,
     enterToSendTerminal, setEnterToSendTerminal,
     defaultSaveToHistory, setDefaultSaveToHistory,
@@ -1578,7 +1580,16 @@ export default function MaestroConsole() {
     sessions.find(s => s.id === activeSessionId) || sessions[0] || null,
     [sessions, activeSessionId]
   );
-  const theme = THEMES[activeThemeId];
+  // Use custom colors when custom theme is selected, otherwise use the standard theme
+  const theme = useMemo(() => {
+    if (activeThemeId === 'custom') {
+      return {
+        ...THEMES.custom,
+        colors: customThemeColors
+      };
+    }
+    return THEMES[activeThemeId];
+  }, [activeThemeId, customThemeColors]);
 
   // Memoized cwd for git viewers (prevents re-renders from inline computation)
   const gitViewerCwd = useMemo(() =>
@@ -5449,6 +5460,10 @@ export default function MaestroConsole() {
         themes={THEMES}
         activeThemeId={activeThemeId}
         setActiveThemeId={setActiveThemeId}
+        customThemeColors={customThemeColors}
+        setCustomThemeColors={setCustomThemeColors}
+        customThemeBaseId={customThemeBaseId}
+        setCustomThemeBaseId={setCustomThemeBaseId}
         llmProvider={llmProvider}
         setLlmProvider={setLlmProvider}
         modelSlug={modelSlug}
