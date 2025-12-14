@@ -190,7 +190,10 @@ export class WebSocketMessageHandler {
     // inputMode from web client - use this instead of server state to avoid sync issues
     const clientInputMode = message.inputMode as 'ai' | 'terminal' | undefined;
 
+    logger.info(`[Web Command] Received: sessionId=${sessionId}, inputMode=${clientInputMode}, command=${command?.substring(0, 50)}`, LOG_CONTEXT);
+
     if (!sessionId || !command) {
+      logger.warn(`[Web Command] Missing sessionId or command: sessionId=${sessionId}, commandLen=${command?.length}`, LOG_CONTEXT);
       client.socket.send(JSON.stringify({
         type: 'error',
         message: 'Missing sessionId or command',

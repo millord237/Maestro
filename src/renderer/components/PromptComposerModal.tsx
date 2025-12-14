@@ -135,6 +135,20 @@ export function PromptComposerModal({
       }
       return;
     }
+
+    // Cmd/Ctrl + S to toggle Save to History
+    if (e.key === 's' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+      e.preventDefault();
+      onToggleTabSaveToHistory?.();
+      return;
+    }
+
+    // Cmd/Ctrl + R to toggle Read-only mode
+    if (e.key === 'r' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+      e.preventDefault();
+      onToggleTabReadOnlyMode?.();
+      return;
+    }
   };
 
   // Handle paste for images

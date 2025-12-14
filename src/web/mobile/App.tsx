@@ -610,13 +610,14 @@ export default function MobileApp() {
     } else {
       // Send the command to the active session immediately
       // Include inputMode so the server uses the web's intended mode (not stale server state)
-      send({
+      const sendResult = send({
         type: 'send_command',
         sessionId: activeSessionId,
         command,
         inputMode: currentMode,
       });
-      webLogger.debug(`Command sent: ${command} (mode: ${currentMode}) to session: ${activeSessionId}`, 'Mobile');
+      webLogger.info(`[Web->Server] Command send result: ${sendResult}, command="${command.substring(0, 50)}" mode=${currentMode} session=${activeSessionId}`, 'Mobile');
+      console.log('[MobileApp] Command sent:', { sendResult, sessionId: activeSessionId, mode: currentMode, commandLen: command.length });
     }
 
     // Clear the input

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Wand2, ExternalLink, Columns, Copy, Loader2, GitBranch, ArrowUp, ArrowDown, FileEdit, List } from 'lucide-react';
 import { LogViewer } from './LogViewer';
 import { TerminalOutput } from './TerminalOutput';
@@ -16,6 +16,14 @@ import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../type
 interface SlashCommand {
   command: string;
   description: string;
+}
+
+/**
+ * Handle for MainPanel component to expose methods to parent.
+ */
+export interface MainPanelHandle {
+  /** Refresh git info (branch, ahead/behind, uncommitted changes) */
+  refreshGitInfo: () => Promise<void>;
 }
 
 interface MainPanelProps {
@@ -152,7 +160,7 @@ interface MainPanelProps {
   onReplayMessage?: (text: string, images?: string[]) => void;
 }
 
-export function MainPanel(props: MainPanelProps) {
+export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
   const {
     logViewerOpen, agentSessionsOpen, activeClaudeSessionId, activeSession, sessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSendAI, enterToSendTerminal, stagedImages, commandHistoryOpen, commandHistoryFilter,
@@ -273,6 +281,11 @@ export function MainPanel(props: MainPanelProps) {
       setGitInfo(null);
     }
   }, [activeSession?.isGitRepo, activeSession?.inputMode, activeSession?.shellCwd, activeSession?.cwd]);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    refreshGitInfo: fetchGitInfo
+  }), [fetchGitInfo]);
 
   // Fetch git info when session changes or becomes a git repo
   // Pauses polling when window is hidden to save CPU
@@ -971,4 +984,4 @@ export function MainPanel(props: MainPanelProps) {
       )}
     </>
   );
-}
+});

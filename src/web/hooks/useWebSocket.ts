@@ -824,9 +824,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
    */
   const send = useCallback((message: object): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+      const messageStr = JSON.stringify(message);
+      webLogger.debug(`[WS Send] Sending message: ${messageStr.substring(0, 200)}`, 'WebSocket');
+      wsRef.current.send(messageStr);
       return true;
     }
+    webLogger.warn(`[WS Send] Cannot send - WebSocket not open (readyState=${wsRef.current?.readyState})`, 'WebSocket');
     return false;
   }, []);
 

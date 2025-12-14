@@ -15,7 +15,7 @@ import { RenameTabModal } from './components/RenameTabModal';
 import { RenameGroupModal } from './components/RenameGroupModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { MainPanel } from './components/MainPanel';
+import { MainPanel, type MainPanelHandle } from './components/MainPanel';
 import { ProcessMonitor } from './components/ProcessMonitor';
 import { GitDiffViewer } from './components/GitDiffViewer';
 import { GitLogViewer } from './components/GitLogViewer';
@@ -1527,6 +1527,7 @@ export default function MaestroConsole() {
   const fileTreeFilterInputRef = useRef<HTMLInputElement>(null);
   const fileTreeKeyboardNavRef = useRef(false); // Track if selection change came from keyboard
   const rightPanelRef = useRef<RightPanelHandle>(null);
+  const mainPanelRef = useRef<MainPanelHandle>(null);
 
   // Refs for toast notifications (to access latest values in event handlers)
   const groupsRef = useRef(groups);
@@ -4910,7 +4911,10 @@ export default function MaestroConsole() {
           setPlaygroundOpen={setPlaygroundOpen}
           onRefreshGitFileState={async () => {
             if (activeSessionId) {
+              // Refresh file tree, branches/tags, and history
               await refreshGitFileState(activeSessionId);
+              // Also refresh git info in main panel header (branch, ahead/behind, uncommitted)
+              await mainPanelRef.current?.refreshGitInfo();
               setSuccessFlashNotification('Files, Git, History Refreshed');
               setTimeout(() => setSuccessFlashNotification(null), 2000);
             }
@@ -5267,6 +5271,7 @@ export default function MaestroConsole() {
       {/* --- CENTER WORKSPACE (hidden when no sessions) --- */}
       {sessions.length > 0 && (
       <MainPanel
+        ref={mainPanelRef}
         logViewerOpen={logViewerOpen}
         agentSessionsOpen={agentSessionsOpen}
         activeClaudeSessionId={activeClaudeSessionId}
