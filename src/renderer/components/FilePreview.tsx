@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen } from 'lucide-react';
@@ -320,7 +321,6 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
-  const [hoveredLink, setHoveredLink] = useState<{ url: string; x: number; y: number } | null>(null);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const [fileStats, setFileStats] = useState<FileStats | null>(null);
@@ -1103,8 +1103,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
             `}</style>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkHighlight]}
-              rehypePlugins={[]}
-              skipHtml={false}
+              rehypePlugins={[rehypeRaw]}
               components={{
                 a: ({ node, href, children, ...props }) => (
                   <a
@@ -1116,13 +1115,6 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                         window.maestro.shell.openExternal(href);
                       }
                     }}
-                    onMouseEnter={(e) => {
-                      if (href) {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setHoveredLink({ url: href, x: rect.left, y: rect.bottom });
-                      }
-                    }}
-                    onMouseLeave={() => setHoveredLink(null)}
                     style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
                   >
                     {children}
@@ -1207,22 +1199,6 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         </div>
       )}
 
-      {/* Link Hover Tooltip */}
-      {hoveredLink && (
-        <div
-          className="fixed px-3 py-2 rounded shadow-lg text-xs font-mono max-w-md break-all z-50"
-          style={{
-            left: `${hoveredLink.x}px`,
-            top: `${hoveredLink.y + 5}px`,
-            backgroundColor: theme.colors.bgActivity,
-            color: theme.colors.textDim,
-            border: `1px solid ${theme.colors.border}`,
-            pointerEvents: 'none'
-          }}
-        >
-          {hoveredLink.url}
-        </div>
-      )}
     </div>
   );
 }
