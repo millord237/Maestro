@@ -10,7 +10,7 @@ import { logger } from './utils/logger';
 import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
-import { registerGitHandlers, registerAutorunHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, setupLoggerEventForwarding } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { DEMO_MODE, DEMO_DATA_PATH, CLAUDE_SESSION_PARSE_LIMITS, CLAUDE_PRICING } from './constants';
 import {
   SessionStatsCache,
@@ -794,6 +794,13 @@ function setupIpcHandlers() {
 
   // Auto Run operations - extracted to src/main/ipc/handlers/autorun.ts
   registerAutorunHandlers({
+    mainWindow,
+    getMainWindow: () => mainWindow,
+    app,
+  });
+
+  // Playbook operations - extracted to src/main/ipc/handlers/playbooks.ts
+  registerPlaybooksHandlers({
     mainWindow,
     getMainWindow: () => mainWindow,
     app,

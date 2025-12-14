@@ -311,10 +311,12 @@ export function registerGitHandlers(): void {
 
   // Create or reuse a worktree
   ipcMain.handle('git:worktreeSetup', async (_, mainRepoCwd: string, worktreePath: string, branchName: string) => {
+    console.log('[git:worktreeSetup] Called with:', { mainRepoCwd, worktreePath, branchName });
     try {
       // Resolve paths to absolute for proper comparison
       const resolvedMainRepo = path.resolve(mainRepoCwd);
       const resolvedWorktree = path.resolve(worktreePath);
+      console.log('[git:worktreeSetup] Resolved paths:', { resolvedMainRepo, resolvedWorktree });
 
       // Check if worktree path is inside the main repo (nested worktree)
       // This can cause issues because git and Claude Code search upward for .git
@@ -329,17 +331,34 @@ export function registerGitHandlers(): void {
       // First check if the worktree path already exists
       let pathExists = true;
       try {
-        await fs.access(worktreePath);
+        await fs.access(resolvedWorktree);
+        console.log('[git:worktreeSetup] Path exists:', resolvedWorktree);
       } catch {
         pathExists = false;
+        console.log('[git:worktreeSetup] Path does not exist:', resolvedWorktree);
       }
 
       if (pathExists) {
         // Check if it's already a worktree of this repo
-        const worktreeInfoResult = await execFileNoThrow('git', ['rev-parse', '--is-inside-work-tree'], worktreePath);
+        const worktreeInfoResult = await execFileNoThrow('git', ['rev-parse', '--is-inside-work-tree'], resolvedWorktree);
+        console.log('[git:worktreeSetup] is-inside-work-tree result:', worktreeInfoResult);
         if (worktreeInfoResult.exitCode !== 0) {
-          return { success: false, error: 'Path exists but is not a git worktree or repository' };
+          // Path exists but isn't a git repo - check if it's empty and can be removed
+          const dirContents = await fs.readdir(resolvedWorktree);
+          console.log('[git:worktreeSetup] Directory contents:', dirContents);
+          if (dirContents.length === 0) {
+            // Empty directory - remove it so we can create the worktree
+            console.log('[git:worktreeSetup] Removing empty directory');
+            await fs.rmdir(resolvedWorktree);
+            pathExists = false;
+          } else {
+            console.log('[git:worktreeSetup] Directory not empty, returning error');
+            return { success: false, error: 'Path exists but is not a git worktree or repository (and is not empty)' };
+          }
         }
+      }
+
+      if (pathExists) {
 
         // Get the common dir to check if it's the same repo
         const gitCommonDirResult = await execFileNoThrow('git', ['rev-parse', '--git-common-dir'], worktreePath);

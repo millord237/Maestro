@@ -32,8 +32,9 @@ export interface GitWorktreeSectionProps {
   // Worktree configuration state
   worktreeEnabled: boolean;
   setWorktreeEnabled: (enabled: boolean) => void;
-  worktreePath: string;
-  setWorktreePath: (path: string) => void;
+  worktreeBaseDir: string;  // User-selected base directory
+  setWorktreeBaseDir: (path: string) => void;
+  computedWorktreePath: string;  // baseDir + branchName (read-only display)
   branchName: string;
   setBranchName: (name: string) => void;
   createPROnCompletion: boolean;
@@ -62,8 +63,9 @@ export function GitWorktreeSection({
   theme,
   worktreeEnabled,
   setWorktreeEnabled,
-  worktreePath,
-  setWorktreePath,
+  worktreeBaseDir,
+  setWorktreeBaseDir,
+  computedWorktreePath,
   branchName,
   setBranchName,
   createPROnCompletion,
@@ -78,6 +80,14 @@ export function GitWorktreeSection({
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Handle browse button click for base directory
+  const handleBrowseBaseDir = async () => {
+    const result = await window.maestro.dialog.selectFolder();
+    if (result) {
+      setWorktreeBaseDir(result);
+    }
+  };
+
   // Close branch dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -91,14 +101,6 @@ export function GitWorktreeSection({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showBranchDropdown]);
-
-  // Handle browse button click
-  const handleBrowse = async () => {
-    const result = await window.maestro.dialog.selectFolder();
-    if (result) {
-      setWorktreePath(result);
-    }
-  };
 
   return (
     <div className="mb-6">
@@ -191,17 +193,17 @@ export function GitWorktreeSection({
           className="rounded-lg border p-4 space-y-4"
           style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
         >
-          {/* Worktree Path */}
+          {/* Worktree Base Directory */}
           <div>
             <label className="text-xs font-medium mb-1.5 block" style={{ color: theme.colors.textDim }}>
-              Worktree Path
+              Worktree Directory
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                value={worktreePath}
-                onChange={(e) => setWorktreePath(e.target.value)}
-                placeholder="/path/to/worktree"
+                value={worktreeBaseDir}
+                onChange={(e) => setWorktreeBaseDir(e.target.value)}
+                placeholder="/path/to/worktrees"
                 className="flex-1 px-3 py-2 rounded border bg-transparent outline-none text-sm"
                 style={{
                   borderColor: theme.colors.border,
@@ -209,13 +211,16 @@ export function GitWorktreeSection({
                 }}
               />
               <button
-                onClick={handleBrowse}
+                onClick={handleBrowseBaseDir}
                 className="px-3 py-2 rounded border hover:bg-white/5 transition-colors text-sm"
                 style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
               >
                 Browse
               </button>
             </div>
+            <p className="text-[10px] mt-1" style={{ color: theme.colors.textDim }}>
+              Base directory where worktrees will be created
+            </p>
           </div>
 
           {/* Branch Name */}
@@ -227,7 +232,7 @@ export function GitWorktreeSection({
               type="text"
               value={branchName}
               onChange={(e) => setBranchName(e.target.value)}
-              placeholder="autorun-feature-xyz"
+              placeholder="feature-xyz"
               className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"
               style={{
                 borderColor: theme.colors.border,
@@ -235,6 +240,26 @@ export function GitWorktreeSection({
               }}
             />
           </div>
+
+          {/* Computed Worktree Path (read-only preview) */}
+          {computedWorktreePath && (
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: theme.colors.textDim }}>
+                Worktree Path (computed)
+              </label>
+              <input
+                type="text"
+                value={computedWorktreePath}
+                readOnly
+                className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm cursor-default"
+                style={{
+                  borderColor: theme.colors.border,
+                  color: theme.colors.textDim,
+                  opacity: 0.7
+                }}
+              />
+            </div>
+          )}
 
           {/* Validation Warnings */}
           {worktreeValidation.checking && (

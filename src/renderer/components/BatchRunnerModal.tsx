@@ -116,12 +116,17 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
   // Worktree configuration state
   const [worktreeEnabled, setWorktreeEnabled] = useState(false);
-  const [worktreePath, setWorktreePath] = useState('');
+  const [worktreeBaseDir, setWorktreeBaseDir] = useState('');  // User-selected base directory for all worktrees
   const [branchName, setBranchName] = useState('');
   const [createPROnCompletion, setCreatePROnCompletion] = useState(false);
   const [prTargetBranch, setPrTargetBranch] = useState('main');
   const [availableBranches, setAvailableBranches] = useState<string[]>([]);
   const [ghCliStatus, setGhCliStatus] = useState<GhCliStatus | null>(null);
+
+  // Compute the display path for the UI (baseDir + branchName)
+  const computedWorktreePath = worktreeBaseDir && branchName
+    ? `${worktreeBaseDir.replace(/\/+$/, '')}/${branchName.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+    : '';
 
   // Playbook management callback to apply loaded playbook configuration
   const handleApplyPlaybook = useCallback((data: {
@@ -188,7 +193,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
   // Worktree validation hook (debounced validation of worktree path)
   const { validation: worktreeValidation } = useWorktreeValidation({
-    worktreePath,
+    worktreePath: computedWorktreePath,
     branchName,
     worktreeEnabled,
     sessionCwd,
@@ -348,10 +353,15 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     };
 
     // Add worktree config if enabled and valid
-    if (worktreeEnabled && isGitRepo && worktreePath && branchName) {
+    if (worktreeEnabled && isGitRepo && worktreeBaseDir && branchName) {
+      // Compute the worktree path: baseDir + sanitized branch name
+      // e.g., /Users/pedram/worktrees + branch "feature-x" -> /Users/pedram/worktrees/feature-x
+      const sanitizedBranch = branchName.replace(/[^a-zA-Z0-9-_]/g, '-');
+      const computedWorktreePath = `${worktreeBaseDir.replace(/\/+$/, '')}/${sanitizedBranch}`;
+
       config.worktree = {
         enabled: true,
-        path: worktreePath,
+        path: computedWorktreePath,
         branchName,
         createPROnCompletion,
         prTargetBranch,
@@ -584,8 +594,9 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
               theme={theme}
               worktreeEnabled={worktreeEnabled}
               setWorktreeEnabled={setWorktreeEnabled}
-              worktreePath={worktreePath}
-              setWorktreePath={setWorktreePath}
+              worktreeBaseDir={worktreeBaseDir}
+              setWorktreeBaseDir={setWorktreeBaseDir}
+              computedWorktreePath={computedWorktreePath}
               branchName={branchName}
               setBranchName={setBranchName}
               createPROnCompletion={createPROnCompletion}
