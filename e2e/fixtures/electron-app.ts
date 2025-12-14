@@ -549,4 +549,192 @@ All tasks complete in this document.
 
     return autoRunFolder;
   },
+
+  // ============================================
+  // Session Switching Helpers
+  // ============================================
+
+  /**
+   * Get all session items in the session list
+   */
+  getSessionItems(window: Page) {
+    return window.locator('[data-testid="session-item"]');
+  },
+
+  /**
+   * Get the session list container
+   */
+  getSessionList(window: Page) {
+    return window.locator('[data-testid="session-list"]').or(
+      window.locator('aside').first()
+    );
+  },
+
+  /**
+   * Click on a session by index in the session list
+   */
+  async clickSessionByIndex(window: Page, index: number): Promise<boolean> {
+    const sessionItems = window.locator('[data-testid="session-item"]');
+    const count = await sessionItems.count();
+    if (index < count) {
+      await sessionItems.nth(index).click();
+      return true;
+    }
+    return false;
+  },
+
+  /**
+   * Click on a session by name in the session list
+   */
+  async clickSessionByName(window: Page, name: string): Promise<boolean> {
+    const sessionItem = window.locator(`[data-testid="session-item"]:has-text("${name}")`);
+    if (await sessionItem.count() > 0) {
+      await sessionItem.first().click();
+      return true;
+    }
+    // Try finding by text directly
+    const sessionByText = window.locator(`text="${name}"`);
+    if (await sessionByText.count() > 0) {
+      await sessionByText.first().click();
+      return true;
+    }
+    return false;
+  },
+
+  /**
+   * Get the currently active session (highlighted in session list)
+   */
+  async getActiveSessionName(window: Page): Promise<string | null> {
+    const activeSession = window.locator('[data-testid="session-item"].active').or(
+      window.locator('[data-testid="session-item"][aria-selected="true"]')
+    );
+    if (await activeSession.count() > 0) {
+      return await activeSession.first().textContent();
+    }
+    return null;
+  },
+
+  /**
+   * Get session count in the session list
+   */
+  async getSessionCount(window: Page): Promise<number> {
+    const sessionItems = window.locator('[data-testid="session-item"]');
+    return await sessionItems.count();
+  },
+
+  /**
+   * Wait for Auto Run content to change after session switch
+   */
+  async waitForAutoRunContentChange(window: Page, previousContent: string, timeout = 5000): Promise<boolean> {
+    const textarea = window.locator('textarea');
+    try {
+      await window.waitForFunction(
+        (args) => {
+          const ta = document.querySelector('textarea');
+          return ta && ta.value !== args.prev;
+        },
+        { prev: previousContent },
+        { timeout }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Create test folders for multiple sessions with unique content
+   */
+  createMultiSessionTestFolders(basePath: string): { session1: string; session2: string } {
+    const session1Path = path.join(basePath, 'session1', 'Auto Run Docs');
+    const session2Path = path.join(basePath, 'session2', 'Auto Run Docs');
+
+    fs.mkdirSync(session1Path, { recursive: true });
+    fs.mkdirSync(session2Path, { recursive: true });
+
+    // Session 1 documents
+    fs.writeFileSync(
+      path.join(session1Path, 'Session 1 Doc.md'),
+      `# Session 1 Document
+
+## Tasks
+
+- [ ] Session 1 Task A
+- [ ] Session 1 Task B
+- [x] Session 1 Completed Task
+
+## Content
+
+Unique content for Session 1.
+`
+    );
+
+    // Session 2 documents
+    fs.writeFileSync(
+      path.join(session2Path, 'Session 2 Doc.md'),
+      `# Session 2 Document
+
+## Tasks
+
+- [ ] Session 2 Task X
+- [ ] Session 2 Task Y
+- [ ] Session 2 Task Z
+
+## Content
+
+Unique content for Session 2.
+`
+    );
+
+    return { session1: session1Path, session2: session2Path };
+  },
+
+  /**
+   * Verify Auto Run shows content specific to a session
+   */
+  async verifyAutoRunSessionContent(window: Page, expectedSessionIdentifier: string): Promise<boolean> {
+    const textarea = window.locator('textarea');
+    if (await textarea.count() > 0) {
+      const content = await textarea.inputValue();
+      return content.includes(expectedSessionIdentifier);
+    }
+    return false;
+  },
+
+  /**
+   * Get dirty state indicator (Save/Revert buttons visible)
+   */
+  async isDirty(window: Page): Promise<boolean> {
+    const saveButton = window.locator('button').filter({ hasText: 'Save' });
+    const revertButton = window.locator('button').filter({ hasText: 'Revert' });
+    const saveVisible = await saveButton.count() > 0 && await saveButton.first().isVisible();
+    const revertVisible = await revertButton.count() > 0 && await revertButton.first().isVisible();
+    return saveVisible || revertVisible;
+  },
+
+  /**
+   * Save current Auto Run content
+   */
+  async saveAutoRunContent(window: Page): Promise<boolean> {
+    const saveButton = window.locator('button').filter({ hasText: 'Save' });
+    if (await saveButton.count() > 0 && await saveButton.first().isVisible()) {
+      await saveButton.first().click();
+      return true;
+    }
+    // Try keyboard shortcut
+    await window.keyboard.press('Meta+S');
+    return true;
+  },
+
+  /**
+   * Revert Auto Run content to saved state
+   */
+  async revertAutoRunContent(window: Page): Promise<boolean> {
+    const revertButton = window.locator('button').filter({ hasText: 'Revert' });
+    if (await revertButton.count() > 0 && await revertButton.first().isVisible()) {
+      await revertButton.first().click();
+      return true;
+    }
+    return false;
+  },
 };
