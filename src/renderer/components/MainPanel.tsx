@@ -871,6 +871,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                   setPreviewFile({ ...previewFile, content });
                 }}
                 shortcuts={shortcuts}
+                fileTree={props.fileTree}
+                cwd={activeSession?.cwd}
+                onFileClick={props.onFileClick}
               />
             </div>
           ) : (

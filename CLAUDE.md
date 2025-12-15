@@ -95,6 +95,7 @@ src/
 | Add playbook feature | `src/cli/services/playbooks.ts` |
 | Modify wizard flow | `src/renderer/components/Wizard/` (see Onboarding Wizard section) |
 | Add tour step | `src/renderer/components/Wizard/tour/tourSteps.ts` |
+| Modify file linking | `src/renderer/utils/remarkFileLinks.ts` (remark plugin for `[[wiki]]` and path links) |
 
 ## Core Patterns
 

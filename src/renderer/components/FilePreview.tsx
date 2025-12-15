@@ -11,6 +11,8 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { MermaidRenderer } from './MermaidRenderer';
 import { getEncoding } from 'js-tiktoken';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
+import { remarkFileLinks } from '../utils/remarkFileLinks';
+import type { FileNode } from '../hooks/useFileExplorer';
 
 interface FileStats {
   size: number;
@@ -26,6 +28,12 @@ interface FilePreviewProps {
   setMarkdownEditMode: (value: boolean) => void;
   onSave?: (path: string, content: string) => Promise<void>;
   shortcuts: Record<string, any>;
+  /** File tree for linking file references */
+  fileTree?: FileNode[];
+  /** Current working directory for proximity-based matching */
+  cwd?: string;
+  /** Callback when a file link is clicked */
+  onFileClick?: (path: string) => void;
 }
 
 // Get language from filename extension
@@ -317,7 +325,7 @@ function remarkHighlight() {
   };
 }
 
-export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdownEditMode, onSave, shortcuts }: FilePreviewProps) {
+export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdownEditMode, onSave, shortcuts, fileTree, cwd, onFileClick }: FilePreviewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
@@ -1102,24 +1110,38 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
               .prose img { display: block; max-width: 100%; height: auto; }
             `}</style>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkHighlight]}
+              remarkPlugins={[
+                remarkGfm,
+                remarkHighlight,
+                ...(fileTree && fileTree.length > 0 && cwd !== undefined
+                  ? [[remarkFileLinks, { fileTree, cwd }] as any]
+                  : [])
+              ]}
               rehypePlugins={[rehypeRaw]}
               components={{
-                a: ({ node, href, children, ...props }) => (
-                  <a
-                    href={href}
-                    {...props}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (href) {
-                        window.maestro.shell.openExternal(href);
-                      }
-                    }}
-                    style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
-                  >
-                    {children}
-                  </a>
-                ),
+                a: ({ node, href, children, ...props }) => {
+                  // Handle maestro-file:// protocol for internal file links
+                  const isMaestroFile = href?.startsWith('maestro-file://');
+                  const filePath = isMaestroFile ? href.replace('maestro-file://', '') : null;
+
+                  return (
+                    <a
+                      href={href}
+                      {...props}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (isMaestroFile && filePath && onFileClick) {
+                          onFileClick(filePath);
+                        } else if (href) {
+                          window.maestro.shell.openExternal(href);
+                        }
+                      }}
+                      style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
+                    >
+                      {children}
+                    </a>
+                  );
+                },
                 code: ({ node, inline, className, children, ...props }) => {
                   const match = (className || '').match(/language-(\w+)/);
                   const language = match ? match[1] : 'text';
