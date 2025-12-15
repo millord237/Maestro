@@ -1271,7 +1271,10 @@ export function SessionList(props: SessionListProps) {
                   className="ml-8 mr-3 mt-1 mb-2 flex gap-1 h-1.5 cursor-pointer"
                   onClick={() => setBookmarksCollapsed(false)}
                 >
-                  {[...filteredSessions.filter(s => s.bookmarked)].sort((a, b) => compareSessionNames(a.name, b.name)).map(s => (
+                  {[...filteredSessions.filter(s => s.bookmarked)].sort((a, b) => compareSessionNames(a.name, b.name)).map(s => {
+                    // Check if this session has any unread tabs
+                    const hasUnreadTabs = s.aiTabs?.some(tab => tab.hasUnread);
+                    return (
                     <div
                       key={`bookmark-collapsed-${s.id}`}
                       className="group/indicator relative flex-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
@@ -1287,6 +1290,13 @@ export function SessionList(props: SessionListProps) {
                         setActiveSessionId(s.id);
                       }}
                     >
+                      {/* Unread indicator tip - red dot at right end */}
+                      {hasUnreadTabs && (
+                        <div
+                          className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: theme.colors.error }}
+                        />
+                      )}
                       {/* Hover Tooltip for Collapsed Bookmark Indicator */}
                       <div
                         className="fixed rounded px-3 py-2 z-[100] opacity-0 group-hover/indicator:opacity-100 pointer-events-none transition-opacity shadow-xl"
@@ -1370,7 +1380,7 @@ export function SessionList(props: SessionListProps) {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
@@ -1464,7 +1474,10 @@ export function SessionList(props: SessionListProps) {
                     className="ml-8 mr-3 mt-1 mb-2 flex gap-1 h-1.5 cursor-pointer"
                     onClick={() => toggleGroup(group.id)}
                   >
-                    {groupSessions.map(s => (
+                    {groupSessions.map(s => {
+                      // Check if this session has any unread tabs
+                      const hasUnreadTabs = s.aiTabs?.some(tab => tab.hasUnread);
+                      return (
                       <div
                         key={`group-collapsed-${group.id}-${s.id}`}
                         className="group/indicator relative flex-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
@@ -1480,6 +1493,13 @@ export function SessionList(props: SessionListProps) {
                           setActiveSessionId(s.id);
                         }}
                       >
+                        {/* Unread indicator tip - red dot at right end */}
+                        {hasUnreadTabs && (
+                          <div
+                            className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: theme.colors.error }}
+                          />
+                        )}
                         {/* Hover Tooltip for Collapsed Group Indicator */}
                         <div
                           className="fixed rounded px-3 py-2 z-[100] opacity-0 group-hover/indicator:opacity-100 pointer-events-none transition-opacity shadow-xl"
@@ -1563,7 +1583,7 @@ export function SessionList(props: SessionListProps) {
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                 )}
               </div>
@@ -1672,7 +1692,10 @@ export function SessionList(props: SessionListProps) {
                 className="ml-8 mr-3 mt-1 mb-2 flex gap-1 h-1.5 cursor-pointer"
                 onClick={() => setUngroupedCollapsed(false)}
               >
-                {[...filteredSessions.filter(s => !s.groupId)].sort((a, b) => compareSessionNames(a.name, b.name)).map(s => (
+                {[...filteredSessions.filter(s => !s.groupId)].sort((a, b) => compareSessionNames(a.name, b.name)).map(s => {
+                  // Check if this session has any unread tabs
+                  const hasUnreadTabs = s.aiTabs?.some(tab => tab.hasUnread);
+                  return (
                   <div
                     key={`ungrouped-collapsed-${s.id}`}
                     className="group/indicator relative flex-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
@@ -1688,6 +1711,13 @@ export function SessionList(props: SessionListProps) {
                       setActiveSessionId(s.id);
                     }}
                   >
+                    {/* Unread indicator tip - red dot at right end */}
+                    {hasUnreadTabs && (
+                      <div
+                        className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: theme.colors.error }}
+                      />
+                    )}
                     {/* Hover Tooltip for Collapsed Ungrouped Indicator */}
                     <div
                       className="fixed rounded px-3 py-2 z-[100] opacity-0 group-hover/indicator:opacity-100 pointer-events-none transition-opacity shadow-xl"
@@ -1771,7 +1801,7 @@ export function SessionList(props: SessionListProps) {
                       </div>
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             )}
           </div>

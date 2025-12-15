@@ -740,6 +740,7 @@ interface TerminalOutputProps {
   onInterrupt?: () => void; // Callback to interrupt the current process
   audioFeedbackCommand?: string; // TTS command for speech synthesis
   onScrollPositionChange?: (scrollTop: number) => void; // Callback to save scroll position
+  onAtBottomChange?: (isAtBottom: boolean) => void; // Callback when user scrolls to/away from bottom
   initialScrollTop?: number; // Initial scroll position to restore
   markdownEditMode: boolean; // Whether to show raw markdown or rendered markdown for AI responses
   setMarkdownEditMode: (value: boolean) => void; // Toggle markdown mode
@@ -751,7 +752,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     session, theme, fontFamily, activeFocus, outputSearchOpen, outputSearchQuery,
     setOutputSearchOpen, setOutputSearchQuery, setActiveFocus, setLightboxImage,
     inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedItem, onInterrupt,
-    audioFeedbackCommand, onScrollPositionChange, initialScrollTop,
+    audioFeedbackCommand, onScrollPositionChange, onAtBottomChange, initialScrollTop,
     markdownEditMode, setMarkdownEditMode, onReplayMessage
   } = props;
 
@@ -805,6 +806,8 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const lastLogCountRef = useRef(0);
+  // Track previous isAtBottom to detect changes for callback
+  const prevIsAtBottomRef = useRef(true);
 
   // Track read state per tab - stores the log count when user scrolled to bottom
   const tabReadStateRef = useRef<Map<string, number>>(new Map());
@@ -1078,6 +1081,13 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     // Consider "at bottom" if within 50px of the bottom
     const atBottom = scrollHeight - scrollTop - clientHeight < 50;
     setIsAtBottom(atBottom);
+
+    // Notify parent when isAtBottom changes (for hasUnread logic)
+    if (atBottom !== prevIsAtBottomRef.current) {
+      prevIsAtBottomRef.current = atBottom;
+      onAtBottomChange?.(atBottom);
+    }
+
     // Clear new message indicator when user scrolls to bottom
     if (atBottom) {
       setHasNewMessages(false);
@@ -1098,7 +1108,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         scrollSaveTimerRef.current = null;
       }, 200);
     }
-  }, [activeTabId, filteredLogs.length, onScrollPositionChange]);
+  }, [activeTabId, filteredLogs.length, onScrollPositionChange, onAtBottomChange]);
 
   const handleScroll = useThrottledCallback(handleScrollInner, 16);
 

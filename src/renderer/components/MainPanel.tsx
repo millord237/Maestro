@@ -152,6 +152,8 @@ interface MainPanelProps {
   onOpenTabSearch?: () => void;
   // Scroll position persistence
   onScrollPositionChange?: (scrollTop: number) => void;
+  // Scroll bottom state change handler (for hasUnread logic)
+  onAtBottomChange?: (isAtBottom: boolean) => void;
   // Input blur handler for persisting AI input state
   onInputBlur?: () => void;
   // Prompt composer modal
@@ -892,6 +894,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 onInterrupt={handleInterrupt}
                 audioFeedbackCommand={props.audioFeedbackCommand}
                 onScrollPositionChange={props.onScrollPositionChange}
+                onAtBottomChange={props.onAtBottomChange}
                 initialScrollTop={
                   activeSession.inputMode === 'ai'
                     ? activeTab?.scrollTop

@@ -557,6 +557,31 @@ ${docList}
       console.error('[AUTORUN] Error logging start event:', err);
     }
 
+    // Add initial history entry when using worktree
+    if (worktreeActive && worktreePath && worktreeBranch) {
+      const worktreeStartSummary = `Auto Run started in worktree`;
+      const worktreeStartDetails = [
+        `**Worktree Auto Run Started**`,
+        ``,
+        `- **Branch:** \`${worktreeBranch}\``,
+        `- **Worktree Path:** \`${worktreePath}\``,
+        `- **Main Repo:** \`${session.cwd}\``,
+        `- **Documents:** ${documents.map(d => d.filename).join(', ')}`,
+        `- **Total Tasks:** ${initialTotalTasks}`,
+        loopEnabled ? `- **Loop Mode:** Enabled${maxLoops ? ` (max ${maxLoops})` : ''}` : '',
+      ].filter(line => line !== '').join('\n');
+
+      onAddHistoryEntry({
+        type: 'AUTO',
+        timestamp: Date.now(),
+        summary: worktreeStartSummary,
+        fullResponse: worktreeStartDetails,
+        projectPath: effectiveCwd,
+        sessionId: sessionId,
+        success: true,
+      });
+    }
+
     // Store custom prompt for persistence
     setCustomPrompts(prev => ({ ...prev, [sessionId]: prompt }));
 
@@ -741,7 +766,8 @@ ${docList}
             if (result.claudeSessionId) {
               claudeSessionIds.push(result.claudeSessionId);
               // Register as auto-initiated Maestro session
-              window.maestro.claude.registerSessionOrigin(session.cwd, result.claudeSessionId, 'auto')
+              // Use effectiveCwd (worktree path when active) so session can be found later
+              window.maestro.claude.registerSessionOrigin(effectiveCwd, result.claudeSessionId, 'auto')
                 .catch(err => console.error('[BatchProcessor] Failed to register session origin:', err));
             }
 
@@ -803,10 +829,11 @@ ${docList}
 
             if (result.success && result.claudeSessionId) {
               // Request a synopsis from the agent by resuming the session
+              // Use effectiveCwd (worktree path when active) to find the session
               try {
                 const synopsisResult = await onSpawnSynopsis(
                   sessionId,
-                  session.cwd,
+                  effectiveCwd,
                   result.claudeSessionId,
                   BATCH_SYNOPSIS_PROMPT
                 );
@@ -825,13 +852,14 @@ ${docList}
             }
 
             // Add history entry
+            // Use effectiveCwd for projectPath so clicking the session link looks in the right place
             onAddHistoryEntry({
               type: 'AUTO',
               timestamp: Date.now(),
               summary: shortSummary,
               fullResponse: fullSynopsis,
               claudeSessionId: result.claudeSessionId,
-              projectPath: session.cwd,
+              projectPath: effectiveCwd,
               sessionId: sessionId,
               success: result.success,
               usageStats: result.usageStats,

@@ -793,11 +793,17 @@ export default function MaestroConsole() {
         }
 
         // Update the target tab's logs within the aiTabs array
-        // Also mark as unread if this is not the active tab
+        // Mark as unread if user hasn't seen the new message:
+        // - The tab is not the active tab in this session, OR
+        // - The session is not the active session, OR
+        // - The user has scrolled up (not at bottom)
         const isTargetTabActive = targetTab.id === s.activeTabId;
+        const isThisSessionActive = s.id === activeSessionIdRef.current;
+        const isUserAtBottom = targetTab.isAtBottom !== false; // Default to true if undefined
+        const shouldMarkUnread = !isTargetTabActive || !isThisSessionActive || !isUserAtBottom;
         const updatedAiTabs = s.aiTabs.map(tab =>
           tab.id === targetTab.id
-            ? { ...tab, logs: updatedTabLogs, hasUnread: !isTargetTabActive }
+            ? { ...tab, logs: updatedTabLogs, hasUnread: shouldMarkUnread }
             : tab
         );
 
@@ -5209,6 +5215,30 @@ export default function MaestroConsole() {
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id ? { ...s, terminalScrollTop: scrollTop } : s
             ));
+          }
+        }}
+        onAtBottomChange={(isAtBottom: boolean) => {
+          if (!activeSession) return;
+          // Save isAtBottom state for the current view (AI tab only - terminal auto-scrolls)
+          if (activeSession.inputMode === 'ai') {
+            const activeTab = getActiveTab(activeSession);
+            if (!activeTab) return;
+            setSessions(prev => prev.map(s => {
+              if (s.id !== activeSession.id) return s;
+              return {
+                ...s,
+                aiTabs: s.aiTabs.map(tab =>
+                  tab.id === activeTab.id
+                    ? {
+                        ...tab,
+                        isAtBottom,
+                        // Clear hasUnread when user scrolls to bottom
+                        hasUnread: isAtBottom ? false : tab.hasUnread
+                      }
+                    : tab
+                )
+              };
+            }));
           }
         }}
         onInputBlur={() => {
