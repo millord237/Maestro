@@ -222,8 +222,8 @@ describe('AutoRunnerHelpModal', () => {
     it('should apply theme background color to modal', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
-      // Find modal by its styling class
-      const modal = document.querySelector('.relative.w-full');
+      // Modal component uses inline width style
+      const modal = document.querySelector('[style*="width: 672px"]');
       expect(modal).toHaveStyle({ backgroundColor: mockTheme.colors.bgSidebar });
     });
 
@@ -246,10 +246,9 @@ describe('AutoRunnerHelpModal', () => {
     it('should call onClose when backdrop is clicked', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
-      // Find and click the backdrop (first element with bg-black/60)
-      const backdrop = document.querySelector('.absolute.inset-0.bg-black\\/60');
-      expect(backdrop).toBeInTheDocument();
-      fireEvent.click(backdrop!);
+      // Modal component with closeOnBackdropClick enabled - clicking the dialog element closes modal
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(dialog);
 
       expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
@@ -257,14 +256,11 @@ describe('AutoRunnerHelpModal', () => {
     it('should call onClose when X button is clicked', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
-      // Find the X button (in the header, first button)
-      const buttons = screen.getAllByRole('button');
-      const closeButton = buttons.find(btn => btn.querySelector('svg'));
+      // Modal component renders close button with aria-label
+      const closeButton = screen.getByRole('button', { name: 'Close modal' });
+      fireEvent.click(closeButton);
 
-      if (closeButton) {
-        fireEvent.click(closeButton);
-        expect(mockOnClose).toHaveBeenCalledTimes(1);
-      }
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
 
     it('should call onClose when "Got it" button is clicked', () => {
@@ -429,20 +425,23 @@ describe('AutoRunnerHelpModal', () => {
     it('should have max-width constraint on modal', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
-      const modal = document.querySelector('.max-w-2xl');
+      // Modal component uses inline width style
+      const modal = document.querySelector('[style*="width: 672px"]');
       expect(modal).toBeInTheDocument();
     });
 
     it('should have max-height constraint for scrolling', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
-      const modal = document.querySelector('.max-h-\\[85vh\\]');
+      // Modal component uses inline max-height style
+      const modal = document.querySelector('[style*="max-height: 85vh"]');
       expect(modal).toBeInTheDocument();
     });
 
     it('should use flex layout for modal structure', () => {
       render(<AutoRunnerHelpModal theme={mockTheme} onClose={mockOnClose} />);
 
+      // Modal inner container uses flex flex-col
       const flexModal = document.querySelector('.flex.flex-col');
       expect(flexModal).toBeInTheDocument();
     });

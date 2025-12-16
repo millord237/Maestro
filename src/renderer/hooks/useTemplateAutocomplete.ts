@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { TEMPLATE_VARIABLES } from '../utils/templateVariables';
+import { useClickOutside } from './useClickOutside';
 
 export interface AutocompleteState {
   isOpen: boolean;
@@ -243,24 +244,12 @@ export function useTemplateAutocomplete({
     }
   }, [autocompleteState.selectedIndex, autocompleteState.isOpen]);
 
-  // Close on click outside
-  useEffect(() => {
-    if (!autocompleteState.isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        autocompleteRef.current &&
-        !autocompleteRef.current.contains(e.target as Node) &&
-        textareaRef.current &&
-        !textareaRef.current.contains(e.target as Node)
-      ) {
-        closeAutocomplete();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [autocompleteState.isOpen, closeAutocomplete, textareaRef]);
+  // Close on click outside (uses multiple refs to exclude both dropdown and textarea)
+  useClickOutside(
+    [autocompleteRef, textareaRef],
+    closeAutocomplete,
+    autocompleteState.isOpen
+  );
 
   return {
     autocompleteState,

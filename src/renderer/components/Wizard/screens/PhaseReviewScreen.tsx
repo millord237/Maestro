@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
+import { useClickOutside } from '../../../hooks';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -76,17 +77,7 @@ function DocumentSelector({
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
+  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
   // Close dropdown on Escape - stop propagation to prevent modal from closing
   useEffect(() => {

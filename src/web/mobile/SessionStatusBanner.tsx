@@ -24,7 +24,8 @@ import { StatusDot, type SessionStatus } from '../components/Badge';
 import type { Session, UsageStats, LastResponsePreview } from '../hooks/useSessions';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
 import { webLogger } from '../utils/logger';
-import { formatRelativeTime } from '../../shared/formatters';
+import { formatRelativeTime, formatCost } from '../../shared/formatters';
+import { stripAnsiCodes } from '../../shared/stringUtils';
 
 /**
  * Props for SessionStatusBanner component
@@ -38,16 +39,6 @@ export interface SessionStatusBannerProps {
   style?: React.CSSProperties;
   /** Callback when user taps to expand the full response (for task 1.30) */
   onExpandResponse?: (lastResponse: LastResponsePreview) => void;
-}
-
-/**
- * Strip ANSI escape codes from text
- * Web interface doesn't render terminal colors, so we remove them for clean display
- */
-function stripAnsiCodes(text: string): string {
-  // Matches ANSI escape sequences: ESC[ followed by params and command letter
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
 /**
@@ -72,22 +63,6 @@ function truncatePath(path: string, maxLength: number = 30): string {
   }
 
   return `.../${lastTwo}`;
-}
-
-/**
- * Format cost in USD for display
- * Shows appropriate precision based on amount:
- * - Less than $0.01: shows 4 decimal places (e.g., $0.0012)
- * - Less than $1.00: shows 2-3 decimal places (e.g., $0.12)
- * - $1.00 or more: shows 2 decimal places (e.g., $1.50)
- */
-function formatCost(cost: number): string {
-  if (cost < 0.01) {
-    return `$${cost.toFixed(4)}`;
-  } else if (cost < 1.0) {
-    return `$${cost.toFixed(3)}`;
-  }
-  return `$${cost.toFixed(2)}`;
 }
 
 /**

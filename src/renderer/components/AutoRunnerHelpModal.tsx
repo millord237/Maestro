@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import { X, FolderOpen, FileText, CheckSquare, Play, Settings, History, Eye, Square, Keyboard, Repeat, RotateCcw, BookMarked, GitBranch, Image, Variable } from 'lucide-react';
+import React from 'react';
+import { FolderOpen, FileText, CheckSquare, Play, Settings, History, Eye, Square, Keyboard, Repeat, RotateCcw, BookMarked, GitBranch, Image, Variable } from 'lucide-react';
 import type { Theme } from '../types';
-import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { Modal } from './ui/Modal';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 interface AutoRunnerHelpModalProps {
@@ -11,75 +11,33 @@ interface AutoRunnerHelpModalProps {
 }
 
 export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps) {
-  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
-  const layerIdRef = useRef<string>();
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  // Register layer on mount
-  useEffect(() => {
-    const id = registerLayer({
-      type: 'modal',
-      priority: MODAL_PRIORITIES.CONFIRM, // Use same priority as confirm modal
-      onEscape: () => {
-        onCloseRef.current();
-      }
-    });
-    layerIdRef.current = id;
-
-    return () => {
-      if (layerIdRef.current) {
-        unregisterLayer(layerIdRef.current);
-      }
-    };
-  }, [registerLayer, unregisterLayer]);
-
-  // Keep escape handler up to date
-  useEffect(() => {
-    if (layerIdRef.current) {
-      updateLayerHandler(layerIdRef.current, () => {
-        onCloseRef.current();
-      });
-    }
-  }, [onClose, updateLayerHandler]);
-
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50">
-      {/* Backdrop */}
+    <Modal
+      theme={theme}
+      title="Auto Run Guide"
+      priority={MODAL_PRIORITIES.CONFIRM}
+      onClose={onClose}
+      width={672}
+      maxHeight="85vh"
+      closeOnBackdropClick
+      zIndex={50}
+      footer={
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded text-sm font-medium transition-colors hover:opacity-90"
+          style={{
+            backgroundColor: theme.colors.accent,
+            color: 'white'
+          }}
+        >
+          Got it
+        </button>
+      }
+    >
       <div
-        className="absolute inset-0 bg-black/60"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div
-        className="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-lg border shadow-2xl flex flex-col"
-        style={{
-          backgroundColor: theme.colors.bgSidebar,
-          borderColor: theme.colors.border
-        }}
+        className="space-y-6"
+        style={{ color: theme.colors.textMain }}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-4 border-b"
-          style={{ borderColor: theme.colors.border }}
-        >
-          <h2 className="text-lg font-bold" style={{ color: theme.colors.textMain }}>
-            Auto Run Guide
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" style={{ color: theme.colors.textDim }} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div
-          className="flex-1 overflow-y-auto px-6 py-5 space-y-6 scrollbar-thin"
-          style={{ color: theme.colors.textMain }}
-        >
           {/* Introduction */}
           <section>
             <p className="text-sm leading-relaxed" style={{ color: theme.colors.textDim }}>
@@ -551,25 +509,7 @@ export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps
               </div>
             </div>
           </section>
-        </div>
-
-        {/* Footer */}
-        <div
-          className="flex justify-end px-6 py-4 border-t"
-          style={{ borderColor: theme.colors.border }}
-        >
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded text-sm font-medium transition-colors hover:opacity-90"
-            style={{
-              backgroundColor: theme.colors.accent,
-              color: 'white'
-            }}
-          >
-            Got it
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -144,7 +144,7 @@ describe('PlaybookDeleteConfirmModal', () => {
 
       const dialog = screen.getByRole('dialog');
       expect(dialog).toHaveAttribute('aria-modal', 'true');
-      expect(dialog).toHaveAttribute('aria-label', 'Delete Playbook Confirmation');
+      expect(dialog).toHaveAttribute('aria-label', 'Delete Playbook');
     });
   });
 
@@ -245,7 +245,8 @@ describe('PlaybookDeleteConfirmModal', () => {
         </TestWrapper>
       );
 
-      const modalBox = container.querySelector('.w-\\[400px\\]');
+      // Modal component uses inline width style instead of Tailwind class
+      const modalBox = container.querySelector('[style*="width: 400px"]');
       expect(modalBox).toHaveStyle({
         backgroundColor: mockTheme.colors.bgSidebar,
         borderColor: mockTheme.colors.border,
@@ -369,7 +370,7 @@ describe('PlaybookDeleteConfirmModal', () => {
       expect(dialog).toHaveClass('fixed', 'inset-0');
     });
 
-    it('has proper width class', () => {
+    it('has proper width style', () => {
       const { container } = render(
         <TestWrapper>
           <PlaybookDeleteConfirmModal
@@ -381,7 +382,8 @@ describe('PlaybookDeleteConfirmModal', () => {
         </TestWrapper>
       );
 
-      const modalBox = container.querySelector('.w-\\[400px\\]');
+      // Modal component uses inline width style instead of Tailwind class
+      const modalBox = container.querySelector('[style*="width: 400px"]');
       expect(modalBox).toBeInTheDocument();
     });
   });

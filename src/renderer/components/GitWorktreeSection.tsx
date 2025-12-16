@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { GitBranch, AlertTriangle, Loader2, ChevronDown } from 'lucide-react';
 import type { Theme } from '../types';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 /**
  * Worktree validation state type
@@ -80,6 +81,9 @@ export function GitWorktreeSection({
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Close branch dropdown when clicking outside
+  useClickOutside(branchDropdownRef, () => setShowBranchDropdown(false), showBranchDropdown);
+
   // Handle browse button click for base directory
   const handleBrowseBaseDir = async () => {
     const result = await window.maestro.dialog.selectFolder();
@@ -87,20 +91,6 @@ export function GitWorktreeSection({
       setWorktreeBaseDir(result);
     }
   };
-
-  // Close branch dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target as Node)) {
-        setShowBranchDropdown(false);
-      }
-    };
-
-    if (showBranchDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showBranchDropdown]);
 
   return (
     <div className="mb-6">

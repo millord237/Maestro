@@ -30,6 +30,11 @@ export { useCliActivityMonitoring } from './useCliActivityMonitoring';
 export { useThemeStyles } from './useThemeStyles';
 export { useSortedSessions, stripLeadingEmojis, compareNamesIgnoringEmojis } from './useSortedSessions';
 export { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './useInputProcessing';
+export { useModalLayer } from './useModalLayer';
+export { useClickOutside } from './useClickOutside';
+export { useListNavigation } from './useListNavigation';
+export { useExpandedSet } from './useExpandedSet';
+export { useScrollPosition } from './useScrollPosition';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -111,3 +116,8 @@ export type {
   UseInputProcessingReturn,
   BatchState,
 } from './useInputProcessing';
+export type { UseModalLayerOptions } from './useModalLayer';
+export type { UseClickOutsideOptions } from './useClickOutside';
+export type { UseListNavigationOptions, UseListNavigationReturn } from './useListNavigation';
+export type { UseExpandedSetOptions, UseExpandedSetReturn } from './useExpandedSet';
+export type { UseScrollPositionOptions, UseScrollPositionReturn, ScrollMetrics } from './useScrollPosition';

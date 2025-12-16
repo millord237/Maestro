@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Folder, X, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Folder, RefreshCw } from 'lucide-react';
 import type { AgentConfig, Session, ToolType } from '../types';
-import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { validateNewSession } from '../utils/sessionValidation';
+import { FormInput } from './ui/FormInput';
+import { Modal, ModalFooter } from './ui/Modal';
 
 interface AgentDebugInfo {
   agentId: string;
@@ -37,10 +38,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
   const [homeDir, setHomeDir] = useState<string>('');
   const [customAgentPaths, setCustomAgentPaths] = useState<Record<string, string>>({});
 
-  // Layer stack integration
-  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
-  const layerIdRef = useRef<string>();
-  const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch home directory on mount for tilde expansion
@@ -134,6 +131,35 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     setWorkingDir('');
   }, [instanceName, selectedAgent, workingDir, onCreate, onClose, expandTilde, existingSessions]);
 
+  // Check if form is valid for submission
+  const isFormValid = useMemo(() => {
+    return selectedAgent &&
+           agents.find(a => a.id === selectedAgent)?.available &&
+           workingDir.trim() &&
+           instanceName.trim() &&
+           validation.valid;
+  }, [selectedAgent, agents, workingDir, instanceName, validation.valid]);
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Handle Cmd+O for folder picker before stopping propagation
+    if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSelectFolder();
+      return;
+    }
+    // Handle Cmd+Enter for creating agent
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isFormValid) {
+        handleCreate();
+      }
+      return;
+    }
+  }, [handleSelectFolder, handleCreate, isFormValid]);
+
   // Effects
   useEffect(() => {
     if (isOpen) {
@@ -141,114 +167,40 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     }
   }, [isOpen]);
 
-  // Register layer when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      const id = registerLayer({
-        id: '',
-        type: 'modal',
-        priority: MODAL_PRIORITIES.NEW_INSTANCE,
-        blocksLowerLayers: true,
-        capturesFocus: true,
-        focusTrap: 'strict',
-        ariaLabel: 'Create New Agent',
-        onEscape: onClose,
-      });
-      layerIdRef.current = id;
-
-      return () => {
-        if (layerIdRef.current) {
-          unregisterLayer(layerIdRef.current);
-        }
-      };
-    }
-  }, [isOpen, registerLayer, unregisterLayer]);
-
-  // Update handler when dependencies change
-  useEffect(() => {
-    if (isOpen && layerIdRef.current) {
-      updateLayerHandler(layerIdRef.current, onClose);
-    }
-  }, [isOpen, onClose, updateLayerHandler]);
-
-  // Focus name input on open (only once, not on every render)
-  useEffect(() => {
-    if (isOpen && nameInputRef.current) {
-      nameInputRef.current.focus();
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999]"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Create New Agent"
-      tabIndex={-1}
-      ref={modalRef}
-      onKeyDown={(e) => {
-        // Handle Cmd+O for folder picker before stopping propagation
-        if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleSelectFolder();
-          return;
+    <div onKeyDown={handleKeyDown}>
+      <Modal
+        theme={theme}
+        title="Create New Agent"
+        priority={MODAL_PRIORITIES.NEW_INSTANCE}
+        onClose={onClose}
+        width={500}
+        initialFocusRef={nameInputRef}
+        footer={
+          <ModalFooter
+            theme={theme}
+            onCancel={onClose}
+            onConfirm={handleCreate}
+            confirmLabel="Create Agent"
+            confirmDisabled={!isFormValid}
+          />
         }
-        // Handle Cmd+Enter for creating agent
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (selectedAgent && agents.find(a => a.id === selectedAgent)?.available && workingDir.trim() && instanceName.trim() && validation.valid) {
-            handleCreate();
-          }
-          return;
-        }
-        // Stop propagation of all other keyboard events to prevent background components from handling them
-        if (e.key !== 'Escape') {
-          e.stopPropagation();
-        }
-      }}
-    >
-      <div
-        className="w-[500px] rounded-xl border shadow-2xl overflow-hidden"
-        style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
       >
-        {/* Header */}
-        <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: theme.colors.border }}>
-          <h2 className="text-lg font-bold" style={{ color: theme.colors.textMain }}>Create New Agent</h2>
-          <button onClick={onClose} style={{ color: theme.colors.textDim }}>
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="space-y-5">
           {/* Agent Name */}
-          <div>
-            <label htmlFor="agent-name-input" className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
-              Agent Name
-            </label>
-            <input
-              id="agent-name-input"
-              ref={nameInputRef}
-              type="text"
-              value={instanceName}
-              onChange={(e) => setInstanceName(e.target.value)}
-              placeholder=""
-              className="w-full p-2 rounded border bg-transparent outline-none"
-              style={{
-                borderColor: validation.errorField === 'name' ? theme.colors.error : theme.colors.border,
-                color: theme.colors.textMain
-              }}
-            />
-            {validation.errorField === 'name' && (
-              <p className="mt-1 text-xs" style={{ color: theme.colors.error }}>
-                {validation.error}
-              </p>
-            )}
-          </div>
+          <FormInput
+            ref={nameInputRef}
+            id="agent-name-input"
+            theme={theme}
+            label="Agent Name"
+            value={instanceName}
+            onChange={setInstanceName}
+            placeholder=""
+            error={validation.errorField === 'name' ? validation.error : undefined}
+            heightClass="p-2"
+          />
 
           {/* Agent Selection */}
           <div>
@@ -410,22 +362,16 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
           </div>
 
           {/* Working Directory */}
-          <div>
-            <label className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
-              Working Directory
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={workingDir}
-                onChange={(e) => setWorkingDir(e.target.value)}
-                placeholder="Select directory..."
-                className="flex-1 p-2 rounded border bg-transparent outline-none font-mono text-sm"
-                style={{
-                  borderColor: validation.errorField === 'directory' ? theme.colors.error : theme.colors.border,
-                  color: theme.colors.textMain
-                }}
-              />
+          <FormInput
+            theme={theme}
+            label="Working Directory"
+            value={workingDir}
+            onChange={setWorkingDir}
+            placeholder="Select directory..."
+            error={validation.errorField === 'directory' ? validation.error : undefined}
+            monospace
+            heightClass="p-2"
+            addon={
               <button
                 onClick={handleSelectFolder}
                 className="p-2 rounded border hover:bg-opacity-10"
@@ -434,34 +380,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
               >
                 <Folder className="w-5 h-5" />
               </button>
-            </div>
-            {validation.errorField === 'directory' && (
-              <p className="mt-1 text-xs" style={{ color: theme.colors.error }}>
-                {validation.error}
-              </p>
-            )}
-          </div>
+            }
+          />
         </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t flex justify-end gap-2" style={{ borderColor: theme.colors.border }}>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded border"
-            style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            disabled={!selectedAgent || !agents.find(a => a.id === selectedAgent)?.available || !workingDir.trim() || !instanceName.trim() || !validation.valid}
-            className="px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: theme.colors.accent, color: theme.colors.accentForeground }}
-          >
-            Create Agent
-          </button>
-        </div>
-      </div>
+      </Modal>
     </div>
   );
 }

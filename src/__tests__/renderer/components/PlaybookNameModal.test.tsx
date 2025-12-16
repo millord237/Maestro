@@ -199,8 +199,8 @@ describe('PlaybookNameModal', () => {
         />
       );
 
-      // Find the modal content container (has width of 400px)
-      const modalContent = document.querySelector('.w-\\[400px\\]');
+      // Find the modal content container (has inline width of 400px)
+      const modalContent = document.querySelector('[style*="width: 400px"]');
       expect(modalContent).toHaveStyle({
         backgroundColor: theme.colors.bgSidebar,
         borderColor: theme.colors.border,
@@ -970,7 +970,7 @@ describe('PlaybookNameModal', () => {
         />
       );
 
-      const modalContent = document.querySelector('.w-\\[400px\\]');
+      const modalContent = document.querySelector('[style*="width: 400px"]');
       expect(modalContent).toHaveStyle({
         backgroundColor: '#ffffff',
       });
