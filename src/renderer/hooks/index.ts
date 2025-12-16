@@ -5,6 +5,8 @@ export { useActivityTracker } from './useActivityTracker';
 export { useMobileLandscape } from './useMobileLandscape';
 export { useNavigationHistory } from './useNavigationHistory';
 export { useDebouncedValue, useThrottledCallback } from './useThrottle';
+export { useDebouncedPersistence, DEFAULT_DEBOUNCE_DELAY } from './useDebouncedPersistence';
+export type { UseDebouncedPersistenceReturn } from './useDebouncedPersistence';
 export { useAutoRunHandlers } from './useAutoRunHandlers';
 export { useInputSync } from './useInputSync';
 export { useSessionNavigation } from './useSessionNavigation';
