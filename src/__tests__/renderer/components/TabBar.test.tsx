@@ -86,6 +86,7 @@ describe('TabBar', () => {
   const mockOnTabReorder = vi.fn();
   const mockOnCloseOthers = vi.fn();
   const mockOnTabStar = vi.fn();
+  const mockOnTabMarkUnread = vi.fn();
   const mockOnToggleUnreadFilter = vi.fn();
   const mockOnOpenTabSearch = vi.fn();
 
@@ -1188,6 +1189,35 @@ describe('TabBar', () => {
 
       fireEvent.click(screen.getByText('Rename Tab'));
       expect(mockOnRequestRename).toHaveBeenCalledWith('tab-1');
+    });
+
+    it('calls onTabMarkUnread when Mark as Unread clicked', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        claudeSessionId: 'abc123'
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onTabMarkUnread={mockOnTabMarkUnread}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      fireEvent.click(screen.getByText('Mark as Unread'));
+      expect(mockOnTabMarkUnread).toHaveBeenCalledWith('tab-1');
     });
 
     it('displays session name in overlay header', async () => {

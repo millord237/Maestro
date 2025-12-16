@@ -15,6 +15,7 @@ interface TabBarProps {
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
   onCloseOthers?: (tabId: string) => void;
   onTabStar?: (tabId: string, starred: boolean) => void;
+  onTabMarkUnread?: (tabId: string) => void;
   showUnreadOnly?: boolean;
   onToggleUnreadFilter?: () => void;
   onOpenTabSearch?: () => void;
@@ -36,6 +37,7 @@ interface TabProps {
   isDragOver: boolean;
   onRename: () => void;
   onStar?: (starred: boolean) => void;
+  onMarkUnread?: () => void;
   shortcutHint?: number | null;
   registerRef?: (el: HTMLDivElement | null) => void;
   hasDraft?: boolean;
@@ -77,6 +79,7 @@ function Tab({
   isDragOver,
   onRename,
   onStar,
+  onMarkUnread,
   shortcutHint,
   registerRef,
   hasDraft
@@ -160,6 +163,12 @@ function Tab({
     // Call rename immediately (before closing overlay) to ensure prompt isn't blocked
     // Browsers block window.prompt() when called from setTimeout since it's not a direct user action
     onRename();
+    setOverlayOpen(false);
+  };
+
+  const handleMarkUnreadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onMarkUnread?.();
     setOverlayOpen(false);
   };
 
@@ -364,6 +373,15 @@ function Tab({
               <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
               Rename Tab
             </button>
+
+            <button
+              onClick={handleMarkUnreadClick}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+              style={{ color: theme.colors.textMain }}
+            >
+              <Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Mark as Unread
+            </button>
           </div>
         </div>,
         document.body
@@ -389,6 +407,7 @@ export function TabBar({
   onTabReorder,
   onCloseOthers,
   onTabStar,
+  onTabMarkUnread,
   showUnreadOnly: showUnreadOnlyProp,
   onToggleUnreadFilter,
   onOpenTabSearch
@@ -585,6 +604,7 @@ export function TabBar({
               isDragOver={dragOverTabId === tab.id}
               onRename={() => handleRenameRequest(tab.id)}
               onStar={onTabStar ? (starred) => onTabStar(tab.id, starred) : undefined}
+              onMarkUnread={onTabMarkUnread ? () => onTabMarkUnread(tab.id) : undefined}
               shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
               hasDraft={hasDraft(tab)}
               registerRef={(el) => {

@@ -144,6 +144,7 @@ interface MainPanelProps {
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
   onCloseOtherTabs?: (tabId: string) => void;
   onTabStar?: (tabId: string, starred: boolean) => void;
+  onTabMarkUnread?: (tabId: string) => void;
   onUpdateTabByClaudeSessionId?: (claudeSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
   onToggleTabReadOnlyMode?: () => void;
   onToggleTabSaveToHistory?: () => void;
@@ -212,7 +213,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
   const headerRef = useRef<HTMLDivElement>(null);
 
   // Extract tab handlers from props
-  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar, showUnreadOnly, onToggleUnreadFilter, onOpenTabSearch } = props;
+  const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar, onTabMarkUnread, showUnreadOnly, onToggleUnreadFilter, onOpenTabSearch } = props;
 
   // Get the active tab for header display
   // The header should show the active tab's data (UUID, name, cost, context), not session-level data
@@ -848,6 +849,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               onTabReorder={onTabReorder}
               onCloseOthers={onCloseOtherTabs}
               onTabStar={onTabStar}
+              onTabMarkUnread={onTabMarkUnread}
               showUnreadOnly={showUnreadOnly}
               onToggleUnreadFilter={onToggleUnreadFilter}
               onOpenTabSearch={onOpenTabSearch}

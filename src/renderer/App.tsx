@@ -5196,6 +5196,18 @@ export default function MaestroConsole() {
             };
           }));
         }}
+        onTabMarkUnread={(tabId: string) => {
+          if (!activeSession) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map(t =>
+                t.id === tabId ? { ...t, hasUnread: true } : t
+              )
+            };
+          }));
+        }}
         onToggleTabReadOnlyMode={() => {
           if (!activeSession) return;
           const activeTab = getActiveTab(activeSession);
