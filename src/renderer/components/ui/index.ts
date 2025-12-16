@@ -1,0 +1,9 @@
+/**
+ * UI Components - Reusable UI primitives
+ *
+ * This directory contains shared UI components that encapsulate common
+ * patterns used throughout the application.
+ */
+
+export { Modal, ModalFooter } from './Modal';
+export type { ModalProps, ModalFooterProps } from './Modal';
