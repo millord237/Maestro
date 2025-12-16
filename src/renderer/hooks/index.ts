@@ -31,6 +31,7 @@ export { useThemeStyles } from './useThemeStyles';
 export { useSortedSessions, stripLeadingEmojis, compareNamesIgnoringEmojis } from './useSortedSessions';
 export { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './useInputProcessing';
 export { useModalLayer } from './useModalLayer';
+export { useClickOutside } from './useClickOutside';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -113,3 +114,4 @@ export type {
   BatchState,
 } from './useInputProcessing';
 export type { UseModalLayerOptions } from './useModalLayer';
+export type { UseClickOutsideOptions } from './useClickOutside';
