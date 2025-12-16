@@ -37,7 +37,7 @@ import { EmptyStateView } from './components/EmptyStateView';
 
 // Import custom hooks
 import { useBatchProcessor } from './hooks/useBatchProcessor';
-import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers, useInputSync, useSessionNavigation } from './hooks';
+import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers, useInputSync, useSessionNavigation, useDebouncedPersistence } from './hooks';
 import type { AutoRunTreeNode } from './hooks';
 import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from './hooks/useTabCompletion';
 import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
@@ -2370,13 +2370,11 @@ export default function MaestroConsole() {
     showSessionJumpNumbers,
   } = useMainKeyboardHandler();
 
-  // Persist sessions and groups to electron-store (only after initial load)
-  useEffect(() => {
-    if (initialLoadComplete.current) {
-      window.maestro.sessions.setAll(sessions);
-    }
-  }, [sessions]);
+  // Persist sessions to electron-store using debounced persistence (reduces disk writes from 100+/sec to <1/sec during streaming)
+  // The hook handles: debouncing, flush-on-unmount, flush-on-visibility-change, flush-on-beforeunload
+  const { flushNow: flushSessionPersistence } = useDebouncedPersistence(sessions, initialLoadComplete);
 
+  // Persist groups directly (groups change infrequently, no need to debounce)
   useEffect(() => {
     if (initialLoadComplete.current) {
       window.maestro.groups.setAll(groups);
@@ -2661,6 +2659,9 @@ export default function MaestroConsole() {
 
         const newSessions = sessions.filter(s => s.id !== id);
         setSessions(newSessions);
+        // Flush immediately for critical operation (session deletion)
+        // Note: flushSessionPersistence will pick up the latest state via ref
+        setTimeout(() => flushSessionPersistence(), 0);
         if (newSessions.length > 0) {
           setActiveSessionId(newSessions[0].id);
         } else {
@@ -4761,6 +4762,7 @@ export default function MaestroConsole() {
           setSessions={setSessions}
           activeSessionId={activeSessionId}
           targetSessionId={renameInstanceSessionId || undefined}
+          onAfterRename={flushSessionPersistence}
         />
       )}
 

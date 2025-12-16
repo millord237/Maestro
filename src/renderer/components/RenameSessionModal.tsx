@@ -14,10 +14,12 @@ interface RenameSessionModalProps {
   activeSessionId: string;
   /** Optional: specific session ID to rename (overrides activeSessionId) */
   targetSessionId?: string;
+  /** Optional: callback to flush persistence immediately after rename (for debounced persistence) */
+  onAfterRename?: () => void;
 }
 
 export function RenameSessionModal(props: RenameSessionModalProps) {
-  const { theme, value, setValue, onClose, sessions, setSessions, activeSessionId, targetSessionId } = props;
+  const { theme, value, setValue, onClose, sessions, setSessions, activeSessionId, targetSessionId, onAfterRename } = props;
   // Use targetSessionId if provided, otherwise fall back to activeSessionId
   const sessionIdToRename = targetSessionId || activeSessionId;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +43,11 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
           targetSession.claudeSessionId,
           trimmedName
         ).catch(err => console.error('Failed to update Claude session name:', err));
+      }
+
+      // Flush persistence immediately for critical operation (session rename)
+      if (onAfterRename) {
+        setTimeout(() => onAfterRename(), 0);
       }
 
       onClose();
