@@ -77,6 +77,9 @@ export const MODAL_PRIORITIES = {
   /** Quick actions command palette (Cmd+K) */
   QUICK_ACTION: 700,
 
+  /** Fuzzy file search modal (Cmd+G) */
+  FUZZY_FILE_SEARCH: 690,
+
   /** Agent sessions browser (Cmd+Shift+L) */
   AGENT_SESSIONS: 680,
 

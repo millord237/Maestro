@@ -319,9 +319,11 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
       }
     }
 
-    // Check if we're in read-only mode for the log entry
+    // Check if we're in read-only mode for the log entry (tab setting OR Auto Run without worktree)
     const activeTabForEntry = currentMode === 'ai' ? getActiveTab(activeSession) : null;
-    const isReadOnlyEntry = activeTabForEntry?.readOnlyMode === true;
+    const currentBatchState = getBatchState(activeSession.id);
+    const isAutoRunReadOnly = currentBatchState.isRunning && !currentBatchState.worktreeActive;
+    const isReadOnlyEntry = activeTabForEntry?.readOnlyMode === true || isAutoRunReadOnly;
 
     const newEntry: LogEntry = {
       id: generateId(),
@@ -522,7 +524,10 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
           const freshActiveTab = getActiveTab(freshSession);
           const tabClaudeSessionId = freshActiveTab?.claudeSessionId;
           const isNewSession = !tabClaudeSessionId;
-          const isReadOnly = activeBatchRunState.isRunning || freshActiveTab?.readOnlyMode;
+          // Check CURRENT session's Auto Run state (not any session's) and respect worktree bypass
+          const currentSessionBatchState = getBatchState(activeSessionId);
+          const isAutoRunReadOnly = currentSessionBatchState.isRunning && !currentSessionBatchState.worktreeActive;
+          const isReadOnly = isAutoRunReadOnly || freshActiveTab?.readOnlyMode;
 
           // Filter out --dangerously-skip-permissions when read-only mode is active
           // (it would override --permission-mode plan)

@@ -7,6 +7,8 @@ import { Clipboard, Loader2, ImageOff } from 'lucide-react';
 import type { Theme } from '../types';
 import type { FileNode } from '../hooks/useFileExplorer';
 import { remarkFileLinks } from '../utils/remarkFileLinks';
+import remarkFrontmatter from 'remark-frontmatter';
+import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
 
 // ============================================================================
 // LocalImage - Loads local images via IPC
@@ -199,7 +201,11 @@ interface MarkdownRendererProps {
 export const MarkdownRenderer = memo(({ content, theme, onCopy, className = '', fileTree, cwd, projectRoot, onFileClick }: MarkdownRendererProps) => {
   // Memoize remark plugins to avoid recreating on every render
   const remarkPlugins = useMemo(() => {
-    const plugins: any[] = [remarkGfm];
+    const plugins: any[] = [
+      remarkGfm,
+      remarkFrontmatter,
+      remarkFrontmatterTable,
+    ];
     // Add remarkFileLinks if we have file tree for relative paths,
     // OR if we have projectRoot for absolute paths (even with empty file tree)
     if ((fileTree && fileTree.length > 0 && cwd !== undefined) || projectRoot) {

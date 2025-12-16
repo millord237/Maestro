@@ -12,6 +12,8 @@ import { MermaidRenderer } from './MermaidRenderer';
 import { getEncoding } from 'js-tiktoken';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { remarkFileLinks } from '../utils/remarkFileLinks';
+import remarkFrontmatter from 'remark-frontmatter';
+import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
 import type { FileNode } from '../hooks/useFileExplorer';
 
 interface FileStats {
@@ -1278,6 +1280,8 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
             <ReactMarkdown
               remarkPlugins={[
                 remarkGfm,
+                remarkFrontmatter,
+                remarkFrontmatterTable,
                 remarkHighlight,
                 ...(fileTree && fileTree.length > 0 && cwd !== undefined
                   ? [[remarkFileLinks, { fileTree, cwd }] as any]

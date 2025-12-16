@@ -154,6 +154,7 @@
     "react-syntax-highlighter": "^16.1.0",
     "react-virtuoso": "^4.15.0",
     "rehype-raw": "^7.0.0",
+    "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "ws": "^8.16.0"
   },

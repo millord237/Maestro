@@ -21,6 +21,7 @@ import { GitDiffViewer } from './components/GitDiffViewer';
 import { GitLogViewer } from './components/GitLogViewer';
 import { BatchRunnerModal, DEFAULT_BATCH_PROMPT } from './components/BatchRunnerModal';
 import { TabSwitcherModal } from './components/TabSwitcherModal';
+import { FileSearchModal, type FlatFileItem } from './components/FileSearchModal';
 import { PromptComposerModal } from './components/PromptComposerModal';
 import { ExecutionQueueBrowser } from './components/ExecutionQueueBrowser';
 import { StandingOvationOverlay } from './components/StandingOvationOverlay';
@@ -325,6 +326,9 @@ export default function MaestroConsole() {
 
   // Tab Switcher Modal State
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
+
+  // Fuzzy File Search Modal State
+  const [fuzzyFileSearchOpen, setFuzzyFileSearchOpen] = useState(false);
 
   // Prompt Composer Modal State
   const [promptComposerOpen, setPromptComposerOpen] = useState(false);
@@ -4197,7 +4201,7 @@ export default function MaestroConsole() {
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
     setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownEditMode,
-    toggleTabStar, setPromptComposerOpen, openWizardModal, rightPanelRef,
+    toggleTabStar, setPromptComposerOpen, openWizardModal, rightPanelRef, setFuzzyFileSearchOpen,
     // Navigation handlers from useKeyboardNavigation hook
     handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
   };
@@ -5488,6 +5492,38 @@ export default function MaestroConsole() {
             setTimeout(() => inputRef.current?.focus(), 50);
           }}
           onClose={() => setTabSwitcherOpen(false)}
+        />
+      )}
+
+      {/* --- FUZZY FILE SEARCH MODAL --- */}
+      {fuzzyFileSearchOpen && activeSession && (
+        <FileSearchModal
+          theme={theme}
+          fileTree={filteredFileTree}
+          shortcut={shortcuts.fuzzyFileSearch}
+          onFileSelect={(file: FlatFileItem, ancestorPaths: string[]) => {
+            // Expand all ancestor folders so the file is visible
+            setSessions(prev => prev.map(s => {
+              if (s.id !== activeSessionId) return s;
+              const newExpanded = new Set([...s.fileExplorerExpanded, ...ancestorPaths]);
+              return { ...s, fileExplorerExpanded: Array.from(newExpanded) };
+            }));
+
+            // Find the file index in the flattened tree to set selection
+            // We need to compute this after folders are expanded
+            setTimeout(() => {
+              // Set focus to right panel and files tab
+              setActiveRightTab('files');
+              setActiveFocus('right');
+
+              // Preview the file if it's not a folder
+              if (!file.isFolder && activeSession) {
+                const absolutePath = `${activeSession.fullPath}/${file.fullPath}`;
+                handleFileClick({ name: file.name, type: 'file' }, absolutePath, activeSession);
+              }
+            }, 50);
+          }}
+          onClose={() => setFuzzyFileSearchOpen(false)}
         />
       )}
 

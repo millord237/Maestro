@@ -186,6 +186,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       else if (ctx.isShortcut(e, 'goToFiles')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('files'); ctx.setActiveFocus('right'); }
       else if (ctx.isShortcut(e, 'goToHistory')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('history'); ctx.setActiveFocus('right'); }
       else if (ctx.isShortcut(e, 'goToAutoRun')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('autorun'); ctx.setActiveFocus('right'); }
+      else if (ctx.isShortcut(e, 'fuzzyFileSearch')) { e.preventDefault(); if (ctx.activeSession) ctx.setFuzzyFileSearchOpen(true); }
       else if (ctx.isShortcut(e, 'openImageCarousel')) {
         e.preventDefault();
         if (ctx.stagedImages.length > 0) {

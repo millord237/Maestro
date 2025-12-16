@@ -1810,7 +1810,18 @@ export function SessionList(props: SessionListProps) {
       ) : (
         /* SIDEBAR CONTENT: SKINNY MODE */
         <div className="flex-1 flex flex-col items-center py-4 gap-2 overflow-y-auto overflow-x-visible no-scrollbar">
-          {sortedSessions.map(session => (
+          {sortedSessions.map(session => {
+            const isInBatch = activeBatchSessionIds.includes(session.id);
+            const hasUnreadTabs = session.aiTabs?.some(tab => tab.hasUnread);
+            // Sessions in Auto Run mode should show yellow/warning color
+            const effectiveStatusColor = isInBatch
+              ? theme.colors.warning
+              : (session.toolType === 'claude' && !session.claudeSessionId
+                  ? undefined // Will use border style instead
+                  : getStatusColor(session.state, theme));
+            const shouldPulse = session.state === 'busy' || isInBatch;
+
+            return (
             <div
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
@@ -1818,15 +1829,25 @@ export function SessionList(props: SessionListProps) {
               className={`group relative w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${activeSessionId === session.id ? 'ring-2' : 'hover:bg-white/10'}`}
               style={{ ringColor: theme.colors.accent }}
             >
-              <div
-                className={`w-3 h-3 rounded-full ${session.state === 'busy' ? 'animate-pulse' : ''}`}
-                style={
-                  session.toolType === 'claude' && !session.claudeSessionId
-                    ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                    : { backgroundColor: getStatusColor(session.state, theme) }
-                }
-                title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
-              />
+              <div className="relative">
+                <div
+                  className={`w-3 h-3 rounded-full ${shouldPulse ? 'animate-pulse' : ''}`}
+                  style={
+                    session.toolType === 'claude' && !session.claudeSessionId && !isInBatch
+                      ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
+                      : { backgroundColor: effectiveStatusColor }
+                  }
+                  title={session.toolType === 'claude' && !session.claudeSessionId ? 'No active Claude session' : undefined}
+                />
+                {/* Unread Notification Badge */}
+                {activeSessionId !== session.id && hasUnreadTabs && (
+                  <div
+                    className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: theme.colors.error }}
+                    title="Unread messages"
+                  />
+                )}
+              </div>
 
               {/* Hover Tooltip for Skinny Mode */}
               <div
@@ -1915,7 +1936,8 @@ export function SessionList(props: SessionListProps) {
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 
