@@ -6,13 +6,14 @@
  * 2. Wiki-style references (Obsidian): `[[Note Name]]` or `[[Folder/Note]]`
  * 3. Wiki-style with alias: `[[Folder/Note|Display Text]]` - links to Note but shows "Display Text"
  * 4. Absolute paths: `/Users/name/Project/file.md` (converted to relative if within projectRoot)
+ * 5. Image embeds (Obsidian): `![[image.png]]` - renders image inline
  *
  * Links are validated against the provided fileTree before conversion.
  * Uses `maestro-file://` protocol for internal file preview handling.
  */
 
 import { visit } from 'unist-util-visit';
-import type { Root, Text, Link } from 'mdast';
+import type { Root, Text, Link, Image } from 'mdast';
 import type { FileNode } from '../hooks/useFileExplorer';
 
 export interface RemarkFileLinksOptions {
@@ -191,6 +192,11 @@ function validatePathReference(
 }
 
 // Regex patterns
+// Image embed: ![[image.png]] or ![[folder/image.png]] or ![[image.png|300]] (with width)
+// Must have image extension (png, jpg, jpeg, gif, webp, svg, bmp, ico)
+// Optional |width syntax for sizing (e.g., |300 means 300px width)
+const IMAGE_EMBED_PATTERN = /!\[\[([^\]|]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))(?:\|(\d+))?\]\]/gi;
+
 // Wiki-style: [[Note Name]] or [[Folder/Note]] or [[Folder/Note|Display Text]]
 // The pipe syntax allows custom display text: [[path|display]]
 const WIKI_LINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
@@ -202,7 +208,9 @@ const PATH_PATTERN = /(?<![:\w])(?:(?:[A-Za-z0-9_-]+\/)+[A-Za-z0-9_.-]+|[A-Za-z0
 // Absolute path pattern: Starts with / and contains path segments
 // Matches paths like /Users/pedram/Project/file.md or /home/user/docs/note.txt
 // Must end with a file extension to avoid matching arbitrary paths
-const ABSOLUTE_PATH_PATTERN = /\/(?:[A-Za-z0-9_. -]+\/)+[A-Za-z0-9_. -]+\.(?:md|txt|json|yaml|yml|toml|ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|h|hpp|css|scss|html|xml|sh|bash|zsh)/g;
+// Supports spaces, unicode, emoji, and special characters in path segments
+// Lookahead allows: whitespace, end of string, or common punctuation (including period, backtick)
+const ABSOLUTE_PATH_PATTERN = /\/(?:[^/\n]+\/)+[^/\n]+\.(?:md|txt|json|yaml|yml|toml|ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|h|hpp|css|scss|html|xml|sh|bash|zsh)(?=\s|$|[.,;:!?`'")\]}>])/g;
 
 /**
  * The remark plugin
@@ -231,7 +239,7 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
       if (!parent || index === undefined) return;
 
       const text = node.value;
-      const replacements: (Text | Link)[] = [];
+      const replacements: (Text | Link | Image)[] = [];
       let lastIndex = 0;
 
       // Combined processing - collect all matches with their positions
@@ -240,8 +248,55 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
         end: number;
         display: string;
         resolvedPath: string;
+        type: 'link' | 'image';
+        isRelativeToCwd?: boolean; // For images: true if path needs cwd prepended (fallback paths)
+        isFromFileTree?: boolean; // For images: true if path was found in file tree (complete from project root)
+        imageWidth?: number; // For images: optional width in pixels
       }
       const matches: Match[] = [];
+
+      // Find image embeds first (before wiki-links, since ![[...]] contains [[...]])
+      let imageMatch;
+      IMAGE_EMBED_PATTERN.lastIndex = 0;
+      while ((imageMatch = IMAGE_EMBED_PATTERN.exec(text)) !== null) {
+        const imagePath = imageMatch[1];
+        const widthStr = imageMatch[2]; // Optional width (e.g., "300")
+        const imageWidth = widthStr ? parseInt(widthStr, 10) : undefined;
+
+        // Try to find the image in the file tree first
+        const foundPath = findClosestMatch(imagePath, filenameIndex, allPaths, cwd);
+
+        // If not found in file tree, try common Obsidian attachment locations
+        // Obsidian stores attachments relative to the current document, typically in:
+        // 1. _attachments/ subfolder next to the document
+        // 2. attachments/ subfolder
+        // 3. Same folder as the document
+        let resolvedPath: string;
+        let isRelativeToCwd = false; // Track if path needs cwd prepended
+
+        let isFromFileTree = false;
+
+        if (foundPath) {
+          // Found in file tree - path is already complete from project root
+          resolvedPath = foundPath;
+          isFromFileTree = true;
+        } else {
+          // Not found - use _attachments fallback relative to current document
+          resolvedPath = `_attachments/${imagePath}`;
+          isRelativeToCwd = true; // This path is relative to cwd
+        }
+
+        matches.push({
+          start: imageMatch.index,
+          end: imageMatch.index + imageMatch[0].length,
+          display: imagePath,
+          resolvedPath,
+          type: 'image',
+          isRelativeToCwd,
+          isFromFileTree,
+          imageWidth,
+        });
+      }
 
       // Find wiki-style links
       let wikiMatch;
@@ -249,6 +304,13 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
       while ((wikiMatch = WIKI_LINK_PATTERN.exec(text)) !== null) {
         const reference = wikiMatch[1];  // The path part
         const displayText = wikiMatch[2];  // Optional display text after |
+
+        // Skip if already inside an image embed match
+        const isInsideExisting = matches.some(m =>
+          wikiMatch!.index >= m.start && wikiMatch!.index < m.end
+        );
+        if (isInsideExisting) continue;
+
         const resolvedPath = findClosestMatch(reference, filenameIndex, allPaths, cwd);
 
         if (resolvedPath) {
@@ -258,6 +320,7 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
             // Use display text if provided, otherwise use the reference
             display: displayText || reference,
             resolvedPath,
+            type: 'link',
           });
         }
       }
@@ -277,12 +340,15 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
 
           // Convert to relative path
           const relativePath = toRelativePath(absolutePath);
-          if (relativePath && allPaths.has(relativePath)) {
+          // For absolute paths within projectRoot, always create a link even if not in file tree
+          // The file click handler will attempt to open the file from disk
+          if (relativePath) {
             matches.push({
               start: absMatch.index,
               end: absMatch.index + absMatch[0].length,
               display: absolutePath,
               resolvedPath: relativePath,
+              type: 'link',
             });
           }
         }
@@ -308,6 +374,7 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
             end: pathMatch.index + pathMatch[0].length,
             display: reference,
             resolvedPath,
+            type: 'link',
           });
         }
       }
@@ -328,18 +395,58 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
           });
         }
 
-        // Add the link - use data-hProperties to pass the file path as a data attribute
-        // This survives rehype processing which may strip custom protocols from href
-        replacements.push({
-          type: 'link',
-          url: `maestro-file://${match.resolvedPath}`,
-          data: {
-            hProperties: {
-              'data-maestro-file': match.resolvedPath,
+        if (match.type === 'image') {
+          // Add image node - construct file:// URL for the image
+          // For AI terminal (has projectRoot): build absolute file:// URL
+          // For FilePreview (no projectRoot): use relative path (resolveImagePath handles it)
+          let imageSrc: string;
+          if (projectRoot) {
+            // Build full path:
+            // - If isRelativeToCwd (fallback path), need: projectRoot + cwd + resolvedPath
+            // - If from file tree (already full relative path), need: projectRoot + resolvedPath
+            let fullPath: string;
+            if (match.isRelativeToCwd && cwd) {
+              fullPath = `${projectRoot}/${cwd}/${match.resolvedPath}`;
+            } else {
+              fullPath = `${projectRoot}/${match.resolvedPath}`;
+            }
+            imageSrc = `file://${fullPath}`;
+          } else {
+            // Relative path - FilePreview's resolveImagePath will resolve from markdown file location
+            imageSrc = match.resolvedPath;
+          }
+          // Build style string - use specified width or default to max-width: 100%
+          const imageStyle = match.imageWidth
+            ? `width: ${match.imageWidth}px; height: auto;`
+            : 'max-width: 100%; height: auto;';
+
+          replacements.push({
+            type: 'image',
+            url: imageSrc,
+            alt: match.display,
+            data: {
+              hProperties: {
+                'data-maestro-image': match.resolvedPath,
+                'data-maestro-width': match.imageWidth?.toString(),
+                'data-maestro-from-tree': match.isFromFileTree ? 'true' : undefined,
+                style: imageStyle,
+              },
             },
-          },
-          children: [{ type: 'text', value: match.display }],
-        });
+          } as Image);
+        } else {
+          // Add the link - use data-hProperties to pass the file path as a data attribute
+          // This survives rehype processing which may strip custom protocols from href
+          replacements.push({
+            type: 'link',
+            url: `maestro-file://${match.resolvedPath}`,
+            data: {
+              hProperties: {
+                'data-maestro-file': match.resolvedPath,
+              },
+            },
+            children: [{ type: 'text', value: match.display }],
+          });
+        }
 
         lastIndex = match.end;
       }
@@ -357,6 +464,80 @@ export function remarkFileLinks(options: RemarkFileLinksOptions) {
 
       // Return the index to continue from (skip the nodes we just inserted)
       return index + replacements.length;
+    });
+
+    // Also process inlineCode nodes - paths wrapped in backticks
+    visit(tree, 'inlineCode', (node: any, index, parent) => {
+      if (!parent || index === undefined) return;
+
+      const code = node.value;
+
+      // Check if this inline code is a file path
+      // First try wiki-style
+      const wikiMatch = code.match(/^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$/);
+      if (wikiMatch) {
+        const reference = wikiMatch[1];
+        const displayText = wikiMatch[2];
+        const resolvedPath = findClosestMatch(reference, filenameIndex, allPaths, cwd);
+        if (resolvedPath) {
+          const link: Link = {
+            type: 'link',
+            url: `maestro-file://${resolvedPath}`,
+            data: {
+              hProperties: {
+                'data-maestro-file': resolvedPath,
+              },
+            },
+            children: [{ type: 'text', value: displayText || reference }],
+          };
+          parent.children.splice(index, 1, link);
+          return index + 1;
+        }
+      }
+
+      // Check for absolute path
+      if (projectRoot && code.startsWith('/')) {
+        // Check if it has a valid file extension
+        const extMatch = code.match(/\.(?:md|txt|json|yaml|yml|toml|ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|h|hpp|css|scss|html|xml|sh|bash|zsh)$/i);
+        if (extMatch) {
+          const relativePath = toRelativePath(code);
+          if (relativePath) {
+            // Extract just the filename for display
+            const filename = code.split('/').pop() || code;
+            const link: Link = {
+              type: 'link',
+              url: `maestro-file://${relativePath}`,
+              data: {
+                hProperties: {
+                  'data-maestro-file': relativePath,
+                },
+              },
+              children: [{ type: 'text', value: filename }],
+            };
+            parent.children.splice(index, 1, link);
+            return index + 1;
+          }
+        }
+      }
+
+      // Check for relative path (with slash or valid extension)
+      const hasSlash = code.includes('/') && !code.includes('://');
+      const hasValidExt = /\.(?:md|txt|json|yaml|yml|toml|ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|h|hpp|css|scss|html|xml|sh|bash|zsh)$/i.test(code);
+      if ((hasSlash || hasValidExt) && allPaths.has(code)) {
+        const filename = code.split('/').pop() || code;
+        const link: Link = {
+          type: 'link',
+          url: `maestro-file://${code}`,
+          data: {
+            hProperties: {
+              'data-maestro-file': code,
+            },
+          },
+          children: [{ type: 'text', value: filename }],
+        };
+        parent.children.splice(index, 1, link);
+        return index + 1;
+      }
     });
   };
 }

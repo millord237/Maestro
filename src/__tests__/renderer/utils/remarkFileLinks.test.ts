@@ -47,6 +47,14 @@ const sampleFileTree: FileNode[] = [
       { name: 'Meeting Notes.md', type: 'file' }, // Duplicate filename
     ]
   },
+  {
+    name: 'attachments',
+    type: 'folder',
+    children: [
+      { name: 'Pasted image 20250519123910.png', type: 'file' },
+      { name: 'screenshot.jpg', type: 'file' },
+    ]
+  },
   { name: 'README.md', type: 'file' },
   { name: 'config.json', type: 'file' },
   { name: 'index.ts', type: 'file' },
@@ -381,6 +389,183 @@ describe('remarkFileLinks', () => {
       );
       // remark-stringify wraps URLs with spaces in angle brackets
       expect(result).toContain('[/Users/pedram/Project/Notes/Meeting Notes.md](<maestro-file://Notes/Meeting Notes.md>)');
+    });
+
+    it('handles absolute paths with dashes and complex names', async () => {
+      const result = await processMarkdown(
+        'See /Users/pedram/Project/OPSWAT/Meetings/OP-0088.md - May 2025',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('[/Users/pedram/Project/OPSWAT/Meetings/OP-0088.md](maestro-file://OPSWAT/Meetings/OP-0088.md)');
+    });
+
+    it('handles multiple absolute paths in bulleted list', async () => {
+      const result = await processMarkdown(
+        '• /Users/pedram/Project/OPSWAT/Meetings/OP-0088.md - first\n• /Users/pedram/Project/OPSWAT/Meetings/OP-0200.md - second',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('[/Users/pedram/Project/OPSWAT/Meetings/OP-0088.md](maestro-file://OPSWAT/Meetings/OP-0088.md)');
+      expect(result).toContain('[/Users/pedram/Project/OPSWAT/Meetings/OP-0200.md](maestro-file://OPSWAT/Meetings/OP-0200.md)');
+    });
+
+    it('links absolute paths even when file is not in file tree', async () => {
+      // This file does NOT exist in sampleFileTree, but should still be linked
+      // because absolute paths are explicit - the file click handler will try to open it
+      const result = await processMarkdown(
+        'See /Users/pedram/Project/SomeOther/NonExistent File.md for details.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // Should still create a link because path is within projectRoot
+      expect(result).toContain('[/Users/pedram/Project/SomeOther/NonExistent File.md](<maestro-file://SomeOther/NonExistent File.md>)');
+    });
+  });
+
+  describe('inline code paths (backticks)', () => {
+    it('converts absolute path in backticks to link with filename display', async () => {
+      const result = await processMarkdown(
+        'Check `/Users/pedram/Project/OPSWAT/README.md` for info.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // Should convert to link showing just the filename
+      expect(result).toContain('[README.md](maestro-file://OPSWAT/README.md)');
+      // Should NOT contain backticks around the path anymore
+      expect(result).not.toContain('`/Users/pedram/Project/OPSWAT/README.md`');
+    });
+
+    it('converts relative path in backticks to link when file exists', async () => {
+      const result = await processMarkdown(
+        'See `OPSWAT/README.md` for details.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('[README.md](maestro-file://OPSWAT/README.md)');
+    });
+
+    it('converts wiki link in backticks to link', async () => {
+      const result = await processMarkdown(
+        'Reference `[[OPSWAT/README]]` here.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('[OPSWAT/README](maestro-file://OPSWAT/README.md)');
+    });
+
+    it('leaves non-path inline code unchanged', async () => {
+      const result = await processMarkdown(
+        'Use `npm install` to install.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('`npm install`');
+    });
+
+    it('handles absolute path with spaces in backticks', async () => {
+      const result = await processMarkdown(
+        'File: `/Users/pedram/Project/Notes/Meeting Notes.md`',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // remark-stringify adds angle brackets around URLs with spaces
+      expect(result).toContain('[Meeting Notes.md](<maestro-file://Notes/Meeting Notes.md>)');
+    });
+  });
+
+  describe('image embeds', () => {
+    it('converts image embed to inline image', async () => {
+      const result = await processMarkdown(
+        'Here is the screenshot: ![[Pasted image 20250519123910.png]]',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // Should convert to markdown image with file:// URL
+      expect(result).toContain('![Pasted image 20250519123910.png]');
+      expect(result).toContain('file:///Users/pedram/Project/attachments/Pasted image 20250519123910.png');
+      // Should NOT contain the original embed syntax
+      expect(result).not.toContain('![[');
+    });
+
+    it('converts image embed with path', async () => {
+      const result = await processMarkdown(
+        'See ![[attachments/screenshot.jpg]] for details.',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('![attachments/screenshot.jpg]');
+      expect(result).toContain('file:///Users/pedram/Project/attachments/screenshot.jpg');
+    });
+
+    it('converts image embed even when not in file tree (uses _attachments fallback)', async () => {
+      const result = await processMarkdown(
+        'Missing: ![[nonexistent.png]]',
+        sampleFileTree,
+        'some/folder',
+        '/Users/pedram/Project'
+      );
+      // Should still create an image with _attachments fallback path
+      // With projectRoot and cwd, full path is: projectRoot/cwd/_attachments/image
+      expect(result).toContain('![nonexistent.png]');
+      expect(result).toContain('file:///Users/pedram/Project/some/folder/_attachments/nonexistent.png');
+    });
+
+    it('handles multiple image embeds', async () => {
+      const result = await processMarkdown(
+        'First ![[screenshot.jpg]] and second ![[Pasted image 20250519123910.png]]',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('![screenshot.jpg]');
+      expect(result).toContain('![Pasted image 20250519123910.png]');
+    });
+
+    it('handles image embed mixed with wiki links', async () => {
+      const result = await processMarkdown(
+        'Image: ![[screenshot.jpg]] and link: [[README]]',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // Image should be converted
+      expect(result).toContain('![screenshot.jpg]');
+      // Link should also be converted
+      expect(result).toContain('[README](maestro-file://README.md)');
+    });
+
+    it('handles image embed with width syntax', async () => {
+      const result = await processMarkdown(
+        'Resized: ![[screenshot.jpg|300]]',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      // Should convert to image
+      expect(result).toContain('![screenshot.jpg]');
+      // Should include the file URL
+      expect(result).toContain('file:///Users/pedram/Project/attachments/screenshot.jpg');
+    });
+
+    it('handles image embed with width and spaces in filename', async () => {
+      const result = await processMarkdown(
+        'Image: ![[Pasted image 20250519123910.png|500]]',
+        sampleFileTree,
+        '',
+        '/Users/pedram/Project'
+      );
+      expect(result).toContain('![Pasted image 20250519123910.png]');
     });
   });
 });

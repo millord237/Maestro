@@ -1,12 +1,119 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Clipboard } from 'lucide-react';
+import { Clipboard, Loader2, ImageOff } from 'lucide-react';
 import type { Theme } from '../types';
 import type { FileNode } from '../hooks/useFileExplorer';
 import { remarkFileLinks } from '../utils/remarkFileLinks';
+
+// ============================================================================
+// LocalImage - Loads local images via IPC
+// ============================================================================
+
+interface LocalImageProps {
+  src?: string;
+  alt?: string;
+  projectRoot?: string;
+  theme: Theme;
+  width?: number; // Optional width in pixels (from ![[image|300]] syntax)
+}
+
+const LocalImage = memo(({ src, alt, projectRoot, theme, width }: LocalImageProps) => {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setError(null);
+    setDataUrl(null);
+
+    if (!src) {
+      setLoading(false);
+      return;
+    }
+
+    // If it's already a data URL, use it directly
+    if (src.startsWith('data:')) {
+      setDataUrl(src);
+      setLoading(false);
+      return;
+    }
+
+    // If it's an HTTP(S) URL, use it directly (browser will handle)
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      setDataUrl(src);
+      setLoading(false);
+      return;
+    }
+
+    // For file:// URLs, extract the path and load via IPC
+    let filePath = src;
+    if (src.startsWith('file://')) {
+      filePath = decodeURIComponent(src.replace('file://', ''));
+    }
+
+    setLoading(true);
+    window.maestro.fs.readFile(filePath)
+      .then((result) => {
+        if (result.startsWith('data:')) {
+          setDataUrl(result);
+        } else {
+          setError('Invalid image data');
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(`Failed to load image: ${err.message || 'Unknown error'}`);
+        setLoading(false);
+      });
+  }, [src]);
+
+  if (loading) {
+    return (
+      <span
+        className="inline-flex items-center gap-2 px-3 py-2 rounded"
+        style={{ backgroundColor: theme.colors.bgActivity }}
+      >
+        <Loader2 className="w-4 h-4 animate-spin" style={{ color: theme.colors.textDim }} />
+        <span className="text-xs" style={{ color: theme.colors.textDim }}>Loading image...</span>
+      </span>
+    );
+  }
+
+  if (error) {
+    return (
+      <span
+        className="inline-flex items-center gap-2 px-3 py-2 rounded text-xs"
+        style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
+        title={error}
+      >
+        <ImageOff className="w-4 h-4" />
+        <span>{alt || 'Image'}</span>
+      </span>
+    );
+  }
+
+  if (!dataUrl) {
+    return null;
+  }
+
+  // Build style based on whether width is specified
+  const imageStyle: React.CSSProperties = width
+    ? { width: `${width}px`, height: 'auto', borderRadius: '4px' }
+    : { maxWidth: '100%', height: 'auto', borderRadius: '4px' };
+
+  return (
+    <img
+      src={dataUrl}
+      alt={alt || ''}
+      style={imageStyle}
+    />
+  );
+});
+
+LocalImage.displayName = 'LocalImage';
 
 // ============================================================================
 // CodeBlockWithCopy - Code block with copy button overlay
@@ -93,8 +200,10 @@ export const MarkdownRenderer = memo(({ content, theme, onCopy, className = '', 
   // Memoize remark plugins to avoid recreating on every render
   const remarkPlugins = useMemo(() => {
     const plugins: any[] = [remarkGfm];
-    if (fileTree && fileTree.length > 0 && cwd !== undefined) {
-      plugins.push([remarkFileLinks, { fileTree, cwd, projectRoot }]);
+    // Add remarkFileLinks if we have file tree for relative paths,
+    // OR if we have projectRoot for absolute paths (even with empty file tree)
+    if ((fileTree && fileTree.length > 0 && cwd !== undefined) || projectRoot) {
+      plugins.push([remarkFileLinks, { fileTree: fileTree || [], cwd: cwd || '', projectRoot }]);
     }
     return plugins;
   }, [fileTree, cwd, projectRoot]);
@@ -148,6 +257,22 @@ export const MarkdownRenderer = memo(({ content, theme, onCopy, className = '', 
               <code className={className} {...props}>
                 {children}
               </code>
+            );
+          },
+          img: ({ node, src, alt, ...props }: any) => {
+            // Use LocalImage component to handle file:// URLs via IPC
+            // Extract width from data-maestro-width attribute if present
+            const widthStr = props['data-maestro-width'];
+            const width = widthStr ? parseInt(widthStr, 10) : undefined;
+
+            return (
+              <LocalImage
+                src={src}
+                alt={alt}
+                projectRoot={projectRoot}
+                theme={theme}
+                width={width}
+              />
             );
           }
         }}

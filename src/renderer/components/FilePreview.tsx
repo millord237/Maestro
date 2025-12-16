@@ -176,13 +176,17 @@ function MarkdownImage({
   alt,
   markdownFilePath,
   theme,
-  showRemoteImages = false
+  showRemoteImages = false,
+  isFromFileTree = false,
+  projectRoot
 }: {
   src?: string;
   alt?: string;
   markdownFilePath: string;
   theme: any;
   showRemoteImages?: boolean;
+  isFromFileTree?: boolean; // If true, src is a path relative to project root, not markdown file
+  projectRoot?: string; // Project root path for resolving file tree paths
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -221,8 +225,26 @@ function MarkdownImage({
     // For local files, we need to load them
     setLoading(true);
 
-    // Resolve the path relative to the markdown file
-    const resolvedPath = resolveImagePath(src, markdownFilePath);
+    // Decode URL-encoded characters (e.g., %20 -> space) since file:// URLs encode spaces
+    // but the filesystem needs actual spaces
+    let decodedSrc = src;
+    try {
+      decodedSrc = decodeURIComponent(src);
+    } catch {
+      // If decoding fails, use original src
+    }
+
+    // Resolve the path:
+    // - If isFromFileTree is true, the src is already a path relative to projectRoot (complete path from file tree)
+    // - Otherwise, resolve relative to the markdown file location
+    let resolvedPath: string;
+    if (isFromFileTree && projectRoot) {
+      // Path was found in file tree - combine with projectRoot directly
+      resolvedPath = `${projectRoot}/${decodedSrc}`;
+    } else {
+      // Path is relative to markdown file - use normal resolution
+      resolvedPath = resolveImagePath(decodedSrc, markdownFilePath);
+    }
 
     // Load the image via IPC
     window.maestro.fs.readFile(resolvedPath)
@@ -240,7 +262,7 @@ function MarkdownImage({
         setError(`Failed to load image: ${err.message || 'Unknown error'}`);
         setLoading(false);
       });
-  }, [src, markdownFilePath, showRemoteImages]);
+  }, [src, markdownFilePath, showRemoteImages, isFromFileTree, projectRoot]);
 
   if (loading) {
     return (
@@ -510,10 +532,10 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     return () => contentEl.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-focus on mount so keyboard shortcuts work immediately
+  // Auto-focus on mount and when file changes so keyboard shortcuts work immediately
   useEffect(() => {
     containerRef.current?.focus();
-  }, []); // Empty dependency array = only run on mount
+  }, [file.path]); // Run on mount and when navigating to a different file
 
   // Register layer on mount
   useEffect(() => {
@@ -1319,15 +1341,43 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                     </code>
                   );
                 },
-                img: ({ node, src, alt, ...props }) => (
-                  <MarkdownImage
-                    src={src}
-                    alt={alt}
-                    markdownFilePath={file.path}
-                    theme={theme}
-                    showRemoteImages={showRemoteImages}
-                  />
-                )
+                img: ({ node, src, alt, ...props }) => {
+                  // Check if this image came from file tree (set by remarkFileLinks)
+                  const isFromTree = (props as any)['data-maestro-from-tree'] === 'true';
+                  // Get the project root from the markdown file path (directory containing the file tree root)
+                  // For FilePreview, the file.path is absolute, so we extract the root from it
+                  const markdownDir = file.path.substring(0, file.path.lastIndexOf('/'));
+                  // If image is from file tree, we need the project root to resolve correctly
+                  // The project root would be the common ancestor - we'll derive it from the file path
+                  // For now, use the directory where the first folder in cwd would be located
+                  let projectRootForImage: string | undefined;
+                  if (isFromTree && cwd) {
+                    // cwd is relative path like "People" or "OPSWAT/Meetings"
+                    // We need to find where in file.path the cwd starts
+                    const cwdIndex = file.path.indexOf(`/${cwd}/`);
+                    if (cwdIndex !== -1) {
+                      projectRootForImage = file.path.substring(0, cwdIndex);
+                    } else {
+                      // Try to find just the first segment of cwd
+                      const firstCwdSegment = cwd.split('/')[0];
+                      const segmentIndex = file.path.indexOf(`/${firstCwdSegment}/`);
+                      if (segmentIndex !== -1) {
+                        projectRootForImage = file.path.substring(0, segmentIndex);
+                      }
+                    }
+                  }
+                  return (
+                    <MarkdownImage
+                      src={src}
+                      alt={alt}
+                      markdownFilePath={file.path}
+                      theme={theme}
+                      showRemoteImages={showRemoteImages}
+                      isFromFileTree={isFromTree}
+                      projectRoot={projectRootForImage}
+                    />
+                  );
+                }
               }}
             >
               {file.content}
