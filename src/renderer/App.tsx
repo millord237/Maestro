@@ -5523,27 +5523,11 @@ export default function MaestroConsole() {
           theme={theme}
           fileTree={filteredFileTree}
           shortcut={shortcuts.fuzzyFileSearch}
-          onFileSelect={(file: FlatFileItem, ancestorPaths: string[]) => {
-            // Expand all ancestor folders so the file is visible
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSessionId) return s;
-              const newExpanded = new Set([...s.fileExplorerExpanded, ...ancestorPaths]);
-              return { ...s, fileExplorerExpanded: Array.from(newExpanded) };
-            }));
-
-            // Find the file index in the flattened tree to set selection
-            // We need to compute this after folders are expanded
-            setTimeout(() => {
-              // Set focus to right panel and files tab
-              setActiveRightTab('files');
-              setActiveFocus('right');
-
-              // Preview the file if it's not a folder
-              if (!file.isFolder && activeSession) {
-                const absolutePath = `${activeSession.fullPath}/${file.fullPath}`;
-                handleFileClick({ name: file.name, type: 'file' }, absolutePath, activeSession);
-              }
-            }, 50);
+          onFileSelect={(file: FlatFileItem) => {
+            // Preview the file directly (handleFileClick expects relative path)
+            if (!file.isFolder) {
+              handleFileClick({ name: file.name, type: 'file' }, file.fullPath);
+            }
           }}
           onClose={() => setFuzzyFileSearchOpen(false)}
         />

@@ -184,33 +184,31 @@ export function generateProseStyles(options: ProseStylesOptions): string {
 // Global match counter for tracking which match is current during render
 let globalMatchCounter = 0;
 
-export function createMarkdownComponents(options: MarkdownComponentsOptions): Partial<Components> {
-  const { theme, imageRenderer, customLanguageRenderers = {}, onExternalLinkClick, searchHighlight } = options;
+/**
+ * Helper to highlight search matches in text content.
+ * Recursively processes children to find and highlight text matches.
+ */
+function highlightSearchMatches(
+  children: React.ReactNode,
+  searchHighlight: NonNullable<MarkdownComponentsOptions['searchHighlight']>,
+  theme: Theme
+): React.ReactNode {
+  const { query, currentMatchIndex, onMatchRendered } = searchHighlight;
 
-  // Reset match counter at start of each render
-  globalMatchCounter = 0;
-
-  const components: Partial<Components> = {
-    // Text node handler for search highlighting
-    text: ({ children }: any) => {
-      const text = String(children);
-
-      // If no search or empty query, return plain text
-      if (!searchHighlight || !searchHighlight.query.trim()) {
-        return React.createElement(React.Fragment, null, text);
-      }
-
-      const { query, currentMatchIndex, onMatchRendered } = searchHighlight;
+  // Process each child
+  const processChild = (child: React.ReactNode, childIndex: number): React.ReactNode => {
+    // Handle string children - this is where we do the actual highlighting
+    if (typeof child === 'string') {
       const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(${escapedQuery})`, 'gi');
-      const parts = text.split(regex);
+      const parts = child.split(regex);
 
-      // If no matches in this text node, return plain text
+      // If no matches, return original string
       if (parts.length === 1) {
-        return React.createElement(React.Fragment, null, text);
+        return child;
       }
 
-      // Build array of text and highlighted spans
+      // Build highlighted elements
       const elements: React.ReactNode[] = [];
       parts.forEach((part, i) => {
         if (part.toLowerCase() === query.toLowerCase()) {
@@ -218,7 +216,7 @@ export function createMarkdownComponents(options: MarkdownComponentsOptions): Pa
           const isCurrent = matchIndex === currentMatchIndex;
           elements.push(
             React.createElement('mark', {
-              key: `match-${i}`,
+              key: `match-${childIndex}-${i}`,
               className: 'search-match',
               'data-match-index': matchIndex,
               'data-current': isCurrent ? 'true' : undefined,
@@ -233,13 +231,86 @@ export function createMarkdownComponents(options: MarkdownComponentsOptions): Pa
                 : undefined,
             }, part)
           );
-        } else {
+        } else if (part) {
           elements.push(part);
         }
       });
 
-      return React.createElement(React.Fragment, null, ...elements);
-    },
+      return React.createElement(React.Fragment, { key: `text-${childIndex}` }, ...elements);
+    }
+
+    // Handle React elements - recursively process their children
+    if (React.isValidElement(child)) {
+      const element = child as React.ReactElement<any>;
+      const elementChildren = element.props.children;
+
+      // If element has children, recursively process them
+      if (elementChildren !== undefined) {
+        const processedChildren = highlightSearchMatches(elementChildren, searchHighlight, theme);
+        // Clone the element with processed children
+        return React.cloneElement(element, { key: element.key || `elem-${childIndex}` }, processedChildren);
+      }
+
+      return child;
+    }
+
+    // Handle arrays of children
+    if (Array.isArray(child)) {
+      return child.map((c, i) => processChild(c, i));
+    }
+
+    // Return other types as-is (numbers, null, undefined, etc.)
+    return child;
+  };
+
+  // Handle array of children
+  if (Array.isArray(children)) {
+    return children.map((child, i) => processChild(child, i));
+  }
+
+  // Handle single child
+  return processChild(children, 0);
+}
+
+export function createMarkdownComponents(options: MarkdownComponentsOptions): Partial<Components> {
+  const { theme, imageRenderer, customLanguageRenderers = {}, onExternalLinkClick, searchHighlight } = options;
+
+  // Reset match counter at start of each render
+  globalMatchCounter = 0;
+
+  // Helper to wrap children with search highlighting
+  const withHighlight = (children: React.ReactNode): React.ReactNode => {
+    if (!searchHighlight || !searchHighlight.query.trim()) {
+      return children;
+    }
+    return highlightSearchMatches(children, searchHighlight, theme);
+  };
+
+  const components: Partial<Components> = {
+    // Override paragraph to apply search highlighting
+    p: ({ children }: any) => React.createElement('p', null, withHighlight(children)),
+
+    // Override headings to apply search highlighting
+    h1: ({ children }: any) => React.createElement('h1', null, withHighlight(children)),
+    h2: ({ children }: any) => React.createElement('h2', null, withHighlight(children)),
+    h3: ({ children }: any) => React.createElement('h3', null, withHighlight(children)),
+    h4: ({ children }: any) => React.createElement('h4', null, withHighlight(children)),
+    h5: ({ children }: any) => React.createElement('h5', null, withHighlight(children)),
+    h6: ({ children }: any) => React.createElement('h6', null, withHighlight(children)),
+
+    // Override list items to apply search highlighting
+    li: ({ children }: any) => React.createElement('li', null, withHighlight(children)),
+
+    // Override table cells to apply search highlighting
+    td: ({ children }: any) => React.createElement('td', null, withHighlight(children)),
+    th: ({ children }: any) => React.createElement('th', null, withHighlight(children)),
+
+    // Override blockquote to apply search highlighting
+    blockquote: ({ children }: any) => React.createElement('blockquote', null, withHighlight(children)),
+
+    // Override strong/em to apply search highlighting
+    strong: ({ children }: any) => React.createElement('strong', null, withHighlight(children)),
+    em: ({ children }: any) => React.createElement('em', null, withHighlight(children)),
     // Code block with syntax highlighting and custom language support
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = (className || '').match(/language-(\w+)/);

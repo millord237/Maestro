@@ -601,6 +601,24 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
         }
       })();
     } else if (currentMode === 'terminal') {
+      // Intercept "clear" command to clear shell logs instead of sending to shell
+      const trimmedCommand = capturedInputValue.trim();
+      if (trimmedCommand === 'clear') {
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id !== activeSessionId) return s;
+            return {
+              ...s,
+              state: 'idle',
+              busySource: undefined,
+              thinkingStartTime: undefined,
+              shellLogs: [],
+            };
+          })
+        );
+        return;
+      }
+
       // Terminal mode: Use runCommand for clean stdout/stderr capture (no PTY noise)
       // This spawns a fresh shell with -l -c to run the command, ensuring aliases work
       window.maestro.process

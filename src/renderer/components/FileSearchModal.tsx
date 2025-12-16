@@ -24,21 +24,8 @@ interface FileSearchModalProps {
   theme: Theme;
   fileTree: FileNode[];
   shortcut?: Shortcut;
-  onFileSelect: (item: FlatFileItem, ancestorPaths: string[]) => void;
+  onFileSelect: (item: FlatFileItem) => void;
   onClose: () => void;
-}
-
-/**
- * Get ancestor folder paths for a file path.
- * e.g., "src/renderer/components/Button.tsx" => ["src", "src/renderer", "src/renderer/components"]
- */
-function getAncestorPaths(filePath: string): string[] {
-  const parts = filePath.split('/');
-  const paths: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    paths.push(parts.slice(0, i).join('/'));
-  }
-  return paths;
 }
 
 /**
@@ -176,8 +163,7 @@ export function FileSearchModal({
   };
 
   const handleItemSelect = (file: FlatFileItem) => {
-    const ancestors = getAncestorPaths(file.fullPath);
-    onFileSelect(file, ancestors);
+    onFileSelect(file);
     onClose();
   };
 
@@ -215,13 +201,13 @@ export function FileSearchModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-16 z-[9999] animate-in fade-in duration-100">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-32 z-[9999] animate-in fade-in duration-100">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Fuzzy File Search"
         tabIndex={-1}
-        className="w-[600px] rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[500px] outline-none"
+        className="w-[600px] rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[550px] outline-none"
         style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
       >
         {/* Search Header */}
