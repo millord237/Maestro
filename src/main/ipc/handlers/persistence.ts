@@ -5,12 +5,15 @@
  * - Settings: get/set/getAll
  * - Sessions: getAll/setAll
  * - Groups: getAll/setAll
+ * - CLI activity: getActivity
  *
  * Extracted from main/index.ts to improve code organization.
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, app } from 'electron';
 import Store from 'electron-store';
+import * as path from 'path';
+import * as fs from 'fs/promises';
 import { logger } from '../../utils/logger';
 import { getThemeById } from '../../themes';
 import { WebServer } from '../../web-server';
@@ -181,5 +184,18 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
   ipcMain.handle('groups:setAll', async (_, groups: any[]) => {
     groupsStore.set('groups', groups);
     return true;
+  });
+
+  // CLI activity (for detecting when CLI is running playbooks)
+  ipcMain.handle('cli:getActivity', async () => {
+    try {
+      const cliActivityPath = path.join(app.getPath('userData'), 'cli-activity.json');
+      const content = await fs.readFile(cliActivityPath, 'utf-8');
+      const data = JSON.parse(content);
+      return data.activities || [];
+    } catch (error) {
+      // File doesn't exist or is invalid - return empty array
+      return [];
+    }
   });
 }

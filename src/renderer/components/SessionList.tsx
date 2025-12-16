@@ -840,20 +840,32 @@ export function SessionList(props: SessionListProps) {
                                 value={webInterfaceCustomPort}
                                 onChange={(e) => {
                                   const value = parseInt(e.target.value, 10);
-                                  if (!isNaN(value)) {
+                                  if (!isNaN(value) && value >= 0) {
                                     setWebInterfaceCustomPort(value);
                                   }
                                 }}
                                 onBlur={() => {
-                                  // Restart server when user finishes editing the port (on blur)
+                                  // Clamp to valid range on blur
+                                  const clampedPort = Math.max(1024, Math.min(65535, webInterfaceCustomPort));
+                                  if (clampedPort !== webInterfaceCustomPort) {
+                                    setWebInterfaceCustomPort(clampedPort);
+                                  }
+                                  // Restart server when user finishes editing the port
                                   if (isLiveMode) {
                                     restartWebServer();
                                   }
                                 }}
                                 onKeyDown={(e) => {
                                   // Restart server when user presses Enter
-                                  if (e.key === 'Enter' && isLiveMode) {
-                                    restartWebServer();
+                                  if (e.key === 'Enter') {
+                                    // Clamp to valid range
+                                    const clampedPort = Math.max(1024, Math.min(65535, webInterfaceCustomPort));
+                                    if (clampedPort !== webInterfaceCustomPort) {
+                                      setWebInterfaceCustomPort(clampedPort);
+                                    }
+                                    if (isLiveMode) {
+                                      restartWebServer();
+                                    }
                                     (e.target as HTMLInputElement).blur();
                                   }
                                 }}

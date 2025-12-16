@@ -263,10 +263,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'toggleMarkdownMode')) {
         // Toggle markdown raw mode for AI message history
-        // Skip when in AutoRun panel (it has its own Cmd+E handler for edit/preview toggle)
+        // Skip if event was already handled (e.g., by AutoRun panel's own Cmd+E handler)
         // Skip when FilePreview is open (it handles its own Cmd+E)
-        const isInAutoRunPanel = ctx.activeFocus === 'right' && ctx.activeRightTab === 'autorun';
-        if (!isInAutoRunPanel && !ctx.previewFile) {
+        if (!e.defaultPrevented && !ctx.previewFile) {
           e.preventDefault();
           ctx.setMarkdownEditMode(!ctx.markdownEditMode);
         }

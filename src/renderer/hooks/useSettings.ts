@@ -846,10 +846,12 @@ export function useSettings(): UseSettingsReturn {
   }, []);
 
   const setWebInterfaceCustomPort = useCallback((value: number) => {
-    // Clamp port to valid range (1024-65535 for non-privileged ports)
-    const clampedPort = Math.max(1024, Math.min(65535, value));
-    setWebInterfaceCustomPortState(clampedPort);
-    window.maestro.settings.set('webInterfaceCustomPort', clampedPort);
+    // Store the value as-is during typing; validation happens on blur/submit
+    setWebInterfaceCustomPortState(value);
+    // Only persist valid port values
+    if (value >= 1024 && value <= 65535) {
+      window.maestro.settings.set('webInterfaceCustomPort', value);
+    }
   }, []);
 
   // Load settings from electron-store on mount
