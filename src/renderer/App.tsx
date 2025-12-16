@@ -233,10 +233,6 @@ export default function MaestroConsole() {
   const [fileTreeFilter, setFileTreeFilter] = useState('');
   const [fileTreeFilterOpen, setFileTreeFilterOpen] = useState(false);
 
-  // File Preview Navigation History
-  const [filePreviewHistory, setFilePreviewHistory] = useState<{name: string; content: string; path: string}[]>([]);
-  const [filePreviewHistoryIndex, setFilePreviewHistoryIndex] = useState(-1);
-
   // Git Diff State
   const [gitDiffPreview, setGitDiffPreview] = useState<string | null>(null);
 
@@ -419,12 +415,10 @@ export default function MaestroConsole() {
     };
   }, []);
 
-  // Close file preview and clear navigation history when switching sessions
+  // Close file preview when switching sessions (history is now per-session)
   useEffect(() => {
     if (previewFile !== null) {
       setPreviewFile(null);
-      setFilePreviewHistory([]);
-      setFilePreviewHistoryIndex(-1);
     }
   }, [activeSessionId]);
 
@@ -1596,6 +1590,36 @@ export default function MaestroConsole() {
     sessions.find(s => s.id === activeSessionId) || sessions[0] || null,
     [sessions, activeSessionId]
   );
+
+  // File preview navigation history - derived from active session (per-agent history)
+  const filePreviewHistory = useMemo(() =>
+    activeSession?.filePreviewHistory ?? [],
+    [activeSession?.filePreviewHistory]
+  );
+  const filePreviewHistoryIndex = useMemo(() =>
+    activeSession?.filePreviewHistoryIndex ?? -1,
+    [activeSession?.filePreviewHistoryIndex]
+  );
+
+  // Helper to update file preview history for the active session
+  const setFilePreviewHistory = useCallback((history: {name: string; content: string; path: string}[]) => {
+    if (!activeSessionId) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSessionId
+        ? { ...s, filePreviewHistory: history }
+        : s
+    ));
+  }, [activeSessionId]);
+
+  const setFilePreviewHistoryIndex = useCallback((index: number) => {
+    if (!activeSessionId) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSessionId
+        ? { ...s, filePreviewHistoryIndex: index }
+        : s
+    ));
+  }, [activeSessionId]);
+
   // Use custom colors when custom theme is selected, otherwise use the standard theme
   const theme = useMemo(() => {
     if (activeThemeId === 'custom') {

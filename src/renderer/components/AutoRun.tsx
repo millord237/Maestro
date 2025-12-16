@@ -786,8 +786,26 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     setCurrentMatchIndex(prevIndex);
   }, [currentMatchIndex, totalMatches]);
 
+  // Track if the user manually navigated to a match (prev/next buttons or Enter key)
+  // vs just typing in the search box
+  const userNavigatedToMatchRef = useRef(false);
+
+  // Wrapped navigation handlers that set the flag
+  const goToNextMatchWithFlag = useCallback(() => {
+    userNavigatedToMatchRef.current = true;
+    goToNextMatch();
+  }, [goToNextMatch]);
+
+  const goToPrevMatchWithFlag = useCallback(() => {
+    userNavigatedToMatchRef.current = true;
+    goToPrevMatch();
+  }, [goToPrevMatch]);
+
   // Scroll to current match in edit mode
+  // Only run when user explicitly navigated to a match (not on every keystroke)
   useEffect(() => {
+    // Only scroll when user explicitly navigated (prev/next buttons or Enter key)
+    if (!userNavigatedToMatchRef.current) return;
     if (!searchOpen || !searchQuery.trim() || totalMatches === 0) return;
     if (mode !== 'edit' || !textareaRef.current) return;
 
@@ -835,9 +853,10 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       const scrollTarget = Math.max(0, matchVerticalPos - textarea.clientHeight / 2);
       textarea.scrollTop = scrollTarget;
 
-      // Select the match text to highlight it
+      // Focus textarea and select the match text
       textarea.focus();
       textarea.setSelectionRange(matchPosition, matchPosition + searchQuery.length);
+      userNavigatedToMatchRef.current = false;
     }
   }, [currentMatchIndex, searchOpen, searchQuery, totalMatches, mode, localContent]);
 
@@ -1299,8 +1318,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           onSearchQueryChange={setSearchQuery}
           currentMatchIndex={currentMatchIndex}
           totalMatches={totalMatches}
-          onNextMatch={goToNextMatch}
-          onPrevMatch={goToPrevMatch}
+          onNextMatch={goToNextMatchWithFlag}
+          onPrevMatch={goToPrevMatchWithFlag}
           onClose={closeSearch}
         />
       )}

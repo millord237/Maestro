@@ -392,6 +392,10 @@ export interface Session {
 
   // File tree auto-refresh interval in seconds (0 = disabled)
   fileTreeAutoRefreshInterval?: number;
+
+  // File preview navigation history (per-session to prevent cross-agent navigation)
+  filePreviewHistory?: {name: string; content: string; path: string}[];
+  filePreviewHistoryIndex?: number;
 }
 
 export interface Group {
