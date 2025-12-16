@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import type { Theme, Session } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter } from './ui/Modal';
+import { FormInput } from './ui/FormInput';
 
 interface RenameSessionModalProps {
   theme: Theme;
@@ -63,20 +64,13 @@ export function RenameSessionModal(props: RenameSessionModalProps) {
         />
       }
     >
-      <input
+      <FormInput
         ref={inputRef}
-        type="text"
+        theme={theme}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleRename();
-          }
-        }}
+        onChange={setValue}
+        onSubmit={handleRename}
         placeholder="Enter agent name..."
-        className="w-full p-3 rounded border bg-transparent outline-none"
-        style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
       />
     </Modal>
   );
