@@ -7,3 +7,6 @@
 
 export { Modal, ModalFooter } from './Modal';
 export type { ModalProps, ModalFooterProps } from './Modal';
+
+export { FormInput } from './FormInput';
+export type { FormInputProps } from './FormInput';
