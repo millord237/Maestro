@@ -102,22 +102,25 @@ describe('HistoryHelpModal', () => {
     it('renders the fixed overlay container', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
+      // Modal component uses fixed inset-0 with backdrop and flex centering
       const overlay = container.querySelector('.fixed.inset-0');
       expect(overlay).toBeInTheDocument();
-      expect(overlay).toHaveClass('flex', 'items-center', 'justify-center', 'z-50');
+      expect(overlay).toHaveClass('flex', 'items-center', 'justify-center');
     });
 
     it('renders the backdrop with correct opacity', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      const backdrop = container.querySelector('.absolute.inset-0.bg-black\\/60');
+      // Modal component uses bg-black/70 with backdrop-blur-sm
+      const backdrop = container.querySelector('.bg-black\\/70');
       expect(backdrop).toBeInTheDocument();
     });
 
     it('renders the modal container with theme-based styling', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      const modalContainer = container.querySelector('.relative.w-full.max-w-2xl');
+      // Modal component uses inline width style
+      const modalContainer = container.querySelector('[style*="width: 672px"]');
       expect(modalContainer).toBeInTheDocument();
       expect(modalContainer).toHaveStyle({
         backgroundColor: mockTheme.colors.bgSidebar,
@@ -132,23 +135,26 @@ describe('HistoryHelpModal', () => {
 
       const title = screen.getByText('History Panel Guide');
       expect(title).toBeInTheDocument();
-      expect(title).toHaveClass('text-lg', 'font-bold');
+      // Modal component uses text-sm font-bold for title
+      expect(title).toHaveClass('text-sm', 'font-bold');
       expect(title).toHaveStyle({ color: mockTheme.colors.textMain });
     });
 
     it('renders the close button with X icon', () => {
-      render(<HistoryHelpModal {...defaultProps} />);
+      const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      const closeButton = screen.getAllByRole('button')[0];
+      // Modal component renders close button with aria-label
+      const closeButton = screen.getByRole('button', { name: 'Close modal' });
       expect(closeButton).toBeInTheDocument();
-      expect(screen.getByTestId('x-icon')).toBeInTheDocument();
+      // X icon is rendered as SVG within the close button
+      expect(closeButton.querySelector('svg')).toBeInTheDocument();
     });
 
     it('calls onClose when close button is clicked', () => {
       const onClose = vi.fn();
       render(<HistoryHelpModal {...defaultProps} onClose={onClose} />);
 
-      const closeButton = screen.getAllByRole('button')[0];
+      const closeButton = screen.getByRole('button', { name: 'Close modal' });
       fireEvent.click(closeButton);
 
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -157,7 +163,7 @@ describe('HistoryHelpModal', () => {
     it('applies hover styles to close button', () => {
       render(<HistoryHelpModal {...defaultProps} />);
 
-      const closeButton = screen.getAllByRole('button')[0];
+      const closeButton = screen.getByRole('button', { name: 'Close modal' });
       expect(closeButton).toHaveClass('hover:bg-white/10', 'transition-colors');
     });
   });
@@ -165,23 +171,25 @@ describe('HistoryHelpModal', () => {
   describe('Backdrop', () => {
     it('calls onClose when backdrop is clicked', () => {
       const onClose = vi.fn();
-      const { container } = render(<HistoryHelpModal {...defaultProps} onClose={onClose} />);
+      render(<HistoryHelpModal {...defaultProps} onClose={onClose} />);
 
-      const backdrop = container.querySelector('.absolute.inset-0.bg-black\\/60');
-      fireEvent.click(backdrop!);
+      // Modal component with closeOnBackdropClick enabled - clicking the backdrop (dialog element) closes modal
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(dialog);
 
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('does not close modal when modal content is clicked', () => {
       const onClose = vi.fn();
-      render(<HistoryHelpModal {...defaultProps} onClose={onClose} />);
+      const { container } = render(<HistoryHelpModal {...defaultProps} onClose={onClose} />);
 
-      const modalContent = screen.getByText('History Panel Guide').closest('.relative');
+      // Clicking on modal content (the inner container with width style) should not close
+      const modalContent = container.querySelector('[style*="width: 672px"]');
       fireEvent.click(modalContent!);
 
       // Only the backdrop should close the modal, not the content area itself
-      // The onClose is only attached to backdrop and buttons, not modal container
+      expect(onClose).not.toHaveBeenCalled();
     });
   });
 
@@ -410,7 +418,8 @@ describe('HistoryHelpModal', () => {
     it('renders the footer with correct border styling', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      const footer = container.querySelector('.flex.justify-end.px-6.py-4.border-t');
+      // Modal component uses p-4 for footer padding
+      const footer = container.querySelector('.p-4.border-t');
       expect(footer).toBeInTheDocument();
       expect(footer).toHaveStyle({ borderColor: mockTheme.colors.border });
     });
@@ -450,11 +459,13 @@ describe('HistoryHelpModal', () => {
       render(<HistoryHelpModal {...defaultProps} />);
 
       expect(mockRegisterLayer).toHaveBeenCalledTimes(1);
-      expect(mockRegisterLayer).toHaveBeenCalledWith({
-        type: 'modal',
-        priority: expect.any(Number),
-        onEscape: expect.any(Function)
-      });
+      expect(mockRegisterLayer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'modal',
+          priority: expect.any(Number),
+          onEscape: expect.any(Function)
+        })
+      );
     });
 
     it('uses CONFIRM priority for the layer', () => {
@@ -606,9 +617,9 @@ describe('HistoryHelpModal', () => {
     it('applies scrollable classes to content area', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
+      // Modal component uses overflow-y-auto for scrollability
       const contentArea = container.querySelector('.flex-1.overflow-y-auto');
       expect(contentArea).toBeInTheDocument();
-      expect(contentArea).toHaveClass('scrollbar-thin');
     });
   });
 
@@ -794,7 +805,8 @@ describe('HistoryHelpModal', () => {
     it('applies padding to content area', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      const contentArea = container.querySelector('.px-6.py-5');
+      // Modal component uses p-6 for content area padding
+      const contentArea = container.querySelector('.p-6');
       expect(contentArea).toBeInTheDocument();
     });
   });
