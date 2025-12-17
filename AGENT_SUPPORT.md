@@ -573,7 +573,7 @@ describe('YourAgentOutputParser', () => {
 | Resume | `--session <session-id>` |
 | Read-only | `--agent plan` |
 | Session ID Field | `sessionID` (camelCase) |
-| Session Storage | Server-managed |
+| Session Storage | ✅ File-based (see below) |
 | YOLO Mode | ✅ Auto-enabled in batch mode |
 
 **YOLO Mode (Auto-Approval) Details:**
@@ -588,16 +588,50 @@ OpenCode automatically approves all tool operations in batch mode (`opencode run
 
 This makes OpenCode suitable for Maestro's batch processing use case without additional configuration.
 
+**Session Storage Details:**
+
+OpenCode stores session data in `~/.local/share/opencode/storage/` with the following structure:
+
+```
+~/.local/share/opencode/
+├── log/                          # Log files
+├── snapshot/                     # Git-style snapshots
+└── storage/
+    ├── project/                  # Project metadata (JSON per project)
+    │   └── {projectID}.json      # Contains: id, worktree path, vcs info, timestamps
+    ├── session/                  # Session metadata (organized by project)
+    │   ├── global/               # Sessions not tied to a specific project
+    │   │   └── {sessionID}.json  # Session info: id, version, projectID, title, timestamps
+    │   └── {projectID}/          # Project-specific sessions
+    │       └── {sessionID}.json
+    ├── message/                  # Message metadata (organized by session)
+    │   └── {sessionID}/          # One folder per session
+    │       └── {messageID}.json  # Message info: role, time, model, tokens, etc.
+    └── part/                     # Message parts (content chunks)
+        └── {messageID}/          # One folder per message
+            └── {partID}.json     # Part content: type (text/tool/reasoning), text, etc.
+```
+
+**Key findings:**
+- **CLI Commands:** `opencode session list`, `opencode export <sessionID>`, `opencode import <file>`
+- **Project IDs:** SHA1 hash of project path (e.g., `ca85ff7c488724e85fc5b4be14ba44a0f6ce5b40`)
+- **Session IDs:** Format `ses_{base62-ish}` (e.g., `ses_4d585107dffeO9bO3HvMdvLYyC`)
+- **Message IDs:** Format `msg_{base62-ish}` (e.g., `msg_b2a7aef8d001MjwADMqsUcIj3k`)
+- **Export format:** `opencode export <sessionID>` outputs complete session JSON with all messages and parts
+- **Message parts include:** `text`, `reasoning`, `tool`, `step-start`, etc.
+- **Token tracking:** Available in message metadata with `input`, `output`, `reasoning`, and cache fields
+
 **Implementation Status:**
 - ✅ Output Parser: `src/main/parsers/opencode-output-parser.ts` (based on expected format)
-- ✅ Session Storage: `src/main/storage/opencode-session-storage.ts` (stub, returns empty results)
+- ⏳ Session Storage: `src/main/storage/opencode-session-storage.ts` (stub, needs implementation using storage paths above)
 - ⏳ Error Patterns: Placeholder, needs real-world testing
-- ⏳ Capabilities: Set to minimal defaults
+- ⏳ Capabilities: Set to minimal defaults; `supportsSessionStorage` can be enabled once storage is implemented
 
 **JSON Event Types:**
-- `step_start` → session start
+- `step_start` → session start (includes snapshot reference)
 - `text` → streaming content
-- `tool_use` → tool invocations
+- `reasoning` → model thinking/chain-of-thought
+- `tool` → tool invocations with state (running/complete)
 - `step_finish` → tokens, completion
 
 ---
