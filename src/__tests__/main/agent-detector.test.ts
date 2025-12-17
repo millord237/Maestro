@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AgentDetector, AgentConfig, AgentConfigOption } from '../../main/agent-detector';
+import { AgentDetector, AgentConfig, AgentConfigOption, AgentCapabilities } from '../../main/agent-detector';
 
 // Mock dependencies
 vi.mock('../../main/utils/execFile', () => ({
@@ -58,9 +58,24 @@ describe('agent-detector', () => {
         args: ['--flag'],
         available: true,
         path: '/usr/bin/test',
+        capabilities: {
+          supportsResume: false,
+          supportsReadOnlyMode: false,
+          supportsJsonOutput: false,
+          supportsSessionId: false,
+          supportsImageInput: false,
+          supportsSlashCommands: false,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: false,
+          supportsBatchMode: false,
+          supportsStreaming: false,
+          supportsResultMessages: false,
+        },
       };
       expect(config.id).toBe('test-agent');
       expect(config.available).toBe(true);
+      expect(config.capabilities).toBeDefined();
     });
 
     it('should support optional AgentConfig fields', () => {
@@ -75,10 +90,44 @@ describe('agent-detector', () => {
         requiresPty: true,
         configOptions: [{ key: 'k', type: 'text', label: 'L', description: 'D', default: '' }],
         hidden: true,
+        capabilities: {
+          supportsResume: true,
+          supportsReadOnlyMode: false,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: false,
+          supportsSlashCommands: false,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: false,
+          supportsBatchMode: false,
+          supportsStreaming: true,
+          supportsResultMessages: false,
+        },
       };
       expect(config.customPath).toBe('/custom/path');
       expect(config.requiresPty).toBe(true);
       expect(config.hidden).toBe(true);
+      expect(config.capabilities.supportsResume).toBe(true);
+    });
+
+    it('should export AgentCapabilities interface', () => {
+      const capabilities: AgentCapabilities = {
+        supportsResume: true,
+        supportsReadOnlyMode: true,
+        supportsJsonOutput: true,
+        supportsSessionId: true,
+        supportsImageInput: true,
+        supportsSlashCommands: true,
+        supportsSessionStorage: true,
+        supportsCostTracking: true,
+        supportsUsageStats: true,
+        supportsBatchMode: true,
+        supportsStreaming: true,
+        supportsResultMessages: true,
+      };
+      expect(capabilities.supportsResume).toBe(true);
+      expect(capabilities.supportsImageInput).toBe(true);
     });
 
     it('should support select type with options in AgentConfigOption', () => {

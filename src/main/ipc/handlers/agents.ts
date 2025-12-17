@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import Store from 'electron-store';
 import { AgentDetector } from '../../agent-detector';
+import { getAgentCapabilities } from '../../agent-capabilities';
 import { execFileNoThrow } from '../../utils/execFile';
 import { logger } from '../../utils/logger';
 import { withIpcErrorLogging, requireDependency, CreateHandlerOptions } from '../../utils/ipcHandler';
@@ -134,6 +135,15 @@ export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
       const agent = await agentDetector.getAgent(agentId);
       // Strip argBuilder functions before sending over IPC
       return stripAgentFunctions(agent);
+    })
+  );
+
+  // Get capabilities for a specific agent
+  ipcMain.handle(
+    'agents:getCapabilities',
+    withIpcErrorLogging(handlerOpts('getCapabilities'), async (agentId: string) => {
+      logger.debug(`Getting capabilities for agent: ${agentId}`, LOG_CONTEXT);
+      return getAgentCapabilities(agentId);
     })
   );
 

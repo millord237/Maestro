@@ -2,6 +2,10 @@ import { execFileNoThrow } from './utils/execFile';
 import { logger } from './utils/logger';
 import * as os from 'os';
 import * as fs from 'fs';
+import { AgentCapabilities, getAgentCapabilities } from './agent-capabilities';
+
+// Re-export AgentCapabilities for convenience
+export { AgentCapabilities } from './agent-capabilities';
 
 // Configuration option types for agent-specific settings
 export interface AgentConfigOption {
@@ -26,9 +30,10 @@ export interface AgentConfig {
   requiresPty?: boolean; // Whether this agent needs a pseudo-terminal
   configOptions?: AgentConfigOption[]; // Agent-specific configuration
   hidden?: boolean; // If true, agent is hidden from UI (internal use only)
+  capabilities: AgentCapabilities; // Agent feature capabilities
 }
 
-const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path'>[] = [
+const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'>[] = [
   {
     id: 'terminal',
     name: 'Terminal',
@@ -169,6 +174,7 @@ export class AgentDetector {
         available: detection.exists,
         path: detection.path,
         customPath: customPath || undefined,
+        capabilities: getAgentCapabilities(agentDef.id),
       });
     }
 

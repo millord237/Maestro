@@ -12,11 +12,31 @@ interface ProcessConfig {
   images?: string[]; // Base64 data URLs for images
 }
 
+/**
+ * Capability flags that determine what features are available for each agent.
+ * This is a simplified version for the renderer - full definition in agent-capabilities.ts
+ */
+interface AgentCapabilities {
+  supportsResume: boolean;
+  supportsReadOnlyMode: boolean;
+  supportsJsonOutput: boolean;
+  supportsSessionId: boolean;
+  supportsImageInput: boolean;
+  supportsSlashCommands: boolean;
+  supportsSessionStorage: boolean;
+  supportsCostTracking: boolean;
+  supportsUsageStats: boolean;
+  supportsBatchMode: boolean;
+  supportsStreaming: boolean;
+  supportsResultMessages: boolean;
+}
+
 interface AgentConfig {
   id: string;
   name: string;
   available: boolean;
   path?: string;
+  capabilities?: AgentCapabilities;
 }
 
 interface DirectoryEntry {
@@ -309,6 +329,7 @@ contextBridge.exposeInMainWorld('maestro', {
     detect: () => ipcRenderer.invoke('agents:detect'),
     refresh: (agentId?: string) => ipcRenderer.invoke('agents:refresh', agentId),
     get: (agentId: string) => ipcRenderer.invoke('agents:get', agentId),
+    getCapabilities: (agentId: string) => ipcRenderer.invoke('agents:getCapabilities', agentId),
     getConfig: (agentId: string) => ipcRenderer.invoke('agents:getConfig', agentId),
     setConfig: (agentId: string, config: Record<string, any>) =>
       ipcRenderer.invoke('agents:setConfig', agentId, config),
@@ -852,6 +873,7 @@ export interface MaestroAPI {
   agents: {
     detect: () => Promise<AgentConfig[]>;
     get: (agentId: string) => Promise<AgentConfig | null>;
+    getCapabilities: (agentId: string) => Promise<AgentCapabilities>;
     getConfig: (agentId: string) => Promise<Record<string, any>>;
     setConfig: (agentId: string, config: Record<string, any>) => Promise<boolean>;
     getConfigValue: (agentId: string, key: string) => Promise<any>;

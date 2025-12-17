@@ -39,6 +39,7 @@ export { useClickOutside } from './useClickOutside';
 export { useListNavigation } from './useListNavigation';
 export { useExpandedSet } from './useExpandedSet';
 export { useScrollPosition } from './useScrollPosition';
+export { useAgentCapabilities, clearCapabilitiesCache, setCapabilitiesCache, DEFAULT_CAPABILITIES } from './useAgentCapabilities';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -125,3 +126,4 @@ export type { UseClickOutsideOptions } from './useClickOutside';
 export type { UseListNavigationOptions, UseListNavigationReturn } from './useListNavigation';
 export type { UseExpandedSetOptions, UseExpandedSetReturn } from './useExpandedSet';
 export type { UseScrollPositionOptions, UseScrollPositionReturn, ScrollMetrics } from './useScrollPosition';
+export type { AgentCapabilities, UseAgentCapabilitiesReturn } from './useAgentCapabilities';
