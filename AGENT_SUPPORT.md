@@ -575,6 +575,8 @@ describe('YourAgentOutputParser', () => {
 | Session ID Field | `sessionID` (camelCase) |
 | Session Storage | ✅ File-based (see below) |
 | YOLO Mode | ✅ Auto-enabled in batch mode |
+| Model Selection | `--model provider/model` |
+| Config File | `~/.config/opencode/opencode.json` or project `opencode.json` |
 
 **YOLO Mode (Auto-Approval) Details:**
 
@@ -633,6 +635,95 @@ OpenCode stores session data in `~/.local/share/opencode/storage/` with the foll
 - `reasoning` → model thinking/chain-of-thought
 - `tool` → tool invocations with state (running/complete)
 - `step_finish` → tokens, completion
+
+**Provider & Model Configuration:**
+
+OpenCode supports 75+ LLM providers including local models via Ollama, LM Studio, and llama.cpp. Configuration is stored in:
+- **Global config:** `~/.config/opencode/opencode.json`
+- **Per-project config:** `opencode.json` in project root
+- **Custom path:** Via `OPENCODE_CONFIG` environment variable
+
+Configuration files are merged, with project config overriding global config for conflicting keys.
+
+**Ollama Setup Example:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/qwen3:8b-16k",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen3:8b-16k": {
+          "name": "Qwen3 8B",
+          "tools": true
+        }
+      }
+    }
+  }
+}
+```
+
+**Key Configuration Options:**
+- `npm`: Provider package (use `@ai-sdk/openai-compatible` for OpenAI-compatible APIs)
+- `options.baseURL`: API endpoint URL
+- `models.<id>.tools`: Enable tool calling support (critical for agentic use)
+- `models.<id>.limit.context`: Max input tokens
+- `models.<id>.limit.output`: Max output tokens
+
+**Context Window Configuration (Ollama):**
+
+Ollama defaults to 4096 context regardless of model capability. To increase context:
+
+```bash
+# Create a model variant with larger context
+ollama run qwen3:8b
+/set parameter num_ctx 16384
+/save qwen3:8b-16k
+```
+
+Then reference the custom model name in OpenCode config.
+
+**Other Local Provider Examples:**
+
+```json
+// LM Studio
+"lmstudio": {
+  "npm": "@ai-sdk/openai-compatible",
+  "options": { "baseURL": "http://127.0.0.1:1234/v1" }
+}
+
+// llama.cpp
+"llamacpp": {
+  "npm": "@ai-sdk/openai-compatible",
+  "options": { "baseURL": "http://127.0.0.1:8080/v1" }
+}
+```
+
+**Model Selection Methods:**
+1. **Command-line:** `opencode run --model ollama/qwen3:8b-16k "prompt"`
+2. **Config file:** Set `"model": "provider/model"` in opencode.json
+3. **Interactive:** Use `/models` command in interactive mode
+
+Model ID format: `provider_id/model_id` (e.g., `ollama/llama2`, `anthropic/claude-sonnet-4-5`)
+
+**Maestro Integration Considerations:**
+
+Since OpenCode supports multiple providers/models, Maestro should consider:
+1. **Model selection UI:** Add model dropdown when OpenCode is selected, populated from config or `opencode models` command
+2. **Default config generation:** Optionally generate `~/.config/opencode/opencode.json` for Ollama on first use
+3. **Per-session model:** Pass `--model` flag based on user selection
+4. **Provider status:** Detect which providers are configured and available
+
+**Documentation Sources:**
+- [OpenCode Config Docs](https://opencode.ai/docs/config/)
+- [OpenCode Providers Docs](https://opencode.ai/docs/providers/)
+- [OpenCode Models Docs](https://opencode.ai/docs/models/)
 
 ---
 

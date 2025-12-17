@@ -38,6 +38,7 @@ export interface AgentConfig {
   jsonOutputArgs?: string[]; // Args for JSON output format (e.g., ['--format', 'json'])
   resumeArgs?: (sessionId: string) => string[]; // Function to build resume args
   readOnlyArgs?: string[]; // Args for read-only/plan mode (e.g., ['--agent', 'plan'])
+  modelArgs?: (modelId: string) => string[]; // Function to build model selection args (e.g., ['--model', modelId])
 }
 
 const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'>[] = [
@@ -86,11 +87,12 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     command: 'opencode',
     args: [], // Base args (none for OpenCode - batch mode uses 'run' subcommand)
     // OpenCode CLI argument builders
-    // Batch mode: opencode run --format json [--session <id>] [--agent plan] "prompt"
+    // Batch mode: opencode run --format json [--model provider/model] [--session <id>] [--agent plan] "prompt"
     batchModePrefix: ['run'], // OpenCode uses 'run' subcommand for batch mode
     jsonOutputArgs: ['--format', 'json'], // JSON output format
     resumeArgs: (sessionId: string) => ['--session', sessionId], // Resume with session ID
     readOnlyArgs: ['--agent', 'plan'], // Read-only/plan mode
+    modelArgs: (modelId: string) => ['--model', modelId], // Model selection (e.g., 'ollama/qwen3:8b')
   },
 ];
 
