@@ -2,6 +2,35 @@
 
 This guide explains how to add support for a new AI coding agent (provider) in Maestro. It covers the architecture, required implementations, and step-by-step instructions.
 
+## Multi-Provider Architecture Status
+
+**Status:** ✅ Foundation Complete (2025-12-16)
+
+The multi-provider refactoring has established the pluggable architecture for supporting multiple AI agents:
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| Capability System | ✅ Complete | `AgentCapabilities` interface, capability gating in UI |
+| Generic Identifiers | ✅ Complete | `claudeSessionId` → `agentSessionId` across 47+ files |
+| Session Storage | ✅ Complete | `AgentSessionStorage` interface, Claude + OpenCode implementations |
+| Output Parsers | ✅ Complete | `AgentOutputParser` interface, Claude + OpenCode parsers |
+| Error Handling | ✅ Complete | `AgentError` types, detection patterns, recovery UI |
+| IPC API | ✅ Complete | `window.maestro.agentSessions.*` replaces `claude.*` |
+| UI Capability Gates | ✅ Complete | Features hidden/shown based on agent capabilities |
+
+### Adding a New Agent
+
+To add support for a new agent (e.g., Gemini CLI, Codex), follow these steps:
+
+1. Add agent definition to `src/main/agent-detector.ts`
+2. Define capabilities in `src/main/agent-capabilities.ts`
+3. Create output parser in `src/main/parsers/{agent}-output-parser.ts`
+4. Register parser in `src/main/parsers/index.ts`
+5. (Optional) Create session storage in `src/main/storage/{agent}-session-storage.ts`
+6. (Optional) Add error patterns to `src/main/parsers/error-patterns.ts`
+
+See detailed instructions below.
+
 ## Table of Contents
 
 - [Vernacular](#vernacular)
@@ -511,7 +540,7 @@ describe('YourAgentOutputParser', () => {
 
 ## Supported Agents Reference
 
-### Claude Code
+### Claude Code ✅ Fully Implemented
 
 | Aspect | Value |
 |--------|-------|
@@ -522,6 +551,12 @@ describe('YourAgentOutputParser', () => {
 | Session ID Field | `session_id` (snake_case) |
 | Session Storage | `~/.claude/projects/<encoded-path>/` |
 
+**Implementation Status:**
+- ✅ Output Parser: `src/main/parsers/claude-output-parser.ts`
+- ✅ Session Storage: `src/main/storage/claude-session-storage.ts`
+- ✅ Error Patterns: `src/main/parsers/error-patterns.ts`
+- ✅ All capabilities enabled
+
 **JSON Event Types:**
 - `system` (init) → session_id, slash_commands
 - `assistant` → streaming content
@@ -529,7 +564,7 @@ describe('YourAgentOutputParser', () => {
 
 ---
 
-### OpenCode
+### OpenCode 🔄 Stub Ready
 
 | Aspect | Value |
 |--------|-------|
@@ -540,6 +575,12 @@ describe('YourAgentOutputParser', () => {
 | Session ID Field | `sessionID` (camelCase) |
 | Session Storage | Server-managed |
 
+**Implementation Status:**
+- ✅ Output Parser: `src/main/parsers/opencode-output-parser.ts` (based on expected format)
+- ✅ Session Storage: `src/main/storage/opencode-session-storage.ts` (stub, returns empty results)
+- ⏳ Error Patterns: Placeholder, needs real-world testing
+- ⏳ Capabilities: Set to minimal defaults
+
 **JSON Event Types:**
 - `step_start` → session start
 - `text` → streaming content
@@ -548,18 +589,36 @@ describe('YourAgentOutputParser', () => {
 
 ---
 
-### Gemini CLI (Planned)
+### Gemini CLI 📋 Planned
 
-Status: Not yet implemented
+**Status:** Not yet implemented
+
+**To Add:**
+1. Agent definition in `agent-detector.ts`
+2. Capabilities in `agent-capabilities.ts`
+3. Output parser for Gemini JSON format
+4. Error patterns for Google API errors
 
 ---
 
-### Codex (Planned)
+### Codex 📋 Planned
 
-Status: Not yet implemented
+**Status:** Not yet implemented
+
+**To Add:**
+1. Agent definition in `agent-detector.ts`
+2. Capabilities in `agent-capabilities.ts`
+3. Output parser for Codex JSON format
+4. Error patterns for OpenAI API errors
 
 ---
 
-### Qwen3 Coder (Planned)
+### Qwen3 Coder 📋 Planned
 
-Status: Not yet implemented
+**Status:** Not yet implemented
+
+**To Add:**
+1. Agent definition in `agent-detector.ts`
+2. Capabilities in `agent-capabilities.ts` (likely local model, no cost tracking)
+3. Output parser for Qwen JSON format
+4. Error patterns (likely minimal for local models)
