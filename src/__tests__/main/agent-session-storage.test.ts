@@ -224,26 +224,41 @@ describe('OpenCodeSessionStorage', () => {
     expect(storage.agentId).toBe('opencode');
   });
 
-  it('should return empty results (stub implementation)', async () => {
+  it('should return empty results for non-existent projects', async () => {
     const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
     const storage = new OpenCodeSessionStorage();
 
-    const sessions = await storage.listSessions('/test/project');
+    // Non-existent project should return empty results
+    const sessions = await storage.listSessions('/test/nonexistent/project');
     expect(sessions).toEqual([]);
 
-    const paginated = await storage.listSessionsPaginated('/test/project');
+    const paginated = await storage.listSessionsPaginated('/test/nonexistent/project');
     expect(paginated.sessions).toEqual([]);
     expect(paginated.totalCount).toBe(0);
 
-    const messages = await storage.readSessionMessages('/test/project', 'session-123');
+    const messages = await storage.readSessionMessages('/test/nonexistent/project', 'session-123');
     expect(messages.messages).toEqual([]);
     expect(messages.total).toBe(0);
 
-    const search = await storage.searchSessions('/test/project', 'query', 'all');
+    const search = await storage.searchSessions('/test/nonexistent/project', 'query', 'all');
     expect(search).toEqual([]);
+  });
 
+  it('should return message directory path for getSessionPath', async () => {
+    const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+    const storage = new OpenCodeSessionStorage();
+
+    // getSessionPath returns the message directory for the session
     const path = storage.getSessionPath('/test/project', 'session-123');
-    expect(path).toBeNull();
+    expect(path).toContain('opencode');
+    expect(path).toContain('storage');
+    expect(path).toContain('message');
+    expect(path).toContain('session-123');
+  });
+
+  it('should reject message deletion (not implemented)', async () => {
+    const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+    const storage = new OpenCodeSessionStorage();
 
     const deleteResult = await storage.deleteMessagePair('/test/project', 'session-123', 'uuid-456');
     expect(deleteResult.success).toBe(false);

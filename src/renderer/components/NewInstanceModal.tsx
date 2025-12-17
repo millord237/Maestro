@@ -239,15 +239,21 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                   >
                     <div
                       onClick={() => {
-                        if (agent.id === 'claude-code' && agent.available) {
+                        // Enable selection for supported agents (claude-code, opencode)
+                        const isSupportedAgent = agent.id === 'claude-code' || agent.id === 'opencode';
+                        if (isSupportedAgent && agent.available) {
                           setSelectedAgent(agent.id);
                         }
                       }}
-                      className={`w-full text-left p-3 ${(agent.id !== 'claude-code' || !agent.available) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-opacity-10 cursor-pointer'}`}
+                      className={`w-full text-left p-3 ${
+                        !(agent.id === 'claude-code' || agent.id === 'opencode') || !agent.available
+                          ? 'opacity-40 cursor-not-allowed'
+                          : 'hover:bg-opacity-10 cursor-pointer'
+                      }`}
                       style={{ color: theme.colors.textMain }}
                       role="option"
                       aria-selected={selectedAgent === agent.id}
-                      tabIndex={agent.id === 'claude-code' && agent.available ? 0 : -1}
+                      tabIndex={(agent.id === 'claude-code' || agent.id === 'opencode') && agent.available ? 0 : -1}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -257,7 +263,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {agent.id === 'claude-code' ? (
+                          {agent.id === 'claude-code' || agent.id === 'opencode' ? (
                             <>
                               {agent.available ? (
                                 <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.success + '20', color: theme.colors.success }}>
@@ -288,8 +294,8 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                         </div>
                       </div>
                     </div>
-                    {/* Custom path input for Claude Code */}
-                    {agent.id === 'claude-code' && (
+                    {/* Custom path input for supported agents */}
+                    {(agent.id === 'claude-code' || agent.id === 'opencode') && (
                       <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: theme.colors.border }}>
                         <label className="block text-xs opacity-60 mb-1">Custom Path (optional)</label>
                         <div className="flex gap-2">
@@ -307,7 +313,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                               loadAgents();
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            placeholder="/path/to/claude"
+                            placeholder={`/path/to/${agent.binaryName}`}
                             className="flex-1 p-1.5 rounded border bg-transparent outline-none text-xs font-mono"
                             style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
                           />
