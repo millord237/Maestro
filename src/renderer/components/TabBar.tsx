@@ -226,8 +226,8 @@ function Tab({
         />
       )}
 
-      {/* Unread indicator - solid dot for tabs with unread messages (only when not active and not busy) */}
-      {!isActive && tab.state !== 'busy' && tab.hasUnread && (
+      {/* Unread indicator - solid dot for tabs with unread messages (not shown when busy) */}
+      {tab.state !== 'busy' && tab.hasUnread && (
         <div
           className="w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: theme.colors.accent }}

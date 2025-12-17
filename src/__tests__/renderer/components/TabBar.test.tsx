@@ -412,7 +412,7 @@ describe('TabBar', () => {
       expect(unreadDot).toHaveStyle({ backgroundColor: mockTheme.colors.accent });
     });
 
-    it('does not show unread indicator for active tab', () => {
+    it('shows unread indicator for active tab (when manually marked)', () => {
       const tabs = [createTab({ id: 'tab-1', name: 'Tab 1', hasUnread: true })];
 
       const { container } = render(
@@ -426,7 +426,11 @@ describe('TabBar', () => {
         />
       );
 
-      expect(container.querySelector('[title="New messages"]')).not.toBeInTheDocument();
+      // Unread indicator should show immediately even on active tab
+      // This allows users to mark a tab as unread and see the indicator right away
+      const unreadDot = container.querySelector('[title="New messages"]');
+      expect(unreadDot).toBeInTheDocument();
+      expect(unreadDot).toHaveStyle({ backgroundColor: mockTheme.colors.accent });
     });
 
     it('does not show unread indicator for busy tab', () => {

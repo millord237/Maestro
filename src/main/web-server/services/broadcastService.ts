@@ -128,24 +128,14 @@ export class BroadcastService {
    * Broadcast a message to all connected web clients
    */
   broadcastToAll(message: object): void {
-    if (!this.getWebClients) {
-      console.log(`[SYNC-DEBUG] broadcastToAll: getWebClients callback not set!`);
-      return;
-    }
-
-    const clients = this.getWebClients();
-    const msgType = (message as Record<string, unknown>).type || 'unknown';
-    console.log(`[SYNC-DEBUG] broadcastToAll: type=${msgType}, clients=${clients.size}`);
+    if (!this.getWebClients) return;
 
     const data = JSON.stringify(message);
-    let sentCount = 0;
-    for (const client of clients.values()) {
+    for (const client of this.getWebClients().values()) {
       if (client.socket.readyState === WebSocket.OPEN) {
         client.socket.send(data);
-        sentCount++;
       }
     }
-    console.log(`[SYNC-DEBUG] broadcastToAll: sent to ${sentCount}/${clients.size} clients`);
   }
 
   /**
@@ -154,29 +144,12 @@ export class BroadcastService {
   broadcastToSession(sessionId: string, message: object): void {
     if (!this.getWebClients) return;
 
-    const clients = this.getWebClients();
     const data = JSON.stringify(message);
-    let sentCount = 0;
-    const msgType = (message as Record<string, unknown>).type || 'unknown';
-
-    for (const client of clients.values()) {
-      const isOpen = client.socket.readyState === WebSocket.OPEN;
-      const matchesSession = client.subscribedSessionId === sessionId || !client.subscribedSessionId;
-      const shouldSend = isOpen && matchesSession;
-
-      if (msgType === 'session_output') {
-        console.log(`[WebBroadcast] Client ${client.id}: isOpen=${isOpen}, subscribedTo=${client.subscribedSessionId || 'none'}, matchesSession=${matchesSession}, shouldSend=${shouldSend}`);
-      }
-
-      if (shouldSend) {
+    for (const client of this.getWebClients().values()) {
+      if (client.socket.readyState === WebSocket.OPEN &&
+          (client.subscribedSessionId === sessionId || !client.subscribedSessionId)) {
         client.socket.send(data);
-        sentCount++;
       }
-    }
-
-    // Log summary for session_output
-    if (msgType === 'session_output') {
-      console.log(`[WebBroadcast] Sent session_output to ${sentCount}/${clients.size} clients for session ${sessionId}`);
     }
   }
 
@@ -269,7 +242,6 @@ export class BroadcastService {
    * Called when the user changes the theme in the desktop app
    */
   broadcastThemeChange(theme: Theme): void {
-    console.log(`[SYNC-DEBUG] BroadcastService.broadcastThemeChange called: ${theme.name}`);
     this.broadcastToAll({
       type: 'theme',
       theme,
