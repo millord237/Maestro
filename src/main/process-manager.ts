@@ -5,10 +5,14 @@ import { stripControlSequences } from './utils/terminalFilter';
 import { logger } from './utils/logger';
 import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './parsers';
 import { aggregateModelUsage } from './parsers/usage-aggregator';
+import type { AgentError } from '../shared/types';
 
 // Re-export parser types for consumers
 export type { ParsedEvent, AgentOutputParser } from './parsers';
 export { getOutputParser } from './parsers';
+
+// Re-export error types for consumers
+export type { AgentError, AgentErrorType } from '../shared/types';
 
 // Re-export usage types for backwards compatibility
 export type { UsageStats, ModelStats } from './parsers/usage-aggregator';
@@ -40,8 +44,11 @@ interface ManagedProcess {
   lastCommand?: string; // Last command sent to terminal (for filtering command echoes)
   sessionIdEmitted?: boolean; // True after session_id has been emitted (prevents duplicate emissions)
   resultEmitted?: boolean; // True after result data has been emitted (prevents duplicate emissions)
+  errorEmitted?: boolean; // True after an error has been emitted (prevents duplicate error emissions)
   startTime: number; // Timestamp when process was spawned
   outputParser?: AgentOutputParser; // Parser for agent-specific JSON output
+  stderrBuffer?: string; // Buffer for accumulating stderr output (for error detection)
+  stdoutBuffer?: string; // Buffer for accumulating stdout output (for error detection at exit)
 }
 
 /**
@@ -302,6 +309,8 @@ export class ProcessManager extends EventEmitter {
           jsonBuffer: isBatchMode ? '' : undefined,
           startTime: Date.now(),
           outputParser,
+          stderrBuffer: '', // Initialize stderr buffer for error detection at exit
+          stdoutBuffer: '', // Initialize stdout buffer for error detection at exit
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -334,6 +343,25 @@ export class ProcessManager extends EventEmitter {
 
             for (const line of lines) {
               if (!line.trim()) continue;
+
+              // Accumulate stdout for error detection at exit
+              managedProcess.stdoutBuffer = (managedProcess.stdoutBuffer || '') + line + '\n';
+
+              // Check for errors using the parser (if available)
+              if (outputParser && !managedProcess.errorEmitted) {
+                const agentError = outputParser.detectErrorFromLine(line);
+                if (agentError) {
+                  managedProcess.errorEmitted = true;
+                  agentError.sessionId = sessionId;
+                  logger.debug('[ProcessManager] Error detected from output', 'ProcessManager', {
+                    sessionId,
+                    errorType: agentError.type,
+                    errorMessage: agentError.message,
+                  });
+                  this.emit('agent-error', sessionId, agentError);
+                }
+              }
+
               try {
                 const msg = JSON.parse(line);
                 // Handle different message types from stream-json output
@@ -392,8 +420,28 @@ export class ProcessManager extends EventEmitter {
             logger.error('[ProcessManager] stderr error', 'ProcessManager', { sessionId, error: String(err) });
           });
           childProcess.stderr.on('data', (data: Buffer | string) => {
-            logger.debug('[ProcessManager] stderr event fired', 'ProcessManager', { sessionId, dataPreview: data.toString().substring(0, 100) });
-            this.emit('data', sessionId, `[stderr] ${data.toString()}`);
+            const stderrData = data.toString();
+            logger.debug('[ProcessManager] stderr event fired', 'ProcessManager', { sessionId, dataPreview: stderrData.substring(0, 100) });
+
+            // Accumulate stderr for error detection at exit
+            managedProcess.stderrBuffer = (managedProcess.stderrBuffer || '') + stderrData;
+
+            // Check for errors in stderr using the parser (if available)
+            if (outputParser && !managedProcess.errorEmitted) {
+              const agentError = outputParser.detectErrorFromLine(stderrData);
+              if (agentError) {
+                managedProcess.errorEmitted = true;
+                agentError.sessionId = sessionId;
+                logger.debug('[ProcessManager] Error detected from stderr', 'ProcessManager', {
+                  sessionId,
+                  errorType: agentError.type,
+                  errorMessage: agentError.message,
+                });
+                this.emit('agent-error', sessionId, agentError);
+              }
+            }
+
+            this.emit('data', sessionId, `[stderr] ${stderrData}`);
           });
         }
 
@@ -440,12 +488,50 @@ export class ProcessManager extends EventEmitter {
             }
           }
 
+          // Check for errors on non-zero exit code using the parser (if not already emitted)
+          if (code !== 0 && outputParser && !managedProcess.errorEmitted) {
+            const agentError = outputParser.detectErrorFromExit(
+              code || 1,
+              managedProcess.stderrBuffer || '',
+              managedProcess.stdoutBuffer || ''
+            );
+            if (agentError) {
+              managedProcess.errorEmitted = true;
+              agentError.sessionId = sessionId;
+              logger.debug('[ProcessManager] Error detected from exit', 'ProcessManager', {
+                sessionId,
+                exitCode: code,
+                errorType: agentError.type,
+                errorMessage: agentError.message,
+              });
+              this.emit('agent-error', sessionId, agentError);
+            }
+          }
+
           this.emit('exit', sessionId, code || 0);
           this.processes.delete(sessionId);
         });
 
         childProcess.on('error', (error) => {
           logger.error('[ProcessManager] Child process error', 'ProcessManager', { sessionId, error: error.message });
+
+          // Emit agent error for process spawn failures
+          if (!managedProcess.errorEmitted) {
+            managedProcess.errorEmitted = true;
+            const agentError: AgentError = {
+              type: 'agent_crashed',
+              message: `Agent process error: ${error.message}`,
+              recoverable: true,
+              agentId: toolType,
+              sessionId,
+              timestamp: Date.now(),
+              raw: {
+                stderr: error.message,
+              },
+            };
+            this.emit('agent-error', sessionId, agentError);
+          }
+
           this.emit('data', sessionId, `[error] ${error.message}`);
           this.emit('exit', sessionId, 1); // Ensure exit is emitted on error
           this.processes.delete(sessionId);

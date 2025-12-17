@@ -22,8 +22,8 @@ import { logger } from '../../utils/logger';
 // Logger context for all static route logs
 const LOG_CONTEXT = 'WebServer:Static';
 
-// GitHub redirect URL for invalid/missing token requests
-const GITHUB_REDIRECT_URL = 'https://github.com/pedramamini/Maestro';
+// Redirect URL for invalid/missing token requests
+const REDIRECT_URL = 'https://runmaestro.ai';
 
 /**
  * Static Routes Class
