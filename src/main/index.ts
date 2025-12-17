@@ -11,7 +11,8 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
-import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, setupLoggerEventForwarding } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, setupLoggerEventForwarding } from './ipc/handlers';
+import { initializeSessionStorages } from './storage';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import { initAutoUpdater } from './auto-updater';
 
@@ -781,6 +782,11 @@ function setupIpcHandlers() {
     claudeSessionOriginsStore,
     getMainWindow: () => mainWindow,
   });
+
+  // Initialize session storages and register generic agent sessions handlers
+  // This provides the new window.maestro.agentSessions.* API
+  initializeSessionStorages();
+  registerAgentSessionsHandlers();
 
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(() => mainWindow);

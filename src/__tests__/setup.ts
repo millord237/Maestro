@@ -135,6 +135,26 @@ const mockMaestro = {
     updateSessionStarred: vi.fn().mockResolvedValue(undefined),
     registerSessionOrigin: vi.fn().mockResolvedValue(undefined),
   },
+  // Generic agent sessions API (preferred over claude.*)
+  agentSessions: {
+    list: vi.fn().mockResolvedValue([]),
+    listPaginated: vi.fn().mockResolvedValue({
+      sessions: [],
+      hasMore: false,
+      totalCount: 0,
+      nextCursor: null,
+    }),
+    read: vi.fn().mockResolvedValue({
+      messages: [],
+      total: 0,
+      hasMore: false,
+    }),
+    search: vi.fn().mockResolvedValue([]),
+    getPath: vi.fn().mockResolvedValue(null),
+    deleteMessagePair: vi.fn().mockResolvedValue({ success: true }),
+    hasStorage: vi.fn().mockResolvedValue(true),
+    getAvailableStorages: vi.fn().mockResolvedValue(['claude-code']),
+  },
   autorun: {
     readDoc: vi.fn().mockResolvedValue({ success: true, content: '' }),
     writeDoc: vi.fn().mockResolvedValue({ success: true }),

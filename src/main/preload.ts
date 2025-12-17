@@ -546,6 +546,35 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('claude:deleteMessagePair', projectPath, sessionId, userMessageUuid, fallbackContent),
   },
 
+  // Agent Sessions API (generic multi-agent session storage)
+  // This is the preferred API for new code. The claude.* API is deprecated.
+  agentSessions: {
+    // List all sessions for an agent
+    list: (agentId: string, projectPath: string) =>
+      ipcRenderer.invoke('agentSessions:list', agentId, projectPath),
+    // List sessions with pagination
+    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }) =>
+      ipcRenderer.invoke('agentSessions:listPaginated', agentId, projectPath, options),
+    // Read session messages
+    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) =>
+      ipcRenderer.invoke('agentSessions:read', agentId, projectPath, sessionId, options),
+    // Search sessions
+    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') =>
+      ipcRenderer.invoke('agentSessions:search', agentId, projectPath, query, searchMode),
+    // Get session file path
+    getPath: (agentId: string, projectPath: string, sessionId: string) =>
+      ipcRenderer.invoke('agentSessions:getPath', agentId, projectPath, sessionId),
+    // Delete a message pair from a session
+    deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) =>
+      ipcRenderer.invoke('agentSessions:deleteMessagePair', agentId, projectPath, sessionId, userMessageUuid, fallbackContent),
+    // Check if an agent has session storage support
+    hasStorage: (agentId: string) =>
+      ipcRenderer.invoke('agentSessions:hasStorage', agentId),
+    // Get list of agent IDs that have session storage
+    getAvailableStorages: () =>
+      ipcRenderer.invoke('agentSessions:getAvailableStorages'),
+  },
+
   // Temp file API (for batch processing)
   tempfile: {
     write: (content: string, filename?: string) =>
@@ -1102,6 +1131,71 @@ export interface MaestroAPI {
     updateSessionStarred: (projectPath: string, agentSessionId: string, starred: boolean) => Promise<boolean>;
     getSessionOrigins: (projectPath: string) => Promise<Record<string, 'user' | 'auto' | { origin: 'user' | 'auto'; sessionName?: string; starred?: boolean }>>;
     deleteMessagePair: (projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{ success: boolean; linesRemoved?: number; error?: string }>;
+  };
+  agentSessions: {
+    list: (agentId: string, projectPath: string) => Promise<Array<{
+      sessionId: string;
+      projectPath: string;
+      timestamp: string;
+      modifiedAt: string;
+      firstMessage: string;
+      messageCount: number;
+      sizeBytes: number;
+      costUsd: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      durationSeconds: number;
+      origin?: 'user' | 'auto';
+      sessionName?: string;
+      starred?: boolean;
+    }>>;
+    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }) => Promise<{
+      sessions: Array<{
+        sessionId: string;
+        projectPath: string;
+        timestamp: string;
+        modifiedAt: string;
+        firstMessage: string;
+        messageCount: number;
+        sizeBytes: number;
+        costUsd: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        durationSeconds: number;
+        origin?: 'user' | 'auto';
+        sessionName?: string;
+        starred?: boolean;
+      }>;
+      hasMore: boolean;
+      totalCount: number;
+      nextCursor: string | null;
+    }>;
+    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => Promise<{
+      messages: Array<{
+        type: string;
+        role?: string;
+        content: string;
+        timestamp: string;
+        uuid: string;
+        toolUse?: any;
+      }>;
+      total: number;
+      hasMore: boolean;
+    }>;
+    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') => Promise<Array<{
+      sessionId: string;
+      matchType: 'title' | 'user' | 'assistant';
+      matchPreview: string;
+      matchCount: number;
+    }>>;
+    getPath: (agentId: string, projectPath: string, sessionId: string) => Promise<string | null>;
+    deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{ success: boolean; linesRemoved?: number; error?: string }>;
+    hasStorage: (agentId: string) => Promise<boolean>;
+    getAvailableStorages: () => Promise<string[]>;
   };
   tempfile: {
     write: (content: string, filename?: string) => Promise<{ success: boolean; path?: string; error?: string }>;

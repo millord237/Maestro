@@ -108,7 +108,7 @@ export class StaticRoutes {
 
     // Root path - redirect to GitHub (no access without token)
     server.get('/', async (_request, reply) => {
-      return reply.redirect(302, GITHUB_REDIRECT_URL);
+      return reply.redirect(302, REDIRECT_URL);
     });
 
     // Health check (no auth required)
@@ -161,7 +161,7 @@ export class StaticRoutes {
     server.get('/:token', async (request, reply) => {
       const { token: reqToken } = request.params as { token: string };
       if (!this.validateToken(reqToken)) {
-        return reply.redirect(302, GITHUB_REDIRECT_URL);
+        return reply.redirect(302, REDIRECT_URL);
       }
       // Valid token but no specific route - serve dashboard
       this.serveIndexHtml(reply);
