@@ -1,18 +1,23 @@
 /**
  * OpenCode Output Parser
  *
- * Parses JSON output from OpenCode CLI.
- * OpenCode outputs JSONL with different message types:
- * - step_start: Beginning of an agent step
- * - text: Text content
- * - tool_use: Tool being used
- * - step_finish: End of step with result
+ * Parses JSON output from OpenCode CLI (`opencode run --format json`).
+ * OpenCode outputs JSONL with the following message types:
  *
- * Key field mappings from OpenCode to normalized format:
- * - sessionID → sessionId
- * - part.text → text
- * - part.tokens → usage
+ * - step_start: Beginning of an agent step (contains sessionID, part.type="step-start")
+ * - text: Text content (contains part.text, streaming response chunks)
+ * - tool_use: Tool execution (contains part.tool, part.state with status/input/output)
+ * - step_finish: End of step (contains part.reason, part.tokens with usage stats)
  *
+ * Key schema details:
+ * - Each message has: type, timestamp, sessionID, part
+ * - Session IDs use camelCase: sessionID (not snake_case like Claude)
+ * - Text is in part.text, not directly on message
+ * - Token stats are in part.tokens: { input, output, reasoning, cache: { read, write } }
+ * - Tool state has: status, input, output, title, metadata
+ * - step_finish reason values: "stop" (complete), "tool-calls" (more work), "error"
+ *
+ * Verified against OpenCode CLI output (2025-12-16)
  * @see https://github.com/opencode-ai/opencode
  */
 
@@ -22,33 +27,67 @@ import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 
 /**
  * Raw message structure from OpenCode output
- * NOTE: Based on expected format - may need updates after integration testing
+ * Verified from actual OpenCode CLI output (2025-12-16)
  */
 interface OpenCodeRawMessage {
-  type?: string;
+  type?: 'step_start' | 'text' | 'tool_use' | 'step_finish' | 'error';
+  timestamp?: number;
   sessionID?: string;
-  part?: {
-    text?: string;
-    tokens?: {
-      input?: number;
-      output?: number;
+  part?: OpenCodePart;
+  error?: string;
+}
+
+/**
+ * Part structure embedded in OpenCode messages
+ * Different message types have different part structures
+ */
+interface OpenCodePart {
+  id?: string;
+  sessionID?: string;
+  messageID?: string;
+  type?: 'step-start' | 'text' | 'tool' | 'step-finish';
+
+  // For text type
+  text?: string;
+  time?: {
+    start?: number;
+    end?: number;
+  };
+
+  // For tool type
+  callID?: string;
+  tool?: string;
+  state?: {
+    status?: 'pending' | 'running' | 'completed' | 'error';
+    input?: Record<string, unknown>;
+    output?: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+    time?: {
+      start?: number;
+      end?: number;
     };
   };
-  tool?: {
-    name?: string;
-    state?: unknown;
+
+  // For step-finish type
+  reason?: 'stop' | 'tool-calls' | 'error';
+  cost?: number;
+  tokens?: {
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache?: {
+      read?: number;
+      write?: number;
+    };
   };
-  result?: string;
-  error?: string;
 }
 
 /**
  * OpenCode Output Parser Implementation
  *
  * Transforms OpenCode's JSON format into normalized ParsedEvents.
- *
- * NOTE: This implementation is based on expected/documented format.
- * May need updates when OpenCode CLI is fully integrated and tested.
+ * Verified against actual OpenCode CLI output (2025-12-16).
  */
 export class OpenCodeOutputParser implements AgentOutputParser {
   readonly agentId: ToolType = 'opencode';
@@ -56,11 +95,11 @@ export class OpenCodeOutputParser implements AgentOutputParser {
   /**
    * Parse a single JSON line from OpenCode output
    *
-   * OpenCode message types:
-   * - { type: 'step_start', sessionID }
-   * - { type: 'text', part: { text } }
-   * - { type: 'tool_use', tool: { name, state } }
-   * - { type: 'step_finish', result, part: { tokens } }
+   * OpenCode message types (verified 2025-12-16):
+   * - { type: 'step_start', sessionID, part: { type: 'step-start' } }
+   * - { type: 'text', sessionID, part: { text, type: 'text' } }
+   * - { type: 'tool_use', sessionID, part: { tool, state: { status, input, output }, type: 'tool' } }
+   * - { type: 'step_finish', sessionID, part: { reason, tokens, type: 'step-finish' } }
    */
   parseJsonLine(line: string): ParsedEvent | null {
     if (!line.trim()) {
@@ -105,21 +144,26 @@ export class OpenCodeOutputParser implements AgentOutputParser {
     }
 
     // Handle tool_use messages
+    // Tool info is in part.tool (tool name) and part.state (execution state)
     if (msg.type === 'tool_use') {
       return {
         type: 'tool_use',
-        toolName: msg.tool?.name,
-        toolState: msg.tool?.state,
+        toolName: msg.part?.tool,
+        toolState: msg.part?.state,
         sessionId: msg.sessionID,
         raw: msg,
       };
     }
 
-    // Handle step_finish messages (final result)
+    // Handle step_finish messages (step completion with token stats)
+    // part.reason indicates: "stop" (final), "tool-calls" (more work), "error"
     if (msg.type === 'step_finish') {
+      // Only mark as "result" if reason is "stop" (final response)
+      // "tool-calls" means more work is coming, so treat as system event
+      const isFinalResult = msg.part?.reason === 'stop';
+
       const event: ParsedEvent = {
-        type: 'result',
-        text: msg.result,
+        type: isFinalResult ? 'result' : 'system',
         sessionId: msg.sessionID,
         raw: msg,
       };
@@ -161,15 +205,21 @@ export class OpenCodeOutputParser implements AgentOutputParser {
 
   /**
    * Extract usage statistics from raw OpenCode message
+   * OpenCode tokens structure: { input, output, reasoning, cache: { read, write } }
    */
   private extractUsageFromRaw(msg: OpenCodeRawMessage): ParsedEvent['usage'] | null {
     if (!msg.part?.tokens) {
       return null;
     }
 
+    const tokens = msg.part.tokens;
     return {
-      inputTokens: msg.part.tokens.input || 0,
-      outputTokens: msg.part.tokens.output || 0,
+      inputTokens: tokens.input || 0,
+      outputTokens: tokens.output || 0,
+      cacheReadTokens: tokens.cache?.read || 0,
+      cacheCreationTokens: tokens.cache?.write || 0,
+      // OpenCode provides cost per step in part.cost (in dollars)
+      costUsd: msg.part.cost || 0,
     };
   }
 

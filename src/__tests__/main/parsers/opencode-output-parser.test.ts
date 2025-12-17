@@ -47,32 +47,45 @@ describe('OpenCodeOutputParser', () => {
     });
 
     it('should parse tool_use messages', () => {
+      // Actual OpenCode format: tool name in part.tool, state in part.state
       const line = JSON.stringify({
         type: 'tool_use',
         sessionID: 'oc-sess-123',
-        tool: {
-          name: 'file_read',
-          state: { path: '/src/index.ts', reading: true },
+        part: {
+          tool: 'view',
+          state: {
+            status: 'completed',
+            input: { path: '/src/index.ts' },
+            output: 'file contents...',
+          },
         },
       });
 
       const event = parser.parseJsonLine(line);
       expect(event).not.toBeNull();
       expect(event?.type).toBe('tool_use');
-      expect(event?.toolName).toBe('file_read');
-      expect(event?.toolState).toEqual({ path: '/src/index.ts', reading: true });
+      expect(event?.toolName).toBe('view');
+      expect(event?.toolState).toEqual({
+        status: 'completed',
+        input: { path: '/src/index.ts' },
+        output: 'file contents...',
+      });
       expect(event?.sessionId).toBe('oc-sess-123');
     });
 
-    it('should parse step_finish messages as result', () => {
+    it('should parse step_finish messages with reason "stop" as result', () => {
+      // Actual OpenCode format: reason and tokens in part
       const line = JSON.stringify({
         type: 'step_finish',
         sessionID: 'oc-sess-123',
-        result: 'Task completed successfully.',
         part: {
+          reason: 'stop',
+          cost: 0.001,
           tokens: {
             input: 500,
             output: 200,
+            reasoning: 0,
+            cache: { read: 100, write: 50 },
           },
         },
       });
@@ -80,10 +93,29 @@ describe('OpenCodeOutputParser', () => {
       const event = parser.parseJsonLine(line);
       expect(event).not.toBeNull();
       expect(event?.type).toBe('result');
-      expect(event?.text).toBe('Task completed successfully.');
       expect(event?.sessionId).toBe('oc-sess-123');
       expect(event?.usage?.inputTokens).toBe(500);
       expect(event?.usage?.outputTokens).toBe(200);
+      expect(event?.usage?.cacheReadTokens).toBe(100);
+      expect(event?.usage?.cacheCreationTokens).toBe(50);
+      expect(event?.usage?.costUsd).toBe(0.001);
+    });
+
+    it('should parse step_finish messages with reason "tool-calls" as system', () => {
+      // step_finish with reason "tool-calls" means more work is coming
+      const line = JSON.stringify({
+        type: 'step_finish',
+        sessionID: 'oc-sess-123',
+        part: {
+          reason: 'tool-calls',
+          tokens: { input: 100, output: 50 },
+        },
+      });
+
+      const event = parser.parseJsonLine(line);
+      expect(event).not.toBeNull();
+      expect(event?.type).toBe('system');
+      expect(event?.sessionId).toBe('oc-sess-123');
     });
 
     it('should parse error messages', () => {
@@ -120,8 +152,8 @@ describe('OpenCodeOutputParser', () => {
     it('should preserve raw message', () => {
       const original = {
         type: 'step_finish',
-        result: 'Test',
         sessionID: 'oc-sess-123',
+        part: { reason: 'stop' },
       };
       const line = JSON.stringify(original);
 
@@ -131,12 +163,20 @@ describe('OpenCodeOutputParser', () => {
   });
 
   describe('isResultMessage', () => {
-    it('should return true for step_finish events', () => {
+    it('should return true for step_finish events with reason "stop"', () => {
       const resultEvent = parser.parseJsonLine(
-        JSON.stringify({ type: 'step_finish', result: 'test' })
+        JSON.stringify({ type: 'step_finish', part: { reason: 'stop' } })
       );
       expect(resultEvent).not.toBeNull();
       expect(parser.isResultMessage(resultEvent!)).toBe(true);
+    });
+
+    it('should return false for step_finish events with reason "tool-calls"', () => {
+      const toolCallsEvent = parser.parseJsonLine(
+        JSON.stringify({ type: 'step_finish', part: { reason: 'tool-calls' } })
+      );
+      expect(toolCallsEvent).not.toBeNull();
+      expect(parser.isResultMessage(toolCallsEvent!)).toBe(false);
     });
 
     it('should return false for non-result events', () => {
@@ -164,7 +204,7 @@ describe('OpenCodeOutputParser', () => {
 
     it('should extract session ID from step_finish message', () => {
       const event = parser.parseJsonLine(
-        JSON.stringify({ type: 'step_finish', result: 'test', sessionID: 'oc-123' })
+        JSON.stringify({ type: 'step_finish', sessionID: 'oc-123', part: { reason: 'stop' } })
       );
       expect(parser.extractSessionId(event!)).toBe('oc-123');
     });
@@ -180,8 +220,8 @@ describe('OpenCodeOutputParser', () => {
       const event = parser.parseJsonLine(
         JSON.stringify({
           type: 'step_finish',
-          result: 'test',
           part: {
+            reason: 'stop',
             tokens: {
               input: 100,
               output: 50,
@@ -207,8 +247,8 @@ describe('OpenCodeOutputParser', () => {
       const event = parser.parseJsonLine(
         JSON.stringify({
           type: 'step_finish',
-          result: 'test',
           part: {
+            reason: 'stop',
             tokens: {
               input: 0,
               output: 0,
@@ -233,12 +273,21 @@ describe('OpenCodeOutputParser', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle empty result string', () => {
+    it('should handle step_finish without reason', () => {
+      // step_finish without reason defaults to system event
       const event = parser.parseJsonLine(
-        JSON.stringify({ type: 'step_finish', result: '', sessionID: 'sess-123' })
+        JSON.stringify({ type: 'step_finish', sessionID: 'sess-123', part: {} })
+      );
+      expect(event?.type).toBe('system');
+      expect(event?.sessionId).toBe('sess-123');
+    });
+
+    it('should handle step_finish with reason "stop"', () => {
+      const event = parser.parseJsonLine(
+        JSON.stringify({ type: 'step_finish', sessionID: 'sess-123', part: { reason: 'stop' } })
       );
       expect(event?.type).toBe('result');
-      expect(event?.text).toBe('');
+      expect(event?.sessionId).toBe('sess-123');
     });
 
     it('should handle missing part.text', () => {
@@ -259,7 +308,7 @@ describe('OpenCodeOutputParser', () => {
 
     it('should handle missing tool info', () => {
       const event = parser.parseJsonLine(
-        JSON.stringify({ type: 'tool_use' })
+        JSON.stringify({ type: 'tool_use', part: {} })
       );
       expect(event?.type).toBe('tool_use');
       expect(event?.toolName).toBeUndefined();
