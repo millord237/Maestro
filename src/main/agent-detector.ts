@@ -39,6 +39,8 @@ export interface AgentConfig {
   resumeArgs?: (sessionId: string) => string[]; // Function to build resume args
   readOnlyArgs?: string[]; // Args for read-only/plan mode (e.g., ['--agent', 'plan'])
   modelArgs?: (modelId: string) => string[]; // Function to build model selection args (e.g., ['--model', modelId])
+  yoloModeArgs?: string[]; // Args for YOLO/full-access mode (e.g., ['--dangerously-bypass-approvals-and-sandbox'])
+  workingDirArgs?: (dir: string) => string[]; // Function to build working directory args (e.g., ['-C', dir])
 }
 
 const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'>[] = [
@@ -60,11 +62,20 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     args: ['--print', '--verbose', '--output-format', 'stream-json', '--dangerously-skip-permissions'],
   },
   {
-    id: 'openai-codex',
-    name: 'OpenAI Codex',
+    id: 'codex',
+    name: 'Codex',
     binaryName: 'codex',
     command: 'codex',
-    args: [],
+    args: [], // Base args (none for Codex - batch mode uses 'exec' subcommand)
+    // Codex CLI argument builders
+    // Batch mode: codex exec --json [--sandbox read-only|workspace-write] [resume <id>] "prompt"
+    // Note: YOLO mode is not included by default - Codex defaults to workspace-write sandbox
+    batchModePrefix: ['exec'], // Codex uses 'exec' subcommand for batch mode
+    jsonOutputArgs: ['--json'], // JSON output format (must come before resume subcommand)
+    resumeArgs: (sessionId: string) => ['resume', sessionId], // Resume with session/thread ID
+    readOnlyArgs: ['--sandbox', 'read-only'], // Read-only/plan mode
+    yoloModeArgs: ['--dangerously-bypass-approvals-and-sandbox'], // Full access mode
+    workingDirArgs: (dir: string) => ['-C', dir], // Set working directory
   },
   {
     id: 'gemini-cli',

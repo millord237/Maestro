@@ -90,11 +90,19 @@ describe('agent-capabilities', () => {
       expect(capabilities.supportsCostTracking).toBe(false);
     });
 
-    it('should have capabilities for openai-codex', () => {
-      const capabilities = AGENT_CAPABILITIES['openai-codex'];
+    it('should have capabilities for codex', () => {
+      const capabilities = AGENT_CAPABILITIES['codex'];
       expect(capabilities).toBeDefined();
-      // Placeholder: capabilities are false until Codex CLI is available
+      // Verified capabilities based on CLI testing (v0.73.0+)
+      expect(capabilities.supportsResume).toBe(true);
+      expect(capabilities.supportsReadOnlyMode).toBe(true);
+      expect(capabilities.supportsJsonOutput).toBe(true);
+      expect(capabilities.supportsSessionId).toBe(true);
+      expect(capabilities.supportsUsageStats).toBe(true);
+      expect(capabilities.supportsBatchMode).toBe(true);
       expect(capabilities.supportsStreaming).toBe(true);
+      expect(capabilities.supportsSlashCommands).toBe(false);
+      expect(capabilities.supportsResultMessages).toBe(false);
     });
 
     it('should have capabilities for gemini-cli', () => {
@@ -130,7 +138,7 @@ describe('agent-capabilities', () => {
       const knownAgents = [
         'claude-code',
         'terminal',
-        'openai-codex',
+        'codex',
         'gemini-cli',
         'qwen3-coder',
         'opencode',

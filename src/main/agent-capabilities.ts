@@ -126,25 +126,26 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
   },
 
   /**
-   * OpenAI Codex - OpenAI's code generation model
+   * Codex - OpenAI's Codex CLI
+   * https://github.com/openai/codex
    *
-   * PLACEHOLDER: All capabilities set to false until Codex CLI is available
-   * and can be tested. Update this configuration when integrating the agent.
+   * Verified capabilities based on CLI testing (v0.73.0+) and documentation review.
+   * See Auto Run Docs/Codex-Support.md for investigation details.
    */
-  'openai-codex': {
-    supportsResume: false,
-    supportsReadOnlyMode: false,
-    supportsJsonOutput: false,
-    supportsSessionId: false,
-    supportsImageInput: false,   // GPT-4 variants may support this
-    supportsSlashCommands: false,
-    supportsSessionStorage: false,
-    supportsCostTracking: false,
-    supportsUsageStats: false,
-    supportsBatchMode: false,
-    supportsStreaming: true,     // Most CLIs stream
-    supportsResultMessages: false,
-    supportsModelSelection: false, // Not yet investigated
+  'codex': {
+    supportsResume: true,         // exec resume <id> (v0.30.0+) - Verified
+    supportsReadOnlyMode: true,   // --sandbox read-only - Verified
+    supportsJsonOutput: true,     // --json flag - Verified
+    supportsSessionId: true,      // thread_id in thread.started event - Verified
+    supportsImageInput: true,     // -i, --image flag - Documented
+    supportsSlashCommands: false, // None - Verified
+    supportsSessionStorage: true, // ~/.codex/sessions/YYYY/MM/DD/*.jsonl - Verified
+    supportsCostTracking: true,   // OpenAI API-based pricing - Verified
+    supportsUsageStats: true,     // usage in turn.completed events - Verified
+    supportsBatchMode: true,      // exec subcommand - Verified
+    supportsStreaming: true,      // Streams JSONL events - Verified
+    supportsResultMessages: false, // All messages are agent_message type (no distinct result) - Verified
+    supportsModelSelection: true, // -m, --model flag - Documented
   },
 
   /**

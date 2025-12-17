@@ -249,13 +249,13 @@ describe('agent-detector', () => {
 
       const agents = await detector.detectAgents();
 
-      // Should have all 6 agents (terminal, claude-code, openai-codex, gemini-cli, qwen3-coder, opencode)
+      // Should have all 6 agents (terminal, claude-code, codex, gemini-cli, qwen3-coder, opencode)
       expect(agents.length).toBe(6);
 
       const agentIds = agents.map(a => a.id);
       expect(agentIds).toContain('terminal');
       expect(agentIds).toContain('claude-code');
-      expect(agentIds).toContain('openai-codex');
+      expect(agentIds).toContain('codex');
       expect(agentIds).toContain('gemini-cli');
       expect(agentIds).toContain('qwen3-coder');
       expect(agentIds).toContain('opencode');
@@ -275,7 +275,7 @@ describe('agent-detector', () => {
       mockExecFileNoThrow.mockResolvedValue({ stdout: '', stderr: 'not found', exitCode: 1 });
 
       const agents = await detector.detectAgents();
-      const codexAgent = agents.find(a => a.id === 'openai-codex');
+      const codexAgent = agents.find(a => a.id === 'codex');
 
       expect(codexAgent?.available).toBe(false);
       expect(codexAgent?.path).toBeUndefined();
@@ -294,7 +294,7 @@ describe('agent-detector', () => {
 
       expect(agents.find(a => a.id === 'terminal')?.available).toBe(true);
       expect(agents.find(a => a.id === 'claude-code')?.available).toBe(true);
-      expect(agents.find(a => a.id === 'openai-codex')?.available).toBe(false);
+      expect(agents.find(a => a.id === 'codex')?.available).toBe(false);
     });
 
     it('should use deduplication for parallel calls', async () => {
