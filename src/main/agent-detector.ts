@@ -66,21 +66,20 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     name: 'Codex',
     binaryName: 'codex',
     command: 'codex',
-    args: [], // Base args (none for Codex - batch mode uses 'exec' subcommand)
+    // YOLO mode is always enabled - Maestro requires it for non-interactive automation
+    // When read-only mode is active, this flag is filtered out in useInputProcessing.ts
+    args: ['--dangerously-bypass-approvals-and-sandbox'],
     // Codex CLI argument builders
-    // Batch mode: codex exec --json [--sandbox read-only|workspace-write] [resume <id>] "prompt"
+    // Batch mode: codex exec --json [--sandbox read-only] [resume <id>] "prompt"
     // Sandbox modes:
-    //   - Default: workspace-write (can write in project directory)
-    //   - Read-only: read-only (can only read files)
-    //   - YOLO: --dangerously-bypass-approvals-and-sandbox (full system access)
+    //   - Default (YOLO): --dangerously-bypass-approvals-and-sandbox (full system access, required by Maestro)
+    //   - Read-only: --sandbox read-only (can only read files, overrides YOLO)
     batchModePrefix: ['exec'], // Codex uses 'exec' subcommand for batch mode
     jsonOutputArgs: ['--json'], // JSON output format (must come before resume subcommand)
     resumeArgs: (sessionId: string) => ['resume', sessionId], // Resume with session/thread ID
     readOnlyArgs: ['--sandbox', 'read-only'], // Read-only/plan mode
-    yoloModeArgs: ['--dangerously-bypass-approvals-and-sandbox'], // Full access mode
+    yoloModeArgs: ['--dangerously-bypass-approvals-and-sandbox'], // Full access mode (already in base args)
     workingDirArgs: (dir: string) => ['-C', dir], // Set working directory
-    // Note: Codex CLI defaults to --sandbox workspace-write, so no explicit arg needed for default mode
-    // The sandbox mode is determined by readOnlyMode and yoloMode flags in process handler
   },
   {
     id: 'gemini-cli',

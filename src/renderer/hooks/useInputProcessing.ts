@@ -514,13 +514,14 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
         ? `${activeSession.id}-ai-${activeTabForSpawn?.id || 'default'}`
         : `${activeSession.id}-terminal`;
 
-    // Check if this is an AI agent in batch mode (e.g., Claude Code, OpenCode)
+    // Check if this is an AI agent in batch mode (e.g., Claude Code, OpenCode, Codex)
     // Batch mode agents spawn a new process per message rather than writing to stdin
     const isBatchModeAgent =
       currentMode === 'ai' &&
       (activeSession.toolType === 'claude' ||
        activeSession.toolType === 'claude-code' ||
-       activeSession.toolType === 'opencode');
+       activeSession.toolType === 'opencode' ||
+       activeSession.toolType === 'codex');
 
     if (isBatchModeAgent) {
       // Batch mode: Spawn new agent process with prompt
@@ -545,8 +546,13 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 
           // For read-only mode, filter out any YOLO/skip-permissions flags from base args
           // (they would override the read-only mode we're requesting)
+          // - Claude Code: --dangerously-skip-permissions
+          // - Codex: --dangerously-bypass-approvals-and-sandbox
           const spawnArgs = isReadOnly
-            ? agent.args.filter((arg) => arg !== '--dangerously-skip-permissions')
+            ? agent.args.filter((arg) =>
+                arg !== '--dangerously-skip-permissions' &&
+                arg !== '--dangerously-bypass-approvals-and-sandbox'
+              )
             : [...agent.args];
 
           // Use agent.path (full path) if available, otherwise fall back to agent.command

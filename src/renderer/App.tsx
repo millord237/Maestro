@@ -3390,10 +3390,15 @@ export default function MaestroConsole() {
         const tabClaudeSessionId = activeTab?.agentSessionId;
         const isReadOnly = activeTab?.readOnlyMode;
 
-        // Filter out --dangerously-skip-permissions when read-only mode is active
-        // (it would override --permission-mode plan)
+        // Filter out YOLO/skip-permissions flags when read-only mode is active
+        // (they would override the read-only mode we're requesting)
+        // - Claude Code: --dangerously-skip-permissions
+        // - Codex: --dangerously-bypass-approvals-and-sandbox
         const spawnArgs = isReadOnly
-          ? agent.args.filter(arg => arg !== '--dangerously-skip-permissions')
+          ? agent.args.filter(arg =>
+              arg !== '--dangerously-skip-permissions' &&
+              arg !== '--dangerously-bypass-approvals-and-sandbox'
+            )
           : [...agent.args];
 
         if (tabClaudeSessionId) {
@@ -3568,10 +3573,15 @@ export default function MaestroConsole() {
       const tabClaudeSessionId = targetTab?.agentSessionId;
       const isReadOnly = item.readOnlyMode || targetTab?.readOnlyMode;
 
-      // Filter out --dangerously-skip-permissions when read-only mode is active
-      // (it would override --permission-mode plan)
+      // Filter out YOLO/skip-permissions flags when read-only mode is active
+      // (they would override the read-only mode we're requesting)
+      // - Claude Code: --dangerously-skip-permissions
+      // - Codex: --dangerously-bypass-approvals-and-sandbox
       const spawnArgs = isReadOnly
-        ? (agent.args || []).filter(arg => arg !== '--dangerously-skip-permissions')
+        ? (agent.args || []).filter(arg =>
+            arg !== '--dangerously-skip-permissions' &&
+            arg !== '--dangerously-bypass-approvals-and-sandbox'
+          )
         : [...(agent.args || [])];
 
       if (tabClaudeSessionId) {
