@@ -48,14 +48,12 @@ export function registerHistoryHandlers(): void {
     'history:getAll',
     withIpcErrorLogging(handlerOpts('getAll'), async (projectPath?: string, sessionId?: string) => {
       if (sessionId) {
-        // Get entries for specific session
+        // Get entries for specific session only - don't include orphaned entries
+        // to prevent history bleeding across different agent sessions in the same directory
         const entries = historyManager.getEntries(sessionId);
-        // Also include orphaned entries (legacy entries without sessionId)
-        const orphanedEntries = historyManager.getEntries(ORPHANED_SESSION_ID);
-        const combined = [...entries, ...orphanedEntries];
         // Sort by timestamp descending
-        combined.sort((a, b) => b.timestamp - a.timestamp);
-        return combined;
+        entries.sort((a, b) => b.timestamp - a.timestamp);
+        return entries;
       }
 
       if (projectPath) {

@@ -203,7 +203,7 @@ export function TabSwitcherModal({
       const namedTabs = tabs.filter(t => t.name && t.agentSessionId);
       await Promise.all(
         namedTabs.map(tab =>
-          window.maestro.claude.updateSessionName(projectRoot, tab.agentSessionId!, tab.name!)
+          window.maestro.agentSessions.updateSessionName(projectRoot, tab.agentSessionId!, tab.name!)
             .catch(err => console.warn('[TabSwitcher] Failed to sync tab name:', err))
         )
       );

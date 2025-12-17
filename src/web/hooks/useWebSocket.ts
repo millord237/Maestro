@@ -211,6 +211,7 @@ export interface ActiveSessionChangedMessage extends ServerMessage {
 export interface SessionOutputMessage extends ServerMessage {
   type: 'session_output';
   sessionId: string;
+  tabId?: string; // Tab ID for multi-tab sessions (format: {sessionId}-ai-{tabId})
   data: string;
   source: 'ai' | 'terminal';
   msgId?: string; // Unique message ID for deduplication
@@ -328,7 +329,7 @@ export interface WebSocketEventHandlers {
   /** Called when the active session changes on the desktop */
   onActiveSessionChanged?: (sessionId: string) => void;
   /** Called when session output is received (real-time AI/terminal output) */
-  onSessionOutput?: (sessionId: string, data: string, source: 'ai' | 'terminal') => void;
+  onSessionOutput?: (sessionId: string, data: string, source: 'ai' | 'terminal', tabId?: string) => void;
   /** Called when a session process exits */
   onSessionExit?: (sessionId: string, exitCode: number) => void;
   /** Called when user input is received (message sent from desktop app) */
@@ -617,8 +618,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
               seenMsgIdsRef.current = new Set(idsArray.slice(-500));
             }
           }
-          console.log(`[WebSocket] Received session_output: msgId=${outputMsg.msgId || 'none'}, session=${outputMsg.sessionId}, source=${outputMsg.source}, dataLen=${outputMsg.data?.length || 0}, hasHandler=${!!handlersRef.current?.onSessionOutput}`);
-          handlersRef.current?.onSessionOutput?.(outputMsg.sessionId, outputMsg.data, outputMsg.source);
+          console.log(`[WebSocket] Received session_output: msgId=${outputMsg.msgId || 'none'}, session=${outputMsg.sessionId}, tabId=${outputMsg.tabId || 'none'}, source=${outputMsg.source}, dataLen=${outputMsg.data?.length || 0}, hasHandler=${!!handlersRef.current?.onSessionOutput}`);
+          handlersRef.current?.onSessionOutput?.(outputMsg.sessionId, outputMsg.data, outputMsg.source, outputMsg.tabId);
           break;
         }
 

@@ -18,6 +18,26 @@ export type { AgentError, AgentErrorType } from '../shared/types';
 export type { UsageStats, ModelStats } from './parsers/usage-aggregator';
 export { aggregateModelUsage } from './parsers/usage-aggregator';
 
+/**
+ * Maximum buffer size for stdout/stderr error detection buffers.
+ * Prevents memory exhaustion during extended process execution.
+ * Only the last MAX_BUFFER_SIZE bytes are kept for error detection at exit.
+ */
+const MAX_BUFFER_SIZE = 100 * 1024; // 100KB
+
+/**
+ * Append to a buffer while enforcing max size limit.
+ * If the buffer exceeds MAX_BUFFER_SIZE, keeps only the last MAX_BUFFER_SIZE bytes.
+ */
+function appendToBuffer(buffer: string, data: string, maxSize: number = MAX_BUFFER_SIZE): string {
+  const combined = buffer + data;
+  if (combined.length <= maxSize) {
+    return combined;
+  }
+  // Keep only the last maxSize characters
+  return combined.slice(-maxSize);
+}
+
 interface ProcessConfig {
   sessionId: string;
   toolType: string;
@@ -49,6 +69,7 @@ interface ManagedProcess {
   outputParser?: AgentOutputParser; // Parser for agent-specific JSON output
   stderrBuffer?: string; // Buffer for accumulating stderr output (for error detection)
   stdoutBuffer?: string; // Buffer for accumulating stdout output (for error detection at exit)
+  streamedText?: string; // Buffer for accumulating streamed text from partial events (OpenCode, Codex)
 }
 
 /**
@@ -291,11 +312,27 @@ export class ProcessManager extends EventEmitter {
         });
 
         const isBatchMode = !!prompt;
-        // Detect stream-json mode from args (now default for Claude Code) or when images are present
-        const isStreamJsonMode = finalArgs.includes('stream-json') || (hasImages && !!prompt);
+        // Detect JSON streaming mode from args:
+        // - Claude Code: --output-format stream-json
+        // - OpenCode: --format json
+        // - Codex: --json
+        // Also triggered when images are present (forces stream-json mode)
+        const isStreamJsonMode = finalArgs.includes('stream-json') ||
+          finalArgs.includes('--json') ||
+          (finalArgs.includes('--format') && finalArgs.includes('json')) ||
+          (hasImages && !!prompt);
 
         // Get the output parser for this agent type (if available)
         const outputParser = getOutputParser(toolType) || undefined;
+
+        logger.debug('[ProcessManager] Output parser lookup', 'ProcessManager', {
+          sessionId,
+          toolType,
+          hasParser: !!outputParser,
+          parserId: outputParser?.agentId,
+          isStreamJsonMode,
+          isBatchMode
+        });
 
         const managedProcess: ManagedProcess = {
           sessionId,
@@ -344,8 +381,8 @@ export class ProcessManager extends EventEmitter {
             for (const line of lines) {
               if (!line.trim()) continue;
 
-              // Accumulate stdout for error detection at exit
-              managedProcess.stdoutBuffer = (managedProcess.stdoutBuffer || '') + line + '\n';
+              // Accumulate stdout for error detection at exit (with size limit to prevent memory exhaustion)
+              managedProcess.stdoutBuffer = appendToBuffer(managedProcess.stdoutBuffer || '', line + '\n');
 
               // Check for errors using the parser (if available)
               if (outputParser && !managedProcess.errorEmitted) {
@@ -369,6 +406,17 @@ export class ProcessManager extends EventEmitter {
                 // This provides a unified way to extract session ID, usage, and data
                 if (outputParser) {
                   const event = outputParser.parseJsonLine(line);
+
+                  logger.debug('[ProcessManager] Parsed event from output parser', 'ProcessManager', {
+                    sessionId,
+                    eventType: event?.type,
+                    hasText: !!event?.text,
+                    textPreview: event?.text?.substring(0, 100),
+                    isPartial: event?.isPartial,
+                    isResultMessage: event ? outputParser.isResultMessage(event) : false,
+                    resultEmitted: managedProcess.resultEmitted
+                  });
+
                   if (event) {
                     // Extract usage statistics
                     const usage = outputParser.extractUsage(event);
@@ -399,14 +447,27 @@ export class ProcessManager extends EventEmitter {
                       this.emit('slash-commands', sessionId, slashCommands);
                     }
 
+                    // Accumulate text from partial streaming events (OpenCode text messages)
+                    if (event.type === 'text' && event.isPartial && event.text) {
+                      managedProcess.streamedText = (managedProcess.streamedText || '') + event.text;
+                    }
+
                     // Extract text data from result events (final complete response)
-                    if (outputParser.isResultMessage(event) && event.text && !managedProcess.resultEmitted) {
+                    // For Codex: agent_message events have text directly
+                    // For OpenCode: step_finish with reason="stop" triggers emission of accumulated text
+                    if (outputParser.isResultMessage(event) && !managedProcess.resultEmitted) {
                       managedProcess.resultEmitted = true;
-                      logger.debug('[ProcessManager] Emitting result data via parser', 'ProcessManager', {
-                        sessionId,
-                        resultLength: event.text.length
-                      });
-                      this.emit('data', sessionId, event.text);
+                      // Use event text if available, otherwise use accumulated streamed text
+                      const resultText = event.text || managedProcess.streamedText || '';
+                      if (resultText) {
+                        logger.debug('[ProcessManager] Emitting result data via parser', 'ProcessManager', {
+                          sessionId,
+                          resultLength: resultText.length,
+                          hasEventText: !!event.text,
+                          hasStreamedText: !!managedProcess.streamedText
+                        });
+                        this.emit('data', sessionId, resultText);
+                      }
                     }
                   }
                 } else {
@@ -462,8 +523,8 @@ export class ProcessManager extends EventEmitter {
             const stderrData = data.toString();
             logger.debug('[ProcessManager] stderr event fired', 'ProcessManager', { sessionId, dataPreview: stderrData.substring(0, 100) });
 
-            // Accumulate stderr for error detection at exit
-            managedProcess.stderrBuffer = (managedProcess.stderrBuffer || '') + stderrData;
+            // Accumulate stderr for error detection at exit (with size limit to prevent memory exhaustion)
+            managedProcess.stderrBuffer = appendToBuffer(managedProcess.stderrBuffer || '', stderrData);
 
             // Check for errors in stderr using the parser (if available)
             if (outputParser && !managedProcess.errorEmitted) {

@@ -249,8 +249,8 @@ export function AgentSessionsBrowser({
 
     const trimmedName = renameValue.trim();
     try {
-      // Update claudeSessionOriginsStore (single source of truth for session names)
-      await window.maestro.claude.updateSessionName(
+      // Update session origins store (single source of truth for session names)
+      await window.maestro.agentSessions.updateSessionName(
         activeSession.cwd,
         sessionId,
         trimmedName

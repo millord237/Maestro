@@ -648,8 +648,8 @@ describe('useBatchProcessor hook', () => {
         ...window.maestro.web,
         broadcastAutoRunState: mockBroadcastAutoRunState
       },
-      claude: {
-        ...window.maestro.claude,
+      agentSessions: {
+        ...window.maestro.agentSessions,
         registerSessionOrigin: mockRegisterSessionOrigin
       }
     };

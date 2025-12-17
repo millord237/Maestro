@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo,
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle } from 'lucide-react';
+import { getEncoding } from 'js-tiktoken';
 import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
@@ -17,6 +18,26 @@ import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 // Memoize remarkPlugins array - it never changes
 const REMARK_PLUGINS = [remarkGfm];
+
+// Lazy-loaded tokenizer encoder (cl100k_base is used by Claude/GPT-4)
+let encoderPromise: Promise<ReturnType<typeof getEncoding>> | null = null;
+const getEncoder = () => {
+  if (!encoderPromise) {
+    encoderPromise = Promise.resolve(getEncoding('cl100k_base'));
+  }
+  return encoderPromise;
+};
+
+// Format token count with K/M suffix
+const formatTokenCount = (count: number): string => {
+  if (count >= 1_000_000) {
+    return `${(count / 1_000_000).toFixed(1)}M`;
+  }
+  if (count >= 1_000) {
+    return `${(count / 1_000).toFixed(1)}K`;
+  }
+  return count.toLocaleString();
+};
 
 interface AutoRunProps {
   theme: Theme;
@@ -493,6 +514,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  // Token count state
+  const [tokenCount, setTokenCount] = useState<number | null>(null);
   // Search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1062,6 +1085,24 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     return { completed, total };
   }, [localContent]);
 
+  // Count tokens when content changes
+  useEffect(() => {
+    if (!localContent) {
+      setTokenCount(null);
+      return;
+    }
+
+    getEncoder()
+      .then(encoder => {
+        const tokens = encoder.encode(localContent);
+        setTokenCount(tokens.length);
+      })
+      .catch(err => {
+        console.error('Failed to count tokens:', err);
+        setTokenCount(null);
+      });
+  }, [localContent]);
+
   // Callback for when a search match is rendered (used for scrolling to current match)
   const handleMatchRendered = useCallback((index: number, element: HTMLElement) => {
     if (index === currentMatchIndex) {
@@ -1551,8 +1592,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       </div>
       )}
 
-      {/* Bottom Panel - shown when folder selected AND (there are tasks OR unsaved changes) */}
-      {folderPath && (taskCounts.total > 0 || (isDirty && mode === 'edit' && !isLocked)) && (
+      {/* Bottom Panel - shown when folder selected AND (there are tasks, unsaved changes, or content with token count) */}
+      {folderPath && (taskCounts.total > 0 || (isDirty && mode === 'edit' && !isLocked) || tokenCount !== null) && (
         <div
           className="flex-shrink-0 px-3 py-1.5 text-xs border-t flex items-center justify-between"
           style={{
@@ -1578,14 +1619,23 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             <div />
           )}
 
-          {/* Task count - center */}
-          {taskCounts.total > 0 ? (
-            <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
-              {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
-            </span>
-          ) : (
-            <span style={{ color: theme.colors.textDim }}>Unsaved changes</span>
-          )}
+          {/* Center info: Task count and/or Token count */}
+          <div className="flex items-center gap-3">
+            {taskCounts.total > 0 && (
+              <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
+                {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
+              </span>
+            )}
+            {tokenCount !== null && (
+              <span style={{ color: theme.colors.textDim }}>
+                <span className="opacity-60">Tokens:</span>{' '}
+                <span style={{ color: theme.colors.accent }}>{formatTokenCount(tokenCount)}</span>
+              </span>
+            )}
+            {taskCounts.total === 0 && tokenCount === null && isDirty && (
+              <span style={{ color: theme.colors.textDim }}>Unsaved changes</span>
+            )}
+          </div>
 
           {/* Save button - right side */}
           {isDirty && mode === 'edit' && !isLocked ? (

@@ -32,13 +32,23 @@ export interface AgentsHandlerDependencies {
 
 /**
  * Helper to strip non-serializable functions from agent configs.
- * Agent configs can have argBuilder functions that cannot be sent over IPC.
+ * Agent configs can have function properties that cannot be sent over IPC:
+ * - argBuilder in configOptions
+ * - resumeArgs, modelArgs, workingDirArgs on the agent config
  */
 function stripAgentFunctions(agent: any) {
   if (!agent) return null;
 
+  // Destructure to remove function properties from agent config
+  const {
+    resumeArgs,
+    modelArgs,
+    workingDirArgs,
+    ...serializableAgent
+  } = agent;
+
   return {
-    ...agent,
+    ...serializableAgent,
     configOptions: agent.configOptions?.map((opt: any) => {
       const { argBuilder, ...serializableOpt } = opt;
       return serializableOpt;

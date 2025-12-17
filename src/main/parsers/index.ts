@@ -53,12 +53,15 @@ export {
 import { ClaudeOutputParser } from './claude-output-parser';
 import { OpenCodeOutputParser } from './opencode-output-parser';
 import { CodexOutputParser } from './codex-output-parser';
-import { registerOutputParser, clearParserRegistry } from './agent-output-parser';
+import { registerOutputParser, clearParserRegistry, getAllOutputParsers } from './agent-output-parser';
+import { logger } from '../utils/logger';
 
 // Export parser classes for direct use if needed
 export { ClaudeOutputParser } from './claude-output-parser';
 export { OpenCodeOutputParser } from './opencode-output-parser';
 export { CodexOutputParser } from './codex-output-parser';
+
+const LOG_CONTEXT = '[OutputParsers]';
 
 /**
  * Initialize all output parser implementations.
@@ -72,6 +75,10 @@ export function initializeOutputParsers(): void {
   registerOutputParser(new ClaudeOutputParser());
   registerOutputParser(new OpenCodeOutputParser());
   registerOutputParser(new CodexOutputParser());
+
+  // Log registered parsers for debugging
+  const registeredParsers = getAllOutputParsers().map(p => p.agentId);
+  logger.info(`Initialized output parsers: ${registeredParsers.join(', ')}`, LOG_CONTEXT);
 }
 
 /**

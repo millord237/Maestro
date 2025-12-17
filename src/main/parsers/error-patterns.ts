@@ -270,8 +270,19 @@ export const OPENCODE_ERROR_PATTERNS: AgentErrorPatterns = {
 
   agent_crashed: [
     {
-      pattern: /error/i,
+      // More specific patterns to avoid matching normal "error" strings in output
+      pattern: /\b(fatal|unexpected|internal|unhandled)\s+error\b/i,
+      message: 'An error occurred in the agent.',
+      recoverable: true,
+    },
+    {
+      pattern: /\berror:\s+(?!.*(?:no such file|not found))/i,
       message: 'An error occurred.',
+      recoverable: true,
+    },
+    {
+      pattern: /\bpanic\b/i,
+      message: 'The agent encountered a critical error.',
       recoverable: true,
     },
   ],

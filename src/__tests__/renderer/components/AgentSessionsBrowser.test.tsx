@@ -195,7 +195,7 @@ describe('AgentSessionsBrowser', () => {
       };
     });
     vi.mocked(window.maestro.claude.updateSessionStarred).mockResolvedValue(undefined);
-    vi.mocked(window.maestro.claude.updateSessionName).mockResolvedValue(undefined);
+    vi.mocked(window.maestro.agentSessions.updateSessionName).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -1266,7 +1266,7 @@ describe('AgentSessionsBrowser', () => {
         await vi.runAllTimersAsync();
       });
 
-      expect(window.maestro.claude.updateSessionName).toHaveBeenCalledWith(
+      expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledWith(
         '/path/to/project',
         'session-1',
         'New Name'
@@ -1314,7 +1314,7 @@ describe('AgentSessionsBrowser', () => {
 
       // Verify that "New Name" was NOT saved - if updateSessionName was called,
       // it should NOT have been called with 'New Name'
-      const calls = vi.mocked(window.maestro.claude.updateSessionName).mock.calls;
+      const calls = vi.mocked(window.maestro.agentSessions.updateSessionName).mock.calls;
       const savedWithNewName = calls.some(call => call[2] === 'New Name');
       expect(savedWithNewName).toBe(false);
     });
@@ -1348,7 +1348,7 @@ describe('AgentSessionsBrowser', () => {
         await vi.runAllTimersAsync();
       });
 
-      expect(window.maestro.claude.updateSessionName).toHaveBeenCalledWith(
+      expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledWith(
         '/path/to/project',
         'session-1',
         'Blur Name'
@@ -1387,7 +1387,7 @@ describe('AgentSessionsBrowser', () => {
         await vi.runAllTimersAsync();
       });
 
-      expect(window.maestro.claude.updateSessionName).toHaveBeenCalledWith(
+      expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledWith(
         '/path/to/project',
         'session-1',
         ''
@@ -2446,7 +2446,7 @@ describe('AgentSessionsBrowser', () => {
         await vi.runAllTimersAsync();
       });
 
-      expect(window.maestro.claude.updateSessionName).toHaveBeenCalledWith(
+      expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledWith(
         '/path/to/project',
         'session-1',
         'Detail View Name'

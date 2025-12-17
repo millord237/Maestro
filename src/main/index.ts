@@ -13,6 +13,7 @@ import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
 import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { initializeSessionStorages } from './storage';
+import { initializeOutputParsers } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import { initAutoUpdater } from './auto-updater';
 
@@ -438,6 +439,17 @@ function createWebServer(): WebServer {
     return true;
   });
 
+  server.setRenameTabCallback(async (sessionId: string, tabId: string, newName: string) => {
+    logger.info(`[Web→Desktop] Rename tab callback invoked: session=${sessionId}, tab=${tabId}, newName=${newName}`, 'WebServer');
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for renameTab', 'WebServer');
+      return false;
+    }
+
+    mainWindow.webContents.send('remote:renameTab', sessionId, tabId, newName);
+    return true;
+  });
+
   return server;
 }
 
@@ -783,10 +795,14 @@ function setupIpcHandlers() {
     getMainWindow: () => mainWindow,
   });
 
+  // Initialize output parsers for all agents (Codex, OpenCode, Claude Code)
+  // This must be called before any agent output is processed
+  initializeOutputParsers();
+
   // Initialize session storages and register generic agent sessions handlers
   // This provides the new window.maestro.agentSessions.* API
   initializeSessionStorages();
-  registerAgentSessionsHandlers();
+  registerAgentSessionsHandlers({ getMainWindow: () => mainWindow });
 
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(() => mainWindow);
@@ -1599,14 +1615,20 @@ function setupProcessListeners() {
           return;
         }
 
-        // Extract base session ID from formats: {id}-ai-{tabId}, {id}-batch-{timestamp}, {id}-synopsis-{timestamp}
+        // Extract base session ID and tab ID from formats: {id}-ai-{tabId}, {id}-batch-{timestamp}, {id}-synopsis-{timestamp}
         const baseSessionId = sessionId.replace(/-ai-[^-]+$|-batch-\d+$|-synopsis-\d+$/, '');
         const isAiOutput = sessionId.includes('-ai-') || sessionId.includes('-batch-') || sessionId.includes('-synopsis-');
+
+        // Extract tab ID from session ID format: {id}-ai-{tabId}
+        const tabIdMatch = sessionId.match(/-ai-([^-]+)$/);
+        const tabId = tabIdMatch ? tabIdMatch[1] : undefined;
+
         const msgId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        console.log(`[WebBroadcast] Broadcasting session_output: msgId=${msgId}, session=${baseSessionId}, source=${isAiOutput ? 'ai' : 'terminal'}, dataLen=${data.length}`);
+        console.log(`[WebBroadcast] Broadcasting session_output: msgId=${msgId}, session=${baseSessionId}, tabId=${tabId || 'none'}, source=${isAiOutput ? 'ai' : 'terminal'}, dataLen=${data.length}`);
         webServer.broadcastToSessionClients(baseSessionId, {
           type: 'session_output',
           sessionId: baseSessionId,
+          tabId,
           data,
           source: isAiOutput ? 'ai' : 'terminal',
           timestamp: Date.now(),

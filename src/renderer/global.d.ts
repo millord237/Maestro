@@ -107,6 +107,7 @@ interface MaestroAPI {
     onRemoteNewTab: (callback: (sessionId: string, responseChannel: string) => void) => () => void;
     sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null) => void;
     onRemoteCloseTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
+    onRemoteRenameTab: (callback: (sessionId: string, tabId: string, newName: string) => void) => () => void;
     onStderr: (callback: (sessionId: string, data: string) => void) => () => void;
     onCommandExit: (callback: (sessionId: string, code: number) => void) => () => void;
     onUsage: (callback: (sessionId: string, usageStats: UsageStats) => void) => () => void;
@@ -224,6 +225,109 @@ interface MaestroAPI {
     getConfigValue: (agentId: string, key: string) => Promise<any>;
     setConfigValue: (agentId: string, key: string, value: any) => Promise<boolean>;
     getModels: (agentId: string, forceRefresh?: boolean) => Promise<string[]>;
+  };
+  agentSessions: {
+    list: (agentId: string, projectPath: string) => Promise<Array<{
+      sessionId: string;
+      projectPath: string;
+      timestamp: string;
+      modifiedAt: string;
+      firstMessage: string;
+      messageCount: number;
+      sizeBytes: number;
+      costUsd?: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      durationSeconds: number;
+    }>>;
+    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }) => Promise<{
+      sessions: Array<{
+        sessionId: string;
+        projectPath: string;
+        timestamp: string;
+        modifiedAt: string;
+        firstMessage: string;
+        messageCount: number;
+        sizeBytes: number;
+        costUsd?: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        durationSeconds: number;
+      }>;
+      hasMore: boolean;
+      totalCount: number;
+      nextCursor: string | null;
+    }>;
+    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => Promise<{
+      messages: Array<{
+        type: string;
+        role?: string;
+        content: string;
+        timestamp: string;
+        uuid: string;
+        toolUse?: unknown;
+      }>;
+      total: number;
+      hasMore: boolean;
+    }>;
+    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') => Promise<Array<{
+      sessionId: string;
+      matchType: 'title' | 'user' | 'assistant';
+      matchPreview: string;
+      matchCount: number;
+    }>>;
+    getPath: (agentId: string, projectPath: string, sessionId: string) => Promise<string | null>;
+    deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{
+      success: boolean;
+      error?: string;
+      linesRemoved?: number;
+    }>;
+    hasStorage: (agentId: string) => Promise<boolean>;
+    getAvailableStorages: () => Promise<string[]>;
+    getGlobalStats: () => Promise<{
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      hasCostData: boolean;
+      totalSizeBytes: number;
+      isComplete: boolean;
+      byProvider: Record<string, {
+        sessions: number;
+        messages: number;
+        inputTokens: number;
+        outputTokens: number;
+        costUsd: number;
+        hasCostData: boolean;
+      }>;
+    }>;
+    onGlobalStatsUpdate: (callback: (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      hasCostData: boolean;
+      totalSizeBytes: number;
+      isComplete: boolean;
+      byProvider: Record<string, {
+        sessions: number;
+        messages: number;
+        inputTokens: number;
+        outputTokens: number;
+        costUsd: number;
+        hasCostData: boolean;
+      }>;
+    }) => void) => () => void;
   };
   dialog: {
     selectFolder: () => Promise<string | null>;

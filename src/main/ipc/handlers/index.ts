@@ -18,7 +18,7 @@ import { registerProcessHandlers, ProcessHandlerDependencies } from './process';
 import { registerPersistenceHandlers, PersistenceHandlerDependencies, MaestroSettings, SessionsData, GroupsData } from './persistence';
 import { registerSystemHandlers, setupLoggerEventForwarding, SystemHandlerDependencies } from './system';
 import { registerClaudeHandlers, ClaudeHandlerDependencies } from './claude';
-import { registerAgentSessionsHandlers } from './agentSessions';
+import { registerAgentSessionsHandlers, AgentSessionsHandlerDependencies } from './agentSessions';
 import { AgentDetector } from '../../agent-detector';
 import { ProcessManager } from '../../process-manager';
 import { WebServer } from '../../web-server';
@@ -43,6 +43,7 @@ export type { ProcessHandlerDependencies };
 export type { PersistenceHandlerDependencies };
 export type { SystemHandlerDependencies };
 export type { ClaudeHandlerDependencies };
+export type { AgentSessionsHandlerDependencies };
 export type { MaestroSettings, SessionsData, GroupsData };
 
 /**

@@ -786,7 +786,7 @@ ${docList}
               agentSessionIds.push(result.agentSessionId);
               // Register as auto-initiated Maestro session
               // Use effectiveCwd (worktree path when active) so session can be found later
-              window.maestro.claude.registerSessionOrigin(effectiveCwd, result.agentSessionId, 'auto')
+              window.maestro.agentSessions.registerSessionOrigin(effectiveCwd, result.agentSessionId, 'auto')
                 .catch(err => console.error('[BatchProcessor] Failed to register session origin:', err));
             }
 

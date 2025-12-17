@@ -47,6 +47,9 @@ export interface AgentCapabilities {
 
   /** Agent provides distinct "result" messages when done */
   supportsResultMessages: boolean;
+
+  /** Agent supports selecting different models (e.g., --model flag) */
+  supportsModelSelection: boolean;
 }
 
 /**
@@ -66,6 +69,7 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = {
   supportsBatchMode: false,
   supportsStreaming: false,
   supportsResultMessages: false,
+  supportsModelSelection: false,
 };
 
 /**

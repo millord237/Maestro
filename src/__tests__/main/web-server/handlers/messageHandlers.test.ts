@@ -12,6 +12,7 @@
  * - Select tab
  * - Create new tab
  * - Close tab
+ * - Rename tab
  * - Subscribe to session updates
  */
 
@@ -64,6 +65,7 @@ function createMockCallbacks(): MessageHandlerCallbacks {
     selectTab: vi.fn().mockResolvedValue(true),
     newTab: vi.fn().mockResolvedValue({ tabId: 'new-tab-123' }),
     closeTab: vi.fn().mockResolvedValue(true),
+    renameTab: vi.fn().mockResolvedValue(true),
     getSessions: vi.fn().mockReturnValue([
       { id: 'session-1', name: 'Session 1', toolType: 'claude-code', state: 'idle', inputMode: 'ai', cwd: '/test' },
     ]),
@@ -440,6 +442,67 @@ describe('WebSocketMessageHandler', () => {
 
       const response = JSON.parse((client.socket.send as any).mock.calls[0][0]);
       expect(response.type).toBe('error');
+    });
+  });
+
+  describe('Rename Tab (Web → Desktop)', () => {
+    it('should rename tab on desktop', async () => {
+      handler.handleMessage(client, {
+        type: 'rename_tab',
+        sessionId: 'session-1',
+        tabId: 'tab-to-rename',
+        newName: 'New Tab Name',
+      });
+
+      await vi.waitFor(() => {
+        expect(callbacks.renameTab).toHaveBeenCalledWith('session-1', 'tab-to-rename', 'New Tab Name');
+      });
+
+      const response = JSON.parse((client.socket.send as any).mock.calls[0][0]);
+      expect(response.type).toBe('rename_tab_result');
+      expect(response.success).toBe(true);
+      expect(response.newName).toBe('New Tab Name');
+    });
+
+    it('should allow renaming to empty string (clear name)', async () => {
+      handler.handleMessage(client, {
+        type: 'rename_tab',
+        sessionId: 'session-1',
+        tabId: 'tab-1',
+        newName: '',
+      });
+
+      await vi.waitFor(() => {
+        expect(callbacks.renameTab).toHaveBeenCalledWith('session-1', 'tab-1', '');
+      });
+
+      const response = JSON.parse((client.socket.send as any).mock.calls[0][0]);
+      expect(response.type).toBe('rename_tab_result');
+      expect(response.success).toBe(true);
+    });
+
+    it('should reject rename tab with missing sessionId', () => {
+      handler.handleMessage(client, {
+        type: 'rename_tab',
+        tabId: 'tab-1',
+        newName: 'New Name',
+      });
+
+      const response = JSON.parse((client.socket.send as any).mock.calls[0][0]);
+      expect(response.type).toBe('error');
+      expect(response.message).toContain('Missing sessionId or tabId');
+    });
+
+    it('should reject rename tab with missing tabId', () => {
+      handler.handleMessage(client, {
+        type: 'rename_tab',
+        sessionId: 'session-1',
+        newName: 'New Name',
+      });
+
+      const response = JSON.parse((client.socket.send as any).mock.calls[0][0]);
+      expect(response.type).toBe('error');
+      expect(response.message).toContain('Missing sessionId or tabId');
     });
   });
 

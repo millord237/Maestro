@@ -742,7 +742,48 @@ describe('useWebSocket', () => {
       expect(onSessionOutput).toHaveBeenCalledWith(
         'session-1',
         'Hello, World!',
-        'ai'
+        'ai',
+        undefined // tabId is optional
+      );
+    });
+
+    it('handles session_output message with tabId', () => {
+      const onSessionOutput = vi.fn();
+      const { result } = renderHook(() =>
+        useWebSocket({ handlers: { onSessionOutput } })
+      );
+
+      act(() => {
+        result.current.connect();
+      });
+
+      const ws = MockWebSocket.getLastInstance();
+      act(() => {
+        ws.simulateOpen();
+        ws.simulateMessage({
+          type: 'connected',
+          clientId: 'client-123',
+          message: 'Connected',
+          authenticated: true,
+        } as ConnectedMessage);
+      });
+
+      act(() => {
+        ws.simulateMessage({
+          type: 'session_output',
+          sessionId: 'session-1',
+          tabId: 'tab-abc123',
+          data: 'Hello from tab!',
+          source: 'ai',
+          msgId: 'msg-002',
+        } as SessionOutputMessage);
+      });
+
+      expect(onSessionOutput).toHaveBeenCalledWith(
+        'session-1',
+        'Hello from tab!',
+        'ai',
+        'tab-abc123'
       );
     });
 

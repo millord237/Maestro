@@ -68,7 +68,8 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     command: 'codex',
     // YOLO mode is always enabled - Maestro requires it for non-interactive automation
     // When read-only mode is active, this flag is filtered out in useInputProcessing.ts
-    args: ['--dangerously-bypass-approvals-and-sandbox'],
+    // --skip-git-repo-check allows running in non-git directories or untrusted repos
+    args: ['--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check'],
     // Codex CLI argument builders
     // Batch mode: codex exec --json [--sandbox read-only] [resume <id>] "prompt"
     // Sandbox modes:

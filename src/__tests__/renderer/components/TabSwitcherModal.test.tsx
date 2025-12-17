@@ -86,7 +86,7 @@ describe('TabSwitcherModal', () => {
 
     // Reset the mocks for each test
     vi.mocked(window.maestro.claude.getAllNamedSessions).mockResolvedValue([]);
-    vi.mocked(window.maestro.claude.updateSessionName).mockResolvedValue(undefined);
+    vi.mocked(window.maestro.agentSessions.updateSessionName).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -1621,7 +1621,7 @@ describe('TabSwitcherModal', () => {
 
       await waitFor(() => {
         // Should sync only the named tab
-        expect(window.maestro.claude.updateSessionName).toHaveBeenCalledWith(
+        expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledWith(
           '/test/project',
           'session-123',
           'Named Tab'
@@ -1629,13 +1629,13 @@ describe('TabSwitcherModal', () => {
       });
 
       // Should NOT sync the unnamed tab (only 1 call total)
-      expect(window.maestro.claude.updateSessionName).toHaveBeenCalledTimes(1);
+      expect(window.maestro.agentSessions.updateSessionName).toHaveBeenCalledTimes(1);
     });
 
     it('handles sync errors gracefully', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      vi.mocked(window.maestro.claude.updateSessionName).mockRejectedValue(
+      vi.mocked(window.maestro.agentSessions.updateSessionName).mockRejectedValue(
         new Error('Sync failed')
       );
 

@@ -185,6 +185,12 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('remote:closeTab', handler);
       return () => ipcRenderer.removeListener('remote:closeTab', handler);
     },
+    // Remote rename tab from web interface
+    onRemoteRenameTab: (callback: (sessionId: string, tabId: string, newName: string) => void) => {
+      const handler = (_: any, sessionId: string, tabId: string, newName: string) => callback(sessionId, tabId, newName);
+      ipcRenderer.on('remote:renameTab', handler);
+      return () => ipcRenderer.removeListener('remote:renameTab', handler);
+    },
     // Stderr listener for runCommand (separate stream)
     onStderr: (callback: (sessionId: string, data: string) => void) => {
       const handler = (_: any, sessionId: string, data: string) => callback(sessionId, data);
@@ -621,6 +627,41 @@ contextBridge.exposeInMainWorld('maestro', {
     // Get list of agent IDs that have session storage
     getAvailableStorages: () =>
       ipcRenderer.invoke('agentSessions:getAvailableStorages'),
+    // Get global stats aggregated from all providers
+    getGlobalStats: () =>
+      ipcRenderer.invoke('agentSessions:getGlobalStats'),
+    // Subscribe to global stats updates (streaming)
+    onGlobalStatsUpdate: (callback: (stats: {
+      totalSessions: number;
+      totalMessages: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      totalCacheReadTokens: number;
+      totalCacheCreationTokens: number;
+      totalCostUsd: number;
+      hasCostData: boolean;
+      totalSizeBytes: number;
+      isComplete: boolean;
+      byProvider: Record<string, {
+        sessions: number;
+        messages: number;
+        inputTokens: number;
+        outputTokens: number;
+        costUsd: number;
+        hasCostData: boolean;
+      }>;
+    }) => void) => {
+      const handler = (_: unknown, stats: Parameters<typeof callback>[0]) => callback(stats);
+      ipcRenderer.on('agentSessions:globalStatsUpdate', handler);
+      return () => ipcRenderer.removeListener('agentSessions:globalStatsUpdate', handler);
+    },
+    // Register a session's origin (user-initiated vs auto/batch)
+    // Currently delegates to claude: handlers for backwards compatibility
+    registerSessionOrigin: (projectPath: string, agentSessionId: string, origin: 'user' | 'auto', sessionName?: string) =>
+      ipcRenderer.invoke('claude:registerSessionOrigin', projectPath, agentSessionId, origin, sessionName),
+    // Update a session's display name
+    updateSessionName: (projectPath: string, agentSessionId: string, sessionName: string) =>
+      ipcRenderer.invoke('claude:updateSessionName', projectPath, agentSessionId, sessionName),
   },
 
   // Temp file API (for batch processing)
@@ -1246,6 +1287,8 @@ export interface MaestroAPI {
     deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{ success: boolean; linesRemoved?: number; error?: string }>;
     hasStorage: (agentId: string) => Promise<boolean>;
     getAvailableStorages: () => Promise<string[]>;
+    registerSessionOrigin: (projectPath: string, agentSessionId: string, origin: 'user' | 'auto', sessionName?: string) => Promise<boolean>;
+    updateSessionName: (projectPath: string, agentSessionId: string, sessionName: string) => Promise<boolean>;
   };
   tempfile: {
     write: (content: string, filename?: string) => Promise<{ success: boolean; path?: string; error?: string }>;

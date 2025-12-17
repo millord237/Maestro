@@ -1247,7 +1247,7 @@ export default function MaestroConsole() {
 
         // Register this as a user-initiated Maestro session (batch sessions are filtered above)
         // Do NOT pass session name - names should only be set when user explicitly renames
-        window.maestro.claude.registerSessionOrigin(session.cwd, agentSessionId, 'user')
+        window.maestro.agentSessions.registerSessionOrigin(session.cwd, agentSessionId, 'user')
           .catch(err => console.error('[onSessionId] Failed to register session origin:', err));
 
         return prev.map(s => {
@@ -3213,10 +3213,10 @@ export default function MaestroConsole() {
   const finishRenamingSession = (sessId: string, newName: string) => {
     setSessions(prev => {
       const updated = prev.map(s => s.id === sessId ? { ...s, name: newName } : s);
-      // Sync the session name to Claude session storage for searchability
+      // Sync the session name to agent session storage for searchability
       const session = updated.find(s => s.id === sessId);
       if (session?.agentSessionId && session.cwd) {
-        window.maestro.claude.updateSessionName(session.cwd, session.agentSessionId, newName)
+        window.maestro.agentSessions.updateSessionName(session.cwd, session.agentSessionId, newName)
           .catch(err => console.warn('[finishRenamingSession] Failed to sync session name:', err));
       }
       return updated;
@@ -4928,8 +4928,8 @@ export default function MaestroConsole() {
               // Find the tab to get its agentSessionId for persistence
               const tab = s.aiTabs.find(t => t.id === renameTabId);
               if (tab?.agentSessionId) {
-                // Persist name to Claude session metadata (async, fire and forget)
-                window.maestro.claude.updateSessionName(
+                // Persist name to agent session metadata (async, fire and forget)
+                window.maestro.agentSessions.updateSessionName(
                   s.cwd,
                   tab.agentSessionId,
                   newName || ''
@@ -5314,8 +5314,8 @@ export default function MaestroConsole() {
             // Find the tab to get its agentSessionId for persistence
             const tab = s.aiTabs.find(t => t.id === tabId);
             if (tab?.agentSessionId) {
-              // Persist name to Claude session metadata (async, fire and forget)
-              window.maestro.claude.updateSessionName(
+              // Persist name to agent session metadata (async, fire and forget)
+              window.maestro.agentSessions.updateSessionName(
                 s.cwd,
                 tab.agentSessionId,
                 newName || ''

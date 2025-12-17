@@ -63,7 +63,7 @@ describe('CodexOutputParser', () => {
     });
 
     describe('item.completed events - agent_message', () => {
-      it('should parse agent_message items as non-partial text', () => {
+      it('should parse agent_message items as result (final response)', () => {
         const line = JSON.stringify({
           type: 'item.completed',
           item: {
@@ -75,7 +75,7 @@ describe('CodexOutputParser', () => {
 
         const event = parser.parseJsonLine(line);
         expect(event).not.toBeNull();
-        expect(event?.type).toBe('text');
+        expect(event?.type).toBe('result');
         expect(event?.text).toBe('Hello! I understand you want me to help with...');
         expect(event?.isPartial).toBe(false);
       });
@@ -147,7 +147,7 @@ describe('CodexOutputParser', () => {
     });
 
     describe('turn.completed events', () => {
-      it('should parse turn.completed as result with usage stats', () => {
+      it('should parse turn.completed as usage event with usage stats', () => {
         const line = JSON.stringify({
           type: 'turn.completed',
           usage: {
@@ -159,7 +159,7 @@ describe('CodexOutputParser', () => {
 
         const event = parser.parseJsonLine(line);
         expect(event).not.toBeNull();
-        expect(event?.type).toBe('result');
+        expect(event?.type).toBe('usage');
         expect(event?.usage?.inputTokens).toBe(3492);
         expect(event?.usage?.outputTokens).toBe(15);
         expect(event?.usage?.cacheReadTokens).toBe(3072);
@@ -186,7 +186,7 @@ describe('CodexOutputParser', () => {
 
         const event = parser.parseJsonLine(line);
         expect(event).not.toBeNull();
-        expect(event?.type).toBe('result');
+        expect(event?.type).toBe('usage');
         expect(event?.usage).toBeUndefined();
       });
     });
@@ -236,9 +236,13 @@ describe('CodexOutputParser', () => {
   });
 
   describe('isResultMessage', () => {
-    it('should return true for turn.completed events', () => {
+    it('should return true for agent_message events with text', () => {
+      // agent_message items contain the actual response text and are marked as 'result'
       const event = parser.parseJsonLine(
-        JSON.stringify({ type: 'turn.completed' })
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: 'hi' },
+        })
       );
       expect(event).not.toBeNull();
       expect(parser.isResultMessage(event!)).toBe(true);
@@ -250,13 +254,20 @@ describe('CodexOutputParser', () => {
       );
       expect(parser.isResultMessage(initEvent!)).toBe(false);
 
-      const textEvent = parser.parseJsonLine(
+      // turn.completed is a usage event, not a result
+      const usageEvent = parser.parseJsonLine(
+        JSON.stringify({ type: 'turn.completed' })
+      );
+      expect(parser.isResultMessage(usageEvent!)).toBe(false);
+
+      // reasoning is partial text, not a final result
+      const reasoningEvent = parser.parseJsonLine(
         JSON.stringify({
           type: 'item.completed',
-          item: { type: 'agent_message', text: 'hi' },
+          item: { type: 'reasoning', text: 'thinking...' },
         })
       );
-      expect(parser.isResultMessage(textEvent!)).toBe(false);
+      expect(parser.isResultMessage(reasoningEvent!)).toBe(false);
     });
   });
 
@@ -353,7 +364,8 @@ describe('CodexOutputParser', () => {
           item: { type: 'agent_message' },
         })
       );
-      expect(event?.type).toBe('text');
+      // agent_message is now a result type
+      expect(event?.type).toBe('result');
       expect(event?.text).toBe('');
     });
 

@@ -15,6 +15,14 @@
  */
 
 import type { ToolType } from '../shared/types';
+import { logger } from './utils/logger';
+
+const LOG_CONTEXT = '[AgentSessionStorage]';
+
+/**
+ * Known agent IDs that have session storage support
+ */
+const KNOWN_AGENT_IDS: ToolType[] = ['claude-code', 'codex', 'opencode'];
 
 /**
  * Session origin types - indicates how the session was created
@@ -46,7 +54,8 @@ export interface AgentSessionInfo {
   firstMessage: string;
   messageCount: number;
   sizeBytes: number;
-  costUsd: number;
+  /** Cost in USD - optional, only provided by agents that support cost tracking */
+  costUsd?: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -220,7 +229,19 @@ export function registerSessionStorage(storage: AgentSessionStorage): void {
 export function getSessionStorage(
   agentId: ToolType | string
 ): AgentSessionStorage | null {
-  return storageRegistry.get(agentId as ToolType) || null;
+  const storage = storageRegistry.get(agentId as ToolType);
+
+  if (!storage) {
+    // Warn if this is an unrecognized agent ID (not one of our known agents)
+    if (!KNOWN_AGENT_IDS.includes(agentId as ToolType) && agentId !== 'terminal') {
+      logger.warn(
+        `Unrecognized agent ID requested for session storage: "${agentId}"`,
+        LOG_CONTEXT
+      );
+    }
+  }
+
+  return storage || null;
 }
 
 /**

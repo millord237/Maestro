@@ -165,10 +165,22 @@ const mockMaestro = {
       hasMore: false,
     }),
     search: vi.fn().mockResolvedValue([]),
+    searchSessions: vi.fn().mockResolvedValue([]),
     getPath: vi.fn().mockResolvedValue(null),
     deleteMessagePair: vi.fn().mockResolvedValue({ success: true }),
     hasStorage: vi.fn().mockResolvedValue(true),
     getAvailableStorages: vi.fn().mockResolvedValue(['claude-code']),
+    // Global stats methods for AboutModal
+    getGlobalStats: vi.fn().mockResolvedValue(null),
+    getProjectStats: vi.fn().mockResolvedValue(undefined),
+    onGlobalStatsUpdate: vi.fn().mockReturnValue(() => {}),
+    onProjectStatsUpdate: vi.fn().mockReturnValue(() => {}),
+    // Session management methods (for TabSwitcherModal and RenameSessionModal)
+    getAllNamedSessions: vi.fn().mockResolvedValue([]),
+    getSessionOrigins: vi.fn().mockResolvedValue({}),
+    updateSessionName: vi.fn().mockResolvedValue(undefined),
+    updateSessionStarred: vi.fn().mockResolvedValue(undefined),
+    registerSessionOrigin: vi.fn().mockResolvedValue(undefined),
   },
   autorun: {
     readDoc: vi.fn().mockResolvedValue({ success: true, content: '' }),

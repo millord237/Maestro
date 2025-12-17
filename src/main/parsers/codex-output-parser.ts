@@ -24,7 +24,6 @@
 import type { ToolType, AgentError } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
-import { CODEX_PRICING } from '../constants';
 
 /**
  * Raw message structure from Codex JSON output
@@ -128,9 +127,11 @@ export class CodexOutputParser implements AgentOutputParser {
     }
 
     // Handle turn.completed (end of turn with usage stats)
+    // Note: This is NOT the result message - actual text comes from agent_message items
+    // This event only contains usage statistics
     if (msg.type === 'turn.completed') {
       const event: ParsedEvent = {
-        type: 'result',
+        type: 'usage',  // Mark as 'usage' type, not 'result'
         raw: msg,
       };
 
@@ -178,9 +179,10 @@ export class CodexOutputParser implements AgentOutputParser {
         };
 
       case 'agent_message':
-        // Final text response from agent
+        // Final text response from agent - mark as 'result' so it gets emitted
+        // This is the actual response text (not reasoning or tool output)
         return {
-          type: 'text',
+          type: 'result',
           text: item.text || '',
           isPartial: false,
           raw: msg,
@@ -232,9 +234,11 @@ export class CodexOutputParser implements AgentOutputParser {
     }
 
     // Byte array - decode to string
+    // Note: Using Buffer.from instead of String.fromCharCode(...output) to avoid
+    // stack overflow on large arrays (spread operator has argument limit ~10K)
     if (Array.isArray(output)) {
       try {
-        return String.fromCharCode(...output);
+        return Buffer.from(output).toString('utf-8');
       } catch {
         return output.toString();
       }
@@ -246,6 +250,7 @@ export class CodexOutputParser implements AgentOutputParser {
   /**
    * Extract usage statistics from raw Codex message
    * Codex usage structure: { input_tokens, output_tokens, cached_input_tokens, reasoning_output_tokens }
+   * Note: Cost tracking is not supported - Codex doesn't provide cost and pricing varies by model
    */
   private extractUsageFromRaw(msg: CodexRawMessage): ParsedEvent['usage'] | null {
     if (!msg.usage) {
@@ -262,27 +267,13 @@ export class CodexOutputParser implements AgentOutputParser {
     // Total output tokens = output_tokens + reasoning_output_tokens
     const totalOutputTokens = outputTokens + reasoningOutputTokens;
 
-    // Calculate cost using OpenAI pricing (o4-mini pricing by default)
-    // Input tokens - uncached tokens are charged at full rate, cached at discounted rate
-    const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
-    const inputCost =
-      (uncachedInputTokens / 1_000_000) * CODEX_PRICING.INPUT_PER_MILLION +
-      (cachedInputTokens / 1_000_000) * CODEX_PRICING.CACHED_INPUT_PER_MILLION;
-
-    // Output tokens - regular output tokens + reasoning tokens (same rate)
-    const outputCost =
-      (totalOutputTokens / 1_000_000) * CODEX_PRICING.OUTPUT_PER_MILLION;
-
-    const totalCostUsd = inputCost + outputCost;
-
     return {
       inputTokens,
       outputTokens: totalOutputTokens,
       cacheReadTokens: cachedInputTokens,
       // Note: Codex doesn't report cache creation tokens
       cacheCreationTokens: 0,
-      costUsd: totalCostUsd,
-      contextWindow: CODEX_PRICING.CONTEXT_WINDOW,
+      // Note: costUsd omitted - Codex doesn't provide cost and pricing varies by model
       // Store reasoning tokens separately for UI display
       reasoningTokens: reasoningOutputTokens,
     };
@@ -290,10 +281,11 @@ export class CodexOutputParser implements AgentOutputParser {
 
   /**
    * Check if an event is a final result message
-   * For Codex, turn.completed indicates end of turn
+   * For Codex, agent_message items contain the actual response text
+   * We check for 'result' type which agent_message events are now marked as
    */
   isResultMessage(event: ParsedEvent): boolean {
-    return event.type === 'result';
+    return event.type === 'result' && !!event.text;
   }
 
   /**

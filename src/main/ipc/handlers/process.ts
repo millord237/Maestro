@@ -107,13 +107,16 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           finalArgs = [...finalArgs, ...agent.jsonOutputArgs];
         }
 
-        // Add session resume args if agentSessionId is provided
-        if (config.agentSessionId && agent.resumeArgs) {
-          const resumeArgArray = agent.resumeArgs(config.agentSessionId);
-          finalArgs = [...finalArgs, ...resumeArgArray];
+        // Add working directory args for agents that support it
+        // For Codex, this adds -C <dir> to set the working directory
+        // IMPORTANT: Must come BEFORE resume subcommand (Codex: -C is not valid after 'resume')
+        if (agent.workingDirArgs && config.cwd) {
+          const workingDirArgArray = agent.workingDirArgs(config.cwd);
+          finalArgs = [...finalArgs, ...workingDirArgArray];
         }
 
         // Add read-only mode args if readOnlyMode is true
+        // For Codex: --sandbox read-only (must come before resume subcommand)
         if (config.readOnlyMode && agent.readOnlyArgs) {
           finalArgs = [...finalArgs, ...agent.readOnlyArgs];
         }
@@ -131,11 +134,11 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           finalArgs = [...finalArgs, ...agent.yoloModeArgs];
         }
 
-        // Add working directory args for agents that support it
-        // For Codex, this adds -C <dir> to set the working directory
-        if (agent.workingDirArgs && config.cwd) {
-          const workingDirArgArray = agent.workingDirArgs(config.cwd);
-          finalArgs = [...finalArgs, ...workingDirArgArray];
+        // Add session resume args if agentSessionId is provided
+        // IMPORTANT: Must come AFTER global options like -C, --sandbox (for Codex subcommand structure)
+        if (config.agentSessionId && agent.resumeArgs) {
+          const resumeArgArray = agent.resumeArgs(config.agentSessionId);
+          finalArgs = [...finalArgs, ...resumeArgArray];
         }
       }
 

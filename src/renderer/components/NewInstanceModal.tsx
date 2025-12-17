@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Folder, RefreshCw } from 'lucide-react';
+import { Folder, RefreshCw, ChevronRight } from 'lucide-react';
 import type { AgentConfig, Session, ToolType } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { validateNewSession, validateEditSession } from '../utils/sessionValidation';
@@ -39,9 +39,13 @@ interface EditAgentModalProps {
   existingSessions: Session[];
 }
 
+// Supported agents that are fully implemented
+const SUPPORTED_AGENTS = ['claude-code', 'opencode', 'codex'];
+
 export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgent, existingSessions }: NewInstanceModalProps) {
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [selectedAgent, setSelectedAgent] = useState(defaultAgent);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [workingDir, setWorkingDir] = useState('');
   const [instanceName, setInstanceName] = useState('');
   const [nudgeMessage, setNudgeMessage] = useState('');
@@ -174,12 +178,22 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     }
   }, [handleSelectFolder, handleCreate, isFormValid]);
 
+  // Sort agents: supported first, then coming soon at the bottom
+  const sortedAgents = useMemo(() => {
+    const visible = agents.filter(a => !a.hidden);
+    const supported = visible.filter(a => SUPPORTED_AGENTS.includes(a.id));
+    const comingSoon = visible.filter(a => !SUPPORTED_AGENTS.includes(a.id));
+    return [...supported, ...comingSoon];
+  }, [agents]);
+
   // Effects
   useEffect(() => {
     if (isOpen) {
       loadAgents();
+      // Expand the selected agent by default
+      setExpandedAgent(defaultAgent);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultAgent]);
 
   if (!isOpen) return null;
 
@@ -224,46 +238,70 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
             {loading ? (
               <div className="text-sm opacity-50">Loading agents...</div>
             ) : (
-              <div className="space-y-2">
-                {agents.filter(a => !a.hidden).map((agent) => (
-                  <div
-                    key={agent.id}
-                    className={`rounded border transition-all ${
-                      selectedAgent === agent.id ? 'ring-2' : ''
-                    }`}
-                    style={{
-                      borderColor: theme.colors.border,
-                      backgroundColor: selectedAgent === agent.id ? theme.colors.accentDim : 'transparent',
-                      ringColor: theme.colors.accent,
-                    }}
-                  >
+              <div className="space-y-1">
+                {sortedAgents.map((agent) => {
+                  const isSupported = SUPPORTED_AGENTS.includes(agent.id);
+                  const isExpanded = expandedAgent === agent.id;
+                  const isSelected = selectedAgent === agent.id;
+                  const canSelect = isSupported && agent.available;
+
+                  return (
                     <div
-                      onClick={() => {
-                        // Enable selection for supported agents (claude-code, opencode, codex)
-                        const isSupportedAgent = agent.id === 'claude-code' || agent.id === 'opencode' || agent.id === 'codex';
-                        if (isSupportedAgent && agent.available) {
-                          setSelectedAgent(agent.id);
-                        }
-                      }}
-                      className={`w-full text-left p-3 ${
-                        !(agent.id === 'claude-code' || agent.id === 'opencode' || agent.id === 'codex') || !agent.available
-                          ? 'opacity-40 cursor-not-allowed'
-                          : 'hover:bg-opacity-10 cursor-pointer'
+                      key={agent.id}
+                      className={`rounded border transition-all overflow-hidden ${
+                        isSelected ? 'ring-2' : ''
                       }`}
-                      style={{ color: theme.colors.textMain }}
-                      role="option"
-                      aria-selected={selectedAgent === agent.id}
-                      tabIndex={(agent.id === 'claude-code' || agent.id === 'opencode' || agent.id === 'codex') && agent.available ? 0 : -1}
+                      style={{
+                        borderColor: theme.colors.border,
+                        backgroundColor: isSelected ? theme.colors.accentDim : 'transparent',
+                        ringColor: theme.colors.accent,
+                      }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{agent.name}</div>
-                          {agent.path && (
-                            <div className="text-xs opacity-50 font-mono mt-1">{agent.path}</div>
+                      {/* Collapsed header row */}
+                      <div
+                        onClick={() => {
+                          if (isSupported) {
+                            // Toggle expansion
+                            setExpandedAgent(isExpanded ? null : agent.id);
+                            // Auto-select if available
+                            if (canSelect) {
+                              setSelectedAgent(agent.id);
+                            }
+                          }
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between ${
+                          !isSupported ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5 cursor-pointer'
+                        }`}
+                        style={{ color: theme.colors.textMain }}
+                        role="option"
+                        aria-selected={isSelected}
+                        aria-expanded={isExpanded}
+                        tabIndex={isSupported ? 0 : -1}
+                      >
+                        <div className="flex items-center gap-2">
+                          {/* Expand/collapse chevron for supported agents */}
+                          {isSupported && (
+                            <ChevronRight
+                              className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              style={{ color: theme.colors.textDim }}
+                            />
+                          )}
+                          <span className="font-medium">{agent.name}</span>
+                          {/* "New" badge for Codex and OpenCode */}
+                          {(agent.id === 'codex' || agent.id === 'opencode') && (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={{
+                                backgroundColor: '#22c55e30',
+                                color: '#22c55e',
+                              }}
+                            >
+                              New
+                            </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {agent.id === 'claude-code' || agent.id === 'opencode' || agent.id === 'codex' ? (
+                          {isSupported ? (
                             <>
                               {agent.available ? (
                                 <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.success + '20', color: theme.colors.success }}>
@@ -280,10 +318,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                                   handleRefreshAgent(agent.id);
                                 }}
                                 className="p-1 rounded hover:bg-white/10 transition-colors"
-                                title="Refresh detection (shows debug info if not found)"
+                                title="Refresh detection"
                                 style={{ color: theme.colors.textDim }}
                               >
-                                <RefreshCw className={`w-4 h-4 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`} />
+                                <RefreshCw className={`w-3 h-3 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`} />
                               </button>
                             </>
                           ) : (
@@ -293,54 +331,61 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                           )}
                         </div>
                       </div>
-                    </div>
-                    {/* Custom path input for supported agents */}
-                    {(agent.id === 'claude-code' || agent.id === 'opencode' || agent.id === 'codex') && (
-                      <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: theme.colors.border }}>
-                        <label className="block text-xs opacity-60 mb-1">Custom Path (optional)</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={customAgentPaths[agent.id] || ''}
-                            onChange={(e) => {
-                              const newPaths = { ...customAgentPaths, [agent.id]: e.target.value };
-                              setCustomAgentPaths(newPaths);
-                            }}
-                            onBlur={async () => {
-                              const path = customAgentPaths[agent.id]?.trim() || null;
-                              await window.maestro.agents.setCustomPath(agent.id, path);
-                              // Refresh agents to pick up the new path
-                              loadAgents();
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            placeholder={`/path/to/${agent.binaryName}`}
-                            className="flex-1 p-1.5 rounded border bg-transparent outline-none text-xs font-mono"
-                            style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                          />
-                          {customAgentPaths[agent.id] && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const newPaths = { ...customAgentPaths };
-                                delete newPaths[agent.id];
-                                setCustomAgentPaths(newPaths);
-                                await window.maestro.agents.setCustomPath(agent.id, null);
-                                loadAgents();
-                              }}
-                              className="px-2 py-1 rounded text-xs"
-                              style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-                            >
-                              Clear
-                            </button>
+
+                      {/* Expanded details for supported agents */}
+                      {isSupported && isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: theme.colors.border }}>
+                          {/* Show path if available */}
+                          {agent.path && (
+                            <div className="text-xs opacity-50 font-mono mb-2 pl-6">{agent.path}</div>
                           )}
+                          {/* Custom path input */}
+                          <div className="pl-6">
+                            <label className="block text-xs opacity-60 mb-1">Custom Path (optional)</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={customAgentPaths[agent.id] || ''}
+                                onChange={(e) => {
+                                  const newPaths = { ...customAgentPaths, [agent.id]: e.target.value };
+                                  setCustomAgentPaths(newPaths);
+                                }}
+                                onBlur={async () => {
+                                  const path = customAgentPaths[agent.id]?.trim() || null;
+                                  await window.maestro.agents.setCustomPath(agent.id, path);
+                                  loadAgents();
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                placeholder={`/path/to/${agent.binaryName}`}
+                                className="flex-1 p-1.5 rounded border bg-transparent outline-none text-xs font-mono"
+                                style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                              />
+                              {customAgentPaths[agent.id] && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const newPaths = { ...customAgentPaths };
+                                    delete newPaths[agent.id];
+                                    setCustomAgentPaths(newPaths);
+                                    await window.maestro.agents.setCustomPath(agent.id, null);
+                                    loadAgents();
+                                  }}
+                                  className="px-2 py-1 rounded text-xs"
+                                  style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-xs opacity-40 mt-1">
+                              Specify a custom path if the agent is not in your PATH
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-xs opacity-40 mt-1">
-                          Specify a custom path if the agent is not in your PATH
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

@@ -55,16 +55,6 @@ const CODEX_SESSION_PARSE_LIMITS = {
 } as const;
 
 /**
- * OpenAI pricing (per million tokens) - GPT-4 pricing
- * Note: Codex may use different models with different pricing
- */
-const CODEX_PRICING = {
-  INPUT_PER_MILLION: 2.5,
-  OUTPUT_PER_MILLION: 10,
-  CACHED_INPUT_PER_MILLION: 1.25,
-} as const;
-
-/**
  * Codex session metadata structure (first line of JSONL)
  */
 interface CodexSessionMetadata {
@@ -75,15 +65,6 @@ interface CodexSessionMetadata {
     branch?: string;
     repository_url?: string;
   };
-}
-
-/**
- * Codex message structure
- */
-interface CodexMessage {
-  type: string;
-  role?: 'user' | 'assistant';
-  content?: CodexMessageContent[];
 }
 
 /**
@@ -128,19 +109,6 @@ function extractTextFromContent(content: CodexMessageContent[] | undefined): str
   return textParts.join(' ');
 }
 
-/**
- * Calculate cost from token counts using Codex/OpenAI pricing
- */
-function calculateCost(
-  inputTokens: number,
-  outputTokens: number,
-  cachedTokens: number
-): number {
-  const inputCost = (inputTokens / 1_000_000) * CODEX_PRICING.INPUT_PER_MILLION;
-  const outputCost = (outputTokens / 1_000_000) * CODEX_PRICING.OUTPUT_PER_MILLION;
-  const cachedCost = (cachedTokens / 1_000_000) * CODEX_PRICING.CACHED_INPUT_PER_MILLION;
-  return inputCost + outputCost + cachedCost;
-}
 
 /**
  * Get the git remote URL for a project path
@@ -274,7 +242,6 @@ async function parseSessionFile(
     }
 
     const messageCount = userMessageCount + assistantMessageCount;
-    const costUsd = calculateCost(totalInputTokens, totalOutputTokens, totalCachedTokens);
 
     const startTime = new Date(firstTimestamp).getTime();
     const endTime = new Date(lastTimestamp).getTime();
@@ -288,7 +255,7 @@ async function parseSessionFile(
       firstMessage: firstUserMessage.slice(0, CODEX_SESSION_PARSE_LIMITS.FIRST_MESSAGE_PREVIEW_LENGTH),
       messageCount,
       sizeBytes: stats.size,
-      costUsd,
+      // Note: costUsd omitted - Codex doesn't provide cost and pricing varies by model
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       cacheReadTokens: totalCachedTokens,
@@ -494,7 +461,7 @@ export class CodexSessionStorage implements AgentSessionStorage {
   }
 
   async readSessionMessages(
-    projectPath: string,
+    _projectPath: string,
     sessionId: string,
     options?: SessionReadOptions
   ): Promise<SessionMessagesResult> {
@@ -730,7 +697,7 @@ export class CodexSessionStorage implements AgentSessionStorage {
     return results;
   }
 
-  getSessionPath(projectPath: string, sessionId: string): string | null {
+  getSessionPath(_projectPath: string, _sessionId: string): string | null {
     // Synchronous version - returns null since we need async file search
     // Use findSessionFile for async access
     return null;

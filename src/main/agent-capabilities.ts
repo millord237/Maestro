@@ -140,7 +140,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsImageInput: true,     // -i, --image flag - Documented
     supportsSlashCommands: false, // None - Verified
     supportsSessionStorage: true, // ~/.codex/sessions/YYYY/MM/DD/*.jsonl - Verified
-    supportsCostTracking: true,   // OpenAI API-based pricing - Verified
+    supportsCostTracking: false,  // Token counts only - Codex doesn't provide cost, pricing varies by model
     supportsUsageStats: true,     // usage in turn.completed events - Verified
     supportsBatchMode: true,      // exec subcommand - Verified
     supportsStreaming: true,      // Streams JSONL events - Verified
