@@ -117,6 +117,10 @@ export class AgentDetector {
   private cachedAgents: AgentConfig[] | null = null;
   private detectionInProgress: Promise<AgentConfig[]> | null = null;
   private customPaths: Record<string, string> = {};
+  // Cache for model discovery results: agentId -> { models, timestamp }
+  private modelCache: Map<string, { models: string[]; timestamp: number }> = new Map();
+  // Cache TTL: 5 minutes (model lists don't change frequently)
+  private readonly MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
   /**
    * Set custom paths for agents (from user configuration)
@@ -322,6 +326,97 @@ export class AgentDetector {
    */
   clearCache(): void {
     this.cachedAgents = null;
+  }
+
+  /**
+   * Clear the model cache for a specific agent or all agents
+   */
+  clearModelCache(agentId?: string): void {
+    if (agentId) {
+      this.modelCache.delete(agentId);
+    } else {
+      this.modelCache.clear();
+    }
+  }
+
+  /**
+   * Discover available models for an agent that supports model selection.
+   * Returns cached results if available and not expired.
+   *
+   * @param agentId - The agent identifier (e.g., 'opencode')
+   * @param forceRefresh - If true, bypass cache and fetch fresh model list
+   * @returns Array of model names, or empty array if agent doesn't support model discovery
+   */
+  async discoverModels(agentId: string, forceRefresh = false): Promise<string[]> {
+    const agent = await this.getAgent(agentId);
+
+    if (!agent || !agent.available) {
+      logger.warn(`Cannot discover models: agent ${agentId} not available`, 'AgentDetector');
+      return [];
+    }
+
+    // Check if agent supports model selection
+    if (!agent.capabilities.supportsModelSelection) {
+      logger.debug(`Agent ${agentId} does not support model selection`, 'AgentDetector');
+      return [];
+    }
+
+    // Check cache unless force refresh
+    if (!forceRefresh) {
+      const cached = this.modelCache.get(agentId);
+      if (cached && (Date.now() - cached.timestamp) < this.MODEL_CACHE_TTL_MS) {
+        logger.debug(`Returning cached models for ${agentId}`, 'AgentDetector');
+        return cached.models;
+      }
+    }
+
+    // Run agent-specific model discovery command
+    const models = await this.runModelDiscovery(agentId, agent);
+
+    // Cache the results
+    this.modelCache.set(agentId, { models, timestamp: Date.now() });
+
+    return models;
+  }
+
+  /**
+   * Run the agent-specific model discovery command.
+   * Each agent may have a different way to list available models.
+   */
+  private async runModelDiscovery(agentId: string, agent: AgentConfig): Promise<string[]> {
+    const env = this.getExpandedEnv();
+    const command = agent.path || agent.command;
+
+    // Agent-specific model discovery commands
+    switch (agentId) {
+      case 'opencode': {
+        // OpenCode: `opencode models` returns one model per line
+        const result = await execFileNoThrow(command, ['models'], undefined, env);
+
+        if (result.exitCode !== 0) {
+          logger.warn(
+            `Model discovery failed for ${agentId}: exit code ${result.exitCode}`,
+            'AgentDetector',
+            { stderr: result.stderr }
+          );
+          return [];
+        }
+
+        // Parse output: one model per line (e.g., "opencode/gpt-5-nano", "ollama/gpt-oss:latest")
+        const models = result.stdout
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0);
+
+        logger.info(`Discovered ${models.length} models for ${agentId}`, 'AgentDetector', { models });
+        return models;
+      }
+
+      default:
+        // For agents without model discovery implemented, return empty array
+        logger.debug(`No model discovery implemented for ${agentId}`, 'AgentDetector');
+        return [];
+    }
   }
 }
 

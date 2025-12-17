@@ -386,6 +386,9 @@ contextBridge.exposeInMainWorld('maestro', {
     getCustomPath: (agentId: string) =>
       ipcRenderer.invoke('agents:getCustomPath', agentId),
     getAllCustomPaths: () => ipcRenderer.invoke('agents:getAllCustomPaths'),
+    // Discover available models for agents that support model selection (e.g., OpenCode with Ollama)
+    getModels: (agentId: string, forceRefresh?: boolean) =>
+      ipcRenderer.invoke('agents:getModels', agentId, forceRefresh) as Promise<string[]>,
   },
 
   // Dialog API
@@ -1006,6 +1009,7 @@ export interface MaestroAPI {
     setCustomPath: (agentId: string, customPath: string | null) => Promise<boolean>;
     getCustomPath: (agentId: string) => Promise<string | null>;
     getAllCustomPaths: () => Promise<Record<string, string>>;
+    getModels: (agentId: string, forceRefresh?: boolean) => Promise<string[]>;
   };
   dialog: {
     selectFolder: () => Promise<string | null>;

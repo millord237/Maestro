@@ -259,4 +259,15 @@ export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
       return customPaths;
     })
   );
+
+  // Discover available models for an agent that supports model selection
+  ipcMain.handle(
+    'agents:getModels',
+    withIpcErrorLogging(handlerOpts('getModels'), async (agentId: string, forceRefresh?: boolean) => {
+      const agentDetector = requireDependency(getAgentDetector, 'Agent detector');
+      logger.info(`Discovering models for agent: ${agentId}`, LOG_CONTEXT, { forceRefresh });
+      const models = await agentDetector.discoverModels(agentId, forceRefresh ?? false);
+      return models;
+    })
+  );
 }
