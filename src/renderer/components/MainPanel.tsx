@@ -633,8 +633,8 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               )}
 
 
-              {/* Cost Tracker - styled as pill (hidden when panel is narrow) - shows active tab's cost */}
-              {showCostWidget && activeSession.inputMode === 'ai' && activeTab?.agentSessionId && (
+              {/* Cost Tracker - styled as pill (hidden when panel is narrow or agent doesn't support cost tracking) - shows active tab's cost */}
+              {showCostWidget && activeSession.inputMode === 'ai' && activeTab?.agentSessionId && hasCapability('supportsCostTracking') && (
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-green-500/30 text-green-500 bg-green-500/10">
                   ${(activeTab?.usageStats?.totalCostUsd ?? 0).toFixed(2)}
                 </span>

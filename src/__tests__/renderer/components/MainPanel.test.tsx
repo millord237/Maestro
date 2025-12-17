@@ -777,6 +777,62 @@ describe('MainPanel', () => {
 
       expect(screen.queryByText(/\$\d+\.\d+/)).not.toBeInTheDocument();
     });
+
+    it('should not display cost tracker when agent does not support cost tracking', () => {
+      // Pre-populate cache with capabilities where supportsCostTracking is false
+      clearCapabilitiesCache();
+      setCapabilitiesCache('claude-code', {
+        supportsResume: true,
+        supportsReadOnlyMode: true,
+        supportsJsonOutput: true,
+        supportsSessionId: true,
+        supportsImageInput: true,
+        supportsSlashCommands: true,
+        supportsSessionStorage: true,
+        supportsCostTracking: false, // Agent doesn't support cost tracking
+        supportsUsageStats: true,
+        supportsBatchMode: true,
+        supportsStreaming: true,
+        supportsResultMessages: true,
+      });
+
+      // Mock offsetWidth to return a value > 500 so cost widget would be shown if capability was true
+      const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        value: 800,
+      });
+
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          agentSessionId: 'claude-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          usageStats: {
+            inputTokens: 1000,
+            outputTokens: 500,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            totalCostUsd: 0.15,
+            contextWindow: 200000,
+          },
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Cost tracker should not be present even though panel is wide enough and we have usage stats
+      expect(screen.queryByText(/\$0\.15/)).not.toBeInTheDocument();
+
+      // Restore
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+      }
+    });
   });
 
   describe('Context window widget', () => {
