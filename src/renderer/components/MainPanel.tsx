@@ -12,6 +12,7 @@ import { gitService } from '../services/git';
 import { useGitStatus } from '../contexts/GitStatusContext';
 import { getActiveTab, getBusyTabs } from '../utils/tabHelpers';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
+import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -292,6 +293,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
   // Copy notification state (centered flash notice)
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
 
+  // Get agent capabilities for conditional feature rendering
+  const { hasCapability } = useAgentCapabilities(activeSession?.toolType);
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     refreshGitInfo: refreshGitStatus
@@ -366,8 +370,8 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     );
   }
 
-  // Show agent sessions browser
-  if (agentSessionsOpen) {
+  // Show agent sessions browser (only if agent supports session storage)
+  if (agentSessionsOpen && hasCapability('supportsSessionStorage')) {
     return (
       <div className="flex-1 flex flex-col min-w-0 relative" style={{ backgroundColor: theme.colors.bgMain }}>
         <AgentSessionsBrowser
@@ -762,17 +766,19 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               </div>
               )}
 
-              {/* Agent Sessions Button */}
-              <button
-                onClick={() => {
-                  setActiveClaudeSessionId(null);
-                  setAgentSessionsOpen(true);
-                }}
-                className="p-2 rounded hover:bg-white/5"
-                title={`Agent Sessions (${shortcuts.agentSessions?.keys?.join('+').replace('Meta', 'Cmd').replace('Shift', '⇧') || 'Cmd+⇧+L'})`}
-              >
-                <List className="w-4 h-4" style={{ color: theme.colors.textDim }} />
-              </button>
+              {/* Agent Sessions Button - only show if agent supports session storage */}
+              {hasCapability('supportsSessionStorage') && (
+                <button
+                  onClick={() => {
+                    setActiveClaudeSessionId(null);
+                    setAgentSessionsOpen(true);
+                  }}
+                  className="p-2 rounded hover:bg-white/5"
+                  title={`Agent Sessions (${shortcuts.agentSessions?.keys?.join('+').replace('Meta', 'Cmd').replace('Shift', '⇧') || 'Cmd+⇧+L'})`}
+                >
+                  <List className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+                </button>
+              )}
 
               {!rightPanelOpen && (
                 <button onClick={() => setRightPanelOpen(true)} className="p-2 rounded hover:bg-white/5" title={`Show right panel (${formatShortcutKeys(shortcuts.toggleRightPanel.keys)})`}>

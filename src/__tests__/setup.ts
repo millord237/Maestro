@@ -106,6 +106,21 @@ const mockMaestro = {
     getAllCustomPaths: vi.fn().mockResolvedValue({}),
     setCustomPath: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn().mockResolvedValue({ agents: [], debugInfo: null }),
+    // Capabilities for gating UI features based on agent type
+    getCapabilities: vi.fn().mockResolvedValue({
+      supportsResume: true,
+      supportsReadOnlyMode: true,
+      supportsJsonOutput: true,
+      supportsSessionId: true,
+      supportsImageInput: true,
+      supportsSlashCommands: true,
+      supportsSessionStorage: true,
+      supportsCostTracking: true,
+      supportsUsageStats: true,
+      supportsBatchMode: true,
+      supportsStreaming: true,
+      supportsResultMessages: true,
+    }),
   },
   fonts: {
     detect: vi.fn().mockResolvedValue([]),

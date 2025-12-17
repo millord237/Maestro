@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { Theme, Session, Shortcut, FocusArea, BatchRunState } from '../../../renderer/types';
+import { clearCapabilitiesCache, setCapabilitiesCache } from '../../../renderer/hooks/useAgentCapabilities';
 
 // Mock child components to simplify testing - must be before MainPanel import
 vi.mock('../../../renderer/components/LogViewer', () => ({
@@ -315,6 +316,23 @@ describe('MainPanel', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
+    // Clear capabilities cache and pre-populate with Claude Code capabilities (default test agent)
+    clearCapabilitiesCache();
+    setCapabilitiesCache('claude-code', {
+      supportsResume: true,
+      supportsReadOnlyMode: true,
+      supportsJsonOutput: true,
+      supportsSessionId: true,
+      supportsImageInput: true,
+      supportsSlashCommands: true,
+      supportsSessionStorage: true,
+      supportsCostTracking: true,
+      supportsUsageStats: true,
+      supportsBatchMode: true,
+      supportsStreaming: true,
+      supportsResultMessages: true,
+    });
+
     // Reset mock git status data to defaults
     resetMockGitStatus();
 
@@ -432,6 +450,56 @@ describe('MainPanel', () => {
 
       expect(setActiveClaudeSessionId).toHaveBeenCalledWith(null);
       expect(setAgentSessionsOpen).toHaveBeenCalledWith(true);
+    });
+
+    it('should hide Agent Sessions button when agent does not support session storage', () => {
+      // Pre-populate cache with capabilities where supportsSessionStorage is false
+      clearCapabilitiesCache();
+      setCapabilitiesCache('claude-code', {
+        supportsResume: true,
+        supportsReadOnlyMode: true,
+        supportsJsonOutput: true,
+        supportsSessionId: true,
+        supportsImageInput: true,
+        supportsSlashCommands: true,
+        supportsSessionStorage: false, // Agent doesn't support session storage
+        supportsCostTracking: true,
+        supportsUsageStats: true,
+        supportsBatchMode: true,
+        supportsStreaming: true,
+        supportsResultMessages: true,
+      });
+
+      render(<MainPanel {...defaultProps} />);
+
+      // Agent Sessions button should not be present
+      expect(screen.queryByTitle(/Agent Sessions/)).not.toBeInTheDocument();
+    });
+
+    it('should not render AgentSessionsBrowser when agentSessionsOpen is true but agent does not support session storage', () => {
+      // Pre-populate cache with capabilities where supportsSessionStorage is false
+      clearCapabilitiesCache();
+      setCapabilitiesCache('claude-code', {
+        supportsResume: true,
+        supportsReadOnlyMode: true,
+        supportsJsonOutput: true,
+        supportsSessionId: true,
+        supportsImageInput: true,
+        supportsSlashCommands: true,
+        supportsSessionStorage: false, // Agent doesn't support session storage
+        supportsCostTracking: true,
+        supportsUsageStats: true,
+        supportsBatchMode: true,
+        supportsStreaming: true,
+        supportsResultMessages: true,
+      });
+
+      render(<MainPanel {...defaultProps} agentSessionsOpen={true} />);
+
+      // AgentSessionsBrowser should not be shown even with agentSessionsOpen=true
+      expect(screen.queryByTestId('agent-sessions-browser')).not.toBeInTheDocument();
+      // Normal content should be shown instead
+      expect(screen.getByTestId('terminal-output')).toBeInTheDocument();
     });
   });
 
