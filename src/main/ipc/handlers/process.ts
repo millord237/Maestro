@@ -200,6 +200,14 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         }
       }
 
+      // ========================================================================
+      // Get custom environment variables from user configuration
+      // ========================================================================
+      const agentCustomEnvVars = allConfigs[config.toolType]?.customEnvVars as Record<string, string> | undefined;
+      if (agentCustomEnvVars && Object.keys(agentCustomEnvVars).length > 0) {
+        logger.debug(`Custom env vars configured for agent ${config.toolType}`, LOG_CONTEXT, { keys: Object.keys(agentCustomEnvVars) });
+      }
+
       // If no shell is specified and this is a terminal session, use the default shell from settings
       const shellToUse = config.shell || (config.toolType === 'terminal' ? settingsStore.get('defaultShell', 'zsh') : undefined);
 
@@ -242,6 +250,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         prompt: config.prompt,
         shell: shellToUse,
         contextWindow, // Pass configured context window to process manager
+        customEnvVars: agentCustomEnvVars, // Pass custom env vars from user configuration
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {

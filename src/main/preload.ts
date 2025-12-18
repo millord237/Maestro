@@ -403,6 +403,13 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('agents:getCustomArgs', agentId) as Promise<string | null>,
     getAllCustomArgs: () =>
       ipcRenderer.invoke('agents:getAllCustomArgs') as Promise<Record<string, string>>,
+    // Custom environment variables that are passed to all agent invocations
+    setCustomEnvVars: (agentId: string, customEnvVars: Record<string, string> | null) =>
+      ipcRenderer.invoke('agents:setCustomEnvVars', agentId, customEnvVars),
+    getCustomEnvVars: (agentId: string) =>
+      ipcRenderer.invoke('agents:getCustomEnvVars', agentId) as Promise<Record<string, string> | null>,
+    getAllCustomEnvVars: () =>
+      ipcRenderer.invoke('agents:getAllCustomEnvVars') as Promise<Record<string, Record<string, string>>>,
     // Discover available models for agents that support model selection (e.g., OpenCode with Ollama)
     getModels: (agentId: string, forceRefresh?: boolean) =>
       ipcRenderer.invoke('agents:getModels', agentId, forceRefresh) as Promise<string[]>,
@@ -1132,6 +1139,9 @@ export interface MaestroAPI {
     setCustomArgs: (agentId: string, customArgs: string | null) => Promise<boolean>;
     getCustomArgs: (agentId: string) => Promise<string | null>;
     getAllCustomArgs: () => Promise<Record<string, string>>;
+    setCustomEnvVars: (agentId: string, customEnvVars: Record<string, string> | null) => Promise<boolean>;
+    getCustomEnvVars: (agentId: string) => Promise<Record<string, string> | null>;
+    getAllCustomEnvVars: () => Promise<Record<string, Record<string, string>>>;
     getModels: (agentId: string, forceRefresh?: boolean) => Promise<string[]>;
   };
   dialog: {

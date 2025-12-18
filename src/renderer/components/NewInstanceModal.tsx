@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Folder, RefreshCw, ChevronRight } from 'lucide-react';
+import { Folder, RefreshCw, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { AgentConfig, Session, ToolType } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { validateNewSession, validateEditSession } from '../utils/sessionValidation';
@@ -54,6 +54,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   const [homeDir, setHomeDir] = useState<string>('');
   const [customAgentPaths, setCustomAgentPaths] = useState<Record<string, string>>({});
   const [customAgentArgs, setCustomAgentArgs] = useState<Record<string, string>>({});
+  const [customAgentEnvVars, setCustomAgentEnvVars] = useState<Record<string, Record<string, string>>>({});
   const [agentConfigs, setAgentConfigs] = useState<Record<string, Record<string, any>>>({});
   const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
@@ -90,11 +91,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       const detectedAgents = await window.maestro.agents.detect();
       setAgents(detectedAgents);
 
-      // Load custom paths and args for agents
+      // Load custom paths, args, and env vars for agents
       const paths = await window.maestro.agents.getAllCustomPaths();
       setCustomAgentPaths(paths);
       const args = await window.maestro.agents.getAllCustomArgs();
       setCustomAgentArgs(args);
+      const envVars = await window.maestro.agents.getAllCustomEnvVars();
+      setCustomAgentEnvVars(envVars);
 
       // Load configurations for all agents
       const configs: Record<string, Record<string, any>> = {};
@@ -468,6 +471,126 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                             </div>
                             <p className="text-xs opacity-50 mt-2">
                               Additional CLI arguments appended to all calls to this agent
+                            </p>
+                          </div>
+
+                          {/* Custom environment variables input */}
+                          <div
+                            className="p-3 rounded border"
+                            style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                          >
+                            <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
+                              Environment Variables (optional)
+                            </label>
+                            <div className="space-y-2">
+                              {/* Existing env vars */}
+                              {Object.entries(customAgentEnvVars[agent.id] || {}).map(([key, value]) => (
+                                <div key={key} className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={key}
+                                    onChange={(e) => {
+                                      const newKey = e.target.value;
+                                      const currentVars = { ...customAgentEnvVars[agent.id] };
+                                      delete currentVars[key];
+                                      currentVars[newKey] = value;
+                                      setCustomAgentEnvVars(prev => ({
+                                        ...prev,
+                                        [agent.id]: currentVars
+                                      }));
+                                    }}
+                                    onBlur={async () => {
+                                      const vars = customAgentEnvVars[agent.id];
+                                      if (vars && Object.keys(vars).length > 0) {
+                                        await window.maestro.agents.setCustomEnvVars(agent.id, vars);
+                                      }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="VARIABLE_NAME"
+                                    className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
+                                    style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                                  />
+                                  <span className="flex items-center text-xs" style={{ color: theme.colors.textDim }}>=</span>
+                                  <input
+                                    type="text"
+                                    value={value}
+                                    onChange={(e) => {
+                                      setCustomAgentEnvVars(prev => ({
+                                        ...prev,
+                                        [agent.id]: {
+                                          ...prev[agent.id],
+                                          [key]: e.target.value
+                                        }
+                                      }));
+                                    }}
+                                    onBlur={async () => {
+                                      const vars = customAgentEnvVars[agent.id];
+                                      if (vars && Object.keys(vars).length > 0) {
+                                        await window.maestro.agents.setCustomEnvVars(agent.id, vars);
+                                      }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="value"
+                                    className="flex-[2] p-2 rounded border bg-transparent outline-none text-xs font-mono"
+                                    style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                                  />
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const currentVars = { ...customAgentEnvVars[agent.id] };
+                                      delete currentVars[key];
+                                      if (Object.keys(currentVars).length > 0) {
+                                        setCustomAgentEnvVars(prev => ({
+                                          ...prev,
+                                          [agent.id]: currentVars
+                                        }));
+                                        await window.maestro.agents.setCustomEnvVars(agent.id, currentVars);
+                                      } else {
+                                        setCustomAgentEnvVars(prev => {
+                                          const newVars = { ...prev };
+                                          delete newVars[agent.id];
+                                          return newVars;
+                                        });
+                                        await window.maestro.agents.setCustomEnvVars(agent.id, null);
+                                      }
+                                    }}
+                                    className="p-2 rounded hover:bg-white/10 transition-colors"
+                                    title="Remove variable"
+                                    style={{ color: theme.colors.textDim }}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              {/* Add new env var button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Find a unique key name
+                                  const currentVars = customAgentEnvVars[agent.id] || {};
+                                  let newKey = 'NEW_VAR';
+                                  let counter = 1;
+                                  while (currentVars[newKey]) {
+                                    newKey = `NEW_VAR_${counter}`;
+                                    counter++;
+                                  }
+                                  setCustomAgentEnvVars(prev => ({
+                                    ...prev,
+                                    [agent.id]: {
+                                      ...prev[agent.id],
+                                      [newKey]: ''
+                                    }
+                                  }));
+                                }}
+                                className="flex items-center gap-1 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                                style={{ color: theme.colors.textDim }}
+                              >
+                                <Plus className="w-3 h-3" />
+                                Add Variable
+                              </button>
+                            </div>
+                            <p className="text-xs opacity-50 mt-2">
+                              Environment variables passed to all calls to this agent
                             </p>
                           </div>
 

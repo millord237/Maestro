@@ -49,6 +49,7 @@ interface ProcessConfig {
   shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish')
   images?: string[]; // Base64 data URLs for images (passed via stream-json input)
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
+  customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
 }
 
 interface ManagedProcess {
@@ -141,7 +142,7 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for a session
    */
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
-    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, images, contextWindow } = config;
+    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, images, contextWindow, customEnvVars } = config;
 
     // For batch mode with images, use stream-json mode and send message via stdin
     // For batch mode without images, append prompt to args with -- separator
@@ -295,6 +296,18 @@ export class ProcessManager extends EventEmitter {
         const isResuming = finalArgs.includes('--resume') || finalArgs.includes('--session');
         if (isResuming) {
           env.MAESTRO_SESSION_RESUMED = '1';
+        }
+
+        // Apply custom environment variables from user configuration
+        // See: https://github.com/pedramamini/Maestro/issues/41
+        if (customEnvVars && Object.keys(customEnvVars).length > 0) {
+          for (const [key, value] of Object.entries(customEnvVars)) {
+            env[key] = value;
+          }
+          logger.debug('[ProcessManager] Applied custom env vars', 'ProcessManager', {
+            sessionId,
+            keys: Object.keys(customEnvVars)
+          });
         }
 
         logger.debug('[ProcessManager] About to spawn child process', 'ProcessManager', {

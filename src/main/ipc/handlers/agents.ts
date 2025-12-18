@@ -319,6 +319,55 @@ export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
     })
   );
 
+  // Set custom environment variables for an agent - passed to all agent invocations
+  ipcMain.handle(
+    'agents:setCustomEnvVars',
+    withIpcErrorLogging(
+      handlerOpts('setCustomEnvVars', CONFIG_LOG_CONTEXT),
+      async (agentId: string, customEnvVars: Record<string, string> | null) => {
+        const allConfigs = agentConfigsStore.get('configs', {});
+        if (!allConfigs[agentId]) {
+          allConfigs[agentId] = {};
+        }
+
+        if (customEnvVars && Object.keys(customEnvVars).length > 0) {
+          allConfigs[agentId].customEnvVars = customEnvVars;
+          logger.info(`Set custom env vars for agent ${agentId}`, CONFIG_LOG_CONTEXT, { keys: Object.keys(customEnvVars) });
+        } else {
+          delete allConfigs[agentId].customEnvVars;
+          logger.info(`Cleared custom env vars for agent ${agentId}`, CONFIG_LOG_CONTEXT);
+        }
+
+        agentConfigsStore.set('configs', allConfigs);
+        return true;
+      }
+    )
+  );
+
+  // Get custom environment variables for an agent
+  ipcMain.handle(
+    'agents:getCustomEnvVars',
+    withIpcErrorLogging(handlerOpts('getCustomEnvVars', CONFIG_LOG_CONTEXT), async (agentId: string) => {
+      const allConfigs = agentConfigsStore.get('configs', {});
+      return allConfigs[agentId]?.customEnvVars || null;
+    })
+  );
+
+  // Get all custom environment variables for agents
+  ipcMain.handle(
+    'agents:getAllCustomEnvVars',
+    withIpcErrorLogging(handlerOpts('getAllCustomEnvVars', CONFIG_LOG_CONTEXT), async () => {
+      const allConfigs = agentConfigsStore.get('configs', {});
+      const customEnvVars: Record<string, Record<string, string>> = {};
+      for (const [agentId, config] of Object.entries(allConfigs)) {
+        if (config && typeof config === 'object' && 'customEnvVars' in config && config.customEnvVars) {
+          customEnvVars[agentId] = config.customEnvVars as Record<string, string>;
+        }
+      }
+      return customEnvVars;
+    })
+  );
+
   // Discover available models for an agent that supports model selection
   ipcMain.handle(
     'agents:getModels',
