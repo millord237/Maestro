@@ -24,6 +24,95 @@
 import type { ToolType, AgentError } from '../../shared/types';
 import type { AgentOutputParser, ParsedEvent } from './agent-output-parser';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
+/**
+ * Known OpenAI model context window sizes (in tokens)
+ * Source: https://platform.openai.com/docs/models
+ */
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  // GPT-4o family
+  'gpt-4o': 128000,
+  'gpt-4o-mini': 128000,
+  'gpt-4o-2024-05-13': 128000,
+  'gpt-4o-2024-08-06': 128000,
+  'gpt-4o-2024-11-20': 128000,
+  // o1/o3/o4 reasoning models
+  'o1': 200000,
+  'o1-mini': 128000,
+  'o1-preview': 128000,
+  'o3': 200000,
+  'o3-mini': 200000,
+  'o4-mini': 200000,
+  // GPT-4 Turbo
+  'gpt-4-turbo': 128000,
+  'gpt-4-turbo-preview': 128000,
+  'gpt-4-1106-preview': 128000,
+  // GPT-4 (original)
+  'gpt-4': 8192,
+  'gpt-4-32k': 32768,
+  // GPT-5 family (Codex default)
+  'gpt-5': 200000,
+  'gpt-5.1': 200000,
+  'gpt-5.1-codex-max': 200000,
+  // Default fallback
+  'default': 128000,
+};
+
+/**
+ * Get the context window size for a given model
+ */
+function getModelContextWindow(model: string): number {
+  // Try exact match first
+  if (MODEL_CONTEXT_WINDOWS[model]) {
+    return MODEL_CONTEXT_WINDOWS[model];
+  }
+  // Try prefix match (e.g., "gpt-4o-2024-11-20" matches "gpt-4o")
+  for (const [prefix, size] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
+    if (model.startsWith(prefix)) {
+      return size;
+    }
+  }
+  return MODEL_CONTEXT_WINDOWS['default'];
+}
+
+/**
+ * Read Codex configuration from ~/.codex/config.toml
+ * Returns the model name and context window override if set
+ */
+function readCodexConfig(): { model?: string; contextWindow?: number } {
+  try {
+    const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    const configPath = path.join(codexHome, 'config.toml');
+
+    if (!fs.existsSync(configPath)) {
+      return {};
+    }
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const result: { model?: string; contextWindow?: number } = {};
+
+    // Simple TOML parsing for the fields we care about
+    // model = "gpt-5.1"
+    const modelMatch = content.match(/^\s*model\s*=\s*"([^"]+)"/m);
+    if (modelMatch) {
+      result.model = modelMatch[1];
+    }
+
+    // model_context_window = 128000
+    const windowMatch = content.match(/^\s*model_context_window\s*=\s*(\d+)/m);
+    if (windowMatch) {
+      result.contextWindow = parseInt(windowMatch[1], 10);
+    }
+
+    return result;
+  } catch {
+    // Config file doesn't exist or can't be read - use defaults
+    return {};
+  }
+}
 
 /**
  * Raw message structure from Codex JSON output
@@ -72,6 +161,19 @@ interface CodexUsage {
  */
 export class CodexOutputParser implements AgentOutputParser {
   readonly agentId: ToolType = 'codex';
+
+  // Cached context window - read once from config
+  private contextWindow: number;
+  private model: string;
+
+  constructor() {
+    // Read config once at initialization
+    const config = readCodexConfig();
+    this.model = config.model || 'gpt-5.1-codex-max';
+
+    // Priority: 1) explicit model_context_window in config, 2) lookup by model name
+    this.contextWindow = config.contextWindow || getModelContextWindow(this.model);
+  }
 
   /**
    * Parse a single JSON line from Codex output
@@ -270,10 +372,16 @@ export class CodexOutputParser implements AgentOutputParser {
     return {
       inputTokens,
       outputTokens: totalOutputTokens,
+      // Note: For OpenAI/Codex, cached_input_tokens is a SUBSET of input_tokens (already included)
+      // Unlike Claude where cache tokens are separate and need to be added to get total context.
+      // We still report cacheReadTokens for display purposes (shows cache efficiency).
+      // Context calculations should use inputTokens + outputTokens, not add cache tokens again.
       cacheReadTokens: cachedInputTokens,
       // Note: Codex doesn't report cache creation tokens
       cacheCreationTokens: 0,
       // Note: costUsd omitted - Codex doesn't provide cost and pricing varies by model
+      // Context window from Codex config (~/.codex/config.toml) or model lookup table
+      contextWindow: this.contextWindow,
       // Store reasoning tokens separately for UI display
       reasoningTokens: reasoningOutputTokens,
     };
@@ -314,6 +422,15 @@ export class CodexOutputParser implements AgentOutputParser {
 
   /**
    * Detect an error from a line of agent output
+   *
+   * IMPORTANT: Only detect errors from structured JSON error events, not from
+   * arbitrary text content. Pattern matching on conversational text leads to
+   * false positives (e.g., AI discussing "timeout" triggers timeout error).
+   *
+   * Error detection sources (in order of reliability):
+   * 1. Structured JSON: { type: "error", error: "..." } or { error: "..." }
+   * 2. stderr output (handled separately by process-manager)
+   * 3. Non-zero exit code (handled by detectErrorFromExit)
    */
   detectErrorFromLine(line: string): AgentError | null {
     // Skip empty lines
@@ -321,26 +438,35 @@ export class CodexOutputParser implements AgentOutputParser {
       return null;
     }
 
-    // Try to parse as JSON first to check for error messages in structured output
-    let textToCheck = line;
+    // Only detect errors from structured JSON error events
+    // Do NOT pattern match on arbitrary text - it causes false positives
+    let errorText: string | null = null;
     try {
       const parsed = JSON.parse(line);
       // Check for error type messages
       if (parsed.type === 'error' && parsed.error) {
-        textToCheck = parsed.error;
+        errorText = parsed.error;
       } else if (parsed.error) {
-        textToCheck =
+        errorText =
           typeof parsed.error === 'string'
             ? parsed.error
             : JSON.stringify(parsed.error);
       }
+      // If no error field in JSON, this is normal output - don't check it
     } catch {
-      // Not JSON, check the raw line
+      // Not JSON - skip pattern matching entirely
+      // Errors should come through structured JSON, stderr, or exit codes
+      // Pattern matching on arbitrary text causes false positives
+    }
+
+    // If no error text was extracted, no error to detect
+    if (!errorText) {
+      return null;
     }
 
     // Match against error patterns
     const patterns = getErrorPatterns(this.agentId);
-    const match = matchErrorPattern(patterns, textToCheck);
+    const match = matchErrorPattern(patterns, errorText);
 
     if (match) {
       return {

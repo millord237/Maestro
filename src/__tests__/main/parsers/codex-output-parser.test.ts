@@ -419,33 +419,33 @@ describe('CodexOutputParser', () => {
       expect(parser.detectErrorFromLine('   ')).toBeNull();
     });
 
-    it('should detect authentication errors', () => {
-      const error = parser.detectErrorFromLine('invalid api key');
+    it('should detect authentication errors from JSON', () => {
+      const line = JSON.stringify({ type: 'error', error: 'invalid api key' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('auth_expired');
       expect(error?.agentId).toBe('codex');
     });
 
-    it('should detect rate limit errors', () => {
-      const error = parser.detectErrorFromLine('rate limit exceeded');
+    it('should detect rate limit errors from JSON', () => {
+      const line = JSON.stringify({ error: 'rate limit exceeded' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('rate_limited');
     });
 
-    it('should detect token exhaustion errors', () => {
-      const error = parser.detectErrorFromLine('maximum tokens exceeded');
+    it('should detect token exhaustion errors from JSON', () => {
+      const line = JSON.stringify({ type: 'error', error: 'maximum tokens exceeded' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('token_exhaustion');
     });
 
-    it('should detect JSON error messages', () => {
-      const line = JSON.stringify({
-        type: 'error',
-        error: 'rate limit exceeded',
-      });
-      const error = parser.detectErrorFromLine(line);
-      expect(error).not.toBeNull();
-      expect(error?.type).toBe('rate_limited');
+    it('should NOT detect errors from plain text (only JSON)', () => {
+      // Plain text errors should come through stderr or exit codes, not stdout
+      expect(parser.detectErrorFromLine('invalid api key')).toBeNull();
+      expect(parser.detectErrorFromLine('rate limit exceeded')).toBeNull();
+      expect(parser.detectErrorFromLine('maximum tokens exceeded')).toBeNull();
     });
 
     it('should return null for non-error lines', () => {

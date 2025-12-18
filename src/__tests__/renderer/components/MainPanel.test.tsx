@@ -1652,8 +1652,8 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} activeSession={session} />);
 
-      // Should render without crashing
-      expect(screen.getByText('Context Window')).toBeInTheDocument();
+      // Should render without crashing - Context Window widget is hidden when contextWindow is not configured
+      expect(screen.queryByText('Context Window')).not.toBeInTheDocument();
     });
 
     it('should handle missing git status from context gracefully', async () => {
@@ -1717,7 +1717,7 @@ describe('MainPanel', () => {
   });
 
   describe('Context usage calculation edge cases', () => {
-    it('should handle zero context window', () => {
+    it('should hide context widget when context window is zero', () => {
       const session = createSession({
         aiTabs: [{
           id: 'tab-1',
@@ -1739,8 +1739,8 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} activeSession={session} />);
 
-      // Should render without crashing
-      expect(screen.getByText('Context Window')).toBeInTheDocument();
+      // Context Window widget should be hidden when contextWindow is 0 (not configured)
+      expect(screen.queryByText('Context Window')).not.toBeInTheDocument();
     });
 
     it('should cap context usage at 100%', () => {

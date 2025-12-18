@@ -5,6 +5,7 @@ import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks/useT
 import { ThinkingStatusPill } from './ThinkingStatusPill';
 import { ExecutionQueueIndicator } from './ExecutionQueueIndicator';
 import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
+import { getProviderDisplayName } from '../utils/sessionValidation';
 
 interface SlashCommand {
   command: string;
@@ -545,7 +546,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
               ref={inputRef}
               className={`flex-1 bg-transparent text-sm outline-none ${isTerminalMode ? 'pl-1.5' : 'pl-3'} pt-3 pr-3 resize-none min-h-[2.5rem] scrollbar-thin`}
               style={{ color: theme.colors.textMain, maxHeight: '7rem' }}
-              placeholder={isTerminalMode ? "Run shell command..." : `Talking to ${session.name} powered by Claude`}
+              placeholder={isTerminalMode ? "Run shell command..." : `Talking to ${session.name} powered by ${getProviderDisplayName(session.toolType)}`}
               value={inputValue}
               onFocus={onInputFocus}
               onBlur={onInputBlur}

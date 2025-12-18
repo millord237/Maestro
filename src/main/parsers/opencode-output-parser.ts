@@ -254,6 +254,15 @@ export class OpenCodeOutputParser implements AgentOutputParser {
 
   /**
    * Detect an error from a line of agent output
+   *
+   * IMPORTANT: Only detect errors from structured JSON error events, not from
+   * arbitrary text content. Pattern matching on conversational text leads to
+   * false positives (e.g., AI discussing "timeout" triggers timeout error).
+   *
+   * Error detection sources (in order of reliability):
+   * 1. Structured JSON: { error: "message" } or { type: "error", message: "..." }
+   * 2. stderr output (handled separately by process-manager)
+   * 3. Non-zero exit code (handled by detectErrorFromExit)
    */
   detectErrorFromLine(line: string): AgentError | null {
     // Skip empty lines
@@ -261,23 +270,32 @@ export class OpenCodeOutputParser implements AgentOutputParser {
       return null;
     }
 
-    // Try to parse as JSON first to check for error messages in structured output
-    let textToCheck = line;
+    // Only detect errors from structured JSON error events
+    // Do NOT pattern match on arbitrary text - it causes false positives
+    let errorText: string | null = null;
     try {
       const parsed = JSON.parse(line);
       // OpenCode uses an 'error' field for errors
       if (parsed.error) {
-        textToCheck = parsed.error;
+        errorText = parsed.error;
       } else if (parsed.type === 'error' && parsed.message) {
-        textToCheck = parsed.message;
+        errorText = parsed.message;
       }
+      // If no error field in JSON, this is normal output - don't check it
     } catch {
-      // Not JSON, check the raw line
+      // Not JSON - skip pattern matching entirely
+      // Errors should come through structured JSON, stderr, or exit codes
+      // Pattern matching on arbitrary text causes false positives
+    }
+
+    // If no error text was extracted, no error to detect
+    if (!errorText) {
+      return null;
     }
 
     // Match against error patterns
     const patterns = getErrorPatterns(this.agentId);
-    const match = matchErrorPattern(patterns, textToCheck);
+    const match = matchErrorPattern(patterns, errorText);
 
     if (match) {
       return {

@@ -228,7 +228,7 @@ describe('InputArea', () => {
       });
       render(<InputArea {...props} />);
 
-      expect(screen.getByPlaceholderText('Talking to MySession powered by Claude')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Talking to MySession powered by Claude Code')).toBeInTheDocument();
     });
 
     it('shows attach image button in AI mode when agent supports image input', () => {

@@ -55,6 +55,87 @@ describe('error-patterns', () => {
       expect(OPENCODE_ERROR_PATTERNS).toBeDefined();
       expect(Object.keys(OPENCODE_ERROR_PATTERNS).length).toBeGreaterThan(0);
     });
+
+    describe('network_error patterns', () => {
+      it('should match "connection failed"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'connection failed');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "connection refused"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'connection refused');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "connection error"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'connection error');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "connection timed out"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'connection timed out');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "ECONNREFUSED"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'Error: ECONNREFUSED');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "ETIMEDOUT"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'Error: ETIMEDOUT');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "request timed out"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'request timed out');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should match "network error"', () => {
+        const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, 'network error occurred');
+        expect(result).not.toBeNull();
+        expect(result?.type).toBe('network_error');
+      });
+
+      it('should NOT match normal text containing "connection" as part of a word or phrase', () => {
+        // These are false positive cases that should NOT trigger errors
+        const falsePositives = [
+          'Retry Connection',
+          'I will establish a connection',
+          'the connection is healthy',
+          'check the connection string',
+          'database connection pool',
+        ];
+
+        for (const text of falsePositives) {
+          const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, text);
+          expect(result).toBeNull();
+        }
+      });
+
+      it('should NOT match normal text containing "timeout" as part of a phrase', () => {
+        // These are false positive cases that should NOT trigger errors
+        const falsePositives = [
+          'set timeout to 30',
+          'the timeout value is',
+          'default timeout setting',
+          'with a timeout of 5 seconds',
+        ];
+
+        for (const text of falsePositives) {
+          const result = matchErrorPattern(OPENCODE_ERROR_PATTERNS, text);
+          expect(result).toBeNull();
+        }
+      });
+    });
   });
 
   describe('CODEX_ERROR_PATTERNS', () => {

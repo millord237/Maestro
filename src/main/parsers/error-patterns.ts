@@ -257,13 +257,24 @@ export const OPENCODE_ERROR_PATTERNS: AgentErrorPatterns = {
 
   network_error: [
     {
-      pattern: /connection/i,
+      // More specific patterns to avoid false positives from normal output
+      pattern: /connection\s*(failed|refused|error|reset|closed|timed?\s*out)/i,
       message: 'Connection error. Check your network.',
       recoverable: true,
     },
     {
-      pattern: /timeout/i,
+      pattern: /ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND/i,
+      message: 'Network error. Check your connection.',
+      recoverable: true,
+    },
+    {
+      pattern: /request\s+timed?\s*out|timed?\s*out\s+waiting/i,
       message: 'Request timed out.',
+      recoverable: true,
+    },
+    {
+      pattern: /network\s+(error|failure|unavailable)/i,
+      message: 'Network error occurred. Please check your connection.',
       recoverable: true,
     },
   ],

@@ -225,12 +225,20 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         ...(config.prompt && { prompt: config.prompt.length > 500 ? config.prompt.substring(0, 500) + '...' : config.prompt })
       });
 
+      // Get contextWindow from agent config (for agents like OpenCode/Codex that need user configuration)
+      // Falls back to the agent's configOptions default (e.g., 200000 for Codex, 128000 for OpenCode)
+      const agentConfig = agentConfigsStore.get('configs', {})[config.toolType] || {};
+      const contextWindowOption = agent?.configOptions?.find(opt => opt.key === 'contextWindow');
+      const contextWindowDefault = contextWindowOption?.default ?? 0;
+      const contextWindow = typeof agentConfig.contextWindow === 'number' ? agentConfig.contextWindow : contextWindowDefault;
+
       const result = processManager.spawn({
         ...config,
         args: finalArgs,
         requiresPty: agent?.requiresPty,
         prompt: config.prompt,
-        shell: shellToUse
+        shell: shellToUse,
+        contextWindow, // Pass configured context window to process manager
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {

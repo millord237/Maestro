@@ -640,8 +640,8 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 </span>
               )}
 
-              {/* Context Window Widget with Tooltip - only show for tabs with agent session and if agent supports usage stats */}
-              {activeSession.inputMode === 'ai' && activeTab?.agentSessionId && hasCapability('supportsUsageStats') && (
+              {/* Context Window Widget with Tooltip - only show when context window is configured and agent supports usage stats */}
+              {activeSession.inputMode === 'ai' && activeTab?.agentSessionId && hasCapability('supportsUsageStats') && (activeTab?.usageStats?.contextWindow ?? 0) > 0 && (
               <div
                 className="flex flex-col items-end mr-2 relative cursor-pointer"
                 onMouseEnter={() => {
@@ -744,32 +744,35 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                           </span>
                         </div>
 
-                        <div className="border-t pt-2 mt-2" style={{ borderColor: theme.colors.border }}>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Tokens</span>
-                            <span className="text-xs font-mono font-bold" style={{ color: theme.colors.accent }}>
-                              {(
-                                (activeTab?.usageStats?.inputTokens ?? 0) +
-                                (activeTab?.usageStats?.outputTokens ?? 0)
-                              ).toLocaleString()}
-                            </span>
+                        {/* Context usage section - only shown when contextWindow is configured */}
+                        {(activeTab?.usageStats?.contextWindow ?? 0) > 0 && (
+                          <div className="border-t pt-2 mt-2" style={{ borderColor: theme.colors.border }}>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Tokens</span>
+                              <span className="text-xs font-mono font-bold" style={{ color: theme.colors.accent }}>
+                                {(
+                                  (activeTab?.usageStats?.inputTokens ?? 0) +
+                                  (activeTab?.usageStats?.outputTokens ?? 0)
+                                ).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Size</span>
+                              <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
+                                {activeTab.usageStats.contextWindow.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Usage</span>
+                              <span
+                                className="text-xs font-mono font-bold"
+                                style={{ color: getContextColor(activeTabContextUsage, theme) }}
+                              >
+                                {activeTabContextUsage}%
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex justify-between items-center mt-1">
-                            <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Size</span>
-                            <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
-                              {(activeTab?.usageStats?.contextWindow ?? 200000).toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center mt-1">
-                            <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Usage</span>
-                            <span
-                              className="text-xs font-mono font-bold"
-                              style={{ color: getContextColor(activeTabContextUsage, theme) }}
-                            >
-                              {activeTabContextUsage}%
-                            </span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                       </div>
                     </div>

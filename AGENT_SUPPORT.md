@@ -143,6 +143,42 @@ interface AgentCapabilities {
 | `supportsSessionId` | Session ID pill | Pill hidden |
 | `supportsResultMessages` | Show only final result | Shows all messages |
 
+### Context Window Configuration
+
+For agents where context window size varies by model (like OpenCode or Codex), Maestro provides a user-configurable setting:
+
+**Configuration Location:** Settings → Agent Configuration → Context Window Size
+
+**How It Works:**
+1. **Parser-reported value:** If the agent reports `contextWindow` in JSON output, that value takes priority
+2. **User configuration:** If the parser doesn't report context window, the user-configured value is used
+3. **Hidden when zero:** If no value is configured (0), the context usage widget is hidden entirely
+
+**Agent-Specific Behavior:**
+
+| Agent | Default Context Window | Notes |
+|-------|----------------------|-------|
+| Claude Code | 200,000 | Always reported in JSON output |
+| Codex | 200,000 | Default for GPT-5.x models; user can override in settings |
+| OpenCode | 128,000 | Default for common models (GPT-4, etc.); user can override in settings |
+
+**Adding Context Window Config to an Agent:**
+
+```typescript
+// In agent-detector.ts, add to configOptions:
+configOptions: [
+  {
+    key: 'contextWindow',
+    type: 'number',
+    label: 'Context Window Size',
+    description: 'Maximum context window size in tokens. Required for context usage display.',
+    default: 128000,  // Set a sane default for the agent's typical model
+  },
+],
+```
+
+The value is passed to `ProcessManager.spawn()` and used when emitting usage stats if the parser doesn't provide a context window value.
+
 ### Starting Point: All False
 
 When adding a new agent, start with all capabilities set to `false`:

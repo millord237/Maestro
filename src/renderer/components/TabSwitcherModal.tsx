@@ -578,10 +578,12 @@ export function TabSwitcherModal({
                     </div>
                   </div>
 
-                  {/* Context Gauge */}
-                  <div className="flex-shrink-0">
-                    <ContextGauge percentage={contextPct} theme={theme} />
-                  </div>
+                  {/* Context Gauge - only show when context window is configured */}
+                  {(tab.usageStats?.contextWindow ?? 0) > 0 && (
+                    <div className="flex-shrink-0">
+                      <ContextGauge percentage={contextPct} theme={theme} />
+                    </div>
+                  )}
                 </button>
               );
             } else {

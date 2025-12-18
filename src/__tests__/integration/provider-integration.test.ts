@@ -118,11 +118,11 @@ const PROVIDERS: ProviderConfig[] = [
       prompt,
     ],
     parseSessionId: (output: string) => {
-      // Codex outputs thread_id in JSON lines (turn.started events)
+      // Codex outputs thread_id in thread.started events
       for (const line of output.split('\n')) {
         try {
           const json = JSON.parse(line);
-          if (json.type === 'turn.started' && json.thread_id) {
+          if (json.type === 'thread.started' && json.thread_id) {
             return json.thread_id;
           }
         } catch { /* ignore non-JSON lines */ }
@@ -130,21 +130,15 @@ const PROVIDERS: ProviderConfig[] = [
       return null;
     },
     parseResponse: (output: string) => {
-      // Codex outputs agent_message events with text
+      // Codex outputs item.completed events with item.type === 'agent_message'
       const responses: string[] = [];
       for (const line of output.split('\n')) {
         try {
           const json = JSON.parse(line);
-          if (json.type === 'agent_message') {
-            // agent_message can have content array or direct text
-            if (json.content && Array.isArray(json.content)) {
-              for (const item of json.content) {
-                if (item.type === 'text' && item.text) {
-                  responses.push(item.text);
-                }
-              }
-            } else if (json.text) {
-              responses.push(json.text);
+          if (json.type === 'item.completed' && json.item?.type === 'agent_message') {
+            // agent_message item has text field directly
+            if (json.item.text) {
+              responses.push(json.item.text);
             }
           }
         } catch { /* ignore non-JSON lines */ }
@@ -181,25 +175,25 @@ const PROVIDERS: ProviderConfig[] = [
       prompt,
     ],
     parseSessionId: (output: string) => {
-      // OpenCode outputs session_id in run.started events
+      // OpenCode outputs sessionID in events (step_start, text, step_finish)
       for (const line of output.split('\n')) {
         try {
           const json = JSON.parse(line);
-          if (json.type === 'run.started' && json.session_id) {
-            return json.session_id;
+          if (json.sessionID) {
+            return json.sessionID;
           }
         } catch { /* ignore non-JSON lines */ }
       }
       return null;
     },
     parseResponse: (output: string) => {
-      // OpenCode outputs text events
+      // OpenCode outputs text events with part.text
       const responses: string[] = [];
       for (const line of output.split('\n')) {
         try {
           const json = JSON.parse(line);
-          if (json.type === 'text' && json.text) {
-            responses.push(json.text);
+          if (json.type === 'text' && json.part?.text) {
+            responses.push(json.part.text);
           }
         } catch { /* ignore non-JSON lines */ }
       }
@@ -239,7 +233,11 @@ function runProvider(
       cwd,
       env: { ...process.env },
       shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // Close stdin immediately to signal EOF (prevents processes waiting for input)
+    proc.stdin?.end();
 
     proc.stdout?.on('data', (data) => {
       stdout += data.toString();

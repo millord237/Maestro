@@ -347,8 +347,9 @@ describe('ClaudeOutputParser', () => {
       expect(parser.detectErrorFromLine('Hello, how can I help you?')).toBeNull();
     });
 
-    it('should detect auth errors', () => {
-      const error = parser.detectErrorFromLine('Error: Invalid API key');
+    it('should detect auth errors from JSON', () => {
+      const line = JSON.stringify({ type: 'error', message: 'Invalid API key' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('auth_expired');
       expect(error?.agentId).toBe('claude-code');
@@ -356,29 +357,25 @@ describe('ClaudeOutputParser', () => {
       expect(error?.timestamp).toBeGreaterThan(0);
     });
 
-    it('should detect token exhaustion errors', () => {
-      const error = parser.detectErrorFromLine('Error: context is too long');
+    it('should detect token exhaustion errors from JSON', () => {
+      const line = JSON.stringify({ error: 'context is too long' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('token_exhaustion');
     });
 
-    it('should detect rate limit errors', () => {
-      const error = parser.detectErrorFromLine('Rate limit exceeded');
+    it('should detect rate limit errors from JSON', () => {
+      const line = JSON.stringify({ type: 'error', message: 'Rate limit exceeded' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('rate_limited');
     });
 
-    it('should detect network errors', () => {
-      const error = parser.detectErrorFromLine('Connection failed');
+    it('should detect network errors from JSON', () => {
+      const line = JSON.stringify({ error: 'Connection failed' });
+      const error = parser.detectErrorFromLine(line);
       expect(error).not.toBeNull();
       expect(error?.type).toBe('network_error');
-    });
-
-    it('should extract error from JSON error messages', () => {
-      const jsonLine = JSON.stringify({ type: 'error', message: 'Invalid API key' });
-      const error = parser.detectErrorFromLine(jsonLine);
-      expect(error).not.toBeNull();
-      expect(error?.type).toBe('auth_expired');
     });
 
     it('should extract error from JSON error field', () => {
@@ -388,8 +385,15 @@ describe('ClaudeOutputParser', () => {
       expect(error?.type).toBe('rate_limited');
     });
 
+    it('should NOT detect errors from plain text (only JSON)', () => {
+      // Plain text errors should come through stderr or exit codes, not stdout
+      expect(parser.detectErrorFromLine('Error: Invalid API key')).toBeNull();
+      expect(parser.detectErrorFromLine('Rate limit exceeded')).toBeNull();
+      expect(parser.detectErrorFromLine('Connection failed')).toBeNull();
+    });
+
     it('should preserve the original line in raw data', () => {
-      const line = 'Error: Invalid API key';
+      const line = JSON.stringify({ type: 'error', message: 'Invalid API key' });
       const error = parser.detectErrorFromLine(line);
       expect(error?.raw?.errorLine).toBe(line);
     });

@@ -303,6 +303,42 @@ export function AgentSelectionPanel({
                       )}
                     </div>
                   )}
+                  {option.type === 'number' && (
+                    <div className="p-3 rounded border" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}>
+                      <div className="mb-2">
+                        <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                          {option.label}
+                        </div>
+                        <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                          {option.description}
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        value={agentConfigs[selectedAgent.id]?.[option.key] ?? option.default}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                          const newConfig = {
+                            ...agentConfigs[selectedAgent.id],
+                            [option.key]: isNaN(value) ? 0 : value
+                          };
+                          setAgentConfigs(prev => ({
+                            ...prev,
+                            [selectedAgent.id]: newConfig
+                          }));
+                        }}
+                        onBlur={() => {
+                          // Only persist on blur to avoid excessive writes
+                          const currentConfig = agentConfigs[selectedAgent.id] || {};
+                          window.maestro.agents.setConfig(selectedAgent.id, currentConfig);
+                        }}
+                        placeholder={option.default?.toString() || '0'}
+                        min={0}
+                        className="w-full p-2 rounded border bg-transparent outline-none text-sm font-mono"
+                        style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

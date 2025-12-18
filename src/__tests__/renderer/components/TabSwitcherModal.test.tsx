@@ -473,7 +473,7 @@ describe('TabSwitcherModal', () => {
     });
 
     describe('getContextPercentage', () => {
-      it('returns 0 when no usageStats', () => {
+      it('hides context gauge when no usageStats', () => {
         const tab = createTestTab({ usageStats: undefined });
 
         renderWithLayerStack(
@@ -488,11 +488,11 @@ describe('TabSwitcherModal', () => {
           />
         );
 
-        // Should show 0%
-        expect(screen.getByText('0%')).toBeInTheDocument();
+        // Context gauge should not be rendered when contextWindow is not configured
+        expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
       });
 
-      it('returns 0 when contextWindow is 0', () => {
+      it('hides context gauge when contextWindow is 0', () => {
         const tab = createTestTab({
           usageStats: {
             inputTokens: 1000,
@@ -516,7 +516,8 @@ describe('TabSwitcherModal', () => {
           />
         );
 
-        expect(screen.getByText('0%')).toBeInTheDocument();
+        // Context gauge should not be rendered when contextWindow is 0
+        expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
       });
 
       it('calculates correct percentage', () => {

@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
-import { stripControlSequences } from './utils/terminalFilter';
+import { stripControlSequences, stripAllAnsiCodes } from './utils/terminalFilter';
 import { logger } from './utils/logger';
 import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './parsers';
 import { aggregateModelUsage } from './parsers/usage-aggregator';
@@ -48,6 +48,7 @@ interface ProcessConfig {
   prompt?: string; // For batch mode agents like Claude (passed as CLI argument)
   shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish')
   images?: string[]; // Base64 data URLs for images (passed via stream-json input)
+  contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
 }
 
 interface ManagedProcess {
@@ -70,6 +71,7 @@ interface ManagedProcess {
   stderrBuffer?: string; // Buffer for accumulating stderr output (for error detection)
   stdoutBuffer?: string; // Buffer for accumulating stdout output (for error detection at exit)
   streamedText?: string; // Buffer for accumulating streamed text from partial events (OpenCode, Codex)
+  contextWindow?: number; // Configured context window size (0 or undefined = not configured)
 }
 
 /**
@@ -139,7 +141,7 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for a session
    */
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
-    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, images } = config;
+    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, images, contextWindow } = config;
 
     // For batch mode with images, use stream-json mode and send message via stdin
     // For batch mode without images, append prompt to args with -- separator
@@ -348,6 +350,7 @@ export class ProcessManager extends EventEmitter {
           outputParser,
           stderrBuffer: '', // Initialize stderr buffer for error detection at exit
           stdoutBuffer: '', // Initialize stdout buffer for error detection at exit
+          contextWindow, // User-configured context window size (0 = not configured)
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -422,13 +425,15 @@ export class ProcessManager extends EventEmitter {
                     const usage = outputParser.extractUsage(event);
                     if (usage) {
                       // Map parser's usage format to UsageStats
+                      // For contextWindow: prefer parser-reported value, then configured value, then 0 (means not available)
+                      // A value of 0 signals the UI to hide context usage display
                       const usageStats = {
                         inputTokens: usage.inputTokens,
                         outputTokens: usage.outputTokens,
                         cacheReadInputTokens: usage.cacheReadTokens || 0,
                         cacheCreationInputTokens: usage.cacheCreationTokens || 0,
                         totalCostUsd: usage.costUsd || 0,
-                        contextWindow: usage.contextWindow || 200000,
+                        contextWindow: usage.contextWindow || managedProcess.contextWindow || 0,
                         reasoningTokens: usage.reasoningTokens,
                       };
                       this.emit('usage', sessionId, usageStats);
@@ -541,7 +546,12 @@ export class ProcessManager extends EventEmitter {
               }
             }
 
-            this.emit('data', sessionId, `[stderr] ${stderrData}`);
+            // Strip ANSI codes and only emit if there's actual content
+            const cleanedStderr = stripAllAnsiCodes(stderrData).trim();
+            if (cleanedStderr) {
+              // Emit to separate 'stderr' event for AI processes (consistent with runCommand)
+              this.emit('stderr', sessionId, cleanedStderr);
+            }
           });
         }
 

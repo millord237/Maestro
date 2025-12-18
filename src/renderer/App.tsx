@@ -1318,16 +1318,38 @@ export default function MaestroConsole() {
       }));
     });
 
-    // Handle stderr from runCommand (BATCHED - separate from stdout)
+    // Handle stderr from processes (BATCHED - separate from stdout)
+    // Supports both AI processes (sessionId format: {id}-ai-{tabId}) and terminal commands (plain sessionId)
     const unsubscribeStderr = window.maestro.process.onStderr((sessionId: string, data: string) => {
-      // runCommand uses plain session ID (no suffix)
-      const actualSessionId = sessionId;
-
       // Filter out empty stderr (only whitespace)
       if (!data.trim()) return;
 
-      // Use batched append for stderr (isStderr = true)
-      batchedUpdater.appendLog(actualSessionId, null, false, data, true);
+      // Parse sessionId to determine which process this is from
+      // Same logic as onData handler
+      let actualSessionId: string;
+      let tabIdFromSession: string | undefined;
+      let isFromAi = false;
+
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
+      if (aiTabMatch) {
+        actualSessionId = aiTabMatch[1];
+        tabIdFromSession = aiTabMatch[2];
+        isFromAi = true;
+      } else if (sessionId.includes('-batch-')) {
+        // Ignore batch task stderr
+        return;
+      } else {
+        // Plain session ID = runCommand (terminal commands)
+        actualSessionId = sessionId;
+      }
+
+      if (isFromAi && tabIdFromSession) {
+        // AI process stderr - route to the correct tab as a system log entry
+        batchedUpdater.appendLog(actualSessionId, tabIdFromSession, true, `[stderr] ${data}`, false);
+      } else {
+        // Terminal command stderr - route to shell logs
+        batchedUpdater.appendLog(actualSessionId, null, false, data, true);
+      }
     });
 
     // Handle command exit from runCommand

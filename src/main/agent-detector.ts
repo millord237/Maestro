@@ -82,6 +82,16 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     readOnlyArgs: ['--sandbox', 'read-only'], // Read-only/plan mode
     yoloModeArgs: ['--dangerously-bypass-approvals-and-sandbox'], // Full access mode
     workingDirArgs: (dir: string) => ['-C', dir], // Set working directory
+    // Agent-specific configuration options shown in UI
+    configOptions: [
+      {
+        key: 'contextWindow',
+        type: 'number',
+        label: 'Context Window Size',
+        description: 'Maximum context window size in tokens. Required for context usage display. Common values: 128000 (o4-mini), 200000 (o3).',
+        default: 200000, // Default for GPT-5.x models
+      },
+    ],
   },
   {
     id: 'gemini-cli',
@@ -125,6 +135,13 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
           }
           return [];
         },
+      },
+      {
+        key: 'contextWindow',
+        type: 'number',
+        label: 'Context Window Size',
+        description: 'Maximum context window size in tokens. Required for context usage display. Varies by model (e.g., 200000 for Claude, 128000 for GPT-4).',
+        default: 128000, // Default for common models (GPT-4, etc.)
       },
     ],
   },
