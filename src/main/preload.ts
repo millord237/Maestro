@@ -866,6 +866,63 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('playbooks:import', sessionId, autoRunFolderPath),
   },
 
+  // Group Chat API (multi-agent coordination)
+  groupChat: {
+    // Storage
+    create: (name: string, moderatorAgentId: string) =>
+      ipcRenderer.invoke('groupChat:create', name, moderatorAgentId),
+    list: () =>
+      ipcRenderer.invoke('groupChat:list'),
+    load: (id: string) =>
+      ipcRenderer.invoke('groupChat:load', id),
+    delete: (id: string) =>
+      ipcRenderer.invoke('groupChat:delete', id),
+    rename: (id: string, name: string) =>
+      ipcRenderer.invoke('groupChat:rename', id, name),
+
+    // Chat log
+    appendMessage: (id: string, from: string, content: string) =>
+      ipcRenderer.invoke('groupChat:appendMessage', id, from, content),
+    getMessages: (id: string) =>
+      ipcRenderer.invoke('groupChat:getMessages', id),
+    saveImage: (id: string, imageData: string, filename: string) =>
+      ipcRenderer.invoke('groupChat:saveImage', id, imageData, filename),
+
+    // Moderator
+    startModerator: (id: string) =>
+      ipcRenderer.invoke('groupChat:startModerator', id),
+    sendToModerator: (id: string, message: string, images?: string[]) =>
+      ipcRenderer.invoke('groupChat:sendToModerator', id, message, images),
+    stopModerator: (id: string) =>
+      ipcRenderer.invoke('groupChat:stopModerator', id),
+    getModeratorSessionId: (id: string) =>
+      ipcRenderer.invoke('groupChat:getModeratorSessionId', id),
+
+    // Participants
+    addParticipant: (id: string, name: string, agentId: string) =>
+      ipcRenderer.invoke('groupChat:addParticipant', id, name, agentId),
+    sendToParticipant: (id: string, name: string, message: string, images?: string[]) =>
+      ipcRenderer.invoke('groupChat:sendToParticipant', id, name, message, images),
+    removeParticipant: (id: string, name: string) =>
+      ipcRenderer.invoke('groupChat:removeParticipant', id, name),
+
+    // Events
+    onMessage: (callback: (groupChatId: string, message: {
+      timestamp: string;
+      from: string;
+      content: string;
+    }) => void) => {
+      const handler = (_: any, groupChatId: string, message: any) => callback(groupChatId, message);
+      ipcRenderer.on('groupChat:message', handler);
+      return () => ipcRenderer.removeListener('groupChat:message', handler);
+    },
+    onStateChange: (callback: (groupChatId: string, state: 'idle' | 'moderator-thinking' | 'agent-working') => void) => {
+      const handler = (_: any, groupChatId: string, state: 'idle' | 'moderator-thinking' | 'agent-working') => callback(groupChatId, state);
+      ipcRenderer.on('groupChat:stateChange', handler);
+      return () => ipcRenderer.removeListener('groupChat:stateChange', handler);
+    },
+  },
+
   // Leaderboard API (runmaestro.ai integration)
   leaderboard: {
     submit: (data: {
@@ -1540,6 +1597,103 @@ export interface MaestroAPI {
       success: boolean;
       error?: string;
     }>;
+  };
+  groupChat: {
+    // Storage
+    create: (name: string, moderatorAgentId: string) => Promise<{
+      id: string;
+      name: string;
+      moderatorAgentId: string;
+      moderatorSessionId: string;
+      participants: Array<{
+        name: string;
+        agentId: string;
+        sessionId: string;
+        addedAt: number;
+      }>;
+      logPath: string;
+      imagesDir: string;
+      createdAt: number;
+    }>;
+    list: () => Promise<Array<{
+      id: string;
+      name: string;
+      moderatorAgentId: string;
+      moderatorSessionId: string;
+      participants: Array<{
+        name: string;
+        agentId: string;
+        sessionId: string;
+        addedAt: number;
+      }>;
+      logPath: string;
+      imagesDir: string;
+      createdAt: number;
+    }>>;
+    load: (id: string) => Promise<{
+      id: string;
+      name: string;
+      moderatorAgentId: string;
+      moderatorSessionId: string;
+      participants: Array<{
+        name: string;
+        agentId: string;
+        sessionId: string;
+        addedAt: number;
+      }>;
+      logPath: string;
+      imagesDir: string;
+      createdAt: number;
+    } | null>;
+    delete: (id: string) => Promise<boolean>;
+    rename: (id: string, name: string) => Promise<{
+      id: string;
+      name: string;
+      moderatorAgentId: string;
+      moderatorSessionId: string;
+      participants: Array<{
+        name: string;
+        agentId: string;
+        sessionId: string;
+        addedAt: number;
+      }>;
+      logPath: string;
+      imagesDir: string;
+      createdAt: number;
+    }>;
+
+    // Chat log
+    appendMessage: (id: string, from: string, content: string) => Promise<void>;
+    getMessages: (id: string) => Promise<Array<{
+      timestamp: string;
+      from: string;
+      content: string;
+    }>>;
+    saveImage: (id: string, imageData: string, filename: string) => Promise<string>;
+
+    // Moderator
+    startModerator: (id: string) => Promise<string>;
+    sendToModerator: (id: string, message: string, images?: string[]) => Promise<void>;
+    stopModerator: (id: string) => Promise<void>;
+    getModeratorSessionId: (id: string) => Promise<string | null>;
+
+    // Participants
+    addParticipant: (id: string, name: string, agentId: string) => Promise<{
+      name: string;
+      agentId: string;
+      sessionId: string;
+      addedAt: number;
+    }>;
+    sendToParticipant: (id: string, name: string, message: string, images?: string[]) => Promise<void>;
+    removeParticipant: (id: string, name: string) => Promise<void>;
+
+    // Events
+    onMessage: (callback: (groupChatId: string, message: {
+      timestamp: string;
+      from: string;
+      content: string;
+    }) => void) => () => void;
+    onStateChange: (callback: (groupChatId: string, state: 'idle' | 'moderator-thinking' | 'agent-working') => void) => () => void;
   };
   leaderboard: {
     submit: (data: {
