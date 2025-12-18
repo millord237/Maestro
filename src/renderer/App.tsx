@@ -36,6 +36,14 @@ import { CONDUCTOR_BADGES, getBadgeForTime } from './constants/conductorBadges';
 import { EmptyStateView } from './components/EmptyStateView';
 import { AgentErrorModal } from './components/AgentErrorModal';
 
+// Group Chat Components
+import { GroupChatPanel } from './components/GroupChatPanel';
+import { GroupChatParticipants } from './components/GroupChatParticipants';
+import { NewGroupChatModal } from './components/NewGroupChatModal';
+import { DeleteGroupChatModal } from './components/DeleteGroupChatModal';
+import { RenameGroupChatModal } from './components/RenameGroupChatModal';
+import { GroupChatInfoOverlay } from './components/GroupChatInfoOverlay';
+
 // Import custom hooks
 import { useBatchProcessor } from './hooks/useBatchProcessor';
 import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers, useInputSync, useSessionNavigation, useDebouncedPersistence, useBatchedSessionUpdates } from './hooks';
@@ -349,6 +357,13 @@ export default function MaestroConsole() {
 
   // Prompt Composer Modal State
   const [promptComposerOpen, setPromptComposerOpen] = useState(false);
+
+  // Group Chat Modal State
+  const [showNewGroupChatModal, setShowNewGroupChatModal] = useState(false);
+  const [showDeleteGroupChatModal, setShowDeleteGroupChatModal] = useState<string | null>(null);
+  const [showRenameGroupChatModal, setShowRenameGroupChatModal] = useState<string | null>(null);
+  const [showGroupChatInfo, setShowGroupChatInfo] = useState(false);
+
   const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
   const [renameGroupValue, setRenameGroupValue] = useState('');
   const [renameGroupEmoji, setRenameGroupEmoji] = useState('📂');
@@ -621,6 +636,15 @@ export default function MaestroConsole() {
           setGroups(savedGroups);
         } else {
           setGroups([]);
+        }
+
+        // Load group chats
+        try {
+          const savedGroupChats = await window.maestro.groupChat.list();
+          setGroupChats(savedGroupChats || []);
+        } catch (gcError) {
+          console.error('Failed to load group chats:', gcError);
+          setGroupChats([]);
         }
       } catch (e) {
         console.error('Failed to load sessions/groups:', e);
@@ -1514,6 +1538,27 @@ export default function MaestroConsole() {
       unsubscribeAgentError();
     };
   }, []);
+
+  // --- GROUP CHAT EVENT LISTENERS ---
+  // Listen for real-time updates to group chat messages and state
+  useEffect(() => {
+    const unsubMessage = window.maestro.groupChat.onMessage((id, message) => {
+      if (id === activeGroupChatId) {
+        setGroupChatMessages(prev => [...prev, message]);
+      }
+    });
+
+    const unsubState = window.maestro.groupChat.onStateChange((id, state) => {
+      if (id === activeGroupChatId) {
+        setGroupChatState(state);
+      }
+    });
+
+    return () => {
+      unsubMessage();
+      unsubState();
+    };
+  }, [activeGroupChatId]);
 
   // Refs
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -2463,6 +2508,54 @@ export default function MaestroConsole() {
     setLightboxImage(image);
     setLightboxImages(contextImages || []);
   }, []);
+
+  // --- GROUP CHAT HANDLERS ---
+
+  const handleOpenGroupChat = useCallback(async (id: string) => {
+    const chat = await window.maestro.groupChat.load(id);
+    if (chat) {
+      setActiveGroupChatId(id);
+      const messages = await window.maestro.groupChat.getMessages(id);
+      setGroupChatMessages(messages);
+
+      // Start moderator if not running
+      await window.maestro.groupChat.startModerator(id);
+    }
+  }, []);
+
+  const handleCloseGroupChat = useCallback(() => {
+    setActiveGroupChatId(null);
+    setGroupChatMessages([]);
+    setGroupChatState('idle');
+  }, []);
+
+  const handleCreateGroupChat = useCallback(async (name: string, moderatorAgentId: string) => {
+    const chat = await window.maestro.groupChat.create(name, moderatorAgentId);
+    setGroupChats(prev => [chat, ...prev]);
+    setShowNewGroupChatModal(false);
+    handleOpenGroupChat(chat.id);
+  }, [handleOpenGroupChat]);
+
+  const handleDeleteGroupChat = useCallback(async (id: string) => {
+    await window.maestro.groupChat.delete(id);
+    setGroupChats(prev => prev.filter(c => c.id !== id));
+    if (activeGroupChatId === id) {
+      handleCloseGroupChat();
+    }
+    setShowDeleteGroupChatModal(null);
+  }, [activeGroupChatId, handleCloseGroupChat]);
+
+  const handleRenameGroupChat = useCallback(async (id: string, newName: string) => {
+    await window.maestro.groupChat.rename(id, newName);
+    setGroupChats(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
+    setShowRenameGroupChatModal(null);
+  }, []);
+
+  const handleSendGroupChatMessage = useCallback(async (content: string, images?: string[]) => {
+    if (!activeGroupChatId) return;
+    setGroupChatState('moderator-thinking');
+    await window.maestro.groupChat.sendToModerator(activeGroupChatId, content, images);
+  }, [activeGroupChatId]);
 
   // --- SESSION SORTING ---
   // Extracted hook for sorted and visible session lists (ignores leading emojis for alphabetization)
@@ -4969,6 +5062,45 @@ export default function MaestroConsole() {
         onClose={() => setDebugWizardModalOpen(false)}
       />
 
+      {/* --- GROUP CHAT MODALS --- */}
+      {showNewGroupChatModal && (
+        <NewGroupChatModal
+          theme={theme}
+          isOpen={showNewGroupChatModal}
+          onClose={() => setShowNewGroupChatModal(false)}
+          onCreate={handleCreateGroupChat}
+        />
+      )}
+
+      {showDeleteGroupChatModal && (
+        <DeleteGroupChatModal
+          theme={theme}
+          isOpen={!!showDeleteGroupChatModal}
+          groupChatName={groupChats.find(c => c.id === showDeleteGroupChatModal)?.name || ''}
+          onClose={() => setShowDeleteGroupChatModal(null)}
+          onConfirm={() => handleDeleteGroupChat(showDeleteGroupChatModal)}
+        />
+      )}
+
+      {showRenameGroupChatModal && (
+        <RenameGroupChatModal
+          theme={theme}
+          isOpen={!!showRenameGroupChatModal}
+          currentName={groupChats.find(c => c.id === showRenameGroupChatModal)?.name || ''}
+          onClose={() => setShowRenameGroupChatModal(null)}
+          onRename={(newName) => handleRenameGroupChat(showRenameGroupChatModal, newName)}
+        />
+      )}
+
+      {showGroupChatInfo && activeGroupChatId && groupChats.find(c => c.id === activeGroupChatId) && (
+        <GroupChatInfoOverlay
+          theme={theme}
+          isOpen={showGroupChatInfo}
+          groupChat={groupChats.find(c => c.id === activeGroupChatId)!}
+          onClose={() => setShowGroupChatInfo(false)}
+        />
+      )}
+
       {/* --- CREATE GROUP MODAL --- */}
       {createGroupModalOpen && (
         <CreateGroupModal
@@ -5155,13 +5287,45 @@ export default function MaestroConsole() {
               setTourFromWizard(false);
               setTourOpen(true);
             }}
+            // Group Chat Props
+            groupChats={groupChats}
+            activeGroupChatId={activeGroupChatId}
+            onOpenGroupChat={handleOpenGroupChat}
+            onNewGroupChat={() => setShowNewGroupChatModal(true)}
+            onRenameGroupChat={(id) => setShowRenameGroupChatModal(id)}
+            onDeleteGroupChat={(id) => setShowDeleteGroupChatModal(id)}
             sidebarContainerRef={sidebarContainerRef}
           />
         </ErrorBoundary>
       )}
 
-      {/* --- CENTER WORKSPACE (hidden when no sessions) --- */}
-      {sessions.length > 0 && (
+      {/* --- GROUP CHAT VIEW (shown when a group chat is active) --- */}
+      {activeGroupChatId && groupChats.find(c => c.id === activeGroupChatId) && (
+        <>
+          <GroupChatPanel
+            theme={theme}
+            groupChat={groupChats.find(c => c.id === activeGroupChatId)!}
+            messages={groupChatMessages}
+            state={groupChatState}
+            onSendMessage={handleSendGroupChatMessage}
+            onClose={handleCloseGroupChat}
+            onRename={() => setShowRenameGroupChatModal(activeGroupChatId)}
+            onShowInfo={() => setShowGroupChatInfo(true)}
+          />
+          <GroupChatParticipants
+            theme={theme}
+            participants={groupChats.find(c => c.id === activeGroupChatId)?.participants || []}
+            participantStates={new Map(
+              sessions
+                .filter(s => groupChats.find(c => c.id === activeGroupChatId)?.participants.some(p => p.sessionId === s.id))
+                .map(s => [s.id, s.state])
+            )}
+          />
+        </>
+      )}
+
+      {/* --- CENTER WORKSPACE (hidden when no sessions or group chat is active) --- */}
+      {sessions.length > 0 && !activeGroupChatId && (
       <MainPanel
         ref={mainPanelRef}
         logViewerOpen={logViewerOpen}
@@ -5683,8 +5847,8 @@ export default function MaestroConsole() {
       />
       )}
 
-      {/* --- RIGHT PANEL (hidden in mobile landscape and when no sessions) --- */}
-      {!isMobileLandscape && sessions.length > 0 && (
+      {/* --- RIGHT PANEL (hidden in mobile landscape, when no sessions, or when group chat is active) --- */}
+      {!isMobileLandscape && sessions.length > 0 && !activeGroupChatId && (
         <ErrorBoundary>
           <RightPanel
             ref={rightPanelRef}

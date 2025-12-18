@@ -35,11 +35,15 @@ import {
 // Group chat moderator imports
 import {
   spawnModerator,
-  sendToModerator,
+  sendToModerator as _sendToModerator,
   killModerator,
   getModeratorSessionId,
-  IProcessManager,
+  type IProcessManager as _IProcessManager,
 } from '../../group-chat/group-chat-moderator';
+
+// Re-exports for potential future use
+export { _sendToModerator as sendToModerator };
+export type { _IProcessManager as IProcessManager };
 
 // Group chat agent imports
 import {
@@ -53,6 +57,15 @@ import {
 import { routeUserMessage } from '../../group-chat/group-chat-router';
 
 const LOG_CONTEXT = '[GroupChat]';
+
+/**
+ * Module-level object to store emitter functions after initialization.
+ * These can be used by other modules to emit messages and state changes.
+ */
+export const groupChatEmitters: {
+  emitMessage?: (groupChatId: string, message: GroupChatMessage) => void;
+  emitStateChange?: (groupChatId: string, state: GroupChatState) => void;
+} = {};
 
 // Helper to create handler options with consistent context
 const handlerOpts = (operation: string): Pick<CreateHandlerOptions, 'context' | 'operation'> => ({
@@ -313,31 +326,29 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
   );
 
   // ========== Event Emission Helpers ==========
+  // These are stored in module scope for access by the exported emitters
 
   /**
    * Emit a new message event to the renderer.
    * Called when a new message is added to any group chat.
    */
-  function emitMessage(groupChatId: string, message: GroupChatMessage): void {
+  groupChatEmitters.emitMessage = (groupChatId: string, message: GroupChatMessage): void => {
     const mainWindow = getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('groupChat:message', groupChatId, message);
     }
-  }
+  };
 
   /**
    * Emit a state change event to the renderer.
    * Called when the group chat state changes (idle, moderator-thinking, agent-working).
    */
-  function emitStateChange(groupChatId: string, state: GroupChatState): void {
+  groupChatEmitters.emitStateChange = (groupChatId: string, state: GroupChatState): void => {
     const mainWindow = getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('groupChat:stateChange', groupChatId, state);
     }
-  }
+  };
 
-  // Export event emitters for use by other modules
-  // These would typically be called from the moderator/agent output handlers
-  // to notify the renderer of new messages and state changes
   logger.info('Registered Group Chat IPC handlers', LOG_CONTEXT);
 }
