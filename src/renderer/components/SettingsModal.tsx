@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug } from 'lucide-react';
 import type { AgentConfig, Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -70,6 +70,8 @@ interface SettingsModalProps {
   setToastDuration: (value: number) => void;
   checkForUpdatesOnStartup: boolean;
   setCheckForUpdatesOnStartup: (value: boolean) => void;
+  crashReportingEnabled: boolean;
+  setCrashReportingEnabled: (value: boolean) => void;
   customAICommands: CustomAICommand[];
   setCustomAICommands: (commands: CustomAICommand[]) => void;
   initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands';
@@ -869,6 +871,17 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 description="Automatically check for new Maestro versions when the app starts"
                 checked={props.checkForUpdatesOnStartup}
                 onChange={props.setCheckForUpdatesOnStartup}
+                theme={theme}
+              />
+
+              {/* Crash Reporting */}
+              <SettingCheckbox
+                icon={Bug}
+                sectionLabel="Privacy"
+                title="Send anonymous crash reports"
+                description="Help improve Maestro by automatically sending crash reports. No personal data is collected. Changes take effect after restart."
+                checked={props.crashReportingEnabled}
+                onChange={props.setCrashReportingEnabled}
                 theme={theme}
               />
             </div>
