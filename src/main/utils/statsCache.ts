@@ -110,32 +110,29 @@ export async function saveStatsCache(projectPath: string, cache: SessionStatsCac
 // ============================================================================
 
 /**
+ * Per-session cached stats
+ */
+export interface CachedSessionStats {
+  messages: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  cachedInputTokens: number;
+  sizeBytes: number;
+  /** File modification time to detect external changes */
+  fileMtimeMs: number;
+}
+
+/**
  * Global statistics cache structure (for About modal).
- * Aggregates stats across all Claude Code sessions from all projects.
+ * Aggregates stats across all agent sessions from all projects.
  */
 export interface GlobalStatsCache {
-  /** Per-session stats keyed by "projectDir/sessionId" */
-  sessions: Record<string, {
-    messages: number;
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheCreationTokens: number;
-    sizeBytes: number;
-    /** File modification time to detect external changes */
-    fileMtimeMs: number;
+  /** Per-provider session stats, keyed by provider then "projectDir/sessionId" or "date/sessionId" */
+  providers: Record<string, {
+    sessions: Record<string, CachedSessionStats>;
   }>;
-  /** Aggregate totals across all sessions */
-  totals: {
-    totalSessions: number;
-    totalMessages: number;
-    totalInputTokens: number;
-    totalOutputTokens: number;
-    totalCacheReadTokens: number;
-    totalCacheCreationTokens: number;
-    totalCostUsd: number;
-    totalSizeBytes: number;
-  };
   /** Unix timestamp when cache was last updated */
   lastUpdated: number;
   /** Cache version - bump to invalidate old caches */
@@ -143,7 +140,7 @@ export interface GlobalStatsCache {
 }
 
 /** Current global stats cache version. Bump to force cache invalidation. */
-export const GLOBAL_STATS_CACHE_VERSION = 1;
+export const GLOBAL_STATS_CACHE_VERSION = 2;
 
 /**
  * Get the cache file path for global stats.

@@ -61,11 +61,23 @@ export function AboutModal({ theme, sessions, autoRunStats, onClose, onOpenLeade
     });
 
     // Trigger the stats calculation (which will send streaming updates)
-    window.maestro.agentSessions.getGlobalStats().catch((error) => {
-      console.error('Failed to load global agent stats:', error);
-      setLoading(false);
-      setIsStatsComplete(true);
-    });
+    // Also use the promise result as a fallback in case IPC events don't arrive
+    window.maestro.agentSessions.getGlobalStats()
+      .then((stats) => {
+        // Use returned stats as fallback if streaming updates didn't arrive
+        setGlobalStats((current) => current ?? stats);
+        setLoading(false);
+        // Only set isComplete based on actual stats, not unconditionally
+        if (stats.isComplete) {
+          setIsStatsComplete(true);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load global agent stats:', error);
+        setLoading(false);
+        // On error, mark as complete to stop showing loading state
+        setIsStatsComplete(true);
+      });
 
     return () => {
       unsubscribe();

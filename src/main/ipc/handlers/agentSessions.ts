@@ -26,6 +26,13 @@ import {
   getAllSessionStorages,
 } from '../../agent-session-storage';
 import { CLAUDE_PRICING } from '../../constants';
+import {
+  loadGlobalStatsCache,
+  saveGlobalStatsCache,
+  GlobalStatsCache,
+  CachedSessionStats,
+  GLOBAL_STATS_CACHE_VERSION,
+} from '../../utils/statsCache';
 import type {
   AgentSessionInfo,
   PaginatedSessionsResult,
@@ -96,34 +103,111 @@ function calculateClaudeCost(
 }
 
 /**
- * Scan Claude Code sessions from ~/.claude/projects/
+ * File info for incremental scanning
  */
-async function scanClaudeSessions(): Promise<{
-  sessions: number;
-  messages: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  sizeBytes: number;
-}> {
-  const homeDir = os.homedir();
-  const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
+interface SessionFileInfo {
+  filePath: string;
+  sessionKey: string;
+  mtimeMs: number;
+}
 
-  const totals = {
-    sessions: 0,
-    messages: 0,
-    inputTokens: 0,
-    outputTokens: 0,
+/**
+ * Parse a Claude Code session file and extract stats
+ */
+function parseClaudeSessionContent(content: string, sizeBytes: number): Omit<CachedSessionStats, 'fileMtimeMs'> {
+  const userMessageCount = (content.match(/"type"\s*:\s*"user"/g) || []).length;
+  const assistantMessageCount = (content.match(/"type"\s*:\s*"assistant"/g) || []).length;
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+
+  const inputMatches = content.matchAll(/"input_tokens"\s*:\s*(\d+)/g);
+  for (const m of inputMatches) inputTokens += parseInt(m[1], 10);
+
+  const outputMatches = content.matchAll(/"output_tokens"\s*:\s*(\d+)/g);
+  for (const m of outputMatches) outputTokens += parseInt(m[1], 10);
+
+  const cacheReadMatches = content.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g);
+  for (const m of cacheReadMatches) cacheReadTokens += parseInt(m[1], 10);
+
+  const cacheCreationMatches = content.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g);
+  for (const m of cacheCreationMatches) cacheCreationTokens += parseInt(m[1], 10);
+
+  return {
+    messages: userMessageCount + assistantMessageCount,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cachedInputTokens: 0,
+    sizeBytes,
+  };
+}
+
+/**
+ * Parse a Codex session file and extract stats
+ */
+function parseCodexSessionContent(content: string, sizeBytes: number): Omit<CachedSessionStats, 'fileMtimeMs'> {
+  const lines = content.split('\n').filter((l) => l.trim());
+
+  let messageCount = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedTokens = 0;
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+
+      // Count messages from response_item entries
+      if (entry.type === 'response_item' && entry.payload?.type === 'message') {
+        const role = entry.payload.role;
+        if (role === 'user' || role === 'assistant') {
+          messageCount++;
+        }
+      }
+
+      // Extract token usage from event_msg with token_count payload
+      if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+        const usage = entry.payload.info?.total_token_usage;
+        if (usage) {
+          inputTokens += usage.input_tokens || 0;
+          outputTokens += usage.output_tokens || 0;
+          outputTokens += usage.reasoning_output_tokens || 0;
+          cachedTokens += usage.cached_input_tokens || 0;
+        }
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return {
+    messages: messageCount,
+    inputTokens,
+    outputTokens,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
-    sizeBytes: 0,
+    cachedInputTokens: cachedTokens,
+    sizeBytes,
   };
+}
+
+/**
+ * Discover Claude Code session files from ~/.claude/projects/
+ * Returns list of files with their mtime for cache comparison
+ */
+async function discoverClaudeSessionFiles(): Promise<SessionFileInfo[]> {
+  const homeDir = os.homedir();
+  const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
+  const files: SessionFileInfo[] = [];
 
   try {
     await fs.access(claudeProjectsDir);
   } catch {
-    return totals;
+    return files;
   }
 
   const projectDirs = await fs.readdir(claudeProjectsDir);
@@ -134,46 +218,17 @@ async function scanClaudeSessions(): Promise<{
       const stat = await fs.stat(projectPath);
       if (!stat.isDirectory()) continue;
 
-      const files = await fs.readdir(projectPath);
-      const sessionFiles = files.filter((f) => f.endsWith('.jsonl'));
+      const dirFiles = await fs.readdir(projectPath);
+      const sessionFiles = dirFiles.filter((f) => f.endsWith('.jsonl'));
 
       for (const filename of sessionFiles) {
         const filePath = path.join(projectPath, filename);
         try {
-          const content = await fs.readFile(filePath, 'utf-8');
           const fileStat = await fs.stat(filePath);
-
-          // Count messages
-          const userMessageCount = (content.match(/"type"\s*:\s*"user"/g) || []).length;
-          const assistantMessageCount = (content.match(/"type"\s*:\s*"assistant"/g) || []).length;
-
-          // Extract tokens
-          let inputTokens = 0;
-          let outputTokens = 0;
-          let cacheReadTokens = 0;
-          let cacheCreationTokens = 0;
-
-          const inputMatches = content.matchAll(/"input_tokens"\s*:\s*(\d+)/g);
-          for (const m of inputMatches) inputTokens += parseInt(m[1], 10);
-
-          const outputMatches = content.matchAll(/"output_tokens"\s*:\s*(\d+)/g);
-          for (const m of outputMatches) outputTokens += parseInt(m[1], 10);
-
-          const cacheReadMatches = content.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g);
-          for (const m of cacheReadMatches) cacheReadTokens += parseInt(m[1], 10);
-
-          const cacheCreationMatches = content.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g);
-          for (const m of cacheCreationMatches) cacheCreationTokens += parseInt(m[1], 10);
-
-          totals.sessions++;
-          totals.messages += userMessageCount + assistantMessageCount;
-          totals.inputTokens += inputTokens;
-          totals.outputTokens += outputTokens;
-          totals.cacheReadTokens += cacheReadTokens;
-          totals.cacheCreationTokens += cacheCreationTokens;
-          totals.sizeBytes += fileStat.size;
+          const sessionKey = `${projectDir}/${filename.replace('.jsonl', '')}`;
+          files.push({ filePath, sessionKey, mtimeMs: fileStat.mtimeMs });
         } catch {
-          // Skip files that can't be read
+          // Skip files we can't stat
         }
       }
     } catch {
@@ -181,39 +236,24 @@ async function scanClaudeSessions(): Promise<{
     }
   }
 
-  return totals;
+  return files;
 }
 
 /**
- * Scan Codex sessions from ~/.codex/sessions/
+ * Discover Codex session files from ~/.codex/sessions/YYYY/MM/DD/
+ * Returns list of files with their mtime for cache comparison
  */
-async function scanCodexSessions(): Promise<{
-  sessions: number;
-  messages: number;
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  sizeBytes: number;
-}> {
+async function discoverCodexSessionFiles(): Promise<SessionFileInfo[]> {
   const homeDir = os.homedir();
   const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
-
-  const totals = {
-    sessions: 0,
-    messages: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedTokens: 0,
-    sizeBytes: 0,
-  };
+  const files: SessionFileInfo[] = [];
 
   try {
     await fs.access(codexSessionsDir);
   } catch {
-    return totals;
+    return files;
   }
 
-  // Scan YYYY/MM/DD directory structure
   const years = await fs.readdir(codexSessionsDir);
   for (const year of years) {
     if (!/^\d{4}$/.test(year)) continue;
@@ -241,53 +281,17 @@ async function scanCodexSessions(): Promise<{
               const dayStat = await fs.stat(dayDir);
               if (!dayStat.isDirectory()) continue;
 
-              const files = await fs.readdir(dayDir);
-              for (const file of files) {
+              const dirFiles = await fs.readdir(dayDir);
+              for (const file of dirFiles) {
                 if (!file.endsWith('.jsonl')) continue;
                 const filePath = path.join(dayDir, file);
 
                 try {
-                  const content = await fs.readFile(filePath, 'utf-8');
                   const fileStat = await fs.stat(filePath);
-                  const lines = content.split('\n').filter((l) => l.trim());
-
-                  let messageCount = 0;
-                  let inputTokens = 0;
-                  let outputTokens = 0;
-                  let cachedTokens = 0;
-
-                  for (const line of lines) {
-                    try {
-                      const entry = JSON.parse(line);
-
-                      // Count messages
-                      if (entry.type === 'message' && (entry.role === 'user' || entry.role === 'assistant')) {
-                        messageCount++;
-                      }
-                      if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
-                        messageCount++;
-                      }
-
-                      // Extract usage from turn.completed
-                      if (entry.type === 'turn.completed' && entry.usage) {
-                        inputTokens += entry.usage.input_tokens || 0;
-                        outputTokens += entry.usage.output_tokens || 0;
-                        outputTokens += entry.usage.reasoning_output_tokens || 0;
-                        cachedTokens += entry.usage.cached_input_tokens || 0;
-                      }
-                    } catch {
-                      // Skip malformed lines
-                    }
-                  }
-
-                  totals.sessions++;
-                  totals.messages += messageCount;
-                  totals.inputTokens += inputTokens;
-                  totals.outputTokens += outputTokens;
-                  totals.cachedTokens += cachedTokens;
-                  totals.sizeBytes += fileStat.size;
+                  const sessionKey = `${year}/${month}/${day}/${file.replace('.jsonl', '')}`;
+                  files.push({ filePath, sessionKey, mtimeMs: fileStat.mtimeMs });
                 } catch {
-                  // Skip files that can't be read
+                  // Skip files we can't stat
                 }
               }
             } catch {
@@ -303,7 +307,61 @@ async function scanCodexSessions(): Promise<{
     }
   }
 
-  return totals;
+  return files;
+}
+
+/**
+ * Calculate aggregated stats from cached sessions for a provider
+ */
+function aggregateProviderStats(
+  sessions: Record<string, CachedSessionStats>,
+  hasCostData: boolean
+): {
+  sessions: number;
+  messages: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  cachedInputTokens: number;
+  sizeBytes: number;
+  costUsd: number;
+  hasCostData: boolean;
+} {
+  let totalMessages = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCacheReadTokens = 0;
+  let totalCacheCreationTokens = 0;
+  let totalCachedInputTokens = 0;
+  let totalSizeBytes = 0;
+
+  for (const stats of Object.values(sessions)) {
+    totalMessages += stats.messages;
+    totalInputTokens += stats.inputTokens;
+    totalOutputTokens += stats.outputTokens;
+    totalCacheReadTokens += stats.cacheReadTokens;
+    totalCacheCreationTokens += stats.cacheCreationTokens;
+    totalCachedInputTokens += stats.cachedInputTokens;
+    totalSizeBytes += stats.sizeBytes;
+  }
+
+  const costUsd = hasCostData
+    ? calculateClaudeCost(totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens)
+    : 0;
+
+  return {
+    sessions: Object.keys(sessions).length,
+    messages: totalMessages,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    cacheReadTokens: totalCacheReadTokens,
+    cacheCreationTokens: totalCacheCreationTokens,
+    cachedInputTokens: totalCachedInputTokens,
+    sizeBytes: totalSizeBytes,
+    costUsd,
+    hasCostData,
+  };
 }
 
 /**
@@ -532,92 +590,199 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
       async (): Promise<GlobalAgentStats> => {
         const mainWindow = getMainWindow?.();
 
+        // Helper to build result from cache
+        const buildResultFromCache = (cache: GlobalStatsCache, isComplete: boolean): GlobalAgentStats => {
+          const result: GlobalAgentStats = {
+            totalSessions: 0,
+            totalMessages: 0,
+            totalInputTokens: 0,
+            totalOutputTokens: 0,
+            totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0,
+            totalCostUsd: 0,
+            hasCostData: false,
+            totalSizeBytes: 0,
+            isComplete,
+            byProvider: {},
+          };
+
+          // Aggregate Claude Code stats
+          const claudeSessions = cache.providers['claude-code']?.sessions || {};
+          const claudeAgg = aggregateProviderStats(claudeSessions, true);
+          if (claudeAgg.sessions > 0) {
+            result.byProvider['claude-code'] = {
+              sessions: claudeAgg.sessions,
+              messages: claudeAgg.messages,
+              inputTokens: claudeAgg.inputTokens,
+              outputTokens: claudeAgg.outputTokens,
+              costUsd: claudeAgg.costUsd,
+              hasCostData: true,
+            };
+            result.totalSessions += claudeAgg.sessions;
+            result.totalMessages += claudeAgg.messages;
+            result.totalInputTokens += claudeAgg.inputTokens;
+            result.totalOutputTokens += claudeAgg.outputTokens;
+            result.totalCacheReadTokens += claudeAgg.cacheReadTokens;
+            result.totalCacheCreationTokens += claudeAgg.cacheCreationTokens;
+            result.totalCostUsd += claudeAgg.costUsd;
+            result.totalSizeBytes += claudeAgg.sizeBytes;
+            result.hasCostData = true;
+          }
+
+          // Aggregate Codex stats
+          const codexSessions = cache.providers['codex']?.sessions || {};
+          const codexAgg = aggregateProviderStats(codexSessions, false);
+          if (codexAgg.sessions > 0) {
+            result.byProvider['codex'] = {
+              sessions: codexAgg.sessions,
+              messages: codexAgg.messages,
+              inputTokens: codexAgg.inputTokens,
+              outputTokens: codexAgg.outputTokens,
+              costUsd: 0,
+              hasCostData: false,
+            };
+            result.totalSessions += codexAgg.sessions;
+            result.totalMessages += codexAgg.messages;
+            result.totalInputTokens += codexAgg.inputTokens;
+            result.totalOutputTokens += codexAgg.outputTokens;
+            result.totalCacheReadTokens += codexAgg.cachedInputTokens;
+            result.totalSizeBytes += codexAgg.sizeBytes;
+          }
+
+          return result;
+        };
+
         // Helper to send progressive updates
-        const sendUpdate = (stats: GlobalAgentStats) => {
+        const sendUpdate = (cache: GlobalStatsCache, isComplete: boolean) => {
           if (mainWindow && !mainWindow.isDestroyed()) {
+            const stats = buildResultFromCache(cache, isComplete);
             mainWindow.webContents.send('agentSessions:globalStatsUpdate', stats);
           }
         };
 
-        // Initialize result
-        const result: GlobalAgentStats = {
-          totalSessions: 0,
-          totalMessages: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalCacheReadTokens: 0,
-          totalCacheCreationTokens: 0,
-          totalCostUsd: 0,
-          hasCostData: false,
-          totalSizeBytes: 0,
-          isComplete: false,
-          byProvider: {},
-        };
-
-        // Scan Claude Code sessions
-        logger.info('Scanning Claude Code sessions for global stats', LOG_CONTEXT);
-        const claudeStats = await scanClaudeSessions();
-        const claudeCost = calculateClaudeCost(
-          claudeStats.inputTokens,
-          claudeStats.outputTokens,
-          claudeStats.cacheReadTokens,
-          claudeStats.cacheCreationTokens
-        );
-
-        result.byProvider['claude-code'] = {
-          sessions: claudeStats.sessions,
-          messages: claudeStats.messages,
-          inputTokens: claudeStats.inputTokens,
-          outputTokens: claudeStats.outputTokens,
-          costUsd: claudeCost,
-          hasCostData: true, // Claude supports cost tracking
-        };
-
-        result.totalSessions += claudeStats.sessions;
-        result.totalMessages += claudeStats.messages;
-        result.totalInputTokens += claudeStats.inputTokens;
-        result.totalOutputTokens += claudeStats.outputTokens;
-        result.totalCacheReadTokens += claudeStats.cacheReadTokens;
-        result.totalCacheCreationTokens += claudeStats.cacheCreationTokens;
-        result.totalCostUsd += claudeCost;
-        result.totalSizeBytes += claudeStats.sizeBytes;
-        if (claudeStats.sessions > 0) {
-          result.hasCostData = true;
+        // Load existing cache or create new one
+        let cache = await loadGlobalStatsCache();
+        if (!cache) {
+          cache = {
+            version: GLOBAL_STATS_CACHE_VERSION,
+            lastUpdated: Date.now(),
+            providers: {},
+          };
         }
 
-        // Send intermediate update
-        sendUpdate({ ...result });
+        // Ensure provider entries exist
+        if (!cache.providers['claude-code']) {
+          cache.providers['claude-code'] = { sessions: {} };
+        }
+        if (!cache.providers['codex']) {
+          cache.providers['codex'] = { sessions: {} };
+        }
 
-        // Scan Codex sessions
-        logger.info('Scanning Codex sessions for global stats', LOG_CONTEXT);
-        const codexStats = await scanCodexSessions();
+        // Discover all session files
+        logger.info('Discovering session files for global stats', LOG_CONTEXT);
+        const [claudeFiles, codexFiles] = await Promise.all([
+          discoverClaudeSessionFiles(),
+          discoverCodexSessionFiles(),
+        ]);
 
-        result.byProvider['codex'] = {
-          sessions: codexStats.sessions,
-          messages: codexStats.messages,
-          inputTokens: codexStats.inputTokens,
-          outputTokens: codexStats.outputTokens,
-          costUsd: 0, // Codex doesn't have pricing - varies by model
-          hasCostData: false,
-        };
+        // Build sets of current session keys for cleanup
+        const currentClaudeKeys = new Set(claudeFiles.map((f) => f.sessionKey));
+        const currentCodexKeys = new Set(codexFiles.map((f) => f.sessionKey));
 
-        result.totalSessions += codexStats.sessions;
-        result.totalMessages += codexStats.messages;
-        result.totalInputTokens += codexStats.inputTokens;
-        result.totalOutputTokens += codexStats.outputTokens;
-        result.totalCacheReadTokens += codexStats.cachedTokens;
-        result.totalSizeBytes += codexStats.sizeBytes;
+        // Remove deleted sessions from cache
+        for (const key of Object.keys(cache.providers['claude-code'].sessions)) {
+          if (!currentClaudeKeys.has(key)) {
+            delete cache.providers['claude-code'].sessions[key];
+          }
+        }
+        for (const key of Object.keys(cache.providers['codex'].sessions)) {
+          if (!currentCodexKeys.has(key)) {
+            delete cache.providers['codex'].sessions[key];
+          }
+        }
 
-        // Mark as complete
-        result.isComplete = true;
+        // Find sessions that need processing (new or modified)
+        const claudeToProcess = claudeFiles.filter((f) => {
+          const cached = cache!.providers['claude-code'].sessions[f.sessionKey];
+          return !cached || cached.fileMtimeMs < f.mtimeMs;
+        });
+        const codexToProcess = codexFiles.filter((f) => {
+          const cached = cache!.providers['codex'].sessions[f.sessionKey];
+          return !cached || cached.fileMtimeMs < f.mtimeMs;
+        });
+
+        const totalToProcess = claudeToProcess.length + codexToProcess.length;
+        const cachedCount = claudeFiles.length + codexFiles.length - totalToProcess;
 
         logger.info(
-          `Global stats complete: ${result.totalSessions} sessions, ${result.totalMessages} messages, $${result.totalCostUsd.toFixed(2)} (from providers with pricing)`,
+          `Global stats: ${totalToProcess} to process (${claudeToProcess.length} Claude, ${codexToProcess.length} Codex), ${cachedCount} cached`,
+          LOG_CONTEXT
+        );
+
+        // Send initial update with cached data
+        sendUpdate(cache, totalToProcess === 0);
+
+        // Process Claude sessions incrementally
+        let processedCount = 0;
+        for (const file of claudeToProcess) {
+          try {
+            const content = await fs.readFile(file.filePath, 'utf-8');
+            const fileStat = await fs.stat(file.filePath);
+            const stats = parseClaudeSessionContent(content, fileStat.size);
+
+            cache.providers['claude-code'].sessions[file.sessionKey] = {
+              ...stats,
+              fileMtimeMs: file.mtimeMs,
+            };
+
+            processedCount++;
+
+            // Send streaming update every 10 sessions or at end
+            if (processedCount % 10 === 0 || processedCount === claudeToProcess.length) {
+              sendUpdate(cache, false);
+            }
+          } catch (error) {
+            logger.warn(`Failed to parse Claude session: ${file.sessionKey}`, LOG_CONTEXT, { error });
+          }
+        }
+
+        // Process Codex sessions incrementally
+        for (const file of codexToProcess) {
+          try {
+            const content = await fs.readFile(file.filePath, 'utf-8');
+            const fileStat = await fs.stat(file.filePath);
+            const stats = parseCodexSessionContent(content, fileStat.size);
+
+            cache.providers['codex'].sessions[file.sessionKey] = {
+              ...stats,
+              fileMtimeMs: file.mtimeMs,
+            };
+
+            processedCount++;
+
+            // Send streaming update every 10 sessions or at end
+            if (processedCount % 10 === 0 || processedCount === totalToProcess) {
+              sendUpdate(cache, false);
+            }
+          } catch (error) {
+            logger.warn(`Failed to parse Codex session: ${file.sessionKey}`, LOG_CONTEXT, { error });
+          }
+        }
+
+        // Update cache timestamp and save
+        cache.lastUpdated = Date.now();
+        await saveGlobalStatsCache(cache);
+
+        // Build final result
+        const result = buildResultFromCache(cache, true);
+
+        logger.info(
+          `Global stats complete: ${result.totalSessions} sessions, ${result.totalMessages} messages, $${result.totalCostUsd.toFixed(2)} (${totalToProcess} processed, ${cachedCount} cached)`,
           LOG_CONTEXT
         );
 
         // Send final update
-        sendUpdate(result);
+        sendUpdate(cache, true);
 
         return result;
       }

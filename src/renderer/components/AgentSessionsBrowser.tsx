@@ -180,9 +180,11 @@ export function AgentSessionsBrowser({
     setAggregateStats({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null, isComplete: false });
   }, [activeSession?.cwd]);
 
-  // Listen for progressive stats updates
+  // Listen for progressive stats updates (Claude-specific)
   useEffect(() => {
     if (!activeSession?.cwd) return;
+    // Only subscribe for Claude Code sessions
+    if (activeSession.toolType !== 'claude-code') return;
 
     const unsubscribe = window.maestro.claude.onProjectStatsUpdate((stats) => {
       // Only update if this is for our project
@@ -200,7 +202,7 @@ export function AgentSessionsBrowser({
     });
 
     return unsubscribe;
-  }, [activeSession?.cwd]);
+  }, [activeSession?.cwd, activeSession?.toolType]);
 
   // Toggle star status for a session
   const toggleStar = useCallback(async (sessionId: string, e: React.MouseEvent) => {

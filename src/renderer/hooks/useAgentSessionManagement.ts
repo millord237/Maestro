@@ -236,10 +236,10 @@ export function useAgentSessionManagement(
       let isStarred = starred ?? false;
       let name = sessionName ?? null;
 
-      if (!starred && !sessionName) {
+      if (!starred && !sessionName && activeSession.toolType === 'claude-code') {
         try {
           // Look up session metadata from session origins (name and starred)
-          // Note: getSessionOrigins is still Agent-specific until we add generic origin tracking
+          // Note: getSessionOrigins is still Claude-specific until we add generic origin tracking
           const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
           const originData = origins[agentSessionId];
           if (originData && typeof originData === 'object') {

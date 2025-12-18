@@ -26,13 +26,69 @@ import {
   encodeClaudeProjectPath,
   loadStatsCache,
   saveStatsCache,
-  loadGlobalStatsCache,
-  saveGlobalStatsCache,
   SessionStatsCache,
-  GlobalStatsCache,
   STATS_CACHE_VERSION,
-  GLOBAL_STATS_CACHE_VERSION,
 } from '../../utils/statsCache';
+import { app } from 'electron';
+
+/**
+ * Legacy global stats cache structure for deprecated claude:getGlobalStats handler.
+ * NOTE: This is kept for backwards compatibility. New code should use agentSessions:getGlobalStats.
+ */
+interface LegacyGlobalStatsCache {
+  sessions: Record<string, {
+    messages: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    sizeBytes: number;
+    fileMtimeMs: number;
+  }>;
+  totals: {
+    totalSessions: number;
+    totalMessages: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheCreationTokens: number;
+    totalCostUsd: number;
+    totalSizeBytes: number;
+  };
+  lastUpdated: number;
+  version: number;
+}
+
+const LEGACY_GLOBAL_STATS_CACHE_VERSION = 1;
+
+function getLegacyGlobalStatsCachePath(): string {
+  return path.join(app.getPath('userData'), 'stats-cache', 'legacy-global-stats.json');
+}
+
+async function loadLegacyGlobalStatsCache(): Promise<LegacyGlobalStatsCache | null> {
+  try {
+    const cachePath = getLegacyGlobalStatsCachePath();
+    const content = await fs.readFile(cachePath, 'utf-8');
+    const cache = JSON.parse(content) as LegacyGlobalStatsCache;
+    if (cache.version !== LEGACY_GLOBAL_STATS_CACHE_VERSION) {
+      return null;
+    }
+    return cache;
+  } catch {
+    return null;
+  }
+}
+
+async function saveLegacyGlobalStatsCache(cache: LegacyGlobalStatsCache): Promise<void> {
+  try {
+    const cachePath = getLegacyGlobalStatsCachePath();
+    const cacheDir = path.dirname(cachePath);
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(cachePath, JSON.stringify(cache), 'utf-8');
+  } catch (error) {
+    logger.warn('Failed to save legacy global stats cache', LOG_CONTEXT, { error });
+  }
+}
 
 const LOG_CONTEXT = '[ClaudeSessions]';
 const ORIGINS_LOG_CONTEXT = '[ClaudeSessionOrigins]';
@@ -711,14 +767,14 @@ export function registerClaudeHandlers(deps: ClaudeHandlerDependencies): void {
       }
 
       // Load existing global cache
-      const cache = await loadGlobalStatsCache();
+      const cache = await loadLegacyGlobalStatsCache();
 
       // List all project directories
       const projectDirs = await fs.readdir(claudeProjectsDir);
 
       // Build new cache
-      const newCache: GlobalStatsCache = {
-        version: GLOBAL_STATS_CACHE_VERSION,
+      const newCache: LegacyGlobalStatsCache = {
+        version: LEGACY_GLOBAL_STATS_CACHE_VERSION,
         lastUpdated: Date.now(),
         sessions: {},
         totals: {
@@ -777,7 +833,7 @@ export function registerClaudeHandlers(deps: ClaudeHandlerDependencies): void {
       }
 
       // Helper to calculate totals
-      const calculateGlobalTotals = (c: GlobalStatsCache) => {
+      const calculateGlobalTotals = (c: LegacyGlobalStatsCache) => {
         let totalSessions = 0;
         let totalMessages = 0;
         let totalInputTokens = 0;
@@ -863,7 +919,7 @@ export function registerClaudeHandlers(deps: ClaudeHandlerDependencies): void {
       newCache.totals = finalTotals;
 
       // Save cache
-      await saveGlobalStatsCache(newCache);
+      await saveLegacyGlobalStatsCache(newCache);
 
       const cachedCount = Object.keys(newCache.sessions).length - sessionsToProcess.length;
       logger.info(`Global stats: ${sessionsToProcess.length} new/modified, ${cachedCount} cached, $${finalTotals.totalCostUsd.toFixed(2)}`, LOG_CONTEXT);

@@ -130,14 +130,16 @@ export function AgentSessionsModal({
       try {
         // Load starred sessions from Claude session origins (shared with AgentSessionsBrowser)
         // Note: Origin tracking remains Claude-specific until generic implementation is added
-        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
-        const starredFromOrigins = new Set<string>();
-        for (const [sessionId, originData] of Object.entries(origins)) {
-          if (typeof originData === 'object' && originData?.starred) {
-            starredFromOrigins.add(sessionId);
+        if (agentId === 'claude-code') {
+          const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
+          const starredFromOrigins = new Set<string>();
+          for (const [sessionId, originData] of Object.entries(origins)) {
+            if (typeof originData === 'object' && originData?.starred) {
+              starredFromOrigins.add(sessionId);
+            }
           }
+          setStarredSessions(starredFromOrigins);
         }
-        setStarredSessions(starredFromOrigins);
 
         // Use generic agentSessions API for session listing
         const result = await window.maestro.agentSessions.listPaginated(agentId, activeSession.cwd, { limit: 100 });

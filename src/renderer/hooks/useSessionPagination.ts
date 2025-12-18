@@ -101,14 +101,16 @@ export function useSessionPagination({
       try {
         // Load session metadata (starred status) from Claude session origins
         // Note: Origin/starred tracking is currently Claude-specific; other agents will get empty results
-        const origins = await window.maestro.claude.getSessionOrigins(cwd);
-        const starredFromOrigins = new Set<string>();
-        for (const [sessionId, originData] of Object.entries(origins)) {
-          if (typeof originData === 'object' && originData?.starred) {
-            starredFromOrigins.add(sessionId);
+        if (agentId === 'claude-code') {
+          const origins = await window.maestro.claude.getSessionOrigins(cwd);
+          const starredFromOrigins = new Set<string>();
+          for (const [sessionId, originData] of Object.entries(origins)) {
+            if (typeof originData === 'object' && originData?.starred) {
+              starredFromOrigins.add(sessionId);
+            }
           }
+          onStarredSessionsLoaded?.(starredFromOrigins);
         }
-        onStarredSessionsLoaded?.(starredFromOrigins);
 
         // Use generic agentSessions API with agentId parameter for paginated loading
         const result = await window.maestro.agentSessions.listPaginated(agentId, cwd, { limit: 100 });

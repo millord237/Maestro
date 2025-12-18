@@ -604,6 +604,11 @@ describe('AboutModal', () => {
     });
 
     it('should show spinner when stats are not complete', async () => {
+      // Mock getGlobalStats to return incomplete stats
+      vi.mocked(window.maestro.agentSessions.getGlobalStats).mockResolvedValue(
+        createGlobalStats({ isComplete: false })
+      );
+
       render(
         <AboutModal
           theme={theme}
@@ -613,7 +618,7 @@ describe('AboutModal', () => {
         />
       );
 
-      // Simulate receiving incomplete stats
+      // Simulate receiving incomplete stats via streaming callback
       await act(async () => {
         if (statsCallback) {
           statsCallback(createGlobalStats({ isComplete: false }));
@@ -913,6 +918,11 @@ describe('AboutModal', () => {
     });
 
     it('should show cost with pulse animation when incomplete', async () => {
+      // Mock getGlobalStats to return incomplete stats
+      vi.mocked(window.maestro.agentSessions.getGlobalStats).mockResolvedValue(
+        createGlobalStats({ totalCostUsd: 25.50, isComplete: false })
+      );
+
       render(
         <AboutModal
           theme={theme}
