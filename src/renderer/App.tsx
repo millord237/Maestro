@@ -528,28 +528,13 @@ export default function MaestroConsole() {
         };
       }
 
-      // Spawn AI process (terminal uses runCommand which spawns fresh shells per command)
-      // Check if agent requires a prompt to start (Codex, OpenCode) - skip eager spawn for those
-      const capabilities = await window.maestro.agents.getCapabilities(aiAgentType);
-      let aiSpawnResult = { pid: 0, success: true }; // Default for agents that don't need eager spawn
-
-      if (!capabilities.requiresPromptToStart) {
-        // Spawn for agents that support interactive mode (Claude Code)
-        // Include active tab ID in session ID to match batch mode format
-        const activeTabId = correctedSession.activeTabId || correctedSession.aiTabs?.[0]?.id || 'default';
-        // Use agent.path (full path) if available for better cross-environment compatibility
-        const agentCommand = agent.path || agent.command || agent.id;
-        aiSpawnResult = await window.maestro.process.spawn({
-          sessionId: `${correctedSession.id}-ai-${activeTabId}`,
-          toolType: aiAgentType,
-          cwd: correctedSession.cwd,
-          command: agentCommand,
-          args: agent.args || []
-        });
-      }
-
-      // For agents that requiresPromptToStart, aiPid can be 0 since we don't spawn until first message
-      const aiSuccess = aiSpawnResult.success && (capabilities.requiresPromptToStart || aiSpawnResult.pid > 0);
+      // Don't eagerly spawn AI processes on session restore:
+      // - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
+      // - Terminal uses runCommand (fresh shells per command)
+      // This prevents 20+ idle processes when app starts with many saved sessions
+      // aiPid stays at 0 until user sends their first message
+      const aiSpawnResult = { pid: 0, success: true };
+      const aiSuccess = true;
 
       if (aiSuccess) {
         // Check if the working directory is a Git repository
@@ -3157,33 +3142,12 @@ export default function MaestroConsole() {
       return;
     }
 
-    // Spawn AI process (terminal uses runCommand which spawns fresh shells per command)
+    // Don't eagerly spawn AI processes on new session creation:
+    // - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
+    // - Terminal uses runCommand (fresh shells per command)
+    // aiPid stays at 0 until user sends their first message
     try {
-      // Get agent capabilities to check if eager spawn is supported
-      const capabilities = await window.maestro.agents.getCapabilities(agentId);
-
-      // For agents that require a prompt to start (Codex, OpenCode), skip eager spawn
-      // They will be spawned on first message instead
-      let aiPid = 0;
-      if (!capabilities.requiresPromptToStart) {
-        // Spawn AI agent process
-        // Use agent.path (full path) if available for better cross-environment compatibility
-        const aiSpawnResult = await window.maestro.process.spawn({
-          sessionId: `${newId}-ai`,
-          toolType: agentId,
-          cwd: workingDir,
-          command: agent.path || agent.command,
-          args: agent.args || []
-        });
-
-        if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
-          throw new Error('Failed to spawn AI agent process');
-        }
-        aiPid = aiSpawnResult.pid;
-      }
-
-      // Terminal processes are spawned lazily when needed (not eagerly)
-      // runCommand() spawns a fresh shell for each command, so no persistent PTY needed
+      const aiPid = 0;
 
       // Check if the working directory is a Git repository
       const isGitRepo = await gitService.isRepo(workingDir);
@@ -3303,30 +3267,11 @@ export default function MaestroConsole() {
     if (!agent) {
       throw new Error(`Agent not found: ${selectedAgent}`);
     }
-    const capabilities = await window.maestro.agents.getCapabilities(selectedAgent);
-
-    // For agents that require a prompt to start (Codex, OpenCode), skip eager spawn
-    // They will be spawned on first message instead
-    let aiPid = 0;
-    if (!capabilities.requiresPromptToStart) {
-      // Spawn AI process for agents that support interactive mode (Claude Code)
-      const aiSpawnResult = await window.maestro.process.spawn({
-        sessionId: `${newId}-ai`,
-        toolType: selectedAgent,
-        cwd: directoryPath,
-        command: agent.path || agent.command,
-        args: agent.args || [],
-        // Per-session config from wizard
-        sessionCustomPath: customPath,
-        sessionCustomArgs: customArgs,
-        sessionCustomEnvVars: customEnvVars,
-      });
-
-      if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
-        throw new Error('Failed to spawn AI agent process');
-      }
-      aiPid = aiSpawnResult.pid;
-    }
+    // Don't eagerly spawn AI processes from wizard:
+    // - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
+    // - Terminal uses runCommand (fresh shells per command)
+    // aiPid stays at 0 until user sends their first message
+    const aiPid = 0;
 
     // Check git repo status
     const isGitRepo = await gitService.isRepo(directoryPath);

@@ -2,12 +2,10 @@
  * ParticipantCard.tsx
  *
  * Displays a single group chat participant with their status,
- * agent type, context usage, and last activity. Expandable to
- * show additional details like session ID.
+ * agent type, context usage, stats, and last activity summary.
  */
 
-import { useState } from 'react';
-import { Copy, ChevronDown, ChevronRight, Clock, MessageSquare, Zap } from 'lucide-react';
+import { Clock, MessageSquare, Zap } from 'lucide-react';
 import type { Theme, GroupChatParticipant, SessionState } from '../types';
 
 interface ParticipantCardProps {
@@ -43,8 +41,6 @@ export function ParticipantCard({
   state,
   color,
 }: ParticipantCardProps): JSX.Element {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const getStatusColor = (): string => {
     switch (state) {
       case 'busy':
@@ -71,10 +67,6 @@ export function ParticipantCard({
     }
   };
 
-  const copySessionId = (): void => {
-    navigator.clipboard.writeText(participant.sessionId);
-  };
-
   return (
     <div
       className="rounded-lg border p-3"
@@ -85,150 +77,112 @@ export function ParticipantCard({
         borderLeftColor: color || theme.colors.accent,
       }}
     >
-      {/* Header - always visible */}
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          {isExpanded ? (
-            <ChevronDown
-              className="w-4 h-4"
-              style={{ color: theme.colors.textDim }}
-            />
-          ) : (
-            <ChevronRight
-              className="w-4 h-4"
-              style={{ color: theme.colors.textDim }}
-            />
-          )}
-          <span
-            className="font-medium"
-            style={{ color: color || theme.colors.textMain }}
-          >
-            {participant.name}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: getStatusColor() }}
-            title={getStatusLabel()}
-          />
-        </div>
+      {/* Header row: name and status */}
+      <div className="flex items-center justify-between">
+        <span
+          className="font-medium"
+          style={{ color: color || theme.colors.textMain }}
+        >
+          {participant.name}
+        </span>
+        <div
+          className="w-2 h-2 rounded-full"
+          style={{ backgroundColor: getStatusColor() }}
+          title={getStatusLabel()}
+        />
       </div>
 
-      {/* Agent type and quick stats */}
+      {/* Agent type */}
       <div
-        className="text-xs mt-1 ml-6 flex items-center gap-3"
+        className="text-xs mt-1"
         style={{ color: theme.colors.textDim }}
       >
-        <span>{participant.agentId}</span>
-        {/* Quick stats row - show even when collapsed */}
-        {(participant.messageCount !== undefined && participant.messageCount > 0) && (
-          <span className="flex items-center gap-1" title="Messages sent">
-            <MessageSquare className="w-3 h-3" />
-            {participant.messageCount}
-          </span>
-        )}
-        {(participant.tokenCount !== undefined && participant.tokenCount > 0) && (
-          <span className="flex items-center gap-1" title="Tokens used">
-            <Zap className="w-3 h-3" />
-            {formatTokens(participant.tokenCount)}
-          </span>
-        )}
-        {(participant.processingTimeMs !== undefined && participant.processingTimeMs > 0) && (
-          <span className="flex items-center gap-1" title="Processing time">
-            <Clock className="w-3 h-3" />
-            {formatDuration(participant.processingTimeMs)}
-          </span>
-        )}
+        {participant.agentId}
       </div>
 
-      {/* Expanded details */}
-      {isExpanded && (
-        <div className="mt-3 ml-6 space-y-2">
-          {/* Session ID */}
-          <div className="flex items-center gap-2">
-            <span
-              className="text-xs font-mono px-2 py-0.5 rounded"
-              style={{
-                backgroundColor: theme.colors.border,
-                color: theme.colors.textDim,
-              }}
-            >
-              {participant.sessionId.slice(0, 8)}...
+      {/* Stats row */}
+      {(participant.messageCount || participant.tokenCount || participant.processingTimeMs) && (
+        <div
+          className="text-xs mt-2 flex items-center gap-3"
+          style={{ color: theme.colors.textDim }}
+        >
+          {(participant.messageCount !== undefined && participant.messageCount > 0) && (
+            <span className="flex items-center gap-1" title="Messages sent">
+              <MessageSquare className="w-3 h-3" />
+              {participant.messageCount}
             </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                copySessionId();
-              }}
-              className="p-1 rounded hover:opacity-80"
-              style={{ color: theme.colors.textDim }}
-              title="Copy session ID"
-            >
-              <Copy className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* Context usage bar */}
-          {participant.contextUsage !== undefined && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className="text-xs"
-                  style={{ color: theme.colors.textDim }}
-                >
-                  Context
-                </span>
-                <span
-                  className="text-xs"
-                  style={{ color: theme.colors.textDim }}
-                >
-                  {participant.contextUsage}%
-                </span>
-              </div>
-              <div
-                className="h-1.5 rounded-full overflow-hidden"
-                style={{ backgroundColor: theme.colors.border }}
-              >
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${participant.contextUsage}%`,
-                    backgroundColor:
-                      participant.contextUsage > 80
-                        ? theme.colors.warning
-                        : theme.colors.accent,
-                  }}
-                />
-              </div>
-            </div>
           )}
-
-          {/* Last activity summary */}
-          {participant.lastSummary && (
-            <div>
-              <span
-                className="text-xs"
-                style={{ color: theme.colors.textDim }}
-              >
-                Last: {participant.lastSummary}
-              </span>
-            </div>
+          {(participant.tokenCount !== undefined && participant.tokenCount > 0) && (
+            <span className="flex items-center gap-1" title="Tokens used">
+              <Zap className="w-3 h-3" />
+              {formatTokens(participant.tokenCount)}
+            </span>
           )}
+          {(participant.processingTimeMs !== undefined && participant.processingTimeMs > 0) && (
+            <span className="flex items-center gap-1" title="Processing time">
+              <Clock className="w-3 h-3" />
+              {formatDuration(participant.processingTimeMs)}
+            </span>
+          )}
+        </div>
+      )}
 
-          {/* Last activity time */}
-          {participant.lastActivity && (
-            <div
+      {/* Context usage bar */}
+      {participant.contextUsage !== undefined && (
+        <div className="mt-2">
+          <div className="flex items-center justify-between mb-1">
+            <span
               className="text-xs"
               style={{ color: theme.colors.textDim }}
             >
-              {new Date(participant.lastActivity).toLocaleTimeString()}
-            </div>
-          )}
+              Context
+            </span>
+            <span
+              className="text-xs"
+              style={{ color: theme.colors.textDim }}
+            >
+              {participant.contextUsage}%
+            </span>
+          </div>
+          <div
+            className="h-1.5 rounded-full overflow-hidden"
+            style={{ backgroundColor: theme.colors.border }}
+          >
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${participant.contextUsage}%`,
+                backgroundColor:
+                  participant.contextUsage > 80
+                    ? theme.colors.warning
+                    : theme.colors.accent,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Last activity summary - always visible */}
+      {participant.lastSummary && (
+        <div
+          className="mt-2 text-xs p-2 rounded"
+          style={{
+            backgroundColor: theme.colors.bgSidebar,
+            color: theme.colors.textDim,
+          }}
+        >
+          <span style={{ color: theme.colors.textMain }}>Last:</span>{' '}
+          {participant.lastSummary}
+        </div>
+      )}
+
+      {/* Last activity time */}
+      {participant.lastActivity && (
+        <div
+          className="mt-1 text-[10px]"
+          style={{ color: theme.colors.textDim }}
+        >
+          {new Date(participant.lastActivity).toLocaleTimeString()}
         </div>
       )}
     </div>
