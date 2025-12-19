@@ -1,8 +1,9 @@
 import React, { useState, useCallback, memo, useEffect, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Copy, Check, Trash2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Copy, Check, Trash2, FileText } from 'lucide-react';
 import type { Theme } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { ConfirmModal } from './ConfirmModal';
 
 // ============================================================================
 // AutoRunLightbox - Full-screen image viewer with navigation, copy, delete
@@ -45,6 +46,8 @@ export const AutoRunLightbox = memo(({
   onDelete,
 }: AutoRunLightboxProps) => {
   const [copied, setCopied] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
   const onCloseRef = useRef(onClose);
@@ -121,8 +124,33 @@ export const AutoRunLightbox = memo(({
     }
   }, [lightboxFilename, lightboxExternalUrl, attachmentPreviews]);
 
-  // Delete the current image
-  const handleDelete = useCallback(() => {
+  // Copy markdown reference to clipboard
+  const copyMarkdownReference = useCallback(async () => {
+    if (!lightboxFilename) return;
+
+    // For external URLs, use the URL directly; for local images, use the relative path
+    const imagePath = lightboxExternalUrl || lightboxFilename;
+    // Extract just the filename for the alt text
+    const altText = lightboxFilename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'image';
+    const markdownString = `![${altText}](${imagePath})`;
+
+    try {
+      await navigator.clipboard.writeText(markdownString);
+      setCopiedMarkdown(true);
+      setTimeout(() => setCopiedMarkdown(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy markdown reference:', err);
+    }
+  }, [lightboxFilename, lightboxExternalUrl]);
+
+  // Show delete confirmation modal
+  const promptDelete = useCallback(() => {
+    if (!lightboxFilename || !onDelete || lightboxExternalUrl) return;
+    setShowDeleteConfirm(true);
+  }, [lightboxFilename, lightboxExternalUrl, onDelete]);
+
+  // Actually delete the current image (called after confirmation)
+  const handleDeleteConfirmed = useCallback(() => {
     if (!lightboxFilename || !onDelete || lightboxExternalUrl) return;
 
     const totalImages = attachmentsList.length;
@@ -158,10 +186,10 @@ export const AutoRunLightbox = memo(({
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       if (!lightboxExternalUrl && onDelete) {
-        handleDelete();
+        promptDelete();
       }
     }
-  }, [goToPrevImage, goToNextImage, lightboxExternalUrl, onDelete, handleDelete]);
+  }, [goToPrevImage, goToNextImage, lightboxExternalUrl, onDelete, promptDelete]);
 
   // Don't render if no image is selected
   const imageUrl = lightboxExternalUrl || (lightboxFilename ? attachmentPreviews.get(lightboxFilename) : undefined);
@@ -196,9 +224,19 @@ export const AutoRunLightbox = memo(({
         onClick={(e) => e.stopPropagation()}
       />
 
-      {/* Top right buttons: Copy and Delete */}
+      {/* Top right buttons: Copy Markdown, Copy Image, Delete, Close */}
       <div className="absolute top-4 right-4 flex gap-2">
-        {/* Copy to clipboard */}
+        {/* Copy markdown reference to clipboard */}
+        <button
+          onClick={(e) => { e.stopPropagation(); copyMarkdownReference(); }}
+          className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors flex items-center gap-2"
+          title="Copy markdown reference (e.g., ![alt](path))"
+        >
+          {copiedMarkdown ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+          {copiedMarkdown && <span className="text-sm">Copied!</span>}
+        </button>
+
+        {/* Copy image to clipboard */}
         <button
           onClick={(e) => { e.stopPropagation(); copyToClipboard(); }}
           className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors flex items-center gap-2"
@@ -211,7 +249,7 @@ export const AutoRunLightbox = memo(({
         {/* Delete image - only for attachments, not external URLs */}
         {!lightboxExternalUrl && onDelete && (
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={(e) => { e.stopPropagation(); promptDelete(); }}
             className="bg-red-500/80 hover:bg-red-500 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
             title="Delete image (Delete key)"
           >
@@ -248,6 +286,16 @@ export const AutoRunLightbox = memo(({
           {!lightboxExternalUrl && onDelete ? 'Delete to remove • ' : ''}ESC to close
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <ConfirmModal
+          theme={theme}
+          message={`Are you sure you want to delete "${lightboxFilename?.split('/').pop() || 'this image'}"? This action cannot be undone.`}
+          onConfirm={handleDeleteConfirmed}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 });

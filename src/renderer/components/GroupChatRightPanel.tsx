@@ -91,6 +91,7 @@ export function GroupChatRightPanel({
     if (typeof window.maestro.groupChat.getHistory !== 'function') {
       console.warn('groupChat.getHistory not available - restart dev server to update preload');
       setHistoryEntries([]);
+      setIsLoadingHistory(false);
       return;
     }
 

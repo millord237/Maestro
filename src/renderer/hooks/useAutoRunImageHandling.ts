@@ -213,7 +213,9 @@ export function useAutoRunImageHandling({
               const cursorPos = textarea.selectionStart;
               const textBefore = localContent.substring(0, cursorPos);
               const textAfter = localContent.substring(cursorPos);
-              const imageMarkdown = `![${filename}](${result.relativePath})`;
+              // URL-encode the path to handle spaces and special characters
+              const encodedPath = result.relativePath!.split('/').map(part => encodeURIComponent(part)).join('/');
+              const imageMarkdown = `![${filename}](${encodedPath})`;
 
               // Push undo state before modifying content
               pushUndoState();
@@ -274,7 +276,9 @@ export function useAutoRunImageHandling({
         pushUndoState();
 
         // Insert at end of content - update local and sync to parent immediately
-        const imageMarkdown = `\n![${filename}](${result.relativePath})\n`;
+        // URL-encode the path to handle spaces and special characters
+        const encodedPath = result.relativePath!.split('/').map(part => encodeURIComponent(part)).join('/');
+        const imageMarkdown = `\n![${filename}](${encodedPath})\n`;
         const newContent = localContent + imageMarkdown;
         setLocalContent(newContent);
         handleContentChange(newContent);

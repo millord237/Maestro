@@ -58,6 +58,7 @@ export function AutoRunExpandedModal({
   onClose,
   mode: initialMode,
   onModeChange,
+  onStateChange,
   batchRunState,
   onOpenBatchRunner,
   onStopBatchRun,
@@ -78,6 +79,23 @@ export function AutoRunExpandedModal({
 
   // Local mode state - independent from the right panel behind the modal
   const [localMode, setLocalMode] = useState<'edit' | 'preview'>(initialMode);
+
+  // Wrap onStateChange to prevent mode from propagating to parent
+  // This keeps the expanded modal's mode independent from the right panel
+  const handleStateChange = useCallback((state: {
+    mode: 'edit' | 'preview';
+    cursorPosition: number;
+    editScrollPos: number;
+    previewScrollPos: number;
+  }) => {
+    if (onStateChange) {
+      // Pass through cursor and scroll positions, but keep the parent's current mode
+      onStateChange({
+        ...state,
+        mode: initialMode, // Don't propagate mode changes to parent
+      });
+    }
+  }, [onStateChange, initialMode]);
 
   const isLocked = batchRunState?.isRunning || false;
   const isAgentBusy = sessionState === 'busy' || sessionState === 'connecting';
@@ -352,8 +370,9 @@ export function AutoRunExpandedModal({
           <AutoRun
             ref={autoRunRef}
             theme={theme}
-            mode={mode}
-            onModeChange={onModeChange}
+            mode={localMode}
+            onModeChange={setLocalMode}
+            onStateChange={handleStateChange}
             batchRunState={batchRunState}
             onOpenBatchRunner={onOpenBatchRunner}
             onStopBatchRun={onStopBatchRun}
