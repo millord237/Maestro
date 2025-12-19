@@ -328,8 +328,8 @@ describe('GroupChatInput', () => {
       const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
       typeInTextarea(textarea, '@');
 
-      // Should show agent type
-      expect(screen.getByText('(claude-code)')).toBeInTheDocument();
+      // Should show agent type (displayed without parentheses)
+      expect(screen.getByText('claude-code')).toBeInTheDocument();
     });
 
     it('wraps arrow key navigation (down from last goes to first)', () => {

@@ -39,6 +39,9 @@ vi.mock('lucide-react', () => ({
   HelpCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <span data-testid="help-circle-icon" className={className} style={style}>?</span>
   ),
+  ChevronDown: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="chevron-down-icon" className={className} style={style}>▼</span>
+  ),
 }));
 
 // Mock layer stack context
