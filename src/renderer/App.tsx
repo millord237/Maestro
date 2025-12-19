@@ -222,6 +222,7 @@ export default function MaestroConsole() {
   const [groupChatReadOnlyMode, setGroupChatReadOnlyMode] = useState(false);
   const [groupChatExecutionQueue, setGroupChatExecutionQueue] = useState<QueuedItem[]>([]);
   const [groupChatRightTab, setGroupChatRightTab] = useState<GroupChatRightTab>('participants');
+  const [groupChatParticipantColors, setGroupChatParticipantColors] = useState<Record<string, string>>({});
   const [moderatorUsage, setModeratorUsage] = useState<{ contextUsage: number; totalCost: number; tokenCount: number } | null>(null);
 
   // --- BATCHED SESSION UPDATES (reduces React re-renders during AI streaming) ---
@@ -2739,6 +2740,37 @@ export default function MaestroConsole() {
       window.maestro.settings.set(`groupChatRightTab:${activeGroupChatId}`, tab);
     }
   }, [activeGroupChatId]);
+
+  // Jump to a message in the group chat by timestamp
+  const handleJumpToGroupChatMessage = useCallback((timestamp: number) => {
+    // Find the closest message by timestamp
+    const messages = groupChatMessages;
+    let closestMessage = messages[0];
+    let closestDiff = Math.abs(new Date(messages[0]?.timestamp || '').getTime() - timestamp);
+
+    for (const msg of messages) {
+      const msgTime = new Date(msg.timestamp).getTime();
+      const diff = Math.abs(msgTime - timestamp);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestMessage = msg;
+      }
+    }
+
+    if (closestMessage) {
+      // Find the element with this timestamp and scroll to it
+      const msgTime = new Date(closestMessage.timestamp).getTime();
+      const element = document.querySelector(`[data-message-timestamp="${msgTime}"]`);
+      if (element) {
+        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // Flash highlight effect
+        element.classList.add('ring-2', 'ring-yellow-400/50');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-yellow-400/50');
+        }, 2000);
+      }
+    }
+  }, [groupChatMessages]);
 
   // Open the moderator session in the direct agent view
   const handleOpenModeratorSession = useCallback((moderatorSessionId: string) => {
@@ -5755,6 +5787,7 @@ export default function MaestroConsole() {
                 setSuccessFlashNotification(message);
                 setTimeout(() => setSuccessFlashNotification(null), 2000);
               }}
+              participantColors={groupChatParticipantColors}
             />
           </div>
           <GroupChatRightPanel
@@ -5765,6 +5798,11 @@ export default function MaestroConsole() {
               sessions
                 .filter(s => groupChats.find(c => c.id === activeGroupChatId)?.participants.some(p => p.sessionId === s.id))
                 .map(s => [s.id, s.state])
+            )}
+            participantSessionPaths={new Map(
+              sessions
+                .filter(s => groupChats.find(c => c.id === activeGroupChatId)?.participants.some(p => p.sessionId === s.id))
+                .map(s => [s.id, s.projectRoot])
             )}
             isOpen={rightPanelOpen}
             onToggle={() => setRightPanelOpen(!rightPanelOpen)}
@@ -5777,6 +5815,8 @@ export default function MaestroConsole() {
             moderatorUsage={moderatorUsage}
             activeTab={groupChatRightTab}
             onTabChange={handleGroupChatRightTabChange}
+            onJumpToMessage={handleJumpToGroupChatMessage}
+            onColorsComputed={setGroupChatParticipantColors}
           />
         </>
       )}

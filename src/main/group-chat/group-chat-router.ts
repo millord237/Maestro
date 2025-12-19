@@ -36,8 +36,6 @@ import {
 } from './group-chat-moderator';
 import {
   addParticipant,
-  getParticipantSessionId,
-  isParticipantActive,
 } from './group-chat-agent';
 import { AgentDetector } from '../agent-detector';
 
@@ -464,21 +462,79 @@ export async function routeModeratorResponse(
   // Track participants that will need to respond for synthesis round
   const participantsToRespond = new Set<string>();
 
-  if (processManager) {
+  // Spawn batch processes for each mentioned participant
+  if (processManager && agentDetector && mentions.length > 0) {
+    // Get available sessions for cwd lookup
+    const sessions = getSessionsCallback?.() || [];
+
+    // Get chat history for context
+    const chatHistory = await readLog(updatedChat.logPath);
+    const historyContext = chatHistory.slice(-15).map(m =>
+      `[${m.from}]: ${m.content.substring(0, 500)}${m.content.length > 500 ? '...' : ''}`
+    ).join('\n');
+
     for (const participantName of mentions) {
-      if (isParticipantActive(groupChatId, participantName)) {
-        const sessionId = getParticipantSessionId(groupChatId, participantName);
-        if (sessionId) {
-          try {
-            // Send the full message to the mentioned participant
-            processManager.write(sessionId, message + '\n');
-            // Track this participant as pending response
-            participantsToRespond.add(participantName);
-          } catch (error) {
-            console.error(`[GroupChatRouter] Failed to write to participant ${participantName}:`, error);
-            // Continue with other participants even if one fails
-          }
-        }
+      // Find the participant info
+      const participant = updatedChat.participants.find(p => p.name === participantName);
+      if (!participant) {
+        console.warn(`[GroupChatRouter] Participant ${participantName} not found in chat`);
+        continue;
+      }
+
+      // Find matching session to get cwd
+      const matchingSession = sessions.find(s =>
+        mentionMatchesName(s.name, participantName) || s.name === participantName
+      );
+      const cwd = matchingSession?.cwd || process.env.HOME || '/tmp';
+
+      // Resolve agent configuration
+      const agent = await agentDetector.getAgent(participant.agentId);
+      if (!agent || !agent.available) {
+        console.error(`[GroupChatRouter] Agent '${participant.agentId}' not available for ${participantName}`);
+        continue;
+      }
+
+      // Build the prompt with context for this participant
+      const participantPrompt = `You are "${participantName}" in a group chat named "${updatedChat.name}".
+
+## Your Role
+Respond to the moderator's request below. Your response will be shared with the moderator and other participants.
+
+**IMPORTANT RESPONSE FORMAT:**
+Your response MUST begin with a single-sentence summary of what you accomplished or are reporting. This first sentence will be extracted for the group chat history. Keep it concise and action-oriented.
+
+## Recent Chat History:
+${historyContext}
+
+## Moderator's Request:
+${message}
+
+Please respond to this request. If you need to perform any actions, do so and report your findings.`;
+
+      // Create a unique session ID for this batch process
+      const sessionId = `group-chat-${groupChatId}-participant-${participantName}-${Date.now()}`;
+
+      // Get custom env vars for this agent
+      const customEnvVars = getCustomEnvVarsCallback?.(participant.agentId);
+
+      try {
+        processManager.spawn({
+          sessionId,
+          toolType: participant.agentId,
+          cwd,
+          command: agent.path || agent.command,
+          args: [...agent.args],
+          readOnlyMode: false, // Participants can make changes
+          prompt: participantPrompt,
+          customEnvVars,
+        });
+
+        // Track this participant as pending response
+        participantsToRespond.add(participantName);
+        console.log(`[GroupChatRouter] Spawned batch process for participant @${participantName} (session ${sessionId})`);
+      } catch (error) {
+        console.error(`[GroupChatRouter] Failed to spawn batch process for ${participantName}:`, error);
+        // Continue with other participants even if one fails
       }
     }
   }
@@ -487,6 +543,8 @@ export async function routeModeratorResponse(
   if (participantsToRespond.size > 0) {
     pendingParticipantResponses.set(groupChatId, participantsToRespond);
     console.log(`[GroupChatRouter] Waiting for ${participantsToRespond.size} participant(s) to respond: ${[...participantsToRespond].join(', ')}`);
+    // Set state to show agents are working
+    groupChatEmitters.emitStateChange?.(groupChatId, 'agent-working');
   }
 }
 

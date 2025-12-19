@@ -20,6 +20,8 @@ interface GroupChatMessagesProps {
   markdownEditMode?: boolean;
   onToggleMarkdownEditMode?: () => void;
   maxOutputLines?: number;
+  /** Pre-computed participant colors (if provided, overrides internal color generation) */
+  participantColors?: Record<string, string>;
 }
 
 export function GroupChatMessages({
@@ -30,6 +32,7 @@ export function GroupChatMessages({
   markdownEditMode,
   onToggleMarkdownEditMode,
   maxOutputLines = 30,
+  participantColors: externalColors,
 }: GroupChatMessagesProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
@@ -93,11 +96,12 @@ export function GroupChatMessages({
     }
   }, [messages]);
 
-  // Memoize participant colors to ensure consistency with GroupChatParticipants
+  // Use external colors if provided, otherwise generate locally
   // Include 'Moderator' at index 0 to match the participant panel's color assignment
   const participantColors = useMemo(() => {
+    if (externalColors) return externalColors;
     return buildParticipantColorMap(['Moderator', ...participants.map(p => p.name)], theme);
-  }, [participants, theme]);
+  }, [participants, theme, externalColors]);
 
   const getParticipantColor = (name: string): string => {
     return participantColors[name] || generateParticipantColor(0, theme);
@@ -177,6 +181,7 @@ export function GroupChatMessages({
           return (
             <div
               key={msgKey}
+              data-message-timestamp={msg.timestamp}
               className={`flex gap-4 group ${isUser ? 'flex-row-reverse' : ''} px-6 py-2`}
             >
               {/* Timestamp - outside bubble, like AI Terminal */}

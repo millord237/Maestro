@@ -480,7 +480,9 @@ export function GroupChatHistoryPanel({
           </div>
         ) : (
           entries.map((entry) => {
-            const participantColor = entry.participantColor || participantColors[entry.participantName] || theme.colors.accent;
+            // Prioritize the runtime-generated color map over the stored color
+            // The stored color might be a default gray, but we want consistent colors from buildParticipantColorMap
+            const participantColor = participantColors[entry.participantName] || entry.participantColor || theme.colors.accent;
             return (
               <div
                 key={entry.id}

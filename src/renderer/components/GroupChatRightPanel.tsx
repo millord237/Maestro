@@ -13,7 +13,12 @@ import type { GroupChatHistoryEntry } from '../../shared/group-chat-types';
 import { ParticipantCard } from './ParticipantCard';
 import { GroupChatHistoryPanel } from './GroupChatHistoryPanel';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
-import { buildParticipantColorMap } from '../utils/participantColors';
+import {
+  buildParticipantColorMapWithPreferences,
+  loadColorPreferences,
+  saveColorPreferences,
+  type ParticipantColorInfo,
+} from '../utils/participantColors';
 
 export type GroupChatRightTab = 'participants' | 'history';
 
@@ -22,6 +27,8 @@ interface GroupChatRightPanelProps {
   groupChatId: string;
   participants: GroupChatParticipant[];
   participantStates: Map<string, SessionState>;
+  /** Map of participant sessionId to their project root path (for color preferences) */
+  participantSessionPaths?: Map<string, string>;
   isOpen: boolean;
   onToggle: () => void;
   width: number;
@@ -39,6 +46,10 @@ interface GroupChatRightPanelProps {
   activeTab: GroupChatRightTab;
   /** Callback when tab changes */
   onTabChange: (tab: GroupChatRightTab) => void;
+  /** Callback to jump to a message by timestamp in the chat panel */
+  onJumpToMessage?: (timestamp: number) => void;
+  /** Callback when participant colors are computed (for sharing with other components) */
+  onColorsComputed?: (colors: Record<string, string>) => void;
 }
 
 export function GroupChatRightPanel({
@@ -46,6 +57,7 @@ export function GroupChatRightPanel({
   groupChatId,
   participants,
   participantStates,
+  participantSessionPaths,
   isOpen,
   onToggle,
   width,
@@ -57,11 +69,50 @@ export function GroupChatRightPanel({
   moderatorUsage,
   activeTab,
   onTabChange,
+  onJumpToMessage,
+  onColorsComputed,
 }: GroupChatRightPanelProps): JSX.Element | null {
-  // Generate consistent colors for all participants (including "Moderator" for the moderator card)
+  // Color preferences state
+  const [colorPreferences, setColorPreferences] = useState<Record<string, number>>({});
+
+  // Load color preferences on mount
+  useEffect(() => {
+    loadColorPreferences().then(setColorPreferences);
+  }, []);
+
+  // Generate consistent colors for all participants with preference support
   const participantColors = useMemo(() => {
-    return buildParticipantColorMap(['Moderator', ...participants.map(p => p.name)], theme);
-  }, [participants, theme]);
+    // Build participant info with session paths for preference lookup
+    const participantInfo: ParticipantColorInfo[] = [
+      { name: 'Moderator' }, // Moderator doesn't have a persistent color preference
+      ...participants.map(p => ({
+        name: p.name,
+        sessionPath: participantSessionPaths?.get(p.sessionId),
+      })),
+    ];
+
+    const { colors, newPreferences } = buildParticipantColorMapWithPreferences(
+      participantInfo,
+      theme,
+      colorPreferences
+    );
+
+    // Save any new preferences
+    if (Object.keys(newPreferences).length > 0) {
+      const updatedPrefs = { ...colorPreferences, ...newPreferences };
+      setColorPreferences(updatedPrefs);
+      saveColorPreferences(updatedPrefs);
+    }
+
+    return colors;
+  }, [participants, participantSessionPaths, theme, colorPreferences]);
+
+  // Notify parent when colors are computed
+  useEffect(() => {
+    if (onColorsComputed && Object.keys(participantColors).length > 0) {
+      onColorsComputed(participantColors);
+    }
+  }, [participantColors, onColorsComputed]);
 
   // Create a synthetic moderator participant for display
   const moderatorParticipant: GroupChatParticipant = useMemo(() => ({
@@ -272,6 +323,7 @@ export function GroupChatRightPanel({
           participantColors={participantColors}
           onRefresh={refreshHistory}
           onDelete={handleDeleteEntry}
+          onJumpToMessage={onJumpToMessage}
         />
       )}
     </div>

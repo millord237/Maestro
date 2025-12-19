@@ -73,3 +73,97 @@ export function buildParticipantColorMap(
   });
   return colors;
 }
+
+/**
+ * Color preference storage key prefix
+ */
+const COLOR_PREF_KEY = 'groupChatColorPreferences';
+
+/**
+ * Load color preferences from settings.
+ * Maps session paths to their preferred color indices.
+ *
+ * @returns Promise resolving to preferences map (sessionPath -> colorIndex)
+ */
+export async function loadColorPreferences(): Promise<Record<string, number>> {
+  try {
+    const prefs = await window.maestro.settings.get(COLOR_PREF_KEY);
+    return (prefs as Record<string, number>) || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save color preferences to settings.
+ *
+ * @param preferences - Map of sessionPath -> colorIndex
+ */
+export async function saveColorPreferences(preferences: Record<string, number>): Promise<void> {
+  await window.maestro.settings.set(COLOR_PREF_KEY, preferences);
+}
+
+/**
+ * Participant info for color assignment
+ */
+export interface ParticipantColorInfo {
+  name: string;
+  /** Session path (project root) - used as stable identifier for color preferences */
+  sessionPath?: string;
+}
+
+/**
+ * Build a color map for participants with preference support.
+ * Agents keep their preferred color index across different group chats when possible.
+ *
+ * @param participants - Array of participant info (name and optional sessionPath)
+ * @param theme - The current theme
+ * @param preferences - Existing color preferences (sessionPath -> colorIndex)
+ * @returns Object with colors map and any new preferences to save
+ */
+export function buildParticipantColorMapWithPreferences(
+  participants: ParticipantColorInfo[],
+  theme: Theme,
+  preferences: Record<string, number>
+): {
+  colors: Record<string, string>;
+  newPreferences: Record<string, number>;
+} {
+  const colors: Record<string, string> = {};
+  const usedIndices = new Set<number>();
+  const newPreferences: Record<string, number> = {};
+
+  // First pass: assign colors to participants with existing preferences
+  for (const participant of participants) {
+    if (participant.sessionPath && preferences[participant.sessionPath] !== undefined) {
+      const preferredIndex = preferences[participant.sessionPath];
+      if (!usedIndices.has(preferredIndex)) {
+        colors[participant.name] = generateParticipantColor(preferredIndex, theme);
+        usedIndices.add(preferredIndex);
+      }
+    }
+  }
+
+  // Second pass: assign colors to remaining participants
+  let nextIndex = 0;
+  for (const participant of participants) {
+    if (colors[participant.name]) continue; // Already assigned
+
+    // Find next available index
+    while (usedIndices.has(nextIndex)) {
+      nextIndex++;
+    }
+
+    colors[participant.name] = generateParticipantColor(nextIndex, theme);
+    usedIndices.add(nextIndex);
+
+    // Save this as the participant's preferred index if they have a sessionPath
+    if (participant.sessionPath) {
+      newPreferences[participant.sessionPath] = nextIndex;
+    }
+
+    nextIndex++;
+  }
+
+  return { colors, newPreferences };
+}

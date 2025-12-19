@@ -51,6 +51,8 @@ interface GroupChatPanelProps {
   setEnterToSendAI?: (value: boolean) => void;
   // Flash notification callback
   showFlashNotification?: (message: string) => void;
+  /** Pre-computed participant colors for consistent colors across components */
+  participantColors?: Record<string, string>;
 }
 
 export function GroupChatPanel({
@@ -84,6 +86,7 @@ export function GroupChatPanel({
   enterToSendAI,
   setEnterToSendAI,
   showFlashNotification,
+  participantColors,
 }: GroupChatPanelProps): JSX.Element {
   return (
     <div
@@ -110,6 +113,7 @@ export function GroupChatPanel({
         markdownEditMode={markdownEditMode}
         onToggleMarkdownEditMode={onToggleMarkdownEditMode}
         maxOutputLines={maxOutputLines}
+        participantColors={participantColors}
       />
 
       <GroupChatInput
