@@ -80,6 +80,8 @@ interface InputAreaProps {
   onToggleTabSaveToHistory?: () => void;
   // Prompt composer modal
   onOpenPromptComposer?: () => void;
+  // Flash notification callback
+  showFlashNotification?: (message: string) => void;
 }
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {

@@ -582,6 +582,90 @@ describe.skipIf(SKIP_INTEGRATION)('Provider Integration Tests', () => {
         const hasInputFormatWithoutImages = argsWithoutImages.includes('--input-format');
         expect(hasInputFormatWithoutImages, `${provider.name} should not include --input-format without images`).toBe(false);
       });
+
+      it('should process image and identify text content', async () => {
+        // This test verifies that images are properly passed to the provider and processed.
+        // It uses a test image containing the word "Maestro" and asks the provider to
+        // identify the text. This validates the full image processing pipeline.
+        //
+        // For agents that support image input (supportsImageInput: true):
+        // - Claude Code: Uses --input-format stream-json with base64 via stdin
+        // - Codex: Uses -i <file> flag
+        // - OpenCode: Uses -f <file> flag
+
+        if (!providerAvailable) {
+          console.log(`Skipping: ${provider.name} not available`);
+          return;
+        }
+
+        const capabilities = getAgentCapabilities(provider.agentId);
+        if (!capabilities.supportsImageInput) {
+          console.log(`Skipping: ${provider.name} does not support image input`);
+          return;
+        }
+
+        // Verify test image exists
+        if (!fs.existsSync(TEST_IMAGE_PATH)) {
+          console.log(`⚠️  Test image not found at ${TEST_IMAGE_PATH}, skipping`);
+          return;
+        }
+
+        const prompt = 'What word is shown in this image? Reply with ONLY the single word shown, nothing else.';
+
+        console.log(`\n🖼️  Testing image processing for ${provider.name}`);
+        console.log(`📁 Image path: ${TEST_IMAGE_PATH}`);
+
+        let result: { stdout: string; stderr: string; exitCode: number };
+
+        if (capabilities.supportsStreamJsonInput && provider.buildStreamJsonInput) {
+          // Claude Code: Use stream-json input with base64 image via stdin
+          const imageBuffer = fs.readFileSync(TEST_IMAGE_PATH);
+          const imageBase64 = imageBuffer.toString('base64');
+          const mediaType = 'image/png';
+
+          const args = provider.buildInitialArgs(prompt, { images: ['placeholder'] });
+          const stdinContent = provider.buildStreamJsonInput(prompt, imageBase64, mediaType);
+
+          console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
+          console.log(`📥 Sending ${imageBase64.length} bytes of base64 image data via stdin`);
+
+          result = await runProvider(provider, args, TEST_CWD, stdinContent);
+        } else if (provider.buildImageArgs) {
+          // Codex/OpenCode: Use file-based image args
+          const args = provider.buildImageArgs(prompt, TEST_IMAGE_PATH);
+
+          console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
+
+          result = await runProvider(provider, args);
+        } else {
+          console.log(`⚠️  ${provider.name} has no image args builder, skipping`);
+          return;
+        }
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+        console.log(`📤 Stdout (first 1000 chars): ${result.stdout.substring(0, 1000)}`);
+        if (result.stderr) {
+          console.log(`📤 Stderr: ${result.stderr.substring(0, 500)}`);
+        }
+
+        // Check for success
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} image processing should complete successfully`
+        ).toBe(true);
+
+        // Parse and verify response contains "Maestro"
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // The response should contain "Maestro" (case-insensitive)
+        const responseContainsMaestro = response?.toLowerCase().includes('maestro');
+        expect(
+          responseContainsMaestro,
+          `${provider.name} should identify "Maestro" in the image. Got: "${response}"`
+        ).toBe(true);
+      }, PROVIDER_TIMEOUT);
     });
   }
 });

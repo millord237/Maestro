@@ -4727,10 +4727,25 @@ export default function MaestroConsole() {
           const reader = new FileReader();
           reader.onload = (event) => {
             if (event.target?.result) {
+              const imageData = event.target!.result as string;
               if (isGroupChatActive) {
-                setGroupChatStagedImages(prev => [...prev, event.target!.result as string]);
+                setGroupChatStagedImages(prev => {
+                  if (prev.includes(imageData)) {
+                    setSuccessFlashNotification('Duplicate image ignored');
+                    setTimeout(() => setSuccessFlashNotification(null), 2000);
+                    return prev;
+                  }
+                  return [...prev, imageData];
+                });
               } else {
-                setStagedImages(prev => [...prev, event.target!.result as string]);
+                setStagedImages(prev => {
+                  if (prev.includes(imageData)) {
+                    setSuccessFlashNotification('Duplicate image ignored');
+                    setTimeout(() => setSuccessFlashNotification(null), 2000);
+                    return prev;
+                  }
+                  return [...prev, imageData];
+                });
               }
             }
           };
@@ -4752,7 +4767,15 @@ export default function MaestroConsole() {
         const reader = new FileReader();
         reader.onload = (event) => {
           if (event.target?.result) {
-             setStagedImages(prev => [...prev, event.target!.result as string]);
+            const imageData = event.target!.result as string;
+            setStagedImages(prev => {
+              if (prev.includes(imageData)) {
+                setSuccessFlashNotification('Duplicate image ignored');
+                setTimeout(() => setSuccessFlashNotification(null), 2000);
+                return prev;
+              }
+              return [...prev, imageData];
+            });
           }
         };
         reader.readAsDataURL(files[i]);
@@ -5292,13 +5315,11 @@ export default function MaestroConsole() {
             setTimeout(() => inputRef.current?.focus(), 0);
           }}
           onNavigate={(img) => setLightboxImage(img)}
-          onDelete={(img) => {
-            // Remove from both lightboxImages and stagedImages
-            if (lightboxImages.length > 0) {
-              setLightboxImages(prev => prev.filter(i => i !== img));
-            }
+          // Only allow delete when viewing staged images (not past message images)
+          // lightboxImages.length > 0 means we're viewing context images from a past message
+          onDelete={lightboxImages.length === 0 ? (img) => {
             setStagedImages(prev => prev.filter(i => i !== img));
-          }}
+          } : undefined}
           theme={theme}
         />
       )}
