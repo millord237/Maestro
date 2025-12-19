@@ -26,9 +26,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { getAgentCapabilities } from '../../main/agent-capabilities';
 
 const execAsync = promisify(exec);
+
+// Path to test image fixture
+const TEST_IMAGE_PATH = path.join(__dirname, '../fixtures/maestro-test-image.png');
 
 // Skip integration tests by default - they make real API calls and may incur costs.
 // Set RUN_INTEGRATION_TESTS=true to enable them.
@@ -55,6 +61,10 @@ interface ProviderConfig {
    * - process-manager.ts (--input-format stream-json for images)
    */
   buildInitialArgs: (prompt: string, options?: { images?: string[] }) => string[];
+  /** Build args for message with image (file path) - for agents that use file-based image args */
+  buildImageArgs?: (prompt: string, imagePath: string) => string[];
+  /** Build stdin content for stream-json mode (for Claude Code) */
+  buildStreamJsonInput?: (prompt: string, imageBase64: string, mediaType: string) => string;
   /** Build args for follow-up message (with session) */
   buildResumeArgs: (sessionId: string, prompt: string) => string[];
   /** Parse session ID from output */
@@ -130,6 +140,33 @@ const PROVIDERS: ProviderConfig[] = [
     },
     isSuccessful: (output: string, exitCode: number) => {
       return exitCode === 0;
+    },
+    /**
+     * Build stream-json input for Claude Code with image.
+     * This mirrors buildStreamJsonMessage() in process-manager.ts
+     */
+    buildStreamJsonInput: (prompt: string, imageBase64: string, mediaType: string) => {
+      const message = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: imageBase64,
+              },
+            },
+            {
+              type: 'text',
+              text: prompt,
+            },
+          ],
+        },
+      };
+      return JSON.stringify(message);
     },
   },
   {
@@ -232,6 +269,20 @@ const PROVIDERS: ProviderConfig[] = [
       }
       return false;
     },
+    /**
+     * Build args with image file path for Codex.
+     * Mirrors agent-detector.ts: imageArgs: (imagePath) => ['-i', imagePath]
+     */
+    buildImageArgs: (prompt: string, imagePath: string) => [
+      'exec',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      '--json',
+      '-C', TEST_CWD,
+      '-i', imagePath,
+      '--',
+      prompt,
+    ],
   },
   {
     name: 'OpenCode',
@@ -308,6 +359,17 @@ const PROVIDERS: ProviderConfig[] = [
     isSuccessful: (output: string, exitCode: number) => {
       return exitCode === 0;
     },
+    /**
+     * Build args with image file path for OpenCode.
+     * Mirrors agent-detector.ts: imageArgs: (imagePath) => ['-f', imagePath]
+     */
+    buildImageArgs: (prompt: string, imagePath: string) => [
+      'run',
+      '--format', 'json',
+      '-f', imagePath,
+      '--',
+      prompt,
+    ],
   },
 ];
 
@@ -325,11 +387,13 @@ async function isProviderAvailable(provider: ProviderConfig): Promise<boolean> {
 
 /**
  * Run a provider command and capture output
+ * @param stdinContent - Optional content to write to stdin before closing (for stream-json mode)
  */
 function runProvider(
   provider: ProviderConfig,
   args: string[],
-  cwd: string = TEST_CWD
+  cwd: string = TEST_CWD,
+  stdinContent?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     let stdout = '';
@@ -342,7 +406,11 @@ function runProvider(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Close stdin immediately to signal EOF (prevents processes waiting for input)
+    // If we have stdin content, write it and then close
+    if (stdinContent) {
+      proc.stdin?.write(stdinContent + '\n');
+    }
+    // Close stdin to signal EOF (prevents processes waiting for input)
     proc.stdin?.end();
 
     proc.stdout?.on('data', (data) => {

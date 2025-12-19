@@ -293,6 +293,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         shellEnvVars: shellEnvVars,      // Shell-specific env vars (for terminal sessions)
         contextWindow, // Pass configured context window to process manager
         customEnvVars: effectiveCustomEnvVars, // Pass custom env vars (session-level or agent-level)
+        imageArgs: agent?.imageArgs,     // Function to build image CLI args (for Codex, OpenCode)
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {

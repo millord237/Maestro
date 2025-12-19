@@ -1,6 +1,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { stripControlSequences, stripAllAnsiCodes } from './utils/terminalFilter';
 import { logger } from './utils/logger';
 import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './parsers';
@@ -50,7 +53,8 @@ interface ProcessConfig {
   shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish', or full path)
   shellArgs?: string; // Additional CLI arguments for shell sessions (e.g., '--login')
   shellEnvVars?: Record<string, string>; // Environment variables for shell sessions
-  images?: string[]; // Base64 data URLs for images (passed via stream-json input)
+  images?: string[]; // Base64 data URLs for images (passed via stream-json input or file args)
+  imageArgs?: (imagePath: string) => string[]; // Function to build image CLI args (e.g., ['-i', path] for Codex)
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
   customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
 }
@@ -76,6 +80,7 @@ interface ManagedProcess {
   stdoutBuffer?: string; // Buffer for accumulating stdout output (for error detection at exit)
   streamedText?: string; // Buffer for accumulating streamed text from partial events (OpenCode, Codex)
   contextWindow?: number; // Configured context window size (0 or undefined = not configured)
+  tempImageFiles?: string[]; // Temp files to clean up when process exits (for file-based image args)
 }
 
 /**
@@ -138,6 +143,50 @@ function buildStreamJsonMessage(prompt: string, images: string[]): string {
   return JSON.stringify(message);
 }
 
+/**
+ * Save a base64 data URL image to a temp file.
+ * Returns the full path to the temp file.
+ */
+function saveImageToTempFile(dataUrl: string, index: number): string | null {
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) {
+    logger.warn('[ProcessManager] Failed to parse data URL for temp file', 'ProcessManager');
+    return null;
+  }
+
+  // Determine file extension from media type
+  const ext = parsed.mediaType.split('/')[1] || 'png';
+  const filename = `maestro-image-${Date.now()}-${index}.${ext}`;
+  const tempPath = path.join(os.tmpdir(), filename);
+
+  try {
+    // Convert base64 to buffer and write to file
+    const buffer = Buffer.from(parsed.base64, 'base64');
+    fs.writeFileSync(tempPath, buffer);
+    logger.debug('[ProcessManager] Saved image to temp file', 'ProcessManager', { tempPath, size: buffer.length });
+    return tempPath;
+  } catch (error) {
+    logger.error('[ProcessManager] Failed to save image to temp file', 'ProcessManager', { error: String(error) });
+    return null;
+  }
+}
+
+/**
+ * Clean up temp image files.
+ */
+function cleanupTempFiles(files: string[]): void {
+  for (const file of files) {
+    try {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+        logger.debug('[ProcessManager] Cleaned up temp file', 'ProcessManager', { file });
+      }
+    } catch (error) {
+      logger.warn('[ProcessManager] Failed to clean up temp file', 'ProcessManager', { file, error: String(error) });
+    }
+  }
+}
+
 export class ProcessManager extends EventEmitter {
   private processes: Map<string, ManagedProcess> = new Map();
 
@@ -145,18 +194,38 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for a session
    */
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
-    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, shellArgs, shellEnvVars, images, contextWindow, customEnvVars } = config;
+    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, shellArgs, shellEnvVars, images, imageArgs, contextWindow, customEnvVars } = config;
 
     // For batch mode with images, use stream-json mode and send message via stdin
     // For batch mode without images, append prompt to args with -- separator
     const hasImages = images && images.length > 0;
     const capabilities = getAgentCapabilities(toolType);
     let finalArgs: string[];
+    let tempImageFiles: string[] = [];
 
     if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
       // For agents that support stream-json input (like Claude Code), add the flag
       // The prompt will be sent via stdin as a JSON message with image data
       finalArgs = [...args, '--input-format', 'stream-json'];
+    } else if (hasImages && prompt && imageArgs) {
+      // For agents that use file-based image args (like Codex, OpenCode),
+      // save images to temp files and add CLI args
+      finalArgs = [...args]; // Start with base args
+      tempImageFiles = [];
+      for (let i = 0; i < images.length; i++) {
+        const tempPath = saveImageToTempFile(images[i], i);
+        if (tempPath) {
+          tempImageFiles.push(tempPath);
+          finalArgs = [...finalArgs, ...imageArgs(tempPath)];
+        }
+      }
+      // Add the prompt at the end
+      finalArgs = [...finalArgs, '--', prompt];
+      logger.debug('[ProcessManager] Using file-based image args', 'ProcessManager', {
+        sessionId,
+        imageCount: images.length,
+        tempFiles: tempImageFiles,
+      });
     } else if (prompt) {
       // Regular batch mode - prompt as CLI arg
       // The -- ensures prompt is treated as positional arg, not a flag (even if it starts with --)
@@ -170,6 +239,8 @@ export class ProcessManager extends EventEmitter {
       toolType,
       hasPrompt: !!prompt,
       hasImages,
+      hasImageArgs: !!imageArgs,
+      tempImageFilesCount: tempImageFiles.length,
       promptValue: prompt,
       baseArgs: args,
       finalArgs
@@ -402,6 +473,7 @@ export class ProcessManager extends EventEmitter {
           stderrBuffer: '', // Initialize stderr buffer for error detection at exit
           stdoutBuffer: '', // Initialize stdout buffer for error detection at exit
           contextWindow, // User-configured context window size (0 = not configured)
+          tempImageFiles: tempImageFiles.length > 0 ? tempImageFiles : undefined, // Temp files to clean up on exit
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -681,6 +753,11 @@ export class ProcessManager extends EventEmitter {
             }
           }
 
+          // Clean up temp image files if any
+          if (managedProcess.tempImageFiles && managedProcess.tempImageFiles.length > 0) {
+            cleanupTempFiles(managedProcess.tempImageFiles);
+          }
+
           this.emit('exit', sessionId, code || 0);
           this.processes.delete(sessionId);
         });
@@ -703,6 +780,11 @@ export class ProcessManager extends EventEmitter {
               },
             };
             this.emit('agent-error', sessionId, agentError);
+          }
+
+          // Clean up temp image files if any
+          if (managedProcess.tempImageFiles && managedProcess.tempImageFiles.length > 0) {
+            cleanupTempFiles(managedProcess.tempImageFiles);
           }
 
           this.emit('data', sessionId, `[error] ${error.message}`);

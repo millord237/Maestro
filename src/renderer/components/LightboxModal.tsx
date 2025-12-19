@@ -120,6 +120,9 @@ export function LightboxModal({ image, stagedImages, onClose, onNavigate, onDele
       const newList = stagedImages.filter(img => img !== image);
       onNavigate(newList[currentIndex]);
     }
+
+    // Refocus the lightbox after deletion so keyboard navigation continues working
+    setTimeout(() => lightboxRef.current?.focus(), 0);
   }, [image, stagedImages, currentIndex, onDelete, onNavigate, onClose]);
 
   // Default theme for ConfirmModal if not provided

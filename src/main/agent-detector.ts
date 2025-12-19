@@ -42,6 +42,7 @@ export interface AgentConfig {
   modelArgs?: (modelId: string) => string[]; // Function to build model selection args (e.g., ['--model', modelId])
   yoloModeArgs?: string[]; // Args for YOLO/full-access mode (e.g., ['--dangerously-bypass-approvals-and-sandbox'])
   workingDirArgs?: (dir: string) => string[]; // Function to build working directory args (e.g., ['-C', dir])
+  imageArgs?: (imagePath: string) => string[]; // Function to build image attachment args (e.g., ['-i', imagePath] for Codex)
 }
 
 const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'>[] = [
@@ -83,6 +84,7 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     readOnlyArgs: ['--sandbox', 'read-only'], // Read-only/plan mode
     yoloModeArgs: ['--dangerously-bypass-approvals-and-sandbox'], // Full access mode
     workingDirArgs: (dir: string) => ['-C', dir], // Set working directory
+    imageArgs: (imagePath: string) => ['-i', imagePath], // Image attachment: codex exec -i /path/to/image.png
     // Agent-specific configuration options shown in UI
     configOptions: [
       {
@@ -123,6 +125,7 @@ const AGENT_DEFINITIONS: Omit<AgentConfig, 'available' | 'path' | 'capabilities'
     readOnlyArgs: ['--agent', 'plan'], // Read-only/plan mode
     modelArgs: (modelId: string) => ['--model', modelId], // Model selection (e.g., 'ollama/qwen3:8b')
     yoloModeArgs: ['run'], // 'run' subcommand auto-approves all permissions (YOLO mode is implicit)
+    imageArgs: (imagePath: string) => ['-f', imagePath], // Image/file attachment: opencode run -f /path/to/image.png
     // Agent-specific configuration options shown in UI
     configOptions: [
       {

@@ -447,9 +447,9 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
               </span>
             </div>
 
-            {/* Expanded dropdown - uses padding to create hover bridge between trigger and dropdown */}
+            {/* Expanded dropdown - positioned above to avoid going off-screen */}
             {isExpanded && (
-              <div className="absolute right-0 top-full pt-1 z-50">
+              <div className="absolute right-0 bottom-full pb-1 z-50">
                 <div
                   className="min-w-[320px] rounded-lg shadow-xl overflow-hidden"
                   style={{
