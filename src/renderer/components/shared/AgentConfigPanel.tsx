@@ -13,8 +13,8 @@
  * - Agent-specific config options (contextWindow, model, etc.)
  */
 
-import { useState, useRef, useMemo } from 'react';
-import { RefreshCw, Plus, Trash2, HelpCircle } from 'lucide-react';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { RefreshCw, Plus, Trash2, HelpCircle, ChevronDown } from 'lucide-react';
 import type { Theme, AgentConfig } from '../../types';
 
 // Counter for generating stable IDs for env vars
@@ -28,6 +28,163 @@ const BUILT_IN_ENV_VARS: { key: string; description: string; value: string }[] =
     value: '1 (when resuming)',
   },
 ];
+
+// Separate component for text input with optional model dropdown
+// This avoids the browser's native datalist styling issues
+interface ModelTextInputProps {
+  theme: Theme;
+  option: { key: string; default?: string };
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  availableModels: string[];
+  loadingModels: boolean;
+  onRefreshModels?: () => void;
+}
+
+function ModelTextInput({
+  theme,
+  option,
+  value,
+  onChange,
+  onBlur,
+  availableModels,
+  loadingModels,
+  onRefreshModels,
+}: ModelTextInputProps): JSX.Element {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Filter models based on input
+  const filteredModels = useMemo(() => {
+    if (!filterText) return availableModels;
+    const lower = filterText.toLowerCase();
+    return availableModels.filter((m) => m.toLowerCase().includes(lower));
+  }, [availableModels, filterText]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDropdown]);
+
+  const isModelField = option.key === 'model';
+  const hasModels = availableModels.length > 0;
+
+  return (
+    <>
+      <div className="flex gap-2" ref={containerRef}>
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              if (isModelField && hasModels) {
+                setFilterText(e.target.value);
+                setShowDropdown(true);
+              }
+            }}
+            onFocus={() => {
+              if (isModelField && hasModels) {
+                setFilterText(value);
+                setShowDropdown(true);
+              }
+            }}
+            onBlur={() => {
+              // Delay to allow click on dropdown item
+              setTimeout(() => {
+                setShowDropdown(false);
+                onBlur();
+              }, 150);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            placeholder={option.default || ''}
+            className="w-full p-2 rounded border bg-transparent outline-none text-xs font-mono pr-8"
+            style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+          />
+          {isModelField && hasModels && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDropdown(!showDropdown);
+                inputRef.current?.focus();
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/10"
+              style={{ color: theme.colors.textDim }}
+            >
+              <ChevronDown className={`w-3 h-3 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+          {/* Custom dropdown */}
+          {isModelField && showDropdown && filteredModels.length > 0 && (
+            <div
+              className="absolute z-50 left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto rounded border shadow-lg"
+              style={{
+                backgroundColor: theme.colors.bgMain,
+                borderColor: theme.colors.border,
+              }}
+            >
+              {filteredModels.map((model) => (
+                <button
+                  key={model}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(model);
+                    setShowDropdown(false);
+                    setFilterText('');
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-mono hover:bg-white/10 transition-colors"
+                  style={{
+                    color: model === value ? theme.colors.accent : theme.colors.textMain,
+                    backgroundColor: model === value ? 'rgba(255,255,255,0.05)' : undefined,
+                  }}
+                >
+                  {model}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {isModelField && onRefreshModels && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefreshModels();
+            }}
+            className="p-2 rounded border hover:bg-white/10 transition-colors"
+            title="Refresh available models"
+            style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
+          >
+            <RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} />
+          </button>
+        )}
+      </div>
+      {isModelField && loadingModels && (
+        <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+          Loading available models...
+        </p>
+      )}
+      {isModelField && !loadingModels && hasModels && (
+        <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+          {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
+        </p>
+      )}
+    </>
+  );
+}
 
 export interface AgentConfigPanelProps {
   theme: Theme;
@@ -393,52 +550,16 @@ export function AgentConfigPanel({
             />
           )}
           {option.type === 'text' && (
-            <>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  list={option.key === 'model' ? `models-${agent.id}` : undefined}
-                  value={agentConfig[option.key] ?? option.default}
-                  onChange={(e) => onConfigChange(option.key, e.target.value)}
-                  onBlur={onConfigBlur}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder={option.default || ''}
-                  className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                  style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                />
-                {option.key === 'model' && agent.capabilities?.supportsModelSelection && onRefreshModels && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRefreshModels();
-                    }}
-                    className="p-2 rounded border hover:bg-white/10 transition-colors"
-                    title="Refresh available models"
-                    style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
-                  >
-                    <RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} />
-                  </button>
-                )}
-              </div>
-              {/* Datalist for model autocomplete */}
-              {option.key === 'model' && availableModels.length > 0 && (
-                <datalist id={`models-${agent.id}`}>
-                  {availableModels.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
-              )}
-              {option.key === 'model' && loadingModels && (
-                <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-                  Loading available models...
-                </p>
-              )}
-              {option.key === 'model' && !loadingModels && availableModels.length > 0 && (
-                <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-                  {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
-                </p>
-              )}
-            </>
+            <ModelTextInput
+              theme={theme}
+              option={option}
+              value={agentConfig[option.key] ?? option.default}
+              onChange={(value) => onConfigChange(option.key, value)}
+              onBlur={onConfigBlur}
+              availableModels={option.key === 'model' ? availableModels : []}
+              loadingModels={option.key === 'model' ? loadingModels : false}
+              onRefreshModels={option.key === 'model' && agent.capabilities?.supportsModelSelection ? onRefreshModels : undefined}
+            />
           )}
           {option.type === 'checkbox' && (
             <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>

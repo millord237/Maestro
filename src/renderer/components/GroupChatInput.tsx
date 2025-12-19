@@ -199,6 +199,7 @@ export function GroupChatInput({
     if (showMentions && filteredAgents.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        e.stopPropagation();
         setSelectedMentionIndex(prev =>
           prev < filteredAgents.length - 1 ? prev + 1 : 0
         );
@@ -206,6 +207,7 @@ export function GroupChatInput({
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
+        e.stopPropagation();
         setSelectedMentionIndex(prev =>
           prev > 0 ? prev - 1 : filteredAgents.length - 1
         );
@@ -213,11 +215,13 @@ export function GroupChatInput({
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault();
+        e.stopPropagation();
         insertMention(filteredAgents[selectedMentionIndex].name);
         return;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setShowMentions(false);
         return;
       }
