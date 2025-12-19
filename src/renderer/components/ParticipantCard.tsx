@@ -81,6 +81,9 @@ export function ParticipantCard({
     }
   };
 
+  // Context usage percentage (default to 0 if not set)
+  const contextUsage = participant.contextUsage ?? 0;
+
   return (
     <div
       className="rounded-lg border p-3"
@@ -91,35 +94,26 @@ export function ParticipantCard({
         borderLeftColor: color || theme.colors.accent,
       }}
     >
-      {/* Header row: name and status */}
-      <div className="flex items-center justify-between">
-        <span
-          className="font-medium"
-          style={{ color: color || theme.colors.textMain }}
-        >
-          {participant.name}
-        </span>
-        <div
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: getStatusColor() }}
-          title={getStatusLabel()}
-        />
-      </div>
-
-      {/* Agent type */}
-      <div
-        className="text-xs mt-1"
-        style={{ color: theme.colors.textDim }}
-      >
-        {participant.agentId}
-      </div>
-
-      {/* Session ID pill */}
-      {displaySessionId && (
-        <div className="mt-2 flex items-center gap-1">
+      {/* Header row: status + name on left, session ID pill on right */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: getStatusColor() }}
+            title={getStatusLabel()}
+          />
+          <span
+            className="font-medium truncate"
+            style={{ color: color || theme.colors.textMain }}
+          >
+            {participant.name}
+          </span>
+        </div>
+        {/* Session ID pill - top right */}
+        {displaySessionId && (
           <button
             onClick={copySessionId}
-            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer"
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             style={{
               backgroundColor: `${theme.colors.accent}20`,
               color: theme.colors.accent,
@@ -128,7 +122,7 @@ export function ParticipantCard({
             title={`Session: ${displaySessionId}\nClick to copy`}
           >
             <span className="font-mono">
-              {displaySessionId.slice(0, 8)}...
+              {displaySessionId.slice(0, 8)}
             </span>
             {copied ? (
               <Check className="w-2.5 h-2.5" />
@@ -136,94 +130,80 @@ export function ParticipantCard({
               <Copy className="w-2.5 h-2.5" />
             )}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Stats row */}
-      {(participant.messageCount || participant.tokenCount || participant.processingTimeMs) && (
-        <div
-          className="text-xs mt-2 flex items-center gap-3"
-          style={{ color: theme.colors.textDim }}
-        >
-          {(participant.messageCount !== undefined && participant.messageCount > 0) && (
-            <span className="flex items-center gap-1" title="Messages sent">
-              <MessageSquare className="w-3 h-3" />
-              {participant.messageCount}
-            </span>
-          )}
-          {(participant.tokenCount !== undefined && participant.tokenCount > 0) && (
-            <span className="flex items-center gap-1" title="Tokens used">
-              <Zap className="w-3 h-3" />
-              {formatTokens(participant.tokenCount)}
-            </span>
-          )}
-          {(participant.processingTimeMs !== undefined && participant.processingTimeMs > 0) && (
-            <span className="flex items-center gap-1" title="Processing time">
-              <Clock className="w-3 h-3" />
-              {formatDuration(participant.processingTimeMs)}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Agent type */}
+      <div
+        className="text-xs mt-1 ml-4"
+        style={{ color: theme.colors.textDim }}
+      >
+        {participant.agentId}
+      </div>
 
-      {/* Context usage bar */}
-      {participant.contextUsage !== undefined && (
-        <div className="mt-2">
-          <div className="flex items-center justify-between mb-1">
-            <span
-              className="text-xs"
-              style={{ color: theme.colors.textDim }}
-            >
-              Context
-            </span>
-            <span
-              className="text-xs"
-              style={{ color: theme.colors.textDim }}
-            >
-              {participant.contextUsage}%
-            </span>
-          </div>
-          <div
-            className="h-1.5 rounded-full overflow-hidden"
-            style={{ backgroundColor: theme.colors.border }}
+      {/* Stats row: message count, last activity time, cost */}
+      <div
+        className="text-xs mt-2 flex items-center gap-3 flex-wrap"
+        style={{ color: theme.colors.textDim }}
+      >
+        {(participant.messageCount !== undefined && participant.messageCount > 0) && (
+          <span className="flex items-center gap-1" title="Messages sent">
+            <MessageSquare className="w-3 h-3" />
+            {participant.messageCount}
+          </span>
+        )}
+        {participant.lastActivity && (
+          <span title="Last activity">
+            {formatTime(participant.lastActivity)}
+          </span>
+        )}
+        {(participant.totalCost !== undefined && participant.totalCost > 0) && (
+          <span
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded"
+            style={{
+              backgroundColor: `${theme.colors.success}20`,
+              color: theme.colors.success,
+            }}
+            title="Total cost"
           >
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${participant.contextUsage}%`,
-                backgroundColor:
-                  participant.contextUsage > 80
-                    ? theme.colors.warning
-                    : theme.colors.accent,
+            <DollarSign className="w-3 h-3" />
+            {formatCost(participant.totalCost).slice(1)}
+          </span>
+        )}
+      </div>
+
+      {/* Context usage gauge */}
+      <div className="mt-2">
+        <div className="flex items-center justify-between mb-1">
+          <span
+            className="text-[10px]"
+            style={{ color: theme.colors.textDim }}
+          >
+            Context
+          </span>
+          <span
+            className="text-[10px]"
+            style={{ color: theme.colors.textDim }}
+          >
+            {contextUsage}%
+          </span>
+        </div>
+        <div
+          className="h-1 rounded-full overflow-hidden"
+          style={{ backgroundColor: theme.colors.border }}
+        >
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${contextUsage}%`,
+              backgroundColor:
+                contextUsage > 80
+                  ? theme.colors.warning
+                  : theme.colors.accent,
               }}
             />
           </div>
         </div>
-      )}
-
-      {/* Last activity summary - always visible */}
-      {participant.lastSummary && (
-        <div
-          className="mt-2 text-xs p-2 rounded"
-          style={{
-            backgroundColor: theme.colors.bgSidebar,
-            color: theme.colors.textDim,
-          }}
-        >
-          <span style={{ color: theme.colors.textMain }}>Last:</span>{' '}
-          {participant.lastSummary}
-        </div>
-      )}
-
-      {/* Last activity time */}
-      {participant.lastActivity && (
-        <div
-          className="mt-1 text-[10px]"
-          style={{ color: theme.colors.textDim }}
-        >
-          {new Date(participant.lastActivity).toLocaleTimeString()}
-        </div>
-      )}
     </div>
   );
 }

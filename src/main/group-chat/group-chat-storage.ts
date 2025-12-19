@@ -42,6 +42,8 @@ export interface GroupChatParticipant {
   tokenCount?: number;
   messageCount?: number;
   processingTimeMs?: number;
+  /** Total cost in USD (optional, depends on provider) */
+  totalCost?: number;
 }
 
 /**
@@ -355,7 +357,7 @@ export async function getParticipant(
  */
 export type ParticipantUpdate = Partial<Pick<
   GroupChatParticipant,
-  'lastActivity' | 'lastSummary' | 'contextUsage' | 'tokenCount' | 'messageCount' | 'processingTimeMs' | 'agentSessionId'
+  'lastActivity' | 'lastSummary' | 'contextUsage' | 'tokenCount' | 'messageCount' | 'processingTimeMs' | 'agentSessionId' | 'totalCost'
 >>;
 
 /**

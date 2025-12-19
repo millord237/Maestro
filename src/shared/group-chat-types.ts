@@ -24,6 +24,8 @@ export interface GroupChatParticipant {
   tokenCount?: number;
   messageCount?: number;
   processingTimeMs?: number;
+  /** Total cost in USD (optional, depends on provider) */
+  totalCost?: number;
 }
 
 /**
