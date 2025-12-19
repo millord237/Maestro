@@ -14,7 +14,7 @@ import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
 import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
-import { routeModeratorResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback } from './group-chat/group-chat-router';
+import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback } from './group-chat/group-chat-router';
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
@@ -1752,6 +1752,19 @@ function setupProcessListeners() {
         return; // Don't send to regular process:data handler
       }
 
+      // Handle group chat participant output
+      // Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid}
+      const participantMatch = sessionId.match(/^group-chat-(.+)-participant-([^-]+)-/);
+      if (participantMatch) {
+        const groupChatId = participantMatch[1];
+        const participantName = participantMatch[2];
+        // Route the agent's response (handles logging, stats update, and moderator notification)
+        routeAgentResponse(groupChatId, participantName, data, processManager ?? undefined).catch(err => {
+          logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
+        });
+        return; // Don't send to regular process:data handler
+      }
+
       mainWindow?.webContents.send('process:data', sessionId, data);
 
       // Broadcast to web clients - extract base session ID (remove -ai or -terminal suffix)
@@ -1792,6 +1805,17 @@ function setupProcessListeners() {
       const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
       if (moderatorMatch) {
         const groupChatId = moderatorMatch[1];
+        groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
+        // Don't send to regular exit handler
+        return;
+      }
+
+      // Handle group chat participant exit - update participant state
+      // Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid}
+      const participantMatch = sessionId.match(/^group-chat-(.+)-participant-([^-]+)-/);
+      if (participantMatch) {
+        const groupChatId = participantMatch[1];
+        // Emit state change back to idle for the group chat
         groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
         // Don't send to regular exit handler
         return;

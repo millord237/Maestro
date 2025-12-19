@@ -451,14 +451,12 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
         {(['debug', 'info', 'warn', 'error', 'toast', 'autorun'] as const).map(level => {
           const isSelected = selectedLevels.has(level);
           const isEnabled = enabledLevels.has(level);
-          // Auto Run cannot be turned off - it's always enabled and selected
-          const isAlwaysOn = level === 'autorun';
           return (
             <button
               key={level}
-              disabled={!isEnabled || isAlwaysOn}
+              disabled={!isEnabled}
               onClick={() => {
-                if (!isEnabled || isAlwaysOn) return; // Safety check
+                if (!isEnabled) return; // Safety check
                 setSelectedLevels(prev => {
                   const newSet = new Set(prev);
                   if (newSet.has(level)) {
@@ -477,9 +475,9 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
                   : theme.colors.textDim,
                 border: `1px solid ${isEnabled && isSelected ? getLevelColor(level) : theme.colors.border}`,
                 opacity: isEnabled ? 1 : 0.3,
-                cursor: isEnabled && !isAlwaysOn ? 'pointer' : 'not-allowed',
+                cursor: isEnabled ? 'pointer' : 'not-allowed',
               }}
-              title={isAlwaysOn ? 'Auto Run logs cannot be turned off' : (isEnabled ? undefined : `${level} level is disabled (current log level: ${logLevel})`)}
+              title={isEnabled ? undefined : `${level} level is disabled (current log level: ${logLevel})`}
             >
               {level.toUpperCase()}
             </button>

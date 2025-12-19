@@ -5,7 +5,8 @@
  * agent type, context usage, stats, and last activity summary.
  */
 
-import { Clock, MessageSquare, Zap } from 'lucide-react';
+import { Clock, MessageSquare, Zap, Copy, Check } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import type { Theme, GroupChatParticipant, SessionState } from '../types';
 
 interface ParticipantCardProps {
@@ -41,6 +42,16 @@ export function ParticipantCard({
   state,
   color,
 }: ParticipantCardProps): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const copySessionId = useCallback(() => {
+    if (participant.sessionId) {
+      navigator.clipboard.writeText(participant.sessionId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [participant.sessionId]);
+
   const getStatusColor = (): string => {
     switch (state) {
       case 'busy':
@@ -99,6 +110,31 @@ export function ParticipantCard({
       >
         {participant.agentId}
       </div>
+
+      {/* Session ID pill */}
+      {participant.sessionId && (
+        <div className="mt-2 flex items-center gap-1">
+          <button
+            onClick={copySessionId}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer"
+            style={{
+              backgroundColor: `${theme.colors.accent}20`,
+              color: theme.colors.accent,
+              border: `1px solid ${theme.colors.accent}40`,
+            }}
+            title={`Session: ${participant.sessionId}\nClick to copy`}
+          >
+            <span className="font-mono">
+              {participant.sessionId.slice(0, 8)}...
+            </span>
+            {copied ? (
+              <Check className="w-2.5 h-2.5" />
+            ) : (
+              <Copy className="w-2.5 h-2.5" />
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Stats row */}
       {(participant.messageCount || participant.tokenCount || participant.processingTimeMs) && (
