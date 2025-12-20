@@ -95,24 +95,35 @@ describe('useAutoRunUndo', () => {
       expect(mockDeps.setLocalContent).toHaveBeenCalledWith('Initial content');
     });
 
-    it('should NOT push if content equals last snapshot', () => {
+    it('should not push duplicate snapshots when content matches last entry', () => {
       const mockDeps = createMockDeps({ localContent: 'Same content' });
       const { result } = renderHook(() => useAutoRunUndo(mockDeps));
 
       // The lastUndoSnapshotRef is initialized to localContent
       expect(result.current.lastUndoSnapshotRef.current).toBe('Same content');
 
-      // Try to push the same content - should be ignored
+      // Push baseline snapshot (should be stored once)
       act(() => {
         result.current.pushUndoState('Same content', 0);
       });
 
-      // Verify undo does nothing (no state was pushed)
+      // Duplicate push should be ignored
+      act(() => {
+        result.current.pushUndoState('Same content', 0);
+      });
+
+      // Verify only one undo entry exists
       act(() => {
         result.current.handleUndo();
       });
 
-      expect(mockDeps.setLocalContent).not.toHaveBeenCalled();
+      expect(mockDeps.setLocalContent).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        result.current.handleUndo();
+      });
+
+      expect(mockDeps.setLocalContent).toHaveBeenCalledTimes(1);
     });
 
     it('should do nothing when selectedFile is null', () => {

@@ -107,9 +107,6 @@ export function useAutoRunUndo({
     const snapshotContent = contentToSnapshot ?? localContent;
     const snapshotCursor = cursorPos ?? textareaRef.current?.selectionStart ?? 0;
 
-    // Only push if content actually differs from last snapshot
-    if (snapshotContent === lastUndoSnapshotRef.current) return;
-
     const currentState: UndoState = {
       content: snapshotContent,
       cursorPosition: snapshotCursor,
@@ -117,6 +114,13 @@ export function useAutoRunUndo({
 
     // Get or create history array for this document
     const history = undoHistoryRef.current.get(selectedFile) || [];
+    const lastHistoryEntry = history[history.length - 1];
+
+    // Only skip if the last entry already matches this snapshot
+    if (snapshotContent === lastUndoSnapshotRef.current && lastHistoryEntry?.content === snapshotContent) {
+      return;
+    }
+
     history.push(currentState);
 
     // Limit to MAX_UNDO_HISTORY entries
