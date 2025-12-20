@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { Session, SessionState, LogEntry, UsageStats } from '../types';
+import type { Session, LogEntry, UsageStats } from '../types';
 import { createTab, getActiveTab } from '../utils/tabHelpers';
 import { generateId } from '../utils/ids';
 import type { RightPanelHandle } from '../components/RightPanel';
@@ -33,11 +33,6 @@ export interface UseAgentSessionManagementDeps {
   setActiveAgentSessionId: (id: string | null) => void;
   /** Agent sessions browser open state setter */
   setAgentSessionsOpen: (open: boolean) => void;
-  /** Helper to add a log entry to the active tab */
-  addLogToActiveTab: (
-    sessionId: string,
-    logEntry: Omit<LogEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: number }
-  ) => void;
   /** Ref to the right panel for refreshing history */
   rightPanelRef: React.RefObject<RightPanelHandle | null>;
   /** Default value for saveToHistory on new tabs */
@@ -52,10 +47,6 @@ export interface UseAgentSessionManagementReturn {
   addHistoryEntry: (entry: HistoryEntryInput) => Promise<void>;
   /** Ref to addHistoryEntry for use in callbacks that need latest version */
   addHistoryEntryRef: React.MutableRefObject<((entry: HistoryEntryInput) => Promise<void>) | null>;
-  /** Clear Agent session and start fresh */
-  startNewAgentSession: () => void;
-  /** Ref to startNewAgentSession for use in callbacks that need latest version */
-  startNewAgentSessionRef: React.MutableRefObject<(() => void) | null>;
   /** Jump to a specific agent session in the browser */
   handleJumpToAgentSession: (agentSessionId: string) => void;
   /** Resume a Agent session, opening as a new tab or switching to existing */
@@ -73,7 +64,6 @@ export interface UseAgentSessionManagementReturn {
  *
  * Handles:
  * - Adding history entries with session metadata
- * - Starting new Agent sessions (clearing context)
  * - Jumping to Agent sessions in the browser
  * - Resuming saved Agent sessions as tabs
  *
@@ -88,14 +78,12 @@ export function useAgentSessionManagement(
     setSessions,
     setActiveAgentSessionId,
     setAgentSessionsOpen,
-    addLogToActiveTab,
     rightPanelRef,
     defaultSaveToHistory,
   } = deps;
 
   // Refs for functions that need to be accessed from other callbacks
   const addHistoryEntryRef = useRef<((entry: HistoryEntryInput) => Promise<void>) | null>(null);
-  const startNewAgentSessionRef = useRef<(() => void) | null>(null);
 
   /**
    * Add a history entry for a session.
@@ -115,6 +103,8 @@ export function useAgentSessionManagement(
       sessionName = activeTab?.name;
     }
 
+    const shouldIncludeContextUsage = !entry.sessionId || entry.sessionId === activeSession?.id;
+
     await window.maestro.history.add({
       id: generateId(),
       type: entry.type,
@@ -125,7 +115,7 @@ export function useAgentSessionManagement(
       sessionId: targetSessionId,
       sessionName: sessionName,
       projectPath: targetProjectPath,
-      contextUsage: activeSession?.contextUsage,
+      ...(shouldIncludeContextUsage ? { contextUsage: activeSession?.contextUsage } : {}),
       // Only include usageStats if explicitly provided (per-task tracking)
       // Never use cumulative session stats - they're lifetime totals
       usageStats: entry.usageStats
@@ -134,43 +124,6 @@ export function useAgentSessionManagement(
     // Refresh history panel to show the new entry
     rightPanelRef.current?.refreshHistoryPanel();
   }, [activeSession, rightPanelRef]);
-
-  /**
-   * Start a new Agent session by clearing the current context.
-   * Blocks if there are queued items.
-   */
-  const startNewAgentSession = useCallback(() => {
-    if (!activeSession) return;
-
-    // Block clearing when there are queued items
-    if (activeSession.executionQueue.length > 0) {
-      addLogToActiveTab(activeSession.id, {
-        source: 'system',
-        text: 'Cannot clear session while items are queued. Remove queued items first.'
-      });
-      return;
-    }
-
-    setSessions(prev => prev.map(s => {
-      if (s.id !== activeSession.id) return s;
-      // Reset active tab's state to 'idle' for write-mode tracking
-      const updatedAiTabs = s.aiTabs?.length > 0
-        ? s.aiTabs.map(tab =>
-            tab.id === s.activeTabId ? { ...tab, state: 'idle' as const, thinkingStartTime: undefined } : tab
-          )
-        : s.aiTabs;
-      return {
-        ...s,
-        agentSessionId: undefined,
-        aiLogs: [],
-        state: 'idle' as SessionState,
-        busySource: undefined,
-        thinkingStartTime: undefined,
-        aiTabs: updatedAiTabs
-      };
-    }));
-    setActiveAgentSessionId(null);
-  }, [activeSession, addLogToActiveTab, setSessions, setActiveAgentSessionId]);
 
   /**
    * Jump to a specific agent session in the agent sessions browser.
@@ -240,7 +193,10 @@ export function useAgentSessionManagement(
       let isStarred = starred ?? false;
       let name = sessionName ?? null;
 
-      if (!starred && !sessionName && activeSession.toolType === 'claude-code') {
+      const shouldLookupOrigins = activeSession.toolType === 'claude-code'
+        && (starred === undefined || sessionName === undefined);
+
+      if (shouldLookupOrigins) {
         try {
           // Look up session metadata from session origins (name and starred)
           // Note: getSessionOrigins is still Claude-specific until we add generic origin tracking
@@ -248,10 +204,10 @@ export function useAgentSessionManagement(
           const origins = await window.maestro.claude.getSessionOrigins(activeSession.projectRoot);
           const originData = origins[agentSessionId];
           if (originData && typeof originData === 'object') {
-            if (originData.sessionName) {
+            if (sessionName === undefined && originData.sessionName) {
               name = originData.sessionName;
             }
-            if (originData.starred !== undefined) {
+            if (starred === undefined && originData.starred !== undefined) {
               isStarred = originData.starred;
             }
           }
@@ -286,13 +242,10 @@ export function useAgentSessionManagement(
 
   // Update refs for slash command functions (so other handlers can access latest versions)
   addHistoryEntryRef.current = addHistoryEntry;
-  startNewAgentSessionRef.current = startNewAgentSession;
 
   return {
     addHistoryEntry,
     addHistoryEntryRef,
-    startNewAgentSession,
-    startNewAgentSessionRef,
     handleJumpToAgentSession,
     handleResumeSession,
   };

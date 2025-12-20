@@ -1826,6 +1826,57 @@ export default function MaestroConsole() {
     [sessions, activeSessionId]
   );
 
+  // Discover slash commands when a session becomes active and doesn't have them yet
+  // This spawns Claude briefly to get the init message with available commands
+  useEffect(() => {
+    if (!activeSession) return;
+    if (activeSession.toolType !== 'claude-code') return;
+    // Skip if we already have commands
+    if (activeSession.agentCommands && activeSession.agentCommands.length > 0) return;
+
+    // Capture session ID to prevent race conditions when switching sessions
+    const sessionId = activeSession.id;
+    let cancelled = false;
+
+    // Discover slash commands in background
+    const discoverCommands = async () => {
+      try {
+        const commands = await window.maestro.agents.discoverSlashCommands(
+          activeSession.toolType,
+          activeSession.cwd,
+          activeSession.customPath
+        );
+
+        // Don't update if effect was cancelled (session switched)
+        if (cancelled) return;
+
+        if (commands && commands.length > 0) {
+          // Convert to command objects and store on session
+          const commandObjects = commands.map(cmd => ({
+            command: cmd.startsWith('/') ? cmd : `/${cmd}`,
+            description: getSlashCommandDescription(cmd),
+          }));
+
+          setSessions(prev => prev.map(s =>
+            s.id === sessionId
+              ? { ...s, agentCommands: commandObjects }
+              : s
+          ));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[SlashCommandDiscovery] Failed to discover commands:', error);
+        }
+      }
+    };
+
+    discoverCommands();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.id, activeSession?.toolType, activeSession?.cwd, activeSession?.customPath, activeSession?.agentCommands]);
+
   // File preview navigation history - derived from active session (per-agent history)
   const filePreviewHistory = useMemo(() =>
     activeSession?.filePreviewHistory ?? [],
@@ -3921,11 +3972,6 @@ export default function MaestroConsole() {
     }
   };
 
-  const handleCreateDebugPackage = useCallback(() => {
-    setDebugPackageModalOpen(true);
-  }, []);
-
-
   // startRenamingSession now accepts a unique key (e.g., 'bookmark-id', 'group-gid-id', 'ungrouped-id')
   // to support renaming the same session from different UI locations (bookmarks vs groups)
   const startRenamingSession = (editKey: string) => {
@@ -5299,7 +5345,7 @@ export default function MaestroConsole() {
     setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
     setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
     setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveAgentSessionId,
-    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, handleCreateDebugPackage, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
+    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,

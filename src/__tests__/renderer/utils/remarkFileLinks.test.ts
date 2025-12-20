@@ -3,7 +3,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkStringify from 'remark-stringify';
 import { remarkFileLinks } from '../../../renderer/utils/remarkFileLinks';
-import type { FileNode } from '../../../renderer/hooks/useFileExplorer';
+import type { FileNode } from '../../../renderer/types/fileTree';
 
 // Helper to process markdown and return the result
 async function processMarkdown(content: string, fileTree: FileNode[], cwd: string, projectRoot?: string): Promise<string> {

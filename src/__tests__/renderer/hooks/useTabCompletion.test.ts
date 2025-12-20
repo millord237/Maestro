@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from '../../../renderer/hooks/useTabCompletion';
 import type { Session } from '../../../renderer/types';
-import type { FileNode } from '../../../renderer/hooks/useFileExplorer';
+import type { FileNode } from '../../../renderer/types/fileTree';
 
 // Helper to create a minimal session for testing
 const createMockSession = (overrides: Partial<Session> = {}): Session => ({

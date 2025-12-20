@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAtMentionCompletion, type AtMentionSuggestion, type UseAtMentionCompletionReturn } from '../../../renderer/hooks/useAtMentionCompletion';
 import type { Session } from '../../../renderer/types';
-import type { FileNode } from '../../../renderer/hooks/useFileExplorer';
+import type { FileNode } from '../../../renderer/types/fileTree';
 
 // =============================================================================
 // TEST HELPERS

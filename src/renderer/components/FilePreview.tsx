@@ -15,7 +15,7 @@ import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { remarkFileLinks } from '../utils/remarkFileLinks';
 import remarkFrontmatter from 'remark-frontmatter';
 import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
-import type { FileNode } from '../hooks/useFileExplorer';
+import type { FileNode } from '../types/fileTree';
 
 interface FileStats {
   size: number;

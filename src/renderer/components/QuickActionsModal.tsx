@@ -302,7 +302,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'website', label: 'Maestro Website', subtext: 'Open the Maestro website', action: () => { window.maestro.shell.openExternal('https://runmaestro.ai/'); setQuickActionOpen(false); } },
     { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/86crXbGb'); setQuickActionOpen(false); } },
     ...(setUpdateCheckModalOpen ? [{ id: 'updateCheck', label: 'Check for Updates', action: () => { setUpdateCheckModalOpen(true); setQuickActionOpen(false); } }] : []),
-    { id: 'createDebugPackage', label: 'Create Debug Package', shortcut: shortcuts.createDebugPackage, subtext: 'Generate a support bundle for bug reporting', action: () => {
+    { id: 'createDebugPackage', label: 'Create Debug Package', subtext: 'Generate a support bundle for bug reporting', action: () => {
       setQuickActionOpen(false);
       if (setDebugPackageModalOpen) {
         setDebugPackageModalOpen(true);

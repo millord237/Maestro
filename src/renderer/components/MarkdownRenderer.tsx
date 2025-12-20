@@ -5,7 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Clipboard, Loader2, ImageOff } from 'lucide-react';
 import type { Theme } from '../types';
-import type { FileNode } from '../hooks/useFileExplorer';
+import type { FileNode } from '../types/fileTree';
 import { remarkFileLinks } from '../utils/remarkFileLinks';
 import remarkFrontmatter from 'remark-frontmatter';
 import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';

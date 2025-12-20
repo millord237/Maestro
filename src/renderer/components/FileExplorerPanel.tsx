@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, EyeOff } from 'lucide-react';
 import type { Session, Theme } from '../types';
+import type { FileNode } from '../types/fileTree';
 import type { FileTreeChanges } from '../utils/fileExplorer';
 import { getFileIcon } from '../utils/theme';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -15,12 +16,6 @@ const AUTO_REFRESH_OPTIONS = [
   { label: 'Every 60 seconds', value: 60 },
   { label: 'Every 3 minutes', value: 180 },
 ];
-
-interface FileNode {
-  name: string;
-  type: 'file' | 'folder';
-  children?: FileNode[];
-}
 
 // Flattened node for virtualization
 interface FlattenedNode {

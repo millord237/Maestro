@@ -413,16 +413,14 @@ Manages sessions and groups with CRUD operations.
 - `createNewGroup(name, emoji, moveSession, activeSessionId)`
 - Drag and drop handlers
 
-#### useFileExplorer (`src/renderer/hooks/useFileExplorer.ts`)
+#### useFileTreeManagement (`src/renderer/hooks/useFileTreeManagement.ts`)
 
-Manages file tree state and navigation.
+Manages file tree refresh/filter state and git-related file metadata.
 
 **Key methods:**
-- `handleFileClick(node, path, activeSession)` - Open file or external app
-- `loadFileTree(dirPath, maxDepth?)` - Load directory tree
-- `toggleFolder(path, activeSessionId, setSessions)` - Toggle folder expansion
-- `expandAllFolders()` / `collapseAllFolders()`
-- `updateSessionWorkingDirectory()` - Change session CWD
+- `refreshFileTree(sessionId)` - Reload directory tree and return change stats
+- `refreshGitFileState(sessionId)` - Refresh tree + git repo metadata
+- `filteredFileTree` - Derived tree based on filter string
 
 #### useBatchProcessor (`src/renderer/hooks/useBatchProcessor.ts`)
 

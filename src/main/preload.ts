@@ -417,6 +417,10 @@ contextBridge.exposeInMainWorld('maestro', {
     // Discover available models for agents that support model selection (e.g., OpenCode with Ollama)
     getModels: (agentId: string, forceRefresh?: boolean) =>
       ipcRenderer.invoke('agents:getModels', agentId, forceRefresh) as Promise<string[]>,
+    // Discover available slash commands for an agent by spawning it briefly
+    // Returns array of command names (e.g., ['compact', 'help', 'my-custom-command'])
+    discoverSlashCommands: (agentId: string, cwd: string, customPath?: string) =>
+      ipcRenderer.invoke('agents:discoverSlashCommands', agentId, cwd, customPath) as Promise<string[] | null>,
   },
 
   // Dialog API
@@ -1256,6 +1260,7 @@ export interface MaestroAPI {
     getCustomEnvVars: (agentId: string) => Promise<Record<string, string> | null>;
     getAllCustomEnvVars: () => Promise<Record<string, Record<string, string>>>;
     getModels: (agentId: string, forceRefresh?: boolean) => Promise<string[]>;
+    discoverSlashCommands: (agentId: string, cwd: string, customPath?: string) => Promise<string[] | null>;
   };
   dialog: {
     selectFolder: () => Promise<string | null>;

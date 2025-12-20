@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import type { Session } from '../types';
-import type { FileNode } from './useFileExplorer';
+import type { FileNode } from '../types/fileTree';
 import { fuzzyMatchWithScore } from '../utils/search';
 
 export interface AtMentionSuggestion {

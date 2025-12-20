@@ -109,6 +109,13 @@ interface UseBatchProcessorReturn {
   abortBatchOnError: (sessionId: string) => void;
 }
 
+type ErrorResolutionAction = 'resume' | 'skip-document' | 'abort';
+
+interface ErrorResolutionEntry {
+  promise: Promise<ErrorResolutionAction>;
+  resolve: (action: ErrorResolutionAction) => void;
+}
+
 /**
  * Format duration in human-readable format for loop summaries
  */
@@ -253,6 +260,9 @@ export function useBatchProcessor({
   const accumulatedTimeRefs = useRef<Record<string, number>>({});
   const lastActiveTimestampRefs = useRef<Record<string, number | null>>({});
 
+  // Error resolution promises to pause batch processing until user action (per session)
+  const errorResolutionRefs = useRef<Record<string, ErrorResolutionEntry>>({});
+
   // Helper to get batch state for a session
   const getBatchState = useCallback((sessionId: string): BatchRunState => {
     return batchRunStates[sessionId] || DEFAULT_BATCH_STATE;
@@ -315,17 +325,6 @@ export function useBatchProcessor({
     // This ensures mobile clients receive updates without waiting for useEffect
     broadcastAutoRunState(sessionId, newStateForSession);
   }, [broadcastAutoRunState]);
-
-  // Helper to get current accumulated elapsed time for a session (visibility-aware)
-  const getAccumulatedElapsedMs = useCallback((sessionId: string): number => {
-    const accumulated = accumulatedTimeRefs.current[sessionId] || 0;
-    const lastActive = lastActiveTimestampRefs.current[sessionId];
-    if (lastActive !== null && lastActive !== undefined && !document.hidden) {
-      // Add time since last active timestamp
-      return accumulated + (Date.now() - lastActive);
-    }
-    return accumulated;
-  }, []);
 
   // Visibility change handler to pause/resume time tracking
   useEffect(() => {
@@ -430,6 +429,7 @@ ${docList}
 
     // Reset stop flag for this session
     stopRequestedRefs.current[sessionId] = false;
+    delete errorResolutionRefs.current[sessionId];
 
     // Set up worktree if enabled
     let effectiveCwd = session.cwd; // Default to session's cwd
@@ -640,7 +640,6 @@ ${docList}
     // Per-loop tracking for loop summary
     let loopStartTime = Date.now();
     let loopTasksCompleted = 0;
-    let loopTasksDiscovered = 0;
     let loopTotalInputTokens = 0;
     let loopTotalOutputTokens = 0;
     let loopTotalCost = 0;
@@ -658,9 +657,6 @@ ${docList}
 
     // Track stalled documents (document filename -> stall reason)
     const stalledDocuments: Map<string, string> = new Map();
-
-    // Legacy flag for backwards compatibility - true if ANY document stalled
-    let stalledDueToNoProgress = false;
 
     // Helper to add final loop summary (defined here so it has access to tracking vars)
     const addFinalLoopSummary = (exitReason: string) => {
@@ -775,6 +771,7 @@ ${docList}
         }));
 
         let docTasksCompleted = 0;
+        let skipCurrentDocumentAfterError = false;
 
         // Process tasks in this document until none remain
         while (remainingTasks > 0) {
@@ -782,6 +779,23 @@ ${docList}
           if (stopRequestedRefs.current[sessionId]) {
             console.log('[BatchProcessor] Batch run stopped by user during document', docEntry.filename);
             break;
+          }
+
+          // Pause processing until the user resolves the error state
+          const errorResolution = errorResolutionRefs.current[sessionId];
+          if (errorResolution) {
+            const action = await errorResolution.promise;
+            delete errorResolutionRefs.current[sessionId];
+
+            if (action === 'abort') {
+              stopRequestedRefs.current[sessionId] = true;
+              break;
+            }
+
+            if (action === 'skip-document') {
+              skipCurrentDocumentAfterError = true;
+              break;
+            }
           }
 
           // Build template context for this task
@@ -955,7 +969,6 @@ ${docList}
 
               // Track this document as stalled
               stalledDocuments.set(docEntry.filename, stallReason);
-              stalledDueToNoProgress = true;
 
               // AUTORUN LOG: Document stalled
               window.maestro.logger.autorun(
@@ -1025,6 +1038,10 @@ ${docList}
         if (stalledDocuments.has(docEntry.filename)) {
           // Reset consecutive no-change counter for next document
           consecutiveNoChangeCount = 0;
+          continue;
+        }
+
+        if (skipCurrentDocumentAfterError) {
           continue;
         }
 
@@ -1193,7 +1210,6 @@ ${docList}
       // Reset per-loop tracking for next iteration
       loopStartTime = Date.now();
       loopTasksCompleted = 0;
-      loopTasksDiscovered = newTotalTasks;
       loopTotalInputTokens = 0;
       loopTotalOutputTokens = 0;
       loopTotalCost = 0;
@@ -1445,6 +1461,7 @@ ${docList}
     // Clean up time tracking refs
     delete accumulatedTimeRefs.current[sessionId];
     delete lastActiveTimestampRefs.current[sessionId];
+    delete errorResolutionRefs.current[sessionId];
   }, [onUpdateSession, onSpawnAgent, onSpawnSynopsis, onAddHistoryEntry, onComplete, onPRResult, audioFeedbackEnabled, audioFeedbackCommand, updateBatchStateAndBroadcast]);
 
   /**
@@ -1452,6 +1469,11 @@ ${docList}
    */
   const stopBatchRun = useCallback((sessionId: string) => {
     stopRequestedRefs.current[sessionId] = true;
+    const errorResolution = errorResolutionRefs.current[sessionId];
+    if (errorResolution) {
+      errorResolution.resolve('abort');
+      delete errorResolutionRefs.current[sessionId];
+    }
     updateBatchStateAndBroadcast(sessionId, prev => ({
       ...prev,
       [sessionId]: {
@@ -1494,6 +1516,17 @@ ${docList}
         }
       };
     });
+
+    if (!errorResolutionRefs.current[sessionId]) {
+      let resolvePromise: ((action: ErrorResolutionAction) => void) | undefined;
+      const promise = new Promise<ErrorResolutionAction>(resolve => {
+        resolvePromise = resolve;
+      });
+      errorResolutionRefs.current[sessionId] = {
+        promise,
+        resolve: resolvePromise as (action: ErrorResolutionAction) => void
+      };
+    }
   }, [updateBatchStateAndBroadcast]);
 
   /**
@@ -1527,9 +1560,13 @@ ${docList}
       };
     });
 
-    // Signal to skip current document in the processing loop
-    // The stopRequestedRefs is reused with a special marker
-    // Note: This relies on the processing loop checking for error state changes
+    const errorResolution = errorResolutionRefs.current[sessionId];
+    if (errorResolution) {
+      errorResolution.resolve('skip-document');
+      delete errorResolutionRefs.current[sessionId];
+    }
+
+    // Signal to skip the current document in the processing loop
   }, [updateBatchStateAndBroadcast]);
 
   /**
@@ -1560,6 +1597,12 @@ ${docList}
         }
       };
     });
+
+    const errorResolution = errorResolutionRefs.current[sessionId];
+    if (errorResolution) {
+      errorResolution.resolve('resume');
+      delete errorResolutionRefs.current[sessionId];
+    }
   }, [updateBatchStateAndBroadcast]);
 
   /**
@@ -1575,6 +1618,11 @@ ${docList}
 
     // Request stop and clear error state
     stopRequestedRefs.current[sessionId] = true;
+    const errorResolution = errorResolutionRefs.current[sessionId];
+    if (errorResolution) {
+      errorResolution.resolve('abort');
+      delete errorResolutionRefs.current[sessionId];
+    }
     updateBatchStateAndBroadcast(sessionId, prev => ({
       ...prev,
       [sessionId]: {

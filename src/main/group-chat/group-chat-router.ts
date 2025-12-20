@@ -495,6 +495,26 @@ export async function routeModeratorResponse(
   groupChatEmitters.emitMessage?.(groupChatId, moderatorMessage);
   console.log(`[GroupChat:Debug] Emitted moderator message to renderer`);
 
+  // Add history entry for moderator response
+  try {
+    const summary = extractFirstSentence(message);
+    const historyEntry = await addGroupChatHistoryEntry(groupChatId, {
+      timestamp: Date.now(),
+      summary,
+      participantName: 'Moderator',
+      participantColor: '#808080', // Gray for moderator
+      type: 'response',
+      fullResponse: message,
+    });
+
+    // Emit history entry event to renderer
+    groupChatEmitters.emitHistoryEntry?.(groupChatId, historyEntry);
+    console.log(`[GroupChatRouter] Added history entry for Moderator: ${summary.substring(0, 50)}...`);
+  } catch (error) {
+    console.error(`[GroupChatRouter] Failed to add history entry for Moderator:`, error);
+    // Don't throw - history logging failure shouldn't break the message flow
+  }
+
   // Extract ALL mentions from the message
   const allMentions = extractAllMentions(message);
   console.log(`[GroupChat:Debug] Extracted @mentions: ${allMentions.join(', ') || '(none)'}`);

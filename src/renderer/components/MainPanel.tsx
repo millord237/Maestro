@@ -164,7 +164,7 @@ interface MainPanelProps {
   // Replay a user message (AI mode)
   onReplayMessage?: (text: string, images?: string[]) => void;
   // File tree for linking file references in AI responses
-  fileTree?: import('../hooks/useFileExplorer').FileNode[];
+  fileTree?: import('../types/fileTree').FileNode[];
   // Callback when a file link is clicked in AI response
   onFileClick?: (relativePath: string) => void;
   // File preview navigation
@@ -220,6 +220,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
   // Panel width for responsive hiding of widgets
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
+  const [configuredContextWindow, setConfiguredContextWindow] = useState(0);
 
   // Extract tab handlers from props
   const { onTabSelect, onTabClose, onNewTab, onTabRename, onRequestTabRename, onTabReorder, onCloseOtherTabs, onTabStar, onTabMarkUnread, showUnreadOnly, onToggleUnreadFilter, onOpenTabSearch } = props;
@@ -231,14 +232,51 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     ?? activeSession?.aiTabs?.[0]
     ?? null;
 
+  // Resolve the configured context window from session override or agent settings.
+  useEffect(() => {
+    let isActive = true;
+
+    const loadContextWindow = async () => {
+      if (!activeSession) {
+        if (isActive) setConfiguredContextWindow(0);
+        return;
+      }
+
+      if (typeof activeSession.customContextWindow === 'number' && activeSession.customContextWindow > 0) {
+        if (isActive) setConfiguredContextWindow(activeSession.customContextWindow);
+        return;
+      }
+
+      try {
+        const config = await window.maestro.agents.getConfig(activeSession.toolType);
+        const value = typeof config?.contextWindow === 'number' ? config.contextWindow : 0;
+        if (isActive) setConfiguredContextWindow(value);
+      } catch (error) {
+        console.error('Failed to load agent context window setting', error);
+        if (isActive) setConfiguredContextWindow(0);
+      }
+    };
+
+    loadContextWindow();
+    return () => {
+      isActive = false;
+    };
+  }, [activeSession?.toolType, activeSession?.customContextWindow]);
+
+  const activeTabContextWindow = useMemo(() => {
+    const configured = configuredContextWindow;
+    const reported = activeTab?.usageStats?.contextWindow ?? 0;
+    return configured > 0 ? configured : reported;
+  }, [configuredContextWindow, activeTab?.usageStats?.contextWindow]);
+
   // Compute context usage percentage from active tab's usage stats
   const activeTabContextUsage = useMemo(() => {
     if (!activeTab?.usageStats) return 0;
-    const { inputTokens, outputTokens, contextWindow } = activeTab.usageStats;
-    if (!contextWindow || contextWindow === 0) return 0;
+    const { inputTokens, outputTokens } = activeTab.usageStats;
+    if (!activeTabContextWindow || activeTabContextWindow === 0) return 0;
     const contextTokens = inputTokens + outputTokens;
-    return Math.min(Math.round((contextTokens / contextWindow) * 100), 100);
-  }, [activeTab?.usageStats]);
+    return Math.min(Math.round((contextTokens / activeTabContextWindow) * 100), 100);
+  }, [activeTab?.usageStats, activeTabContextWindow]);
 
   // PERF: Track panel width for responsive widget hiding with throttled updates
   useEffect(() => {
@@ -644,7 +682,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               )}
 
               {/* Context Window Widget with Tooltip - only show when context window is configured and agent supports usage stats */}
-              {activeSession.inputMode === 'ai' && (activeTab?.agentSessionId || activeTab?.usageStats) && hasCapability('supportsUsageStats') && (activeTab?.usageStats?.contextWindow ?? 0) > 0 && (
+              {activeSession.inputMode === 'ai' && (activeTab?.agentSessionId || activeTab?.usageStats) && hasCapability('supportsUsageStats') && activeTabContextWindow > 0 && (
               <div
                 className="flex flex-col items-end mr-2 relative cursor-pointer"
                 onMouseEnter={() => {
@@ -748,7 +786,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                         </div>
 
                         {/* Context usage section - only shown when contextWindow is configured */}
-                        {(activeTab?.usageStats?.contextWindow ?? 0) > 0 && (
+                        {activeTabContextWindow > 0 && (
                           <div className="border-t pt-2 mt-2" style={{ borderColor: theme.colors.border }}>
                             <div className="flex justify-between items-center">
                               <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Tokens</span>
@@ -762,7 +800,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                             <div className="flex justify-between items-center mt-1">
                               <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Size</span>
                               <span className="text-xs font-mono font-bold" style={{ color: theme.colors.textMain }}>
-                                {activeTab.usageStats.contextWindow.toLocaleString()}
+                                {activeTabContextWindow.toLocaleString()}
                               </span>
                             </div>
                             <div className="flex justify-between items-center mt-1">

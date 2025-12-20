@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import type { Session, Group, HistoryEntry, UsageStats, BatchRunConfig } from '../../../renderer/types';
+import type { Session, Group, HistoryEntry, UsageStats, BatchRunConfig, AgentError } from '../../../renderer/types';
 
 // Import the exported functions directly
 import { countUnfinishedTasks, uncheckAllTasks, useBatchProcessor } from '../../../renderer/hooks/useBatchProcessor';
@@ -2232,6 +2232,79 @@ describe('useBatchProcessor hook', () => {
       // Should have attempted both tasks
       expect(mockOnSpawnAgent).toHaveBeenCalledTimes(2);
       expect(mockOnComplete).toHaveBeenCalled();
+    });
+  });
+
+  describe('error pause handling', () => {
+    it('should pause processing until resumeAfterError is called', async () => {
+      const sessions = [createMockSession()];
+      const groups = [createMockGroup()];
+
+      const contentInitial = '- [ ] Task 1\n- [ ] Task 2';
+      const contentAfterFirst = '- [x] Task 1\n- [ ] Task 2';
+      const contentAfterSecond = '- [x] Task 1\n- [x] Task 2';
+      const docStates = [
+        contentInitial,
+        contentInitial,
+        contentInitial,
+        contentAfterFirst,
+        contentAfterFirst,
+        contentAfterSecond
+      ];
+
+      mockReadDoc.mockImplementation(async () => ({
+        success: true,
+        content: docStates.shift() ?? contentAfterSecond
+      }));
+
+      let pauseHandler: ((sessionId: string, error: AgentError, documentIndex: number, taskDescription?: string) => void) | null = null;
+
+      mockOnSpawnAgent.mockImplementation(async () => {
+        if (pauseHandler) {
+          pauseHandler('test-session-id', {
+            type: 'auth',
+            message: 'Auth error',
+            recoverable: true,
+            timestamp: Date.now()
+          }, 0, 'Task 1');
+          pauseHandler = null;
+        }
+        return { success: true, agentSessionId: 'session-1' };
+      });
+
+      const { result } = renderHook(() =>
+        useBatchProcessor({
+          sessions,
+          groups,
+          onUpdateSession: mockOnUpdateSession,
+          onSpawnAgent: mockOnSpawnAgent,
+          onSpawnSynopsis: mockOnSpawnSynopsis,
+          onAddHistoryEntry: mockOnAddHistoryEntry,
+          onComplete: mockOnComplete
+        })
+      );
+
+      pauseHandler = result.current.pauseBatchOnError;
+
+      let startPromise: Promise<void>;
+      act(() => {
+        startPromise = result.current.startBatchRun('test-session-id', {
+          documents: [{ filename: 'tasks', resetOnCompletion: false }],
+          prompt: 'Test',
+          loopEnabled: false
+        }, '/test/folder');
+      });
+
+      await waitFor(() => expect(mockOnSpawnAgent).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(result.current.getBatchState('test-session-id').errorPaused).toBe(true));
+      expect(mockOnSpawnAgent).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        result.current.resumeAfterError('test-session-id');
+      });
+
+      await startPromise;
+      expect(mockOnSpawnAgent).toHaveBeenCalledTimes(2);
     });
   });
 

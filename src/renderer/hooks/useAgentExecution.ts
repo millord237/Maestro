@@ -48,7 +48,7 @@ export interface UseAgentExecutionReturn {
     toolType?: ToolType
   ) => Promise<AgentSpawnResult>;
   /** Ref to spawnBackgroundSynopsis for use in callbacks that need latest version */
-  spawnBackgroundSynopsisRef: React.MutableRefObject<typeof useAgentExecution extends (...args: infer _) => { spawnBackgroundSynopsis: infer R } ? R : never>;
+  spawnBackgroundSynopsisRef: React.MutableRefObject<UseAgentExecutionReturn['spawnBackgroundSynopsis'] | null>;
   /** Ref to spawnAgentWithPrompt for use in callbacks that need latest version */
   spawnAgentWithPromptRef: React.MutableRefObject<((prompt: string) => Promise<AgentSpawnResult>) | null>;
   /** Show flash notification (auto-dismisses after 2 seconds) */
@@ -84,6 +84,20 @@ export function useAgentExecution(
   // Refs for functions that need to be accessed from other callbacks
   const spawnBackgroundSynopsisRef = useRef<UseAgentExecutionReturn['spawnBackgroundSynopsis'] | null>(null);
   const spawnAgentWithPromptRef = useRef<((prompt: string) => Promise<AgentSpawnResult>) | null>(null);
+  const accumulateUsageStats = useCallback(
+    (current: UsageStats | undefined, usageStats: UsageStats): UsageStats => ({
+      ...usageStats,
+      inputTokens: (current?.inputTokens || 0) + usageStats.inputTokens,
+      outputTokens: (current?.outputTokens || 0) + usageStats.outputTokens,
+      cacheReadInputTokens: (current?.cacheReadInputTokens || 0) + usageStats.cacheReadInputTokens,
+      cacheCreationInputTokens: (current?.cacheCreationInputTokens || 0) + usageStats.cacheCreationInputTokens,
+      totalCostUsd: (current?.totalCostUsd || 0) + usageStats.totalCostUsd,
+      reasoningTokens: current?.reasoningTokens || usageStats.reasoningTokens
+        ? (current?.reasoningTokens || 0) + (usageStats.reasoningTokens || 0)
+        : undefined,
+    }),
+    []
+  );
 
   /**
    * Spawn a Claude agent for a specific session and wait for completion.
@@ -158,19 +172,7 @@ export function useAgentExecution(
         cleanupUsage = window.maestro.process.onUsage((sid: string, usageStats) => {
           if (sid === targetSessionId) {
             // Accumulate usage stats for this task (there may be multiple usage events per task)
-            if (!taskUsageStats) {
-              taskUsageStats = { ...usageStats };
-            } else {
-              // Accumulate tokens and cost
-              taskUsageStats = {
-                ...usageStats,
-                inputTokens: taskUsageStats.inputTokens + usageStats.inputTokens,
-                outputTokens: taskUsageStats.outputTokens + usageStats.outputTokens,
-                cacheReadInputTokens: taskUsageStats.cacheReadInputTokens + usageStats.cacheReadInputTokens,
-                cacheCreationInputTokens: taskUsageStats.cacheCreationInputTokens + usageStats.cacheCreationInputTokens,
-                totalCostUsd: taskUsageStats.totalCostUsd + usageStats.totalCostUsd,
-              };
-            }
+            taskUsageStats = accumulateUsageStats(taskUsageStats, usageStats);
           }
         });
 
@@ -324,7 +326,7 @@ export function useAgentExecution(
       console.error('Error spawning agent:', error);
       return { success: false };
     }
-  }, [sessionsRef, setSessions, processQueuedItemRef]); // Uses sessionsRef for latest sessions
+  }, [accumulateUsageStats, processQueuedItemRef, sessionsRef, setSessions]); // Uses sessionsRef for latest sessions
 
   /**
    * Wrapper for slash commands that need to spawn an agent with just a prompt.
@@ -397,18 +399,7 @@ export function useAgentExecution(
         cleanupUsage = window.maestro.process.onUsage((sid: string, usageStats) => {
           if (sid === targetSessionId) {
             // Accumulate usage stats (there may be multiple events)
-            if (!synopsisUsageStats) {
-              synopsisUsageStats = { ...usageStats };
-            } else {
-              synopsisUsageStats = {
-                ...usageStats,
-                inputTokens: synopsisUsageStats.inputTokens + usageStats.inputTokens,
-                outputTokens: synopsisUsageStats.outputTokens + usageStats.outputTokens,
-                cacheReadInputTokens: synopsisUsageStats.cacheReadInputTokens + usageStats.cacheReadInputTokens,
-                cacheCreationInputTokens: synopsisUsageStats.cacheCreationInputTokens + usageStats.cacheCreationInputTokens,
-                totalCostUsd: synopsisUsageStats.totalCostUsd + usageStats.totalCostUsd,
-              };
-            }
+            synopsisUsageStats = accumulateUsageStats(synopsisUsageStats, usageStats);
           }
         });
 
@@ -439,7 +430,7 @@ export function useAgentExecution(
       console.error('Error spawning background synopsis:', error);
       return { success: false };
     }
-  }, []);
+  }, [accumulateUsageStats]);
 
   /**
    * Show flash notification (bottom-right, auto-dismisses after 2 seconds).

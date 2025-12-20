@@ -379,4 +379,67 @@ export function registerAgentsHandlers(deps: AgentsHandlerDependencies): void {
       return models;
     })
   );
+
+  // Discover available slash commands for an agent by spawning it briefly
+  // This allows the UI to show available commands before the user sends their first message
+  ipcMain.handle(
+    'agents:discoverSlashCommands',
+    withIpcErrorLogging(handlerOpts('discoverSlashCommands'), async (agentId: string, cwd: string, customPath?: string) => {
+      const agentDetector = requireDependency(getAgentDetector, 'Agent detector');
+      logger.info(`Discovering slash commands for agent: ${agentId} in ${cwd}`, LOG_CONTEXT);
+
+      const agent = await agentDetector.getAgent(agentId);
+      if (!agent?.available) {
+        logger.warn(`Agent ${agentId} not available for slash command discovery`, LOG_CONTEXT);
+        return null;
+      }
+
+      // Only Claude Code supports slash command discovery via init message
+      if (agentId !== 'claude-code') {
+        logger.debug(`Agent ${agentId} does not support slash command discovery`, LOG_CONTEXT);
+        return null;
+      }
+
+      try {
+        // Use custom path if provided, otherwise use detected path
+        const commandPath = customPath || agent.path || agent.command;
+
+        // Spawn Claude with /help which immediately exits and costs no tokens
+        // The init message contains all available slash commands
+        const args = ['--print', '--verbose', '--output-format', 'stream-json', '--dangerously-skip-permissions', '--', '/help'];
+
+        logger.debug(`Spawning for slash command discovery: ${commandPath} ${args.join(' ')}`, LOG_CONTEXT);
+
+        const result = await execFileNoThrow(commandPath, args, cwd);
+
+        if (result.exitCode !== 0 && !result.stdout) {
+          logger.warn(`Slash command discovery failed with exit code ${result.exitCode}`, LOG_CONTEXT, {
+            stderr: result.stderr?.substring(0, 500)
+          });
+          return null;
+        }
+
+        // Parse the first JSON line to get the init message
+        const lines = result.stdout.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.type === 'system' && msg.subtype === 'init' && msg.slash_commands) {
+              logger.info(`Discovered ${msg.slash_commands.length} slash commands for ${agentId}`, LOG_CONTEXT);
+              return msg.slash_commands as string[];
+            }
+          } catch {
+            // Not valid JSON, skip
+          }
+        }
+
+        logger.warn(`No init message found in slash command discovery output`, LOG_CONTEXT);
+        return null;
+      } catch (error) {
+        logger.error(`Error discovering slash commands for ${agentId}`, LOG_CONTEXT, { error: String(error) });
+        return null;
+      }
+    })
+  );
 }
