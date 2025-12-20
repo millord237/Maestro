@@ -1,8 +1,39 @@
 /**
  * @file group-chat-types.ts
- * @description Shared type definitions for Group Chat feature.
+ * @description Shared type definitions and utilities for Group Chat feature.
  * Used by both main process and renderer.
  */
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Normalize a name for use in @mentions.
+ * Replaces spaces with hyphens so names can be referenced without quotes.
+ *
+ * @param name - Original name (may contain spaces)
+ * @returns Normalized name with hyphens instead of spaces
+ */
+export function normalizeMentionName(name: string): string {
+  return name.replace(/\s+/g, '-');
+}
+
+/**
+ * Check if a name matches a mention target (handles normalized names).
+ *
+ * @param mentionedName - The name from the @mention (may be hyphenated)
+ * @param actualName - The actual session/participant name (may have spaces)
+ * @returns True if they match
+ */
+export function mentionMatches(mentionedName: string, actualName: string): boolean {
+  return mentionedName.toLowerCase() === actualName.toLowerCase() ||
+         mentionedName.toLowerCase() === normalizeMentionName(actualName).toLowerCase();
+}
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
 /**
  * Group chat participant

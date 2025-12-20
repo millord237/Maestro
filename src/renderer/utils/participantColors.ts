@@ -1,32 +1,13 @@
 /**
  * @file participantColors.ts
- * @description Utilities for group chat participants including colors and name normalization.
+ * @description Utilities for group chat participants - colors and preferences.
+ * Name normalization utilities are in shared/group-chat-types.ts.
  */
 
 import type { Theme } from '../types';
 
-/**
- * Normalize a name for use in @mentions.
- * Replaces spaces with hyphens so names can be referenced without quotes.
- *
- * @param name - Original name (may contain spaces)
- * @returns Normalized name with hyphens instead of spaces
- */
-export function normalizeMentionName(name: string): string {
-  return name.replace(/\s+/g, '-');
-}
-
-/**
- * Check if a name matches a mention target (handles normalized names).
- *
- * @param mentionedName - The name from the @mention (may be hyphenated)
- * @param actualName - The actual session/participant name (may have spaces)
- * @returns True if they match
- */
-export function mentionMatches(mentionedName: string, actualName: string): boolean {
-  return mentionedName.toLowerCase() === actualName.toLowerCase() ||
-         mentionedName.toLowerCase() === normalizeMentionName(actualName).toLowerCase();
-}
+// Re-export name normalization utilities from shared for backward compatibility
+export { normalizeMentionName, mentionMatches } from '../../shared/group-chat-types';
 
 /**
  * Generate a theme-compatible color for a participant based on their index.

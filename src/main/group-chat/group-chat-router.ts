@@ -10,24 +10,7 @@
 
 import { GroupChatParticipant, loadGroupChat, updateParticipant, addGroupChatHistoryEntry, extractFirstSentence } from './group-chat-storage';
 import { appendToLog, readLog } from './group-chat-log';
-import type { GroupChatMessage } from '../../shared/group-chat-types';
-
-/**
- * Normalize a name for @mention matching.
- * Converts spaces to hyphens for consistent matching.
- */
-function normalizeMentionName(name: string): string {
-  return name.replace(/\s+/g, '-');
-}
-
-/**
- * Check if a mentioned name matches a session/participant name.
- * Handles both exact match and normalized (hyphenated) match.
- */
-function mentionMatchesName(mentionedName: string, actualName: string): boolean {
-  return mentionedName.toLowerCase() === actualName.toLowerCase() ||
-         mentionedName.toLowerCase() === normalizeMentionName(actualName).toLowerCase();
-}
+import { type GroupChatMessage, mentionMatches } from '../../shared/group-chat-types';
 import {
   IProcessManager,
   getModeratorSessionId,
@@ -167,7 +150,7 @@ export function extractMentions(
     const mentionedName = match[1];
     // Find participant that matches (either exact or normalized)
     const matchingParticipant = participants.find(p =>
-      mentionMatchesName(mentionedName, p.name)
+      mentionMatches(mentionedName, p.name)
     );
     if (matchingParticipant && !mentions.includes(matchingParticipant.name)) {
       mentions.push(matchingParticipant.name);
@@ -238,7 +221,7 @@ export async function routeUserMessage(
     for (const mentionedName of userMentions) {
       // Skip if already a participant (check both exact and normalized names)
       const alreadyParticipant = Array.from(existingParticipantNames).some(
-        existingName => mentionMatchesName(mentionedName, existingName)
+        existingName => mentionMatches(mentionedName, existingName)
       );
       if (alreadyParticipant) {
         continue;
@@ -246,7 +229,7 @@ export async function routeUserMessage(
 
       // Find matching session by name (supports both exact and hyphenated names)
       const matchingSession = sessions.find(s =>
-        mentionMatchesName(mentionedName, s.name) && s.toolType !== 'terminal'
+        mentionMatches(mentionedName, s.name) && s.toolType !== 'terminal'
       );
 
       if (matchingSession) {
@@ -435,7 +418,7 @@ export async function routeModeratorResponse(
     for (const mentionedName of allMentions) {
       // Skip if already a participant (check both exact and normalized names)
       const alreadyParticipant = Array.from(existingParticipantNames).some(
-        existingName => mentionMatchesName(mentionedName, existingName)
+        existingName => mentionMatches(mentionedName, existingName)
       );
       if (alreadyParticipant) {
         continue;
@@ -443,7 +426,7 @@ export async function routeModeratorResponse(
 
       // Find matching session by name (supports both exact and hyphenated names)
       const matchingSession = sessions.find(s =>
-        mentionMatchesName(mentionedName, s.name) && s.toolType !== 'terminal'
+        mentionMatches(mentionedName, s.name) && s.toolType !== 'terminal'
       );
 
       if (matchingSession) {
@@ -510,7 +493,7 @@ export async function routeModeratorResponse(
 
       // Find matching session to get cwd
       const matchingSession = sessions.find(s =>
-        mentionMatchesName(s.name, participantName) || s.name === participantName
+        mentionMatches(s.name, participantName) || s.name === participantName
       );
       const cwd = matchingSession?.cwd || process.env.HOME || '/tmp';
 
