@@ -7,20 +7,8 @@ import type { Session, Group } from '../types';
 export interface GroupModalState {
   /** Whether the create group modal is open */
   createGroupModalOpen: boolean;
-  /** New group name input value */
-  newGroupName: string;
-  /** Selected emoji for new group */
-  newGroupEmoji: string;
-  /** Whether emoji picker is open */
-  emojiPickerOpen: boolean;
-  /** Whether to move current session to new group */
-  moveSessionToNewGroup: boolean;
   /** Setters for modal state */
   setCreateGroupModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  setNewGroupName: React.Dispatch<React.SetStateAction<string>>;
-  setNewGroupEmoji: React.Dispatch<React.SetStateAction<string>>;
-  setEmojiPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  setMoveSessionToNewGroup: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 /**
@@ -33,8 +21,6 @@ export interface UseGroupManagementDeps {
   setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
   /** Setter for sessions (for group assignment) */
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
-  /** Active session ID (for moving to new group) */
-  activeSessionId: string | null;
   /** Currently dragged session ID */
   draggingSessionId: string | null;
   /** Setter for dragging session ID */
@@ -57,8 +43,6 @@ export interface UseGroupManagementReturn {
   finishRenamingGroup: (groupId: string, newName: string) => void;
   /** Open the create group modal */
   createNewGroup: () => void;
-  /** Confirm group creation from modal */
-  handleCreateGroupConfirm: () => void;
   /** Drop a session on a group */
   handleDropOnGroup: (groupId: string) => void;
   /** Drop a session on ungrouped area */
@@ -86,7 +70,6 @@ export function useGroupManagement(
     groups,
     setGroups,
     setSessions,
-    activeSessionId,
     draggingSessionId,
     setDraggingSessionId,
     setEditingGroupId,
@@ -94,10 +77,6 @@ export function useGroupManagement(
 
   // Modal state for create group dialog
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupEmoji, setNewGroupEmoji] = useState('📂');
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-  const [moveSessionToNewGroup, setMoveSessionToNewGroup] = useState(false);
 
   /**
    * Toggle group collapse/expand state
@@ -117,7 +96,12 @@ export function useGroupManagement(
    * Finish renaming a group
    */
   const finishRenamingGroup = useCallback((groupId: string, newName: string) => {
-    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: newName.toUpperCase() } : g));
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      setEditingGroupId(null);
+      return;
+    }
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: trimmedName.toUpperCase() } : g));
     setEditingGroupId(null);
   }, [setGroups, setEditingGroupId]);
 
@@ -125,38 +109,8 @@ export function useGroupManagement(
    * Open the create group modal
    */
   const createNewGroup = useCallback(() => {
-    setNewGroupName('');
-    setNewGroupEmoji('📂');
-    setMoveSessionToNewGroup(false);
     setCreateGroupModalOpen(true);
   }, []);
-
-  /**
-   * Confirm group creation from modal
-   */
-  const handleCreateGroupConfirm = useCallback(() => {
-    if (newGroupName.trim()) {
-      const newGroup: Group = {
-        id: `group-${Date.now()}`,
-        name: newGroupName.trim().toUpperCase(),
-        emoji: newGroupEmoji,
-        collapsed: false
-      };
-      setGroups(prev => [...prev, newGroup]);
-
-      // If we should move the session to the new group
-      if (moveSessionToNewGroup && activeSessionId) {
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? { ...s, groupId: newGroup.id } : s
-        ));
-      }
-
-      setCreateGroupModalOpen(false);
-      setNewGroupName('');
-      setNewGroupEmoji('📂');
-      setEmojiPickerOpen(false);
-    }
-  }, [newGroupName, newGroupEmoji, moveSessionToNewGroup, activeSessionId, setGroups, setSessions]);
 
   /**
    * Drop a session on a group
@@ -185,15 +139,7 @@ export function useGroupManagement(
   // Modal state bundle for external access
   const modalState: GroupModalState = {
     createGroupModalOpen,
-    newGroupName,
-    newGroupEmoji,
-    emojiPickerOpen,
-    moveSessionToNewGroup,
     setCreateGroupModalOpen,
-    setNewGroupName,
-    setNewGroupEmoji,
-    setEmojiPickerOpen,
-    setMoveSessionToNewGroup,
   };
 
   return {
@@ -201,7 +147,6 @@ export function useGroupManagement(
     startRenamingGroup,
     finishRenamingGroup,
     createNewGroup,
-    handleCreateGroupConfirm,
     handleDropOnGroup,
     handleDropOnUngrouped,
     modalState,

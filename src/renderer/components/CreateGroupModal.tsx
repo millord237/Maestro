@@ -1,24 +1,19 @@
 import React, { useState, useRef } from 'react';
-import type { Theme, Session, Group } from '../types';
+import type { Theme, Group } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter, EmojiPickerField, FormInput } from './ui';
+import { generateId } from '../utils/ids';
 
 interface CreateGroupModalProps {
   theme: Theme;
   onClose: () => void;
   groups: Group[];
   setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
-  sessions: Session[];
-  setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
-  activeSessionId: string;
-  moveSessionToNewGroup: boolean;
-  setMoveSessionToNewGroup: (move: boolean) => void;
 }
 
 export function CreateGroupModal(props: CreateGroupModalProps) {
   const {
-    theme, onClose, groups, setGroups, sessions, setSessions,
-    activeSessionId, moveSessionToNewGroup, setMoveSessionToNewGroup
+    theme, onClose, groups, setGroups,
   } = props;
 
   const [groupName, setGroupName] = useState('');
@@ -29,23 +24,15 @@ export function CreateGroupModal(props: CreateGroupModalProps) {
   const handleCreate = () => {
     if (groupName.trim()) {
       const newGroup: Group = {
-        id: `group-${Date.now()}`,
+        id: `group-${generateId()}`,
         name: groupName.trim().toUpperCase(),
         emoji: groupEmoji,
         collapsed: false
       };
       setGroups([...groups, newGroup]);
 
-      // If we should move the session to the new group
-      if (moveSessionToNewGroup) {
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? { ...s, groupId: newGroup.id } : s
-        ));
-      }
-
       setGroupName('');
       setGroupEmoji('📂');
-      setMoveSessionToNewGroup(false);
       onClose();
     }
   };

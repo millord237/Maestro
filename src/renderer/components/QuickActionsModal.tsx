@@ -36,8 +36,6 @@ interface QuickActionsModalProps {
   setRenameGroupValue: (value: string) => void;
   setRenameGroupEmoji: (emoji: string) => void;
   setCreateGroupModalOpen: (open: boolean) => void;
-  setNewGroupName: (name: string) => void;
-  setMoveSessionToNewGroup: (move: boolean) => void;
   setLeftSidebarOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setRightPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setActiveRightTab: (tab: string) => void;
@@ -88,7 +86,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     initialMode = 'main',
     setQuickActionOpen, setActiveSessionId, setRenameInstanceModalOpen, setRenameInstanceValue,
     setRenameGroupModalOpen, setRenameGroupId, setRenameGroupValue, setRenameGroupEmoji,
-    setCreateGroupModalOpen, setNewGroupName, setMoveSessionToNewGroup,
+    setCreateGroupModalOpen,
     setLeftSidebarOpen, setRightPanelOpen, setActiveRightTab, toggleInputMode,
     deleteSession, addNewSession, setSettingsModalOpen, setSettingsTab,
     setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
@@ -189,8 +187,6 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   };
 
   const handleCreateGroup = () => {
-    setNewGroupName('');
-    setMoveSessionToNewGroup(false); // Create empty group, don't move any session
     setCreateGroupModalOpen(true);
     setQuickActionOpen(false);
   };

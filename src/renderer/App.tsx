@@ -1785,7 +1785,7 @@ export default function MaestroConsole() {
   activeSessionIdRef.current = activeSessionId;
 
   // Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now provided by useAgentExecution hook
-  // Note: addHistoryEntryRef and startNewAgentSessionRef are now provided by useAgentSessionManagement hook
+  // Note: addHistoryEntryRef is now provided by useAgentSessionManagement hook
   // Ref for processQueuedMessage - allows batch exit handler to process queued messages
   const processQueuedItemRef = useRef<((sessionId: string, item: QueuedItem) => Promise<void>) | null>(null);
 
@@ -2302,8 +2302,6 @@ export default function MaestroConsole() {
   const {
     addHistoryEntry,
     addHistoryEntryRef,
-    startNewAgentSession,
-    startNewAgentSessionRef,
     handleJumpToAgentSession,
     handleResumeSession,
   } = useAgentSessionManagement({
@@ -2311,7 +2309,6 @@ export default function MaestroConsole() {
     setSessions,
     setActiveAgentSessionId,
     setAgentSessionsOpen,
-    addLogToActiveTab,
     rightPanelRef,
     defaultSaveToHistory,
   });
@@ -2603,10 +2600,10 @@ export default function MaestroConsole() {
 
         // Add to history
         addHistoryEntry({
+          type: 'USER',
           summary: parsed.shortSummary,
           fullResponse: parsed.fullSynopsis,
           agentSessionId: agentSessionId,
-          command: '/history',
           sessionId: activeSession.id,
           projectPath: activeSession.cwd,
           sessionName: activeTab.name || undefined,
@@ -5269,7 +5266,6 @@ export default function MaestroConsole() {
     startRenamingGroup,
     finishRenamingGroup,
     createNewGroup,
-    handleCreateGroupConfirm,
     handleDropOnGroup,
     handleDropOnUngrouped,
     modalState: groupModalState,
@@ -5277,7 +5273,6 @@ export default function MaestroConsole() {
     groups,
     setGroups,
     setSessions,
-    activeSessionId,
     draggingSessionId,
     setDraggingSessionId,
     editingGroupId,
@@ -5287,15 +5282,7 @@ export default function MaestroConsole() {
   // Destructure group modal state for use in JSX
   const {
     createGroupModalOpen,
-    newGroupName,
-    newGroupEmoji,
-    emojiPickerOpen,
-    moveSessionToNewGroup,
     setCreateGroupModalOpen,
-    setNewGroupName,
-    setNewGroupEmoji,
-    setEmojiPickerOpen,
-    setMoveSessionToNewGroup,
   } = groupModalState;
 
   // Update keyboardHandlerRef synchronously during render (before effects run)
@@ -5606,8 +5593,6 @@ export default function MaestroConsole() {
           setRenameGroupValue={setRenameGroupValue}
           setRenameGroupEmoji={setRenameGroupEmoji}
           setRenameGroupModalOpen={setRenameGroupModalOpen}
-          setNewGroupName={setNewGroupName}
-          setMoveSessionToNewGroup={setMoveSessionToNewGroup}
           setCreateGroupModalOpen={setCreateGroupModalOpen}
           setLeftSidebarOpen={setLeftSidebarOpen}
           setRightPanelOpen={setRightPanelOpen}
@@ -5973,15 +5958,9 @@ export default function MaestroConsole() {
           theme={theme}
           onClose={() => {
             setCreateGroupModalOpen(false);
-            setMoveSessionToNewGroup(false);
           }}
           groups={groups}
           setGroups={setGroups}
-          sessions={sessions}
-          setSessions={setSessions}
-          activeSessionId={activeSessionId}
-          moveSessionToNewGroup={moveSessionToNewGroup}
-          setMoveSessionToNewGroup={setMoveSessionToNewGroup}
         />
       )}
 

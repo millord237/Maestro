@@ -138,8 +138,6 @@ const createDefaultProps = (overrides: Partial<React.ComponentProps<typeof Quick
   setRenameGroupValue: vi.fn(),
   setRenameGroupEmoji: vi.fn(),
   setCreateGroupModalOpen: vi.fn(),
-  setNewGroupName: vi.fn(),
-  setMoveSessionToNewGroup: vi.fn(),
   setLeftSidebarOpen: vi.fn(),
   setRightPanelOpen: vi.fn(),
   setActiveRightTab: vi.fn(),
@@ -941,8 +939,6 @@ describe('QuickActionsModal', () => {
 
       fireEvent.click(screen.getByText('Create New Group'));
 
-      expect(props.setNewGroupName).toHaveBeenCalledWith('');
-      expect(props.setMoveSessionToNewGroup).toHaveBeenCalledWith(false);
       expect(props.setCreateGroupModalOpen).toHaveBeenCalledWith(true);
       expect(props.setQuickActionOpen).toHaveBeenCalledWith(false);
     });

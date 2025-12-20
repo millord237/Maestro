@@ -4,7 +4,6 @@
  * CreateGroupModal allows users to create new session groups with:
  * - Custom group name (uppercased on save)
  * - Custom emoji icon selection
- * - Optional auto-move of active session to new group
  * - Layer stack integration for modal management
  * - Input focus management and keyboard navigation
  */
@@ -14,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { CreateGroupModal } from '../../../renderer/components/CreateGroupModal';
 import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext';
-import type { Theme, Session, Group } from '../../../renderer/types';
+import type { Theme, Group } from '../../../renderer/types';
 
 // Mock lucide-react
 vi.mock('lucide-react', () => ({
@@ -51,6 +50,10 @@ vi.mock('@emoji-mart/react', () => ({
   ),
 }));
 
+vi.mock('../../../renderer/utils/ids', () => ({
+  generateId: () => 'test-id',
+}));
+
 // Create a test theme
 const createTestTheme = (overrides: Partial<Theme['colors']> = {}): Theme => ({
   id: 'test-theme',
@@ -74,45 +77,6 @@ const createTestTheme = (overrides: Partial<Theme['colors']> = {}): Theme => ({
   },
 });
 
-// Create test sessions
-const createTestSessions = (): Session[] => [
-  {
-    id: 'session-1',
-    name: 'Session 1',
-    toolType: 'claude-code',
-    state: 'idle',
-    inputMode: 'ai',
-    cwd: '/project1',
-    projectRoot: '/project1',
-    aiPid: 1001,
-    terminalPid: 2001,
-    aiLogs: [],
-    shellLogs: [],
-    isGitRepo: true,
-    fileTree: [],
-    fileExplorerExpanded: [],
-    messageQueue: [],
-  },
-  {
-    id: 'session-2',
-    name: 'Session 2',
-    toolType: 'claude-code',
-    state: 'busy',
-    inputMode: 'terminal',
-    cwd: '/project2',
-    projectRoot: '/project2',
-    aiPid: 1002,
-    terminalPid: 2002,
-    aiLogs: [],
-    shellLogs: [],
-    isGitRepo: false,
-    fileTree: [],
-    fileExplorerExpanded: [],
-    messageQueue: [],
-    groupId: 'group-1',
-  },
-];
-
 // Create test groups
 const createTestGroups = (): Group[] => [
   { id: 'group-1', name: 'EXISTING GROUP', emoji: '📁', collapsed: false },
@@ -129,21 +93,15 @@ const renderWithLayerStack = (ui: React.ReactElement) => {
 
 describe('CreateGroupModal', () => {
   let theme: Theme;
-  let sessions: Session[];
   let groups: Group[];
   let setGroups: ReturnType<typeof vi.fn>;
-  let setSessions: ReturnType<typeof vi.fn>;
   let onClose: ReturnType<typeof vi.fn>;
-  let setMoveSessionToNewGroup: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     theme = createTestTheme();
-    sessions = createTestSessions();
     groups = createTestGroups();
     setGroups = vi.fn();
-    setSessions = vi.fn();
     onClose = vi.fn();
-    setMoveSessionToNewGroup = vi.fn();
     vi.useFakeTimers();
   });
 
@@ -158,11 +116,6 @@ describe('CreateGroupModal', () => {
       onClose,
       groups,
       setGroups,
-      sessions,
-      setSessions,
-      activeSessionId: 'session-1',
-      moveSessionToNewGroup: false,
-      setMoveSessionToNewGroup,
     };
 
     return renderWithLayerStack(
@@ -522,7 +475,7 @@ describe('CreateGroupModal', () => {
       expect(setGroups).toHaveBeenCalledWith([
         ...groups,
         expect.objectContaining({
-          id: 'group-1234567890',
+          id: 'group-test-id',
         }),
       ]);
     });
@@ -552,8 +505,6 @@ describe('CreateGroupModal', () => {
       const input = screen.getByPlaceholderText('Enter group name...');
       fireEvent.change(input, { target: { value: 'Rock Band' } });
       fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      expect(setMoveSessionToNewGroup).toHaveBeenCalledWith(false);
       expect(onClose).toHaveBeenCalled();
     });
 
@@ -565,69 +516,6 @@ describe('CreateGroupModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
       expect(onClose).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('Move session to new group', () => {
-    it('does not move session when moveSessionToNewGroup is false', () => {
-      renderModal({ moveSessionToNewGroup: false });
-
-      const input = screen.getByPlaceholderText('Enter group name...');
-      fireEvent.change(input, { target: { value: 'Test' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      expect(setSessions).not.toHaveBeenCalled();
-    });
-
-    it('moves active session to new group when moveSessionToNewGroup is true', () => {
-      vi.spyOn(Date, 'now').mockReturnValue(9999);
-
-      renderModal({
-        moveSessionToNewGroup: true,
-        activeSessionId: 'session-1',
-      });
-
-      const input = screen.getByPlaceholderText('Enter group name...');
-      fireEvent.change(input, { target: { value: 'New Group' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      expect(setSessions).toHaveBeenCalledWith(expect.any(Function));
-
-      // Call the update function to verify it correctly updates the session
-      const updateFn = setSessions.mock.calls[0][0];
-      const result = updateFn(sessions);
-
-      expect(result[0].groupId).toBe('group-9999');
-      expect(result[1].groupId).toBe('group-1'); // Unchanged
-    });
-
-    it('only updates the active session', () => {
-      vi.spyOn(Date, 'now').mockReturnValue(5555);
-
-      renderModal({
-        moveSessionToNewGroup: true,
-        activeSessionId: 'session-2',
-      });
-
-      const input = screen.getByPlaceholderText('Enter group name...');
-      fireEvent.change(input, { target: { value: 'New Group' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      const updateFn = setSessions.mock.calls[0][0];
-      const result = updateFn(sessions);
-
-      expect(result[0].groupId).toBeUndefined(); // session-1 unchanged
-      expect(result[1].groupId).toBe('group-5555'); // session-2 updated
-    });
-
-    it('resets moveSessionToNewGroup flag after creation', () => {
-      renderModal({ moveSessionToNewGroup: true });
-
-      const input = screen.getByPlaceholderText('Enter group name...');
-      fireEvent.change(input, { target: { value: 'Test' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      expect(setMoveSessionToNewGroup).toHaveBeenCalledWith(false);
     });
   });
 
@@ -801,11 +689,6 @@ describe('CreateGroupModal', () => {
               onClose={onClose}
               groups={groups}
               setGroups={setGroups}
-              sessions={sessions}
-              setSessions={setSessions}
-              activeSessionId="session-1"
-              moveSessionToNewGroup={false}
-              setMoveSessionToNewGroup={setMoveSessionToNewGroup}
             />
           </LayerStackProvider>
         </div>
@@ -870,11 +753,6 @@ describe('CreateGroupModal', () => {
             onClose={onClose1}
             groups={groups}
             setGroups={setGroups}
-            sessions={sessions}
-            setSessions={setSessions}
-            activeSessionId="session-1"
-            moveSessionToNewGroup={false}
-            setMoveSessionToNewGroup={setMoveSessionToNewGroup}
           />
         </LayerStackProvider>
       );
@@ -887,11 +765,6 @@ describe('CreateGroupModal', () => {
             onClose={onClose2}
             groups={groups}
             setGroups={setGroups}
-            sessions={sessions}
-            setSessions={setSessions}
-            activeSessionId="session-1"
-            moveSessionToNewGroup={false}
-            setMoveSessionToNewGroup={setMoveSessionToNewGroup}
           />
         </LayerStackProvider>
       );
@@ -992,23 +865,6 @@ describe('CreateGroupModal', () => {
           name: 'FIRST GROUP',
         }),
       ]);
-    });
-
-    it('handles empty sessions array', () => {
-      renderModal({ sessions: [], moveSessionToNewGroup: true });
-
-      const input = screen.getByPlaceholderText('Enter group name...');
-      fireEvent.change(input, { target: { value: 'Test' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-      expect(setGroups).toHaveBeenCalled();
-      // setSessions should still be called with the update function
-      // The function will return empty array since no session matches
-      if (setSessions.mock.calls.length > 0) {
-        const updateFn = setSessions.mock.calls[0][0];
-        const result = updateFn([]);
-        expect(result).toEqual([]);
-      }
     });
 
     it('handles rapid create clicks', () => {
