@@ -27,6 +27,9 @@ export interface AgentCapabilities {
   /** Agent can accept image inputs (screenshots, diagrams, etc.) */
   supportsImageInput: boolean;
 
+  /** Agent can accept image inputs when resuming an existing session */
+  supportsImageInputOnResume: boolean;
+
   /** Agent supports slash commands (e.g., /help, /compact) */
   supportsSlashCommands: boolean;
 
@@ -62,6 +65,7 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = {
   supportsJsonOutput: false,
   supportsSessionId: false,
   supportsImageInput: false,
+  supportsImageInputOnResume: false,
   supportsSlashCommands: false,
   supportsSessionStorage: false,
   supportsCostTracking: false,

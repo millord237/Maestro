@@ -6,6 +6,15 @@ export { isValidThemeId } from '../../shared/theme-types';
 
 // Re-export error types from shared location
 export type { AgentError, AgentErrorType, AgentErrorRecovery } from '../../shared/types';
+
+// Re-export group chat types from shared location
+export type {
+  GroupChat,
+  GroupChatParticipant,
+  GroupChatMessage,
+  GroupChatState,
+  ModeratorConfig,
+} from '../../shared/group-chat-types';
 // Import AgentError for use within this file
 import type { AgentError } from '../../shared/types';
 
@@ -33,7 +42,7 @@ export interface FileArtifact {
 export interface LogEntry {
   id: string;
   timestamp: number;
-  source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai';
+  source: 'stdout' | 'stderr' | 'system' | 'user' | 'ai' | 'error';
   text: string;
   interactive?: boolean;
   options?: string[];
@@ -47,6 +56,8 @@ export interface LogEntry {
   delivered?: boolean;
   // For user messages - tracks if message was sent in read-only mode
   readOnly?: boolean;
+  // For error entries - stores the full AgentError for "View Details" functionality
+  agentError?: AgentError;
 }
 
 // Queued item for the session-level execution queue
@@ -205,7 +216,7 @@ export interface UsageStats {
   cacheReadInputTokens: number;
   cacheCreationInputTokens: number;
   totalCostUsd: number;
-  contextWindow: number; // e.g., 200000 for Claude, 128000 for Codex o4-mini
+  contextWindow: number; // e.g., 200000 for Claude/GPT-5.2, 128000 for GPT-4o
   /**
    * Reasoning/thinking tokens (separate from outputTokens)
    * Some models like OpenAI o3/o4-mini report reasoning tokens separately.
@@ -425,6 +436,14 @@ export interface Session {
   // Whether operations are paused due to an agent error
   // When true, new messages are blocked until the error is resolved
   agentErrorPaused?: boolean;
+
+  // Per-session agent configuration overrides
+  // These override the global agent-level settings for this specific session
+  customPath?: string;           // Custom path to agent binary (overrides agent-level)
+  customArgs?: string;           // Custom CLI arguments (overrides agent-level)
+  customEnvVars?: Record<string, string>; // Custom environment variables (overrides agent-level)
+  customModel?: string;          // Custom model ID (overrides agent-level)
+  customProviderPath?: string;   // Custom provider path (overrides agent-level)
 }
 
 export interface Group {
@@ -467,6 +486,17 @@ export interface ProcessConfig {
   args: string[];
   prompt?: string; // For batch mode agents like Claude (passed as CLI argument)
   shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish')
+  images?: string[]; // Base64 data URLs for images
+  // Agent-specific spawn options (used to build args via agent config)
+  agentSessionId?: string; // For session resume (uses agent's resumeArgs builder)
+  readOnlyMode?: boolean; // For read-only/plan mode (uses agent's readOnlyArgs)
+  modelId?: string; // For model selection (uses agent's modelArgs builder)
+  yoloMode?: boolean; // For YOLO/full-access mode (uses agent's yoloModeArgs)
+  // Per-session overrides (take precedence over agent-level config)
+  sessionCustomPath?: string;
+  sessionCustomArgs?: string;
+  sessionCustomEnvVars?: Record<string, string>;
+  sessionCustomModel?: string;
 }
 
 // Directory entry from fs:readDir
@@ -531,4 +561,3 @@ export interface LeaderboardSubmitResponse {
     longestRun: LeaderboardRankingInfo | null;  // null if no longestRunMs submitted
   };
 }
-

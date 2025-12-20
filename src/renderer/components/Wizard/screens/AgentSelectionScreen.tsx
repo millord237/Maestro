@@ -13,10 +13,11 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, Settings, ArrowLeft } from 'lucide-react';
 import type { Theme, AgentConfig } from '../../../types';
 import { useWizard } from '../WizardContext';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
+import { AgentConfigPanel } from '../../shared/AgentConfigPanel';
 
 interface AgentSelectionScreenProps {
   theme: Theme;
@@ -25,7 +26,7 @@ interface AgentSelectionScreenProps {
 /**
  * Agent tile data for display
  */
-interface AgentTile {
+export interface AgentTile {
   id: string;
   name: string;
   supported: boolean; // Whether Maestro supports this agent (only Claude for now)
@@ -38,7 +39,7 @@ interface AgentTile {
  * Supported agents: Claude Code, Codex, OpenCode (shown first)
  * Unsupported agents: shown ghosted with "Coming soon" (at bottom)
  */
-const AGENT_TILES: AgentTile[] = [
+export const AGENT_TILES: AgentTile[] = [
   // Supported agents first
   {
     id: 'claude-code',
@@ -92,7 +93,7 @@ const GRID_ROWS = 2;
 /**
  * Get SVG logo for an agent with brand colors
  */
-function AgentLogo({ agentId, supported, detected, brandColor, theme }: {
+export function AgentLogo({ agentId, supported, detected, brandColor, theme }: {
   agentId: string;
   supported: boolean;
   detected: boolean;
@@ -282,6 +283,9 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     setSelectedAgent,
     setAvailableAgents,
     setAgentName,
+    setCustomPath: setWizardCustomPath,
+    setCustomArgs: setWizardCustomArgs,
+    setCustomEnvVars: setWizardCustomEnvVars,
     nextStep,
     canProceedToNext,
   } = useWizard();
@@ -295,6 +299,24 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   // Screen reader announcement state
   const [announcement, setAnnouncement] = useState('');
   const [announcementKey, setAnnouncementKey] = useState(0);
+
+  // Configuration panel state
+  const [viewMode, setViewMode] = useState<'grid' | 'config'>('grid');
+  const [configuringAgentId, setConfiguringAgentId] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Configuration form state (uses wizard state for customPath/Args/EnvVars)
+  const customPath = state.customPath ?? '';
+  const customArgs = state.customArgs ?? '';
+  const customEnvVars = state.customEnvVars ?? {};
+  const setCustomPath = (val: string) => setWizardCustomPath(val || undefined);
+  const setCustomArgs = (val: string) => setWizardCustomArgs(val || undefined);
+  const setCustomEnvVars = (val: Record<string, string>) =>
+    setWizardCustomEnvVars(Object.keys(val).length > 0 ? val : undefined);
+  const [agentConfig, setAgentConfig] = useState<Record<string, any>>({});
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [refreshingAgent, setRefreshingAgent] = useState(false);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -526,6 +548,110 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     return detected?.available ?? false;
   }, [detectedAgents]);
 
+  /**
+   * Open the configuration panel for an agent
+   * Uses wizard state for customPath/Args/EnvVars - no provider-level storage
+   */
+  const handleOpenConfig = useCallback(async (agentId: string) => {
+    // Load agent config (model selection only - per-agent path/args/envVars are in wizard state)
+    const config = await window.maestro.agents.getConfig(agentId);
+    setAgentConfig(config || {});
+    setConfiguringAgentId(agentId);
+
+    // Load models if agent supports it
+    const agent = detectedAgents.find(a => a.id === agentId);
+    if (agent?.capabilities?.supportsModelSelection) {
+      setLoadingModels(true);
+      try {
+        const models = await window.maestro.agents.getModels(agentId);
+        setAvailableModels(models);
+      } catch (err) {
+        console.error('Failed to load models:', err);
+      } finally {
+        setLoadingModels(false);
+      }
+    }
+
+    // Auto-select this agent when opening config
+    setSelectedAgent(agentId as any);
+
+    // Trigger transition
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setViewMode('config');
+      setIsTransitioning(false);
+    }, 150);
+
+    // Announce opening config panel
+    const tile = AGENT_TILES.find(t => t.id === agentId);
+    setAnnouncement(`Configuring ${tile?.name || agentId}`);
+    setAnnouncementKey((prev) => prev + 1);
+  }, [detectedAgents, setSelectedAgent]);
+
+  /**
+   * Close the configuration panel and return to grid
+   */
+  const handleCloseConfig = useCallback(() => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setViewMode('grid');
+      setConfiguringAgentId(null);
+      setIsTransitioning(false);
+      // Focus the tile that was being configured
+      const index = AGENT_TILES.findIndex(t => t.id === configuringAgentId);
+      if (index !== -1) {
+        setFocusedTileIndex(index);
+        tileRefs.current[index]?.focus();
+      }
+    }, 150);
+
+    setAnnouncement('Returned to agent selection');
+    setAnnouncementKey((prev) => prev + 1);
+  }, [configuringAgentId]);
+
+  /**
+   * Refresh agent detection after config changes
+   */
+  const refreshAgentDetection = useCallback(async () => {
+    const agents = await window.maestro.agents.detect();
+    const visibleAgents = agents.filter((a: AgentConfig) => !a.hidden);
+    setDetectedAgents(visibleAgents);
+    setAvailableAgents(visibleAgents);
+  }, [setAvailableAgents]);
+
+  /**
+   * Handle refresh for single agent in config panel
+   */
+  const handleRefreshAgent = useCallback(async () => {
+    if (!configuringAgentId) return;
+    setRefreshingAgent(true);
+    try {
+      await refreshAgentDetection();
+    } finally {
+      setRefreshingAgent(false);
+    }
+  }, [configuringAgentId, refreshAgentDetection]);
+
+  /**
+   * Handle model refresh in config panel
+   */
+  const handleRefreshModels = useCallback(async () => {
+    if (!configuringAgentId) return;
+    setLoadingModels(true);
+    try {
+      const models = await window.maestro.agents.getModels(configuringAgentId, true);
+      setAvailableModels(models);
+    } catch (err) {
+      console.error('Failed to refresh models:', err);
+    } finally {
+      setLoadingModels(false);
+    }
+  }, [configuringAgentId]);
+
+  // Get the agent being configured
+  const configuringAgent = detectedAgents.find(a => a.id === configuringAgentId);
+  const configuringTile = AGENT_TILES.find(t => t.id === configuringAgentId);
+
   // Loading state
   if (isDetecting) {
     return (
@@ -544,10 +670,135 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     );
   }
 
+  // Render configuration panel view
+  if (viewMode === 'config' && configuringAgent && configuringTile) {
+    return (
+      <div
+        ref={containerRef}
+        className={`flex flex-col flex-1 min-h-0 px-8 py-6 overflow-y-auto transition-opacity duration-150 ${
+          isTransitioning ? 'opacity-0' : 'opacity-100'
+        }`}
+        tabIndex={-1}
+      >
+        {/* Screen reader announcements */}
+        <ScreenReaderAnnouncement
+          message={announcement}
+          announceKey={announcementKey}
+          politeness="polite"
+        />
+
+        {/* Header with Back button */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={handleCloseConfig}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            style={{ color: theme.colors.textDim }}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <h3
+            className="text-xl font-semibold"
+            style={{ color: theme.colors.textMain }}
+          >
+            Configure {configuringTile.name}
+          </h3>
+          <div className="w-20" /> {/* Spacer for centering */}
+        </div>
+
+        {/* Configuration Panel */}
+        <div className="flex-1 flex justify-center overflow-y-auto">
+          <div className="w-full max-w-xl">
+            <AgentConfigPanel
+              theme={theme}
+              agent={configuringAgent}
+              customPath={customPath}
+              onCustomPathChange={setCustomPath}
+              onCustomPathBlur={async () => {
+                // Wizard state is already updated via setCustomPath - just refresh detection
+                await refreshAgentDetection();
+              }}
+              onCustomPathClear={async () => {
+                setCustomPath('');
+                await refreshAgentDetection();
+              }}
+              customArgs={customArgs}
+              onCustomArgsChange={setCustomArgs}
+              onCustomArgsBlur={() => {
+                // Wizard state is already updated via setCustomArgs - no provider-level save
+              }}
+              onCustomArgsClear={() => {
+                setCustomArgs('');
+              }}
+              customEnvVars={customEnvVars}
+              onEnvVarKeyChange={(oldKey, newKey, value) => {
+                const newVars = { ...customEnvVars };
+                delete newVars[oldKey];
+                newVars[newKey] = value;
+                setCustomEnvVars(newVars);
+              }}
+              onEnvVarValueChange={(key, value) => {
+                setCustomEnvVars({ ...customEnvVars, [key]: value });
+              }}
+              onEnvVarRemove={(key) => {
+                const newVars = { ...customEnvVars };
+                delete newVars[key];
+                setCustomEnvVars(newVars);
+              }}
+              onEnvVarAdd={() => {
+                let newKey = 'NEW_VAR';
+                let counter = 1;
+                while (customEnvVars[newKey]) {
+                  newKey = `NEW_VAR_${counter}`;
+                  counter++;
+                }
+                setCustomEnvVars({ ...customEnvVars, [newKey]: '' });
+              }}
+              onEnvVarsBlur={() => {
+                // Wizard state is already updated via setCustomEnvVars - no provider-level save
+              }}
+              agentConfig={agentConfig}
+              onConfigChange={(key, value) => {
+                setAgentConfig(prev => ({ ...prev, [key]: value }));
+              }}
+              onConfigBlur={async () => {
+                await window.maestro.agents.setConfig(configuringAgentId!, agentConfig);
+              }}
+              availableModels={availableModels}
+              loadingModels={loadingModels}
+              onRefreshModels={handleRefreshModels}
+              onRefreshAgent={handleRefreshAgent}
+              refreshingAgent={refreshingAgent}
+              compact
+              showBuiltInEnvVars
+            />
+          </div>
+        </div>
+
+        {/* Done button */}
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={handleCloseConfig}
+            className="px-8 py-2.5 rounded-lg font-medium transition-all outline-none"
+            style={{
+              backgroundColor: theme.colors.accent,
+              color: theme.colors.accentForeground,
+            }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render grid view
   return (
     <div
       ref={containerRef}
-      className="flex flex-col flex-1 min-h-0 px-8 py-6 overflow-y-auto justify-between"
+      className={`flex flex-col flex-1 min-h-0 px-8 py-6 overflow-y-auto justify-between transition-opacity duration-150 ${
+        isTransitioning ? 'opacity-0' : 'opacity-100'
+      }`}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -595,7 +846,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                 }}
                 disabled={!canSelect}
                 className={`
-                  relative flex flex-col items-center justify-center p-6 rounded-xl
+                  relative flex flex-col items-center justify-center pt-6 px-6 pb-10 rounded-xl
                   border-2 transition-all duration-200 outline-none min-w-[160px]
                   ${canSelect ? 'cursor-pointer' : 'cursor-not-allowed'}
                 `}
@@ -687,17 +938,42 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                   </span>
                 )}
 
-                {/* "New" badge for Codex and OpenCode */}
+                {/* "Beta" badge for Codex and OpenCode */}
                 {isSupported && (tile.id === 'codex' || tile.id === 'opencode') && (
                   <span
-                    className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] rounded-full font-medium"
+                    className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] rounded font-bold uppercase"
                     style={{
-                      backgroundColor: '#22c55e30',
-                      color: '#22c55e',
+                      backgroundColor: theme.colors.warning + '30',
+                      color: theme.colors.warning,
                     }}
                   >
-                    New
+                    Beta
                   </span>
+                )}
+
+                {/* Customize button for supported agents (shown even if not detected, so user can set custom path) */}
+                {/* Note: Using div with role="button" to avoid nested button warning */}
+                {isSupported && (
+                  <div
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenConfig(tile.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation();
+                        handleOpenConfig(tile.id);
+                      }
+                    }}
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 mt-2 rounded text-[10px] hover:bg-white/10 transition-colors cursor-pointer"
+                    style={{ color: theme.colors.textDim }}
+                    title="Customize agent settings"
+                    tabIndex={-1}
+                  >
+                    <Settings className="w-3 h-3" />
+                    Customize
+                  </div>
                 )}
               </button>
             );

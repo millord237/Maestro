@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -15,6 +15,139 @@ import { NotificationsPanel } from './NotificationsPanel';
 const FEATURE_FLAGS = {
   LLM_SETTINGS: false,  // LLM provider configuration (OpenRouter, Anthropic, Ollama)
 };
+
+// Environment Variables Editor - uses stable indices to prevent focus loss during key editing
+interface EnvVarEntry {
+  id: number;
+  key: string;
+  value: string;
+}
+
+interface EnvVarsEditorProps {
+  envVars: Record<string, string>;
+  setEnvVars: (vars: Record<string, string>) => void;
+  theme: Theme;
+}
+
+function EnvVarsEditor({ envVars, setEnvVars, theme }: EnvVarsEditorProps) {
+  // Convert object to array with stable IDs for editing
+  const [entries, setEntries] = useState<EnvVarEntry[]>(() => {
+    return Object.entries(envVars).map(([key, value], index) => ({
+      id: index,
+      key,
+      value,
+    }));
+  });
+  const [nextId, setNextId] = useState(Object.keys(envVars).length);
+
+  // Sync entries back to parent when they change (but debounced to avoid focus issues)
+  const commitChanges = (newEntries: EnvVarEntry[]) => {
+    const newEnvVars: Record<string, string> = {};
+    newEntries.forEach(entry => {
+      if (entry.key.trim()) {
+        newEnvVars[entry.key] = entry.value;
+      }
+    });
+    setEnvVars(newEnvVars);
+  };
+
+  // Sync from parent when envVars changes externally (e.g., on modal open)
+  useEffect(() => {
+    const parentEntries = Object.entries(envVars);
+    // Only reset if the keys/values actually differ
+    const currentKeys = entries.filter(e => e.key.trim()).map(e => `${e.key}=${e.value}`).sort().join(',');
+    const parentKeys = parentEntries.map(([k, v]) => `${k}=${v}`).sort().join(',');
+    if (currentKeys !== parentKeys) {
+      setEntries(parentEntries.map(([key, value], index) => ({
+        id: index,
+        key,
+        value,
+      })));
+      setNextId(parentEntries.length);
+    }
+  }, [envVars]);
+
+  const updateEntry = (id: number, field: 'key' | 'value', newValue: string) => {
+    setEntries(prev => {
+      const updated = prev.map(entry =>
+        entry.id === id ? { ...entry, [field]: newValue } : entry
+      );
+      // Commit changes on every update for value field, but for key field
+      // only commit valid keys to avoid issues with empty keys
+      commitChanges(updated);
+      return updated;
+    });
+  };
+
+  const removeEntry = (id: number) => {
+    setEntries(prev => {
+      const updated = prev.filter(entry => entry.id !== id);
+      commitChanges(updated);
+      return updated;
+    });
+  };
+
+  const addEntry = () => {
+    // Generate a unique default key name
+    let newKey = 'VAR';
+    let counter = 1;
+    const existingKeys = new Set(entries.map(e => e.key));
+    while (existingKeys.has(newKey)) {
+      newKey = `VAR_${counter}`;
+      counter++;
+    }
+    setEntries(prev => [...prev, { id: nextId, key: newKey, value: '' }]);
+    setNextId(prev => prev + 1);
+  };
+
+  return (
+    <div>
+      <label className="block text-xs opacity-60 mb-1">Environment Variables (optional)</label>
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <div key={entry.id} className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={entry.key}
+              onChange={(e) => updateEntry(entry.id, 'key', e.target.value)}
+              placeholder="VARIABLE"
+              className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
+              style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+            />
+            <span className="text-xs" style={{ color: theme.colors.textDim }}>=</span>
+            <input
+              type="text"
+              value={entry.value}
+              onChange={(e) => updateEntry(entry.id, 'value', e.target.value)}
+              placeholder="value"
+              className="flex-[2] p-2 rounded border bg-transparent outline-none text-xs font-mono"
+              style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+            />
+            <button
+              onClick={() => removeEntry(entry.id)}
+              className="p-2 rounded hover:bg-white/10 transition-colors"
+              title="Remove variable"
+              style={{ color: theme.colors.textDim }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={addEntry}
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+          style={{ color: theme.colors.textDim }}
+        >
+          <Plus className="w-3 h-3" />
+          Add Variable
+        </button>
+      </div>
+      <p className="text-xs opacity-50 mt-1">
+        Environment variables passed to every shell session.
+      </p>
+    </div>
+  );
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -49,6 +182,12 @@ interface SettingsModalProps {
   setMaxOutputLines: (lines: number) => void;
   defaultShell: string;
   setDefaultShell: (shell: string) => void;
+  customShellPath: string;
+  setCustomShellPath: (path: string) => void;
+  shellArgs: string;
+  setShellArgs: (args: string) => void;
+  shellEnvVars: Record<string, string>;
+  setShellEnvVars: (vars: Record<string, string>) => void;
   ghPath: string;
   setGhPath: (path: string) => void;
   enterToSendAI: boolean;
@@ -91,6 +230,16 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
   const [shells, setShells] = useState<ShellInfo[]>([]);
   const [shellsLoading, setShellsLoading] = useState(false);
   const [shellsLoaded, setShellsLoaded] = useState(false);
+  const [shellConfigExpanded, setShellConfigExpanded] = useState(false);
+
+  // Sync/storage location state
+  const [defaultStoragePath, setDefaultStoragePath] = useState<string>('');
+  const [currentStoragePath, setCurrentStoragePath] = useState<string>('');
+  const [customSyncPath, setCustomSyncPath] = useState<string | undefined>(undefined);
+  const [syncRestartRequired, setSyncRestartRequired] = useState(false);
+  const [syncMigrating, setSyncMigrating] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncMigratedCount, setSyncMigratedCount] = useState<number | null>(null);
 
   // Layer stack integration
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -103,6 +252,23 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
       // Don't load fonts immediately - only when user interacts with font selector
       // Set initial tab if provided, otherwise default to 'general'
       setActiveTab(initialTab || 'general');
+
+      // Load sync settings
+      Promise.all([
+        window.maestro.sync.getDefaultPath(),
+        window.maestro.sync.getSettings(),
+        window.maestro.sync.getCurrentStoragePath(),
+      ]).then(([defaultPath, settings, currentPath]) => {
+        setDefaultStoragePath(defaultPath);
+        setCustomSyncPath(settings.customSyncPath);
+        setCurrentStoragePath(currentPath);
+        setSyncRestartRequired(false);
+        setSyncError(null);
+        setSyncMigratedCount(null);
+      }).catch((err) => {
+        console.error('Failed to load sync settings:', err);
+        setSyncError('Failed to load storage settings');
+      });
     }
   }, [isOpen, initialTab]);
 
@@ -644,10 +810,13 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
               {/* Default Shell */}
               <div>
-                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                <label className="block text-xs font-bold opacity-70 uppercase mb-1 flex items-center gap-2">
                   <Terminal className="w-3 h-3" />
                   Default Terminal Shell
                 </label>
+                <p className="text-xs opacity-50 mb-2">
+                  Choose which shell to use for terminal sessions. Select any shell and configure a custom path if needed.
+                </p>
                 {shellsLoading ? (
                   <div className="text-sm opacity-50 p-2">Loading shells...</div>
                 ) : (
@@ -656,17 +825,18 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                       shells.map((shell) => (
                         <button
                           key={shell.id}
-                          disabled={!shell.available}
                           onClick={() => {
-                            if (shell.available) {
-                              props.setDefaultShell(shell.id);
+                            props.setDefaultShell(shell.id);
+                            // Auto-expand shell config when selecting an unavailable shell
+                            if (!shell.available) {
+                              setShellConfigExpanded(true);
                             }
                           }}
                           onMouseEnter={handleShellInteraction}
                           onFocus={handleShellInteraction}
                           className={`w-full text-left p-3 rounded border transition-all ${
                             props.defaultShell === shell.id ? 'ring-2' : ''
-                          } ${!shell.available ? 'opacity-40 cursor-not-allowed' : 'hover:bg-opacity-10'}`}
+                          } hover:bg-opacity-10`}
                           style={{
                             borderColor: theme.colors.border,
                             backgroundColor: props.defaultShell === shell.id ? theme.colors.accentDim : theme.colors.bgMain,
@@ -690,31 +860,141 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                                 </span>
                               )
                             ) : (
-                              <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.error + '20', color: theme.colors.error }}>
-                                Not Found
-                              </span>
+                              props.defaultShell === shell.id ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.warning + '20', color: theme.colors.warning }}>
+                                    Custom Path Required
+                                  </span>
+                                  <Check className="w-4 h-4" style={{ color: theme.colors.accent }} />
+                                </div>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.warning + '20', color: theme.colors.warning }}>
+                                  Not Found
+                                </span>
+                              )
                             )}
                           </div>
                         </button>
                       ))
                     ) : (
-                      <button
-                        onClick={handleShellInteraction}
-                        className="w-full text-left p-3 rounded border"
-                        style={{
-                          borderColor: theme.colors.border,
-                          backgroundColor: theme.colors.bgMain,
-                          color: theme.colors.textMain,
-                        }}
-                      >
-                        Click to detect available shells...
-                      </button>
+                      /* Show current default shell before detection runs */
+                      <div className="space-y-2">
+                        <button
+                          className="w-full text-left p-3 rounded border ring-2"
+                          style={{
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.accentDim,
+                            ringColor: theme.colors.accent,
+                            color: theme.colors.textMain,
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{props.defaultShell.charAt(0).toUpperCase() + props.defaultShell.slice(1)}</div>
+                              <div className="text-xs opacity-50 font-mono mt-1">Current default</div>
+                            </div>
+                            <Check className="w-4 h-4" style={{ color: theme.colors.accent }} />
+                          </div>
+                        </button>
+                        <button
+                          onClick={handleShellInteraction}
+                          className="w-full text-left p-3 rounded border hover:bg-white/5 transition-colors"
+                          style={{
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.bgMain,
+                            color: theme.colors.textDim,
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Terminal className="w-4 h-4" />
+                            <span>Detect other available shells...</span>
+                          </div>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
-                <p className="text-xs opacity-50 mt-2">
-                  Choose which shell to use for terminal sessions. Only available shells are shown.
-                </p>
+
+                {/* Shell Configuration Expandable Section */}
+                <button
+                  onClick={() => setShellConfigExpanded(!shellConfigExpanded)}
+                  className="w-full flex items-center justify-between p-3 rounded border mt-3 hover:bg-white/5 transition-colors"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  <span className="text-sm font-medium" style={{ color: theme.colors.textMain }}>
+                    Shell Configuration
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${shellConfigExpanded ? 'rotate-180' : ''}`}
+                    style={{ color: theme.colors.textDim }}
+                  />
+                </button>
+
+                {shellConfigExpanded && (
+                  <div className="mt-2 space-y-3 p-3 rounded border" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}>
+                    {/* Custom Shell Path */}
+                    <div>
+                      <label className="block text-xs opacity-60 mb-1">Custom Path (optional)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={props.customShellPath}
+                          onChange={(e) => props.setCustomShellPath(e.target.value)}
+                          placeholder="/path/to/shell"
+                          className="flex-1 p-2 rounded border bg-transparent outline-none text-sm font-mono"
+                          style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                        />
+                        {props.customShellPath && (
+                          <button
+                            onClick={() => props.setCustomShellPath('')}
+                            className="px-2 py-1.5 rounded text-xs"
+                            style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.textDim }}
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs opacity-50 mt-1">
+                        Override the auto-detected shell path. Leave empty to use the detected path.
+                      </p>
+                    </div>
+
+                    {/* Shell Arguments */}
+                    <div>
+                      <label className="block text-xs opacity-60 mb-1">Additional Arguments (optional)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={props.shellArgs}
+                          onChange={(e) => props.setShellArgs(e.target.value)}
+                          placeholder="--flag value"
+                          className="flex-1 p-2 rounded border bg-transparent outline-none text-sm font-mono"
+                          style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                        />
+                        {props.shellArgs && (
+                          <button
+                            onClick={() => props.setShellArgs('')}
+                            className="px-2 py-1.5 rounded text-xs"
+                            style={{ backgroundColor: theme.colors.bgMain, color: theme.colors.textDim }}
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs opacity-50 mt-1">
+                        Additional CLI arguments passed to every shell session (e.g., --login, -c).
+                      </p>
+                    </div>
+
+                    {/* Shell Environment Variables */}
+                    <EnvVarsEditor
+                      envVars={props.shellEnvVars}
+                      setEnvVars={props.setShellEnvVars}
+                      theme={theme}
+                    />
+                  </div>
+                )}
+
               </div>
 
               {/* GitHub CLI Path */}
@@ -839,6 +1119,181 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 onChange={props.setCrashReportingEnabled}
                 theme={theme}
               />
+
+              {/* Settings Storage Location */}
+              <div
+                className="flex items-start gap-3 p-4 rounded-xl border relative"
+                style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
+              >
+                {/* BETA Badge */}
+                <div
+                  className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+                  style={{ backgroundColor: theme.colors.warning + '30', color: theme.colors.warning }}
+                >
+                  Beta
+                </div>
+                <div
+                  className="p-2 rounded-lg flex-shrink-0"
+                  style={{ backgroundColor: theme.colors.accent + '20' }}
+                >
+                  <FolderSync className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase font-bold opacity-50 mb-1">Storage Location</p>
+                  <p className="font-semibold mb-1">Settings folder</p>
+                  <p className="text-xs opacity-60 mb-2">
+                    Choose where Maestro stores settings, sessions, and groups. Use a synced folder (iCloud Drive, Dropbox, OneDrive) to share across devices.
+                  </p>
+                  <p className="text-xs opacity-50 mb-4 italic">
+                    Note: Only run Maestro on one device at a time to avoid sync conflicts.
+                  </p>
+
+                  {/* Default Location */}
+                  <div className="mb-3">
+                    <p className="text-[10px] uppercase font-bold opacity-40 mb-1">Default Location</p>
+                    <div
+                      className="text-xs p-2 rounded font-mono truncate"
+                      style={{ backgroundColor: theme.colors.bgPanel }}
+                      title={defaultStoragePath}
+                    >
+                      {defaultStoragePath || 'Loading...'}
+                    </div>
+                  </div>
+
+                  {/* Current Location (if different) */}
+                  {customSyncPath && (
+                    <div className="mb-3">
+                      <p className="text-[10px] uppercase font-bold opacity-40 mb-1">Current Location (Custom)</p>
+                      <div
+                        className="text-xs p-2 rounded font-mono truncate flex items-center gap-2"
+                        style={{ backgroundColor: theme.colors.accent + '15', border: `1px solid ${theme.colors.accent}40` }}
+                        title={customSyncPath}
+                      >
+                        <Cloud className="w-3 h-3 flex-shrink-0" style={{ color: theme.colors.accent }} />
+                        <span className="truncate">{customSyncPath}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={async () => {
+                        const folder = await window.maestro.sync.selectSyncFolder();
+                        if (folder) {
+                          setSyncMigrating(true);
+                          setSyncError(null);
+                          setSyncMigratedCount(null);
+                          try {
+                            const result = await window.maestro.sync.setCustomPath(folder);
+                            if (result.success) {
+                              setCustomSyncPath(folder);
+                              setCurrentStoragePath(folder);
+                              setSyncRestartRequired(true);
+                              if (result.migrated !== undefined) {
+                                setSyncMigratedCount(result.migrated);
+                              }
+                            } else {
+                              setSyncError(result.error || 'Failed to change storage location');
+                            }
+                            if (result.errors && result.errors.length > 0) {
+                              setSyncError(result.errors.join(', '));
+                            }
+                          } finally {
+                            setSyncMigrating(false);
+                          }
+                        }
+                      }}
+                      disabled={syncMigrating}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                      style={{
+                        backgroundColor: theme.colors.accent,
+                        color: theme.colors.bgMain,
+                      }}
+                    >
+                      <Folder className="w-3 h-3" />
+                      {syncMigrating ? 'Migrating...' : (customSyncPath ? 'Change Folder...' : 'Choose Folder...')}
+                    </button>
+
+                    {customSyncPath && (
+                      <button
+                        onClick={async () => {
+                          setSyncMigrating(true);
+                          setSyncError(null);
+                          setSyncMigratedCount(null);
+                          try {
+                            const result = await window.maestro.sync.setCustomPath(null);
+                            if (result.success) {
+                              setCustomSyncPath(undefined);
+                              setCurrentStoragePath(defaultStoragePath);
+                              setSyncRestartRequired(true);
+                              if (result.migrated !== undefined) {
+                                setSyncMigratedCount(result.migrated);
+                              }
+                            } else {
+                              setSyncError(result.error || 'Failed to reset storage location');
+                            }
+                          } finally {
+                            setSyncMigrating(false);
+                          }
+                        }}
+                        disabled={syncMigrating}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                        style={{
+                          backgroundColor: theme.colors.border,
+                          color: theme.colors.textMain,
+                        }}
+                        title="Reset to default location"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Use Default
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Success Message */}
+                  {syncMigratedCount !== null && syncMigratedCount > 0 && !syncError && (
+                    <div
+                      className="mt-3 p-2 rounded text-xs flex items-center gap-2"
+                      style={{
+                        backgroundColor: theme.colors.success + '20',
+                        color: theme.colors.success,
+                      }}
+                    >
+                      <Check className="w-3 h-3" />
+                      Migrated {syncMigratedCount} settings file{syncMigratedCount !== 1 ? 's' : ''}
+                    </div>
+                  )}
+
+                  {/* Error Message */}
+                  {syncError && (
+                    <div
+                      className="mt-3 p-2 rounded text-xs flex items-start gap-2"
+                      style={{
+                        backgroundColor: theme.colors.error + '20',
+                        color: theme.colors.error,
+                      }}
+                    >
+                      <X className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                      <span>{syncError}</span>
+                    </div>
+                  )}
+
+                  {/* Restart Required Warning */}
+                  {syncRestartRequired && !syncError && (
+                    <div
+                      className="mt-3 p-2 rounded text-xs flex items-center gap-2"
+                      style={{
+                        backgroundColor: theme.colors.warning + '20',
+                        color: theme.colors.warning,
+                      }}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Restart Maestro for changes to take effect
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

@@ -139,7 +139,12 @@ describe('BatchRunnerModal', () => {
     };
 
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main', 'develop'] });
-    (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: true, authenticated: true });
+    (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn(() => ({
+      then: (cb: (value: { installed: boolean; authenticated: boolean }) => void) => {
+        cb({ installed: true, authenticated: true });
+        return Promise.resolve({ installed: true, authenticated: true });
+      },
+    }));
     (window.maestro.git as Record<string, unknown>).worktreeInfo = vi.fn().mockResolvedValue({
       success: true,
       exists: false,
@@ -275,7 +280,7 @@ describe('BatchRunnerModal', () => {
       fireEvent.click(doc1Button);
 
       // Click Add button
-      const addButton = screen.getByRole('button', { name: /Add \(/ });
+      const addButton = screen.getByRole('button', { name: /Add \d+ file/ });
       fireEvent.click(addButton);
 
       // Verify documents are now in the list
@@ -293,7 +298,7 @@ describe('BatchRunnerModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       const doc1Button = screen.getByRole('button', { name: /doc1\.md/ });
       fireEvent.click(doc1Button);
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       // Now we have 2 documents - find and click the remove button on the first
       const removeButtons = screen.getAllByTitle(/Remove document/);
@@ -395,7 +400,7 @@ describe('BatchRunnerModal', () => {
       // Add a second document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       // Find the drag handles
       const items = screen.getAllByText(/\.md/);
@@ -419,7 +424,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       await waitFor(() => {
         expect(screen.getByText('Loop')).toBeInTheDocument();
@@ -433,7 +438,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       const loopButton = await screen.findByText('Loop');
       fireEvent.click(loopButton);
@@ -452,7 +457,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       // Enable loop mode
       const loopButton = await screen.findByText('Loop');
@@ -478,7 +483,7 @@ describe('BatchRunnerModal', () => {
       // Add another document and enable loop with max
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
       fireEvent.click(await screen.findByText('Loop'));
       fireEvent.click(screen.getByRole('button', { name: 'max' }));
 
@@ -662,7 +667,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       await waitFor(() => {
         expect(screen.getByText('Save as Playbook')).toBeInTheDocument();
@@ -676,7 +681,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       fireEvent.click(screen.getByRole('button', { name: 'Save as Playbook' }));
 
@@ -696,7 +701,7 @@ describe('BatchRunnerModal', () => {
       // Add another document
       fireEvent.click(screen.getByRole('button', { name: 'Add Docs' }));
       fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-      fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
       fireEvent.click(screen.getByRole('button', { name: 'Save as Playbook' }));
 
@@ -1336,7 +1341,7 @@ describe('Loop Mode Additional Controls', () => {
     // Add another document to show loop controls
     fireEvent.click(screen.getByText('Add Docs'));
     fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
     // Enable loop and set max
     const loopButton = await screen.findByText('Loop');
@@ -1362,7 +1367,7 @@ describe('Loop Mode Additional Controls', () => {
     // Add another document
     fireEvent.click(screen.getByText('Add Docs'));
     fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
     // Enable loop with max
     const loopButton = await screen.findByText('Loop');
@@ -1390,7 +1395,7 @@ describe('Loop Mode Additional Controls', () => {
     // Add another document
     fireEvent.click(screen.getByText('Add Docs'));
     fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
     // Enable loop (defaults to infinite)
     const loopButton = await screen.findByText('Loop');
@@ -2307,7 +2312,7 @@ describe('Escape Handler Priority', () => {
     // Add documents to show Save as Playbook button
     fireEvent.click(screen.getByText('Add Docs'));
     fireEvent.click(screen.getByRole('button', { name: /doc1\.md/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Add \(/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ file/ }));
 
     await waitFor(() => screen.getByText('Save as Playbook'));
     fireEvent.click(screen.getByRole('button', { name: 'Save as Playbook' }));

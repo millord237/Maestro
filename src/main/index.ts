@@ -12,11 +12,56 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
-import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, setupLoggerEventForwarding } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, setupLoggerEventForwarding } from './ipc/handlers';
+import { groupChatEmitters } from './ipc/handlers/groupChat';
+import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, setGetAgentConfigCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState } from './group-chat/group-chat-router';
+import { updateParticipant, loadGroupChat, updateGroupChat } from './group-chat/group-chat-storage';
 import { initializeSessionStorages } from './storage';
-import { initializeOutputParsers } from './parsers';
+import { initializeOutputParsers, getOutputParser } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import { initAutoUpdater } from './auto-updater';
+
+// ============================================================================
+// Custom Storage Location Configuration
+// ============================================================================
+// This bootstrap store is ALWAYS local - it tells us where to find the main data
+// Users can choose a custom folder (e.g., iCloud Drive, Dropbox, OneDrive) to sync settings
+interface BootstrapSettings {
+  customSyncPath?: string;
+  iCloudSyncEnabled?: boolean; // Legacy - kept for backwards compatibility during migration
+}
+
+const bootstrapStore = new Store<BootstrapSettings>({
+  name: 'maestro-bootstrap',
+  defaults: {},
+});
+
+/**
+ * Get the custom sync path if configured.
+ * Returns undefined if using default path.
+ */
+function getSyncPath(): string | undefined {
+  const customPath = bootstrapStore.get('customSyncPath');
+
+  if (customPath) {
+    // Ensure the directory exists
+    if (!fsSync.existsSync(customPath)) {
+      try {
+        fsSync.mkdirSync(customPath, { recursive: true });
+      } catch {
+        // If we can't create the directory, fall back to default
+        console.error(`Failed to create custom sync path: ${customPath}, using default`);
+        return undefined;
+      }
+    }
+    return customPath;
+  }
+
+  return undefined; // Use default path
+}
+
+// Get the sync path once at startup
+const syncPath = getSyncPath();
 
 // Initialize Sentry for crash reporting (before app.ready)
 // Check if crash reporting is enabled (default: true for opt-out behavior)
@@ -72,6 +117,7 @@ interface MaestroSettings {
 
 const store = new Store<MaestroSettings>({
   name: 'maestro-settings',
+  cwd: syncPath, // Use iCloud/custom sync path if configured
   defaults: {
     activeThemeId: 'dracula',
     llmProvider: 'openrouter',
@@ -97,6 +143,7 @@ interface SessionsData {
 
 const sessionsStore = new Store<SessionsData>({
   name: 'maestro-sessions',
+  cwd: syncPath, // Use iCloud/custom sync path if configured
   defaults: {
     sessions: [],
   },
@@ -109,6 +156,7 @@ interface GroupsData {
 
 const groupsStore = new Store<GroupsData>({
   name: 'maestro-groups',
+  cwd: syncPath, // Use iCloud/custom sync path if configured
   defaults: {
     groups: [],
   },
@@ -120,12 +168,14 @@ interface AgentConfigsData {
 
 const agentConfigsStore = new Store<AgentConfigsData>({
   name: 'maestro-agent-configs',
+  cwd: syncPath, // Use iCloud/custom sync path if configured
   defaults: {
     configs: {},
   },
 });
 
 // Window state store (for remembering window size/position)
+// NOTE: This is intentionally NOT synced - window state is per-device
 interface WindowState {
   x?: number;
   y?: number;
@@ -137,6 +187,7 @@ interface WindowState {
 
 const windowStateStore = new Store<WindowState>({
   name: 'maestro-window-state',
+  // No cwd - always local, not synced (window position is device-specific)
   defaults: {
     width: 1400,
     height: 900,
@@ -164,6 +215,7 @@ interface ClaudeSessionOriginsData {
 
 const claudeSessionOriginsStore = new Store<ClaudeSessionOriginsData>({
   name: 'maestro-claude-session-origins',
+  cwd: syncPath, // Use iCloud/custom sync path if configured
   defaults: {
     origins: {},
   },
@@ -754,6 +806,7 @@ function setupIpcHandlers() {
   });
 
   // Broadcast AutoRun state to web clients (called when batch processing state changes)
+  // Always store state even if no clients are connected, so new clients get initial state
   ipcMain.handle('web:broadcastAutoRunState', async (_, sessionId: string, state: {
     isRunning: boolean;
     totalTasks: number;
@@ -761,7 +814,9 @@ function setupIpcHandlers() {
     currentTaskIndex: number;
     isStopping?: boolean;
   } | null) => {
-    if (webServer && webServer.getWebClientCount() > 0) {
+    if (webServer) {
+      // Always call broadcastAutoRunState - it stores the state for new clients
+      // and broadcasts to any currently connected clients
       webServer.broadcastAutoRunState(sessionId, state);
       return true;
     }
@@ -827,6 +882,7 @@ function setupIpcHandlers() {
     settingsStore: store,
     tunnelManager,
     getWebServer: () => webServer,
+    bootstrapStore, // For iCloud/sync settings
   });
 
   // Claude Code sessions - extracted to src/main/ipc/handlers/claude.ts
@@ -841,8 +897,47 @@ function setupIpcHandlers() {
 
   // Initialize session storages and register generic agent sessions handlers
   // This provides the new window.maestro.agentSessions.* API
-  initializeSessionStorages();
+  // Pass the shared claudeSessionOriginsStore so session names/stars are consistent
+  initializeSessionStorages({ claudeSessionOriginsStore });
   registerAgentSessionsHandlers({ getMainWindow: () => mainWindow });
+
+  // Helper to get agent config values (custom args/env vars, model, etc.)
+  const getAgentConfigForAgent = (agentId: string): Record<string, any> => {
+    const allConfigs = agentConfigsStore.get('configs', {});
+    return allConfigs[agentId] || {};
+  };
+
+  // Helper to get custom env vars for an agent
+  const getCustomEnvVarsForAgent = (agentId: string): Record<string, string> | undefined => {
+    return getAgentConfigForAgent(agentId).customEnvVars as Record<string, string> | undefined;
+  };
+
+  // Register Group Chat handlers
+  registerGroupChatHandlers({
+    getMainWindow: () => mainWindow,
+    getProcessManager: () => processManager,
+    getAgentDetector: () => agentDetector,
+    getCustomEnvVars: getCustomEnvVarsForAgent,
+    getAgentConfig: getAgentConfigForAgent,
+  });
+
+  // Set up callback for group chat router to lookup sessions for auto-add @mentions
+  setGetSessionsCallback(() => {
+    const sessions = sessionsStore.get('sessions', []);
+    return sessions.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      toolType: s.toolType,
+      cwd: s.cwd || s.fullPath || process.env.HOME || '/tmp',
+      customArgs: s.customArgs,
+      customEnvVars: s.customEnvVars,
+      customModel: s.customModel,
+    }));
+  });
+
+  // Set up callback for group chat router to lookup custom env vars for agents
+  setGetCustomEnvVarsCallback(getCustomEnvVarsForAgent);
+  setGetAgentConfigCallback(getAgentConfigForAgent);
 
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(() => mainWindow);
@@ -1648,10 +1743,203 @@ function setupIpcHandlers() {
   );
 }
 
+// Buffer for group chat output (keyed by sessionId)
+// We buffer output and only route it on process exit to avoid duplicate messages from streaming chunks
+const groupChatOutputBuffers = new Map<string, string>();
+
+/**
+ * Extract text content from agent JSON output format.
+ * Uses the registered output parser for the given agent type.
+ * Different agents have different output formats:
+ * - Claude: { type: 'result', result: '...' } and { type: 'assistant', message: { content: ... } }
+ * - OpenCode: { type: 'text', part: { text: '...' } } and { type: 'step_finish', part: { reason: 'stop' } }
+ *
+ * @param rawOutput - The raw JSONL output from the agent
+ * @param agentType - The agent type (e.g., 'claude-code', 'opencode')
+ * @returns Extracted text content
+ */
+function extractTextFromAgentOutput(rawOutput: string, agentType: string): string {
+  const parser = getOutputParser(agentType);
+
+  // If no parser found, try a generic extraction
+  if (!parser) {
+    logger.warn(`No parser found for agent type '${agentType}', using generic extraction`, '[GroupChat]');
+    return extractTextGeneric(rawOutput);
+  }
+
+  const lines = rawOutput.split('\n');
+
+  // Check if this looks like JSONL output (first non-empty line starts with '{')
+  // If not JSONL, return the raw output as-is (it's already parsed text from process-manager)
+  const firstNonEmptyLine = lines.find(line => line.trim());
+  if (firstNonEmptyLine && !firstNonEmptyLine.trim().startsWith('{')) {
+    logger.debug(`[GroupChat] Input is not JSONL, returning as plain text (len=${rawOutput.length})`, '[GroupChat]');
+    return rawOutput;
+  }
+
+  const textParts: string[] = [];
+  let resultText: string | null = null;
+  let resultMessageCount = 0;
+  let textMessageCount = 0;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const event = parser.parseJsonLine(line);
+    if (!event) continue;
+
+    // Extract text based on event type
+    if (event.type === 'result' && event.text) {
+      // Result message is the authoritative final response - save it
+      resultText = event.text;
+      resultMessageCount++;
+    }
+
+    if (event.type === 'text' && event.text) {
+      textParts.push(event.text);
+      textMessageCount++;
+    }
+  }
+
+  // Prefer result message if available (it contains the complete formatted response)
+  if (resultText) {
+    return resultText;
+  }
+
+  // Fallback: if no result message, concatenate streaming text parts with newlines
+  // to preserve paragraph structure from partial streaming events
+  return textParts.join('\n');
+}
+
+/**
+ * Extract text content from stream-json output (JSONL).
+ * Uses the agent-specific parser when the agent type is known.
+ */
+function extractTextFromStreamJson(rawOutput: string, agentType?: string): string {
+  if (agentType) {
+    return extractTextFromAgentOutput(rawOutput, agentType);
+  }
+
+  return extractTextGeneric(rawOutput);
+}
+
+/**
+ * Generic text extraction fallback for unknown agent types.
+ * Tries common patterns for JSON output.
+ */
+function extractTextGeneric(rawOutput: string): string {
+  const lines = rawOutput.split('\n');
+
+  // Check if this looks like JSONL output (first non-empty line starts with '{')
+  // If not JSONL, return the raw output as-is (it's already parsed text)
+  const firstNonEmptyLine = lines.find(line => line.trim());
+  if (firstNonEmptyLine && !firstNonEmptyLine.trim().startsWith('{')) {
+    return rawOutput;
+  }
+
+  const textParts: string[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    try {
+      const msg = JSON.parse(line);
+
+      // Try common patterns
+      if (msg.result) return msg.result;
+      if (msg.text) textParts.push(msg.text);
+      if (msg.part?.text) textParts.push(msg.part.text);
+      if (msg.message?.content) {
+        const content = msg.message.content;
+        if (typeof content === 'string') {
+          textParts.push(content);
+        }
+      }
+    } catch {
+      // Not valid JSON - include raw text if it looks like content
+      if (!line.startsWith('{') && !line.includes('session_id') && !line.includes('sessionID')) {
+        textParts.push(line);
+      }
+    }
+  }
+
+  // Join with newlines to preserve paragraph structure
+  return textParts.join('\n');
+}
+
+/**
+ * Parses a group chat participant session ID to extract groupChatId and participantName.
+ * Handles hyphenated participant names by matching against UUID or timestamp suffixes.
+ *
+ * Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid|timestamp}
+ * Examples:
+ * - group-chat-abc123-participant-Claude-1702934567890
+ * - group-chat-abc123-participant-OpenCode-Ollama-550e8400-e29b-41d4-a716-446655440000
+ *
+ * @returns null if not a participant session ID, otherwise { groupChatId, participantName }
+ */
+function parseParticipantSessionId(sessionId: string): { groupChatId: string; participantName: string } | null {
+  // First check if this is a participant session ID at all
+  if (!sessionId.includes('-participant-')) {
+    return null;
+  }
+
+  // Try matching with UUID suffix first (36 chars: 8-4-4-4-12 format)
+  // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  const uuidMatch = sessionId.match(/^group-chat-(.+)-participant-(.+)-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i);
+  if (uuidMatch) {
+    return { groupChatId: uuidMatch[1], participantName: uuidMatch[2] };
+  }
+
+  // Try matching with timestamp suffix (13 digits)
+  const timestampMatch = sessionId.match(/^group-chat-(.+)-participant-(.+)-(\d{13,})$/);
+  if (timestampMatch) {
+    return { groupChatId: timestampMatch[1], participantName: timestampMatch[2] };
+  }
+
+  // Fallback: try the old pattern for backwards compatibility (non-hyphenated names)
+  const fallbackMatch = sessionId.match(/^group-chat-(.+)-participant-([^-]+)-/);
+  if (fallbackMatch) {
+    return { groupChatId: fallbackMatch[1], participantName: fallbackMatch[2] };
+  }
+
+  return null;
+}
+
 // Handle process output streaming (set up after initialization)
 function setupProcessListeners() {
   if (processManager) {
     processManager.on('data', (sessionId: string, data: string) => {
+      // Handle group chat moderator output - buffer it
+      // Session ID format: group-chat-{groupChatId}-moderator-{uuid} or group-chat-{groupChatId}-moderator-synthesis-{uuid}
+      const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
+      if (moderatorMatch) {
+        const groupChatId = moderatorMatch[1];
+        console.log(`[GroupChat:Debug] MODERATOR DATA received for chat ${groupChatId}`);
+        console.log(`[GroupChat:Debug] Session ID: ${sessionId}`);
+        console.log(`[GroupChat:Debug] Data length: ${data.length}`);
+        // Buffer the output - will be routed on process exit
+        const existing = groupChatOutputBuffers.get(sessionId) || '';
+        groupChatOutputBuffers.set(sessionId, existing + data);
+        console.log(`[GroupChat:Debug] Buffered total: ${(existing + data).length} chars`);
+        return; // Don't send to regular process:data handler
+      }
+
+      // Handle group chat participant output - buffer it
+      // Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid|timestamp}
+      const participantInfo = parseParticipantSessionId(sessionId);
+      if (participantInfo) {
+        console.log(`[GroupChat:Debug] PARTICIPANT DATA received`);
+        console.log(`[GroupChat:Debug] Chat: ${participantInfo.groupChatId}, Participant: ${participantInfo.participantName}`);
+        console.log(`[GroupChat:Debug] Session ID: ${sessionId}`);
+        console.log(`[GroupChat:Debug] Data length: ${data.length}`);
+        // Buffer the output - will be routed on process exit
+        const existing = groupChatOutputBuffers.get(sessionId) || '';
+        groupChatOutputBuffers.set(sessionId, existing + data);
+        console.log(`[GroupChat:Debug] Buffered total: ${(existing + data).length} chars`);
+        return; // Don't send to regular process:data handler
+      }
+
       mainWindow?.webContents.send('process:data', sessionId, data);
 
       // Broadcast to web clients - extract base session ID (remove -ai or -terminal suffix)
@@ -1664,9 +1952,16 @@ function setupProcessListeners() {
           return;
         }
 
-        // Extract base session ID and tab ID from formats: {id}-ai-{tabId}, {id}-batch-{timestamp}, {id}-synopsis-{timestamp}
-        const baseSessionId = sessionId.replace(/-ai-[^-]+$|-batch-\d+$|-synopsis-\d+$/, '');
-        const isAiOutput = sessionId.includes('-ai-') || sessionId.includes('-batch-') || sessionId.includes('-synopsis-');
+        // Don't broadcast background batch/synopsis output to web clients
+        // These are internal Auto Run operations that should only appear in history, not as chat messages
+        if (sessionId.includes('-batch-') || sessionId.includes('-synopsis-')) {
+          console.log(`[WebBroadcast] SKIPPING batch/synopsis output for web: session=${sessionId}`);
+          return;
+        }
+
+        // Extract base session ID and tab ID from format: {id}-ai-{tabId}
+        const baseSessionId = sessionId.replace(/-ai-[^-]+$/, '');
+        const isAiOutput = sessionId.includes('-ai-');
 
         // Extract tab ID from session ID format: {id}-ai-{tabId}
         const tabIdMatch = sessionId.match(/-ai-([^-]+)$/);
@@ -1687,6 +1982,163 @@ function setupProcessListeners() {
     });
 
     processManager.on('exit', (sessionId: string, code: number) => {
+      // Handle group chat moderator exit - route buffered output and set state back to idle
+      // Session ID format: group-chat-{groupChatId}-moderator-{uuid}
+      // This handles BOTH initial moderator responses AND synthesis responses.
+      // The routeModeratorResponse function will check for @mentions:
+      // - If @mentions present: route to agents (continue conversation)
+      // - If no @mentions: final response to user (conversation complete for this turn)
+      const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
+      if (moderatorMatch) {
+        const groupChatId = moderatorMatch[1];
+        console.log(`[GroupChat:Debug] ========== MODERATOR PROCESS EXIT ==========`);
+        console.log(`[GroupChat:Debug] Group Chat ID: ${groupChatId}`);
+        console.log(`[GroupChat:Debug] Session ID: ${sessionId}`);
+        console.log(`[GroupChat:Debug] Exit code: ${code}`);
+        logger.debug(`[GroupChat] Moderator exit: groupChatId=${groupChatId}`, 'ProcessListener', { sessionId });
+        // Route the buffered output now that process is complete
+        const bufferedOutput = groupChatOutputBuffers.get(sessionId);
+        console.log(`[GroupChat:Debug] Buffered output length: ${bufferedOutput?.length ?? 0}`);
+        if (bufferedOutput) {
+          console.log(`[GroupChat:Debug] Raw buffered output preview: "${bufferedOutput.substring(0, 300)}${bufferedOutput.length > 300 ? '...' : ''}"`);
+          logger.debug(`[GroupChat] Moderator has buffered output (${bufferedOutput.length} chars)`, 'ProcessListener', { groupChatId });
+          void (async () => {
+            try {
+              const chat = await loadGroupChat(groupChatId);
+              console.log(`[GroupChat:Debug] Chat loaded for parsing: ${chat?.name || 'null'}`);
+              const agentType = chat?.moderatorAgentId;
+              console.log(`[GroupChat:Debug] Agent type for parsing: ${agentType}`);
+              const parsedText = extractTextFromStreamJson(bufferedOutput, agentType);
+              console.log(`[GroupChat:Debug] Parsed text length: ${parsedText.length}`);
+              console.log(`[GroupChat:Debug] Parsed text preview: "${parsedText.substring(0, 300)}${parsedText.length > 300 ? '...' : ''}"`);
+              if (parsedText.trim()) {
+                console.log(`[GroupChat:Debug] Routing moderator response...`);
+                logger.info(`[GroupChat] Routing moderator response (${parsedText.length} chars)`, 'ProcessListener', { groupChatId });
+                const readOnly = getGroupChatReadOnlyState(groupChatId);
+                console.log(`[GroupChat:Debug] Read-only state: ${readOnly}`);
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined, readOnly).catch(err => {
+                  console.error(`[GroupChat:Debug] ERROR routing moderator response:`, err);
+                  logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
+                });
+              } else {
+                console.log(`[GroupChat:Debug] WARNING: Parsed text is empty!`);
+                logger.warn('[GroupChat] Moderator output parsed to empty string', 'ProcessListener', { groupChatId, bufferedLength: bufferedOutput.length });
+              }
+            } catch (err) {
+              console.error(`[GroupChat:Debug] ERROR loading chat:`, err);
+              logger.error('[GroupChat] Failed to load chat for moderator output parsing', 'ProcessListener', { error: String(err) });
+              const parsedText = extractTextFromStreamJson(bufferedOutput);
+              if (parsedText.trim()) {
+                const readOnly = getGroupChatReadOnlyState(groupChatId);
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined, readOnly).catch(routeErr => {
+                  console.error(`[GroupChat:Debug] ERROR routing moderator response (fallback):`, routeErr);
+                  logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(routeErr) });
+                });
+              }
+            }
+          })().finally(() => {
+            groupChatOutputBuffers.delete(sessionId);
+            console.log(`[GroupChat:Debug] Cleared output buffer for session`);
+          });
+        } else {
+          console.log(`[GroupChat:Debug] WARNING: No buffered output!`);
+          logger.warn('[GroupChat] Moderator exit with no buffered output', 'ProcessListener', { groupChatId, sessionId });
+        }
+        groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
+        console.log(`[GroupChat:Debug] Emitted state change: idle`);
+        console.log(`[GroupChat:Debug] =============================================`);
+        // Don't send to regular exit handler
+        return;
+      }
+
+      // Handle group chat participant exit - route buffered output and update participant state
+      // Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid|timestamp}
+      const participantExitInfo = parseParticipantSessionId(sessionId);
+      if (participantExitInfo) {
+        const { groupChatId, participantName } = participantExitInfo;
+        console.log(`[GroupChat:Debug] ========== PARTICIPANT PROCESS EXIT ==========`);
+        console.log(`[GroupChat:Debug] Group Chat ID: ${groupChatId}`);
+        console.log(`[GroupChat:Debug] Participant: ${participantName}`);
+        console.log(`[GroupChat:Debug] Session ID: ${sessionId}`);
+        console.log(`[GroupChat:Debug] Exit code: ${code}`);
+        logger.debug(`[GroupChat] Participant exit: ${participantName} (groupChatId=${groupChatId})`, 'ProcessListener', { sessionId });
+
+        // Emit participant state change to show this participant is done working
+        groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'idle');
+        console.log(`[GroupChat:Debug] Emitted participant state: idle`);
+
+        // Route the buffered output now that process is complete
+        // IMPORTANT: We must wait for the response to be logged before triggering synthesis
+        // to avoid a race condition where synthesis reads the log before the response is written
+        const bufferedOutput = groupChatOutputBuffers.get(sessionId);
+        console.log(`[GroupChat:Debug] Buffered output length: ${bufferedOutput?.length ?? 0}`);
+
+        // Helper function to mark participant and potentially trigger synthesis
+        const markAndMaybeSynthesize = () => {
+          const isLastParticipant = markParticipantResponded(groupChatId, participantName);
+          console.log(`[GroupChat:Debug] Is last participant to respond: ${isLastParticipant}`);
+          if (isLastParticipant && processManager && agentDetector) {
+            // All participants have responded - spawn moderator synthesis round
+            console.log(`[GroupChat:Debug] All participants responded - spawning synthesis round...`);
+            logger.info('[GroupChat] All participants responded, spawning moderator synthesis', 'ProcessListener', { groupChatId });
+            spawnModeratorSynthesis(groupChatId, processManager, agentDetector).catch(err => {
+              console.error(`[GroupChat:Debug] ERROR spawning synthesis:`, err);
+              logger.error('[GroupChat] Failed to spawn moderator synthesis', 'ProcessListener', { error: String(err), groupChatId });
+            });
+          } else if (!isLastParticipant) {
+            // More participants pending
+            console.log(`[GroupChat:Debug] Waiting for more participants to respond...`);
+          }
+        };
+
+        if (bufferedOutput) {
+          console.log(`[GroupChat:Debug] Raw buffered output preview: "${bufferedOutput.substring(0, 300)}${bufferedOutput.length > 300 ? '...' : ''}"`);
+          void (async () => {
+            try {
+              const chat = await loadGroupChat(groupChatId);
+              console.log(`[GroupChat:Debug] Chat loaded for participant parsing: ${chat?.name || 'null'}`);
+              const agentType = chat?.participants.find(p => p.name === participantName)?.agentId;
+              console.log(`[GroupChat:Debug] Agent type for parsing: ${agentType}`);
+              const parsedText = extractTextFromStreamJson(bufferedOutput, agentType);
+              console.log(`[GroupChat:Debug] Parsed text length: ${parsedText.length}`);
+              console.log(`[GroupChat:Debug] Parsed text preview: "${parsedText.substring(0, 200)}${parsedText.length > 200 ? '...' : ''}"`);
+              if (parsedText.trim()) {
+                console.log(`[GroupChat:Debug] Routing agent response from ${participantName}...`);
+                // Await the response logging before marking participant as responded
+                await routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined);
+                console.log(`[GroupChat:Debug] Successfully routed agent response from ${participantName}`);
+              } else {
+                console.log(`[GroupChat:Debug] WARNING: Parsed text is empty for ${participantName}!`);
+              }
+            } catch (err) {
+              console.error(`[GroupChat:Debug] ERROR loading chat for participant:`, err);
+              logger.error('[GroupChat] Failed to load chat for participant output parsing', 'ProcessListener', { error: String(err), participant: participantName });
+              try {
+                const parsedText = extractTextFromStreamJson(bufferedOutput);
+                if (parsedText.trim()) {
+                  await routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined);
+                }
+              } catch (routeErr) {
+                console.error(`[GroupChat:Debug] ERROR routing agent response (fallback):`, routeErr);
+                logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(routeErr), participant: participantName });
+              }
+            }
+          })().finally(() => {
+            groupChatOutputBuffers.delete(sessionId);
+            console.log(`[GroupChat:Debug] Cleared output buffer for participant session`);
+            // Mark participant and trigger synthesis AFTER logging is complete
+            markAndMaybeSynthesize();
+          });
+        } else {
+          console.log(`[GroupChat:Debug] WARNING: No buffered output for participant ${participantName}!`);
+          // No output to log, so mark participant as responded immediately
+          markAndMaybeSynthesize();
+        }
+        console.log(`[GroupChat:Debug] ===============================================`);
+        // Don't send to regular exit handler
+        return;
+      }
+
       mainWindow?.webContents.send('process:exit', sessionId, code);
 
       // Broadcast exit to web clients
@@ -1703,6 +2155,39 @@ function setupProcessListeners() {
     });
 
     processManager.on('session-id', (sessionId: string, agentSessionId: string) => {
+      // Handle group chat participant session ID - store the agent's session ID
+      // Session ID format: group-chat-{groupChatId}-participant-{name}-{uuid|timestamp}
+      const participantSessionInfo = parseParticipantSessionId(sessionId);
+      if (participantSessionInfo) {
+        const { groupChatId, participantName } = participantSessionInfo;
+        // Update the participant with the agent's session ID
+        updateParticipant(groupChatId, participantName, { agentSessionId }).then(async () => {
+          // Emit participants changed so UI updates with the new session ID
+          const chat = await loadGroupChat(groupChatId);
+          if (chat) {
+            groupChatEmitters.emitParticipantsChanged?.(groupChatId, chat.participants);
+          }
+        }).catch(err => {
+          logger.error('[GroupChat] Failed to update participant agentSessionId', 'ProcessListener', { error: String(err), participant: participantName });
+        });
+        // Don't return - still send to renderer for logging purposes
+      }
+
+      // Handle group chat moderator session ID - store the real agent session ID
+      // Session ID format: group-chat-{groupChatId}-moderator-{timestamp}
+      const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-\d+$/);
+      if (moderatorMatch) {
+        const groupChatId = moderatorMatch[1];
+        // Update the group chat with the moderator's real agent session ID
+        updateGroupChat(groupChatId, { moderatorSessionId: agentSessionId }).then(() => {
+          // Emit session ID change event so UI updates with the new session ID
+          groupChatEmitters.emitModeratorSessionIdChanged?.(groupChatId, agentSessionId);
+        }).catch((err: unknown) => {
+          logger.error('[GroupChat] Failed to update moderator session ID', 'ProcessListener', { error: String(err), groupChatId });
+        });
+        // Don't return - still send to renderer for logging purposes
+      }
+
       mainWindow?.webContents.send('process:session-id', sessionId, agentSessionId);
     });
 
@@ -1731,6 +2216,55 @@ function setupProcessListeners() {
       contextWindow: number;
       reasoningTokens?: number;  // Separate reasoning tokens (Codex o3/o4-mini)
     }) => {
+      // Handle group chat participant usage - update participant stats
+      const participantUsageInfo = parseParticipantSessionId(sessionId);
+      if (participantUsageInfo) {
+        const { groupChatId, participantName } = participantUsageInfo;
+
+        // Calculate context usage percentage
+        const totalTokens = usageStats.inputTokens + usageStats.outputTokens;
+        const contextUsage = usageStats.contextWindow > 0
+          ? Math.round((totalTokens / usageStats.contextWindow) * 100)
+          : 0;
+
+        // Update participant with usage stats
+        updateParticipant(groupChatId, participantName, {
+          contextUsage,
+          tokenCount: totalTokens,
+          totalCost: usageStats.totalCostUsd,
+        }).then(async () => {
+          // Emit participants changed so UI updates
+          const chat = await loadGroupChat(groupChatId);
+          if (chat) {
+            groupChatEmitters.emitParticipantsChanged?.(groupChatId, chat.participants);
+          }
+        }).catch(err => {
+          logger.error('[GroupChat] Failed to update participant usage', 'ProcessListener', {
+            error: String(err),
+            participant: participantName,
+          });
+        });
+        // Still send to renderer for consistency
+      }
+
+      // Handle group chat moderator usage - emit for UI
+      const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
+      if (moderatorMatch) {
+        const groupChatId = moderatorMatch[1];
+        // Calculate context usage percentage for moderator display
+        const totalTokens = usageStats.inputTokens + usageStats.outputTokens;
+        const contextUsage = usageStats.contextWindow > 0
+          ? Math.round((totalTokens / usageStats.contextWindow) * 100)
+          : 0;
+
+        // Emit moderator usage for the moderator card
+        groupChatEmitters.emitModeratorUsage?.(groupChatId, {
+          contextUsage,
+          totalCost: usageStats.totalCostUsd,
+          tokenCount: totalTokens,
+        });
+      }
+
       mainWindow?.webContents.send('process:usage', sessionId, usageStats);
     });
 

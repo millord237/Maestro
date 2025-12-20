@@ -12,6 +12,7 @@ import type { Theme, AutoRunStats, LeaderboardRegistration } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { getBadgeForTime, CONDUCTOR_BADGES } from '../constants/conductorBadges';
+import { generateId } from '../utils/ids';
 
 // Social media icons as SVG components
 const GithubIcon = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
@@ -45,8 +46,11 @@ type SubmitState = 'idle' | 'submitting' | 'success' | 'awaiting_confirmation' |
 
 // Generate a random client token for polling
 function generateClientToken(): string {
-  return crypto.randomUUID();
+  return generateId();
 }
+
+// Error message for lost auth token
+const AUTH_TOKEN_LOST_MESSAGE = 'Your email is confirmed but we seem to have lost your auth token. Please contact pedram@runmaestro.ai to resolve this issue or ping him on Discord.';
 
 export function LeaderboardRegistrationModal({
   theme,
@@ -83,11 +87,16 @@ export function LeaderboardRegistrationModal({
   // Manual token entry state
   const [showManualTokenEntry, setShowManualTokenEntry] = useState(false);
   const [manualToken, setManualToken] = useState('');
+  const [recoveryAttempted, setRecoveryAttempted] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
 
   // Get current badge info
   const currentBadge = getBadgeForTime(autoRunStats.cumulativeTimeMs);
   const badgeLevel = currentBadge?.level || 0;
   const badgeName = currentBadge?.name || 'No Badge Yet';
+
+  // Check if we need to recover auth token (email confirmed but no token)
+  const needsAuthTokenRecovery = existingRegistration?.emailConfirmed && !existingRegistration?.authToken && existingRegistration?.clientToken;
 
   // Validate email format
   const isValidEmail = (email: string): boolean => {
@@ -214,10 +223,70 @@ export function LeaderboardRegistrationModal({
           setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
         }
       } else if (result.authTokenRequired) {
-        // Email is confirmed but we're missing the auth token - show manual entry
-        setSubmitState('error');
-        setShowManualTokenEntry(true);
-        setErrorMessage('Your email is confirmed but we need your auth token. Enter it below or check your confirmation email.');
+        // Email is confirmed but auth token is missing/invalid - try to recover it automatically
+        let recovered = false;
+        if (clientToken) {
+          setSubmitState('submitting');
+          setErrorMessage('');
+          try {
+            const pollResult = await window.maestro.leaderboard.pollAuthStatus(clientToken);
+            if (pollResult.status === 'confirmed' && pollResult.authToken) {
+              // Token recovered! Save it and retry submission
+              const registration: LeaderboardRegistration = {
+                email: email.trim(),
+                displayName: displayName.trim(),
+                twitterHandle: twitterHandle.trim() || undefined,
+                githubUsername: githubUsername.trim() || undefined,
+                linkedinHandle: linkedinHandle.trim() || undefined,
+                registeredAt: existingRegistration?.registeredAt || Date.now(),
+                emailConfirmed: true,
+                lastSubmissionAt: Date.now(),
+                clientToken,
+                authToken: pollResult.authToken,
+              };
+              onSave(registration);
+
+              // Retry submission with recovered token
+              let longestRunDate: string | undefined;
+              if (autoRunStats.longestRunTimestamp > 0) {
+                longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
+              }
+
+              const retryResult = await window.maestro.leaderboard.submit({
+                email: email.trim(),
+                displayName: displayName.trim(),
+                githubUsername: githubUsername.trim() || undefined,
+                twitterHandle: twitterHandle.trim() || undefined,
+                linkedinHandle: linkedinHandle.trim() || undefined,
+                badgeLevel,
+                badgeName,
+                cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
+                totalRuns: autoRunStats.totalRuns,
+                longestRunMs: autoRunStats.longestRunMs || undefined,
+                longestRunDate,
+                theme: theme.id,
+                clientToken,
+                authToken: pollResult.authToken,
+              });
+
+              if (retryResult.success) {
+                setSubmitState('success');
+                setSuccessMessage('Auth token recovered and stats submitted successfully!');
+                recovered = true;
+              } else {
+                setErrorMessage(retryResult.error || 'Submission failed after token recovery');
+              }
+            }
+          } catch {
+            // Recovery failed - fall through to manual entry
+          }
+        }
+        // If recovery failed or wasn't possible, show manual entry
+        if (!recovered) {
+          setSubmitState('error');
+          setShowManualTokenEntry(true);
+          if (!errorMessage) setErrorMessage(AUTH_TOKEN_LOST_MESSAGE);
+        }
       } else {
         setSubmitState('error');
         setErrorMessage(result.error || result.message || 'Submission failed');
@@ -295,6 +364,38 @@ export function LeaderboardRegistrationModal({
       }
     };
   }, []);
+
+  // On mount, if we need auth token recovery, try polling once to see if the server has our token
+  useEffect(() => {
+    if (needsAuthTokenRecovery && existingRegistration?.clientToken && !recoveryAttempted) {
+      setRecoveryAttempted(true);
+      setIsRecovering(true);
+      // Try a single poll to recover the auth token
+      window.maestro.leaderboard.pollAuthStatus(existingRegistration.clientToken).then((result) => {
+        setIsRecovering(false);
+        if (result.status === 'confirmed' && result.authToken) {
+          // Token recovered! Save it
+          const registration: LeaderboardRegistration = {
+            ...existingRegistration,
+            emailConfirmed: true,
+            authToken: result.authToken,
+          };
+          onSave(registration);
+          setSubmitState('success');
+          setSuccessMessage('Auth token recovered! Your registration is complete.');
+        } else {
+          // Token not available from server, show manual entry
+          setShowManualTokenEntry(true);
+          setErrorMessage(AUTH_TOKEN_LOST_MESSAGE);
+        }
+      }).catch(() => {
+        setIsRecovering(false);
+        // On error, show manual entry as fallback
+        setShowManualTokenEntry(true);
+        setErrorMessage(AUTH_TOKEN_LOST_MESSAGE);
+      });
+    }
+  }, [needsAuthTokenRecovery, existingRegistration, onSave, recoveryAttempted]);
 
   // Handle opt-out (clears local registration)
   const handleOptOut = useCallback(() => {
@@ -518,13 +619,26 @@ export function LeaderboardRegistrationModal({
           </div>
 
           {/* Status messages */}
-          {submitState === 'error' && (
+          {submitState === 'error' && !showManualTokenEntry && (
             <div
               className="flex items-start gap-2 p-3 rounded-lg"
               style={{ backgroundColor: `${theme.colors.error}15`, border: `1px solid ${theme.colors.error}30` }}
             >
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.error }} />
               <p className="text-xs" style={{ color: theme.colors.error }}>{errorMessage}</p>
+            </div>
+          )}
+
+          {/* Recovering auth token status */}
+          {isRecovering && (
+            <div
+              className="flex items-start gap-2 p-3 rounded-lg"
+              style={{ backgroundColor: `${theme.colors.accent}15`, border: `1px solid ${theme.colors.accent}30` }}
+            >
+              <RefreshCw className="w-4 h-4 flex-shrink-0 mt-0.5 animate-spin" style={{ color: theme.colors.accent }} />
+              <p className="text-xs" style={{ color: theme.colors.textMain }}>
+                Checking for your auth token...
+              </p>
             </div>
           )}
 
@@ -548,47 +662,59 @@ export function LeaderboardRegistrationModal({
 
           {/* Manual token entry */}
           {showManualTokenEntry && (
-            <div
-              className="p-3 rounded-lg space-y-3"
-              style={{ backgroundColor: `${theme.colors.accent}10`, border: `1px solid ${theme.colors.accent}30` }}
-            >
-              <div className="flex items-start gap-2">
-                <Key className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.accent }} />
-                <div>
-                  <p className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
-                    Enter Auth Token
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
-                    Copy the token from your confirmation email or the confirmation page.
-                  </p>
+            <>
+              {/* Error/info message above token entry */}
+              {errorMessage && (
+                <div
+                  className="flex items-start gap-2 p-3 rounded-lg"
+                  style={{ backgroundColor: `${theme.colors.error}15`, border: `1px solid ${theme.colors.error}30` }}
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.error }} />
+                  <p className="text-xs" style={{ color: theme.colors.error }}>{errorMessage}</p>
+                </div>
+              )}
+              <div
+                className="p-3 rounded-lg space-y-3"
+                style={{ backgroundColor: `${theme.colors.accent}10`, border: `1px solid ${theme.colors.accent}30` }}
+              >
+                <div className="flex items-start gap-2">
+                  <Key className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.accent }} />
+                  <div>
+                    <p className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
+                      Enter Auth Token
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+                      Copy the token from your confirmation email or the confirmation page.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    placeholder="Paste your 64-character auth token"
+                    className="flex-1 px-3 py-2 text-xs rounded border outline-none focus:ring-1 font-mono"
+                    style={{
+                      backgroundColor: theme.colors.bgActivity,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.textMain,
+                    }}
+                  />
+                  <button
+                    onClick={handleManualTokenSubmit}
+                    disabled={!manualToken.trim()}
+                    className="px-3 py-2 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: theme.colors.accent,
+                      color: '#fff',
+                    }}
+                  >
+                    Submit
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value)}
-                  placeholder="Paste your 64-character auth token"
-                  className="flex-1 px-3 py-2 text-xs rounded border outline-none focus:ring-1 font-mono"
-                  style={{
-                    backgroundColor: theme.colors.bgActivity,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.textMain,
-                  }}
-                />
-                <button
-                  onClick={handleManualTokenSubmit}
-                  disabled={!manualToken.trim()}
-                  className="px-3 py-2 text-xs font-medium rounded transition-colors disabled:opacity-50"
-                  style={{
-                    backgroundColor: theme.colors.accent,
-                    color: '#fff',
-                  }}
-                >
-                  Submit
-                </button>
-              </div>
-            </div>
+            </>
           )}
 
           {(submitState === 'success' || submitState === 'opted_out') && (

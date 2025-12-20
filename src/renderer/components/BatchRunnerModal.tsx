@@ -11,6 +11,7 @@ import { DocumentsPanel } from './DocumentsPanel';
 import { GitWorktreeSection, GhCliStatus } from './GitWorktreeSection';
 import { usePlaybookManagement, useWorktreeValidation } from '../hooks';
 import { autorunDefaultPrompt } from '../../prompts';
+import { generateId } from '../utils/ids';
 
 // Default batch processing prompt
 export const DEFAULT_BATCH_PROMPT = autorunDefaultPrompt;
@@ -27,6 +28,7 @@ interface BatchRunnerModalProps {
   folderPath: string;
   currentDocument: string;
   allDocuments: string[]; // All available docs in folder (without .md)
+  documentTree?: Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }>; // Tree structure for folder selection
   getDocumentTaskCount: (filename: string) => Promise<number>; // Get task count for a document
   onRefreshDocuments: () => Promise<void>; // Refresh document list from folder
   // Session ID for playbook storage
@@ -74,6 +76,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     folderPath,
     currentDocument,
     allDocuments,
+    documentTree,
     getDocumentTaskCount,
     onRefreshDocuments,
     sessionId,
@@ -86,7 +89,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     // Initialize with current document
     if (currentDocument) {
       return [{
-        id: crypto.randomUUID(),
+        id: generateId(),
         filename: currentDocument,
         resetOnCompletion: false,
         isDuplicate: false
@@ -231,6 +234,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   useEffect(() => {
     const checkGitRepo = async () => {
       setCheckingGitRepo(true);
+      console.log(`[BatchRunnerModal] Checking git repo and gh CLI. ghPath prop: "${ghPath}"`);
       try {
         const result = await window.maestro.git.isRepo(sessionCwd);
         const isRepo = result === true;
@@ -238,10 +242,13 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
         // If it's a git repo, fetch available branches and check gh CLI
         if (isRepo) {
+          const ghPathToUse = ghPath || undefined;
+          console.log(`[BatchRunnerModal] Checking gh CLI with path: ${ghPathToUse}`);
           const [branchResult, ghResult] = await Promise.all([
             window.maestro.git.branches(sessionCwd),
-            window.maestro.git.checkGhCli(ghPath || undefined)
+            window.maestro.git.checkGhCli(ghPathToUse)
           ]);
+          console.log(`[BatchRunnerModal] gh CLI check result:`, ghResult);
 
           if (branchResult.branches && branchResult.branches.length > 0) {
             setAvailableBranches(branchResult.branches);
@@ -585,6 +592,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
             maxLoops={maxLoops}
             setMaxLoops={setMaxLoops}
             allDocuments={allDocuments}
+            documentTree={documentTree as import('./DocumentsPanel').DocTreeNode[] | undefined}
             onRefreshDocuments={onRefreshDocuments}
           />
 

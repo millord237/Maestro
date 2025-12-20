@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
+import type { GroupChat } from '../../shared/group-chat-types';
 import { useLayerStack } from '../contexts/LayerStackContext';
+import { useToast } from '../contexts/ToastContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { gitService } from '../services/git';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
@@ -66,9 +68,18 @@ interface QuickActionsModalProps {
   openWizard?: () => void;
   wizardGoToStep?: (step: WizardStep) => void;
   setDebugWizardModalOpen?: (open: boolean) => void;
+  setDebugPackageModalOpen?: (open: boolean) => void;
   startTour?: () => void;
   setFuzzyFileSearchOpen?: (open: boolean) => void;
   onEditAgent?: (session: Session) => void;
+  // Group Chat
+  groupChats?: GroupChat[];
+  onNewGroupChat?: () => void;
+  onOpenGroupChat?: (id: string) => void;
+  onCloseGroupChat?: () => void;
+  onDeleteGroupChat?: (id: string) => void;
+  activeGroupChatId?: string | null;
+  hasActiveSessionCapability?: (capability: string) => boolean;
 }
 
 export function QuickActionsModal(props: QuickActionsModalProps) {
@@ -83,7 +94,9 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
     setAgentSessionsOpen, setActiveAgentSessionId, setGitDiffPreview, setGitLogOpen,
     onRenameTab, onToggleReadOnlyMode, onOpenTabSwitcher, tabShortcuts, isAiMode, setPlaygroundOpen, onRefreshGitFileState,
-    onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep, setDebugWizardModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent
+    onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep, setDebugWizardModalOpen, setDebugPackageModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent,
+    groupChats, onNewGroupChat, onOpenGroupChat, onCloseGroupChat, onDeleteGroupChat, activeGroupChatId,
+    hasActiveSessionCapability
   } = props;
 
   const [search, setSearch] = useState('');
@@ -98,6 +111,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const { addToast } = useToast();
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
   // Register layer on mount (handler will be updated by separate effect)
@@ -196,8 +210,22 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     subtext: s.state.toUpperCase()
   }));
 
+  // Group chat jump actions
+  const groupChatActions: QuickAction[] = (groupChats && onOpenGroupChat)
+    ? groupChats.map(gc => ({
+        id: `groupchat-${gc.id}`,
+        label: `Group Chat: ${gc.name}`,
+        action: () => {
+          onOpenGroupChat(gc.id);
+          setQuickActionOpen(false);
+        },
+        subtext: `${gc.participants.length} participant${gc.participants.length !== 1 ? 's' : ''}`
+      }))
+    : [];
+
   const mainActions: QuickAction[] = [
     ...sessionActions,
+    ...groupChatActions,
     { id: 'new', label: 'Create New Agent', shortcut: shortcuts.newInstance, action: addNewSession },
     ...(openWizard ? [{ id: 'wizard', label: 'New Agent Wizard', shortcut: shortcuts.openWizard, action: () => { openWizard(); setQuickActionOpen(false); } }] : []),
     ...(activeSession ? [{ id: 'rename', label: `Rename Agent: ${activeSession.name}`, action: () => {
@@ -251,7 +279,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     ...(startTour ? [{ id: 'tour', label: 'Start Introductory Tour', subtext: 'Take a guided tour of the interface', action: () => { startTour(); setQuickActionOpen(false); } }] : []),
     { id: 'logs', label: 'View System Logs', shortcut: shortcuts.systemLogs, action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
     { id: 'processes', label: 'View System Processes', shortcut: shortcuts.processMonitor, action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
-    ...(activeSession ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveAgentSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
+    ...(activeSession && hasActiveSessionCapability?.('supportsSessionStorage') ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveAgentSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
     ...(activeSession?.isGitRepo ? [{ id: 'gitDiff', label: 'View Git Diff', shortcut: shortcuts.viewGitDiff, action: async () => {
       const cwd = activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd;
       const diff = await gitService.getDiff(cwd);
@@ -278,10 +306,32 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'website', label: 'Maestro Website', subtext: 'Open the Maestro website', action: () => { window.maestro.shell.openExternal('https://runmaestro.ai/'); setQuickActionOpen(false); } },
     { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/86crXbGb'); setQuickActionOpen(false); } },
     ...(setUpdateCheckModalOpen ? [{ id: 'updateCheck', label: 'Check for Updates', action: () => { setUpdateCheckModalOpen(true); setQuickActionOpen(false); } }] : []),
+    { id: 'createDebugPackage', label: 'Create Debug Package', shortcut: shortcuts.createDebugPackage, subtext: 'Generate a support bundle for bug reporting', action: () => {
+      setQuickActionOpen(false);
+      if (setDebugPackageModalOpen) {
+        setDebugPackageModalOpen(true);
+      } else {
+        // Fallback to direct API call if modal not available
+        addToast({ type: 'info', title: 'Debug Package', message: 'Creating debug package...' });
+        window.maestro.debug.createPackage().then(result => {
+          if (result.success && result.path) {
+            addToast({ type: 'success', title: 'Debug Package Created', message: `Saved to ${result.path}` });
+          } else if (result.error !== 'Cancelled by user') {
+            addToast({ type: 'error', title: 'Debug Package Failed', message: result.error || 'Unknown error' });
+          }
+        }).catch(error => {
+          addToast({ type: 'error', title: 'Debug Package Failed', message: error instanceof Error ? error.message : 'Unknown error' });
+        });
+      }
+    } },
     { id: 'goToFiles', label: 'Go to Files Tab', shortcut: shortcuts.goToFiles, action: () => { setRightPanelOpen(true); setActiveRightTab('files'); setQuickActionOpen(false); } },
     { id: 'goToHistory', label: 'Go to History Tab', shortcut: shortcuts.goToHistory, action: () => { setRightPanelOpen(true); setActiveRightTab('history'); setQuickActionOpen(false); } },
     { id: 'goToAutoRun', label: 'Go to Auto Run Tab', shortcut: shortcuts.goToAutoRun, action: () => { setRightPanelOpen(true); setActiveRightTab('autorun'); setQuickActionOpen(false); } },
     ...(setFuzzyFileSearchOpen ? [{ id: 'fuzzyFileSearch', label: 'Fuzzy File Search', shortcut: shortcuts.fuzzyFileSearch, action: () => { setFuzzyFileSearchOpen(true); setQuickActionOpen(false); } }] : []),
+    // Group Chat commands - only show when at least 2 AI agents exist
+    ...(onNewGroupChat && sessions.filter(s => s.toolType !== 'terminal').length >= 2 ? [{ id: 'newGroupChat', label: 'New Group Chat', action: () => { onNewGroupChat(); setQuickActionOpen(false); } }] : []),
+    ...(activeGroupChatId && onCloseGroupChat ? [{ id: 'closeGroupChat', label: 'Close Group Chat', action: () => { onCloseGroupChat(); setQuickActionOpen(false); } }] : []),
+    ...(activeGroupChatId && onDeleteGroupChat && groupChats ? [{ id: 'deleteGroupChat', label: `Remove Group Chat: ${groupChats.find(c => c.id === activeGroupChatId)?.name || 'Group Chat'}`, shortcut: shortcuts.killInstance, action: () => { onDeleteGroupChat(activeGroupChatId); setQuickActionOpen(false); } }] : []),
     // Debug commands - only visible when user types "debug"
     { id: 'debugResetBusy', label: 'Debug: Reset Busy State', subtext: 'Clear stuck thinking/busy state for all sessions', action: () => {
       // Reset all sessions and tabs to idle state

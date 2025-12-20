@@ -30,6 +30,18 @@ vi.mock('lucide-react', () => ({
   AlertCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <span data-testid="alert-circle-icon" className={className} style={style}>⚠</span>
   ),
+  Plus: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="plus-icon" className={className} style={style}>+</span>
+  ),
+  Trash2: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="trash-icon" className={className} style={style}>🗑</span>
+  ),
+  HelpCircle: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="help-circle-icon" className={className} style={style}>?</span>
+  ),
+  ChevronDown: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="chevron-down-icon" className={className} style={style}>▼</span>
+  ),
 }));
 
 // Mock layer stack context
@@ -707,7 +719,7 @@ describe('NewInstanceModal', () => {
         fireEvent.click(createButton);
       });
 
-      expect(onCreate).toHaveBeenCalledWith('claude-code', '/home/testuser/projects', 'My Session', undefined);
+      expect(onCreate).toHaveBeenCalledWith('claude-code', '/home/testuser/projects', 'My Session', undefined, undefined, undefined, undefined, undefined);
     });
 
     it('should expand lone tilde to home directory', async () => {
@@ -741,7 +753,7 @@ describe('NewInstanceModal', () => {
         fireEvent.click(createButton);
       });
 
-      expect(onCreate).toHaveBeenCalledWith('claude-code', '/home/testuser', 'Home Session', undefined);
+      expect(onCreate).toHaveBeenCalledWith('claude-code', '/home/testuser', 'Home Session', undefined, undefined, undefined, undefined, undefined);
     });
 
     it('should not expand tilde in middle of path', async () => {
@@ -775,7 +787,7 @@ describe('NewInstanceModal', () => {
         fireEvent.click(createButton);
       });
 
-      expect(onCreate).toHaveBeenCalledWith('claude-code', '/path/with~tilde', 'Tilde Test', undefined);
+      expect(onCreate).toHaveBeenCalledWith('claude-code', '/path/with~tilde', 'Tilde Test', undefined, undefined, undefined, undefined, undefined);
     });
   });
 
@@ -810,7 +822,7 @@ describe('NewInstanceModal', () => {
         fireEvent.click(createButton);
       });
 
-      expect(onCreate).toHaveBeenCalledWith('claude-code', '/my/project', 'My Session', undefined);
+      expect(onCreate).toHaveBeenCalledWith('claude-code', '/my/project', 'My Session', undefined, undefined, undefined, undefined, undefined);
       expect(onClose).toHaveBeenCalled();
     });
 
@@ -1253,13 +1265,10 @@ describe('NewInstanceModal', () => {
       });
     });
 
-    it('should load existing custom paths on open', async () => {
+    it('should pass custom path to onCreate when creating agent', async () => {
       vi.mocked(window.maestro.agents.detect).mockResolvedValue([
         createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
       ]);
-      vi.mocked(window.maestro.agents.getAllCustomPaths).mockResolvedValue({
-        'claude-code': '/custom/path/to/claude',
-      });
 
       render(
         <NewInstanceModal
@@ -1267,7 +1276,7 @@ describe('NewInstanceModal', () => {
           onClose={onClose}
           onCreate={onCreate}
           theme={theme}
-        existingSessions={[]}
+          existingSessions={[]}
         />
       );
 
@@ -1277,13 +1286,41 @@ describe('NewInstanceModal', () => {
       });
       fireEvent.click(screen.getByText('Claude Code'));
 
+      // Fill in required fields
+      const nameInput = screen.getByLabelText('Agent Name');
+      fireEvent.change(nameInput, { target: { value: 'My Session' } });
+
+      const dirInput = screen.getByPlaceholderText('Select directory...');
+      fireEvent.change(dirInput, { target: { value: '/my/project' } });
+
       await waitFor(() => {
-        const customPathInput = screen.getByPlaceholderText('/path/to/claude');
-        expect(customPathInput).toHaveValue('/custom/path/to/claude');
+        expect(screen.getByPlaceholderText('/path/to/claude')).toBeInTheDocument();
       });
+
+      // Set custom path
+      const customPathInput = screen.getByPlaceholderText('/path/to/claude');
+      fireEvent.change(customPathInput, { target: { value: '/custom/path/to/claude' } });
+
+      // Create agent
+      const createButton = screen.getByText('Create Agent');
+      await act(async () => {
+        fireEvent.click(createButton);
+      });
+
+      // Custom path should be passed to onCreate
+      expect(onCreate).toHaveBeenCalledWith(
+        'claude-code',
+        '/my/project',
+        'My Session',
+        undefined,
+        '/custom/path/to/claude',
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
-    it('should save custom path on blur', async () => {
+    it('should clear custom path in local state when clear button is clicked', async () => {
       vi.mocked(window.maestro.agents.detect).mockResolvedValue([
         createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
       ]);
@@ -1294,7 +1331,7 @@ describe('NewInstanceModal', () => {
           onClose={onClose}
           onCreate={onCreate}
           theme={theme}
-        existingSessions={[]}
+          existingSessions={[]}
         />
       );
 
@@ -1308,40 +1345,15 @@ describe('NewInstanceModal', () => {
         expect(screen.getByPlaceholderText('/path/to/claude')).toBeInTheDocument();
       });
 
+      // Set custom path first
       const customPathInput = screen.getByPlaceholderText('/path/to/claude');
-      fireEvent.change(customPathInput, { target: { value: '/new/custom/path' } });
+      fireEvent.change(customPathInput, { target: { value: '/custom/path' } });
 
-      await act(async () => {
-        fireEvent.blur(customPathInput);
-      });
-
-      expect(window.maestro.agents.setCustomPath).toHaveBeenCalledWith('claude-code', '/new/custom/path');
-    });
-
-    it('should clear custom path when clear button is clicked', async () => {
-      vi.mocked(window.maestro.agents.detect).mockResolvedValue([
-        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
-      ]);
-      vi.mocked(window.maestro.agents.getAllCustomPaths).mockResolvedValue({
-        'claude-code': '/existing/path',
-      });
-
-      render(
-        <NewInstanceModal
-          isOpen={true}
-          onClose={onClose}
-          onCreate={onCreate}
-          theme={theme}
-        existingSessions={[]}
-        />
-      );
-
-      // Wait for agents to load, then click to expand
       await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument();
+        expect(customPathInput).toHaveValue('/custom/path');
       });
-      fireEvent.click(screen.getByText('Claude Code'));
 
+      // Clear button should appear when there's a value
       await waitFor(() => {
         expect(screen.getByText('Clear')).toBeInTheDocument();
       });
@@ -1350,46 +1362,8 @@ describe('NewInstanceModal', () => {
         fireEvent.click(screen.getByText('Clear'));
       });
 
-      expect(window.maestro.agents.setCustomPath).toHaveBeenCalledWith('claude-code', null);
-    });
-
-    it('should refresh agents after setting custom path', async () => {
-      vi.mocked(window.maestro.agents.detect).mockResolvedValue([
-        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: false }),
-      ]);
-
-      render(
-        <NewInstanceModal
-          isOpen={true}
-          onClose={onClose}
-          onCreate={onCreate}
-          theme={theme}
-        existingSessions={[]}
-        />
-      );
-
-      // Wait for agents to load, then click to expand
-      await waitFor(() => {
-        expect(screen.getByText('Claude Code')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByText('Claude Code'));
-
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('/path/to/claude')).toBeInTheDocument();
-      });
-
-      const customPathInput = screen.getByPlaceholderText('/path/to/claude');
-      fireEvent.change(customPathInput, { target: { value: '/custom/claude' } });
-
-      // Clear initial call count
-      vi.mocked(window.maestro.agents.detect).mockClear();
-
-      await act(async () => {
-        fireEvent.blur(customPathInput);
-      });
-
-      // Should refresh agents after setting custom path
-      expect(window.maestro.agents.detect).toHaveBeenCalled();
+      // Custom path should be cleared in local state
+      expect(customPathInput).toHaveValue('');
     });
   });
 
@@ -1711,6 +1685,260 @@ describe('NewInstanceModal', () => {
         expect(screen.getByText('/usr/bin')).toBeInTheDocument();
         expect(screen.getByText('/usr/local/bin')).toBeInTheDocument();
         expect(screen.getByText('/home/user/.local/bin')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('model autocomplete', () => {
+    it('should load models when expanding an agent with supportsModelSelection', async () => {
+      const agentWithModelSelection = createAgentConfig({
+        id: 'opencode',
+        name: 'OpenCode',
+        available: true,
+        capabilities: {
+          supportsResume: false,
+          supportsReadOnlyMode: false,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: false,
+          supportsSlashCommands: false,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: true,
+          supportsBatchMode: true,
+          supportsStreaming: true,
+          supportsResultMessages: true,
+          supportsModelSelection: true,
+        },
+        configOptions: [
+          {
+            key: 'model',
+            type: 'text',
+            label: 'Model',
+            description: 'Model to use',
+            default: '',
+          },
+        ],
+      });
+
+      vi.mocked(window.maestro.agents.detect).mockResolvedValue([agentWithModelSelection]);
+      vi.mocked(window.maestro.agents.getModels).mockResolvedValue([
+        'ollama/qwen3:8b',
+        'anthropic/claude-sonnet-4-20250514',
+        'opencode/gpt-5-nano',
+      ]);
+      vi.mocked(window.maestro.agents.getConfig).mockResolvedValue({});
+
+      render(
+        <NewInstanceModal
+          isOpen={true}
+          onClose={onClose}
+          onCreate={onCreate}
+          theme={theme}
+          existingSessions={[]}
+        />
+      );
+
+      // Wait for agents to load and click to expand
+      await waitFor(() => {
+        expect(screen.getByText('OpenCode')).toBeInTheDocument();
+      });
+
+      // Click to expand the agent
+      const agentRow = screen.getByText('OpenCode').closest('[role="option"]');
+      if (agentRow) {
+        await act(async () => {
+          fireEvent.click(agentRow);
+        });
+      }
+
+      // Should call getModels when expanding
+      await waitFor(() => {
+        expect(window.maestro.agents.getModels).toHaveBeenCalledWith('opencode', false);
+      });
+    });
+
+    it('should show model count when models are loaded', async () => {
+      const agentWithModelSelection = createAgentConfig({
+        id: 'opencode',
+        name: 'OpenCode',
+        available: true,
+        capabilities: {
+          supportsResume: false,
+          supportsReadOnlyMode: false,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: false,
+          supportsSlashCommands: false,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: true,
+          supportsBatchMode: true,
+          supportsStreaming: true,
+          supportsResultMessages: true,
+          supportsModelSelection: true,
+        },
+        configOptions: [
+          {
+            key: 'model',
+            type: 'text',
+            label: 'Model',
+            description: 'Model to use',
+            default: '',
+          },
+        ],
+      });
+
+      vi.mocked(window.maestro.agents.detect).mockResolvedValue([agentWithModelSelection]);
+      vi.mocked(window.maestro.agents.getModels).mockResolvedValue([
+        'model1',
+        'model2',
+        'model3',
+      ]);
+      vi.mocked(window.maestro.agents.getConfig).mockResolvedValue({});
+
+      render(
+        <NewInstanceModal
+          isOpen={true}
+          onClose={onClose}
+          onCreate={onCreate}
+          theme={theme}
+          existingSessions={[]}
+        />
+      );
+
+      // Wait for agents to load and click to expand
+      await waitFor(() => {
+        expect(screen.getByText('OpenCode')).toBeInTheDocument();
+      });
+
+      // Click to expand the agent
+      const agentRow = screen.getByText('OpenCode').closest('[role="option"]');
+      if (agentRow) {
+        await act(async () => {
+          fireEvent.click(agentRow);
+        });
+      }
+
+      // Should show model count
+      await waitFor(() => {
+        expect(screen.getByText('3 models available')).toBeInTheDocument();
+      });
+    });
+
+    it('should not load models for agents without supportsModelSelection', async () => {
+      const agentWithoutModelSelection = createAgentConfig({
+        id: 'claude-code',
+        name: 'Claude Code',
+        available: true,
+        capabilities: {
+          supportsResume: true,
+          supportsReadOnlyMode: true,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: true,
+          supportsSlashCommands: true,
+          supportsSessionStorage: true,
+          supportsCostTracking: true,
+          supportsUsageStats: true,
+          supportsBatchMode: true,
+          supportsStreaming: true,
+          supportsResultMessages: true,
+          supportsModelSelection: false,
+        },
+      });
+
+      vi.mocked(window.maestro.agents.detect).mockResolvedValue([agentWithoutModelSelection]);
+      vi.mocked(window.maestro.agents.getConfig).mockResolvedValue({});
+
+      render(
+        <NewInstanceModal
+          isOpen={true}
+          onClose={onClose}
+          onCreate={onCreate}
+          theme={theme}
+          existingSessions={[]}
+        />
+      );
+
+      // Wait for agents to load and click to expand
+      await waitFor(() => {
+        expect(screen.getByText('Claude Code')).toBeInTheDocument();
+      });
+
+      // Click to expand the agent
+      const agentRow = screen.getByText('Claude Code').closest('[role="option"]');
+      if (agentRow) {
+        await act(async () => {
+          fireEvent.click(agentRow);
+        });
+      }
+
+      // Should NOT call getModels
+      expect(window.maestro.agents.getModels).not.toHaveBeenCalled();
+    });
+
+    it('should show refresh button for model input when supportsModelSelection', async () => {
+      const agentWithModelSelection = createAgentConfig({
+        id: 'opencode',
+        name: 'OpenCode',
+        available: true,
+        capabilities: {
+          supportsResume: false,
+          supportsReadOnlyMode: false,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: false,
+          supportsSlashCommands: false,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: true,
+          supportsBatchMode: true,
+          supportsStreaming: true,
+          supportsResultMessages: true,
+          supportsModelSelection: true,
+        },
+        configOptions: [
+          {
+            key: 'model',
+            type: 'text',
+            label: 'Model',
+            description: 'Model to use',
+            default: '',
+          },
+        ],
+      });
+
+      vi.mocked(window.maestro.agents.detect).mockResolvedValue([agentWithModelSelection]);
+      vi.mocked(window.maestro.agents.getModels).mockResolvedValue(['model1']);
+      vi.mocked(window.maestro.agents.getConfig).mockResolvedValue({});
+
+      render(
+        <NewInstanceModal
+          isOpen={true}
+          onClose={onClose}
+          onCreate={onCreate}
+          theme={theme}
+          existingSessions={[]}
+        />
+      );
+
+      // Wait for agents to load and click to expand
+      await waitFor(() => {
+        expect(screen.getByText('OpenCode')).toBeInTheDocument();
+      });
+
+      // Click to expand the agent
+      const agentRow = screen.getByText('OpenCode').closest('[role="option"]');
+      if (agentRow) {
+        await act(async () => {
+          fireEvent.click(agentRow);
+        });
+      }
+
+      // Should show refresh button with correct title
+      await waitFor(() => {
+        expect(screen.getByTitle('Refresh available models')).toBeInTheDocument();
       });
     });
   });

@@ -112,24 +112,31 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
   const allExpanded = expandableIndices.length > 0 && expandableIndices.every(i => expandedData.has(i));
   const allCollapsed = expandedData.size === 0;
 
+  // Track the max log buffer for trimming real-time updates
+  const [maxLogBuffer, setMaxLogBuffer] = useState(1000);
+
   // Load logs on mount and subscribe to new logs
   useEffect(() => {
-    loadLogs();
+    // Get max buffer setting first, then load logs
+    window.maestro.logger.getMaxLogBuffer().then(max => {
+      setMaxLogBuffer(max || 1000);
+      loadLogs();
+    });
 
     // Subscribe to new log entries
     const unsubscribe = window.maestro.logger.onNewLog((newLog: SystemLogEntry) => {
       setLogs(prevLogs => {
         // Add new log at the beginning (newest first)
         const updated = [newLog, ...prevLogs];
-        // Keep only the last 50 logs (matching the initial load limit)
-        return updated.slice(0, 50);
+        // Trim to max buffer size (main process also trims, but keep UI in sync)
+        return updated.slice(0, maxLogBuffer);
       });
     });
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [maxLogBuffer]);
 
   // Filter logs whenever search query or selected levels changes
   // Optimized: Uses lazy evaluation to avoid expensive JSON.stringify unless needed
@@ -221,7 +228,9 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
 
   const loadLogs = async () => {
     try {
-      const systemLogs = await window.maestro.logger.getLogs({ limit: 50 });
+      // Get the configured max log buffer size, default to 1000 if not set
+      const maxBuffer = await window.maestro.logger.getMaxLogBuffer() || 1000;
+      const systemLogs = await window.maestro.logger.getLogs({ limit: maxBuffer });
       // Reverse to show newest first
       setLogs(systemLogs.reverse());
     } catch (error) {
@@ -451,14 +460,12 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
         {(['debug', 'info', 'warn', 'error', 'toast', 'autorun'] as const).map(level => {
           const isSelected = selectedLevels.has(level);
           const isEnabled = enabledLevels.has(level);
-          // Auto Run cannot be turned off - it's always enabled and selected
-          const isAlwaysOn = level === 'autorun';
           return (
             <button
               key={level}
-              disabled={!isEnabled || isAlwaysOn}
+              disabled={!isEnabled}
               onClick={() => {
-                if (!isEnabled || isAlwaysOn) return; // Safety check
+                if (!isEnabled) return; // Safety check
                 setSelectedLevels(prev => {
                   const newSet = new Set(prev);
                   if (newSet.has(level)) {
@@ -477,9 +484,9 @@ export function LogViewer({ theme, onClose, logLevel = 'info', savedSelectedLeve
                   : theme.colors.textDim,
                 border: `1px solid ${isEnabled && isSelected ? getLevelColor(level) : theme.colors.border}`,
                 opacity: isEnabled ? 1 : 0.3,
-                cursor: isEnabled && !isAlwaysOn ? 'pointer' : 'not-allowed',
+                cursor: isEnabled ? 'pointer' : 'not-allowed',
               }}
-              title={isAlwaysOn ? 'Auto Run logs cannot be turned off' : (isEnabled ? undefined : `${level} level is disabled (current log level: ${logLevel})`)}
+              title={isEnabled ? undefined : `${level} level is disabled (current log level: ${logLevel})`}
             >
               {level.toUpperCase()}
             </button>

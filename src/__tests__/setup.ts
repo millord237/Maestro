@@ -1,5 +1,57 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import React from 'react';
+
+// Create a mock icon component factory
+const createMockIcon = (name: string) => {
+  const MockIcon = function({ className, style }: { className?: string; style?: React.CSSProperties }) {
+    return React.createElement('svg', {
+      'data-testid': `${name.toLowerCase().replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, '')}-icon`,
+      className,
+      style,
+    });
+  };
+  MockIcon.displayName = name;
+  return MockIcon;
+};
+
+// Global mock for lucide-react using Proxy to auto-generate mock icons
+// This ensures any icon import works without explicitly listing every icon
+vi.mock('lucide-react', () => {
+  const iconCache = new Map<string, ReturnType<typeof createMockIcon>>();
+
+  return new Proxy({}, {
+    get(_target, prop: string) {
+      // Ignore internal properties
+      if (prop === '__esModule' || prop === 'default' || prop === 'then' || typeof prop === 'symbol') {
+        return undefined;
+      }
+
+      // Return cached icon or create new one
+      if (!iconCache.has(prop)) {
+        iconCache.set(prop, createMockIcon(prop));
+      }
+      return iconCache.get(prop);
+    },
+    has(_target, prop: string) {
+      if (prop === '__esModule' || prop === 'default' || prop === 'then' || typeof prop === 'symbol') {
+        return false;
+      }
+      return true;
+    },
+    getOwnPropertyDescriptor(_target, prop: string) {
+      if (prop === '__esModule' || prop === 'default' || prop === 'then' || typeof prop === 'symbol') {
+        return undefined;
+      }
+      return {
+        configurable: true,
+        enumerable: true,
+        writable: false,
+        value: this.get?.(_target, prop),
+      };
+    },
+  });
+});
 
 // Mock window.matchMedia for components that use media queries
 Object.defineProperty(window, 'matchMedia', {
@@ -104,11 +156,17 @@ const mockMaestro = {
     getConfig: vi.fn().mockResolvedValue({}),
     setConfig: vi.fn().mockResolvedValue(undefined),
     getAllCustomPaths: vi.fn().mockResolvedValue({}),
+    getCustomPath: vi.fn().mockResolvedValue(null),
     setCustomPath: vi.fn().mockResolvedValue(undefined),
     getAllCustomArgs: vi.fn().mockResolvedValue({}),
-    setCustomArgs: vi.fn().mockResolvedValue(undefined),
     getCustomArgs: vi.fn().mockResolvedValue(null),
+    setCustomArgs: vi.fn().mockResolvedValue(undefined),
+    getAllCustomEnvVars: vi.fn().mockResolvedValue({}),
+    getCustomEnvVars: vi.fn().mockResolvedValue(null),
+    setCustomEnvVars: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn().mockResolvedValue({ agents: [], debugInfo: null }),
+    // Model discovery for agents that support model selection
+    getModels: vi.fn().mockResolvedValue([]),
     // Capabilities for gating UI features based on agent type
     getCapabilities: vi.fn().mockResolvedValue({
       supportsResume: true,
@@ -116,6 +174,7 @@ const mockMaestro = {
       supportsJsonOutput: true,
       supportsSessionId: true,
       supportsImageInput: true,
+      supportsImageInputOnResume: true,
       supportsSlashCommands: true,
       supportsSessionStorage: true,
       supportsCostTracking: true,
@@ -232,6 +291,14 @@ const mockMaestro = {
   },
   shell: {
     openExternal: vi.fn().mockResolvedValue(undefined),
+  },
+  sync: {
+    getDefaultPath: vi.fn().mockResolvedValue('/default/path'),
+    getSettings: vi.fn().mockResolvedValue({ customSyncPath: undefined }),
+    getCurrentStoragePath: vi.fn().mockResolvedValue('/current/path'),
+    setCustomPath: vi.fn().mockResolvedValue(undefined),
+    migrateStorage: vi.fn().mockResolvedValue({ success: true, migratedCount: 0 }),
+    resetToDefault: vi.fn().mockResolvedValue({ success: true }),
   },
 };
 

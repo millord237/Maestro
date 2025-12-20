@@ -8,20 +8,45 @@ const MAX_PERSISTED_LOGS_PER_TAB = 100;
 
 /**
  * Prepare a session for loading by resetting runtime-only fields.
+ * This ensures sessions don't get stuck in busy state after app restart,
+ * since underlying processes are gone after restart.
  */
 const prepareSessionForLoad = (session: Session): Session => {
+  // Reset tab states - processes don't survive app restart
+  const resetTabs = session.aiTabs?.map(tab => ({
+    ...tab,
+    state: 'idle' as const,
+    thinkingStartTime: undefined,
+  })) || [];
+
   return {
     ...session,
+    // Reset session state - processes don't survive app restart
+    state: 'idle',
+    busySource: undefined,
+    thinkingStartTime: undefined,
+    currentCycleTokens: undefined,
+    currentCycleBytes: undefined,
+    statusMessage: undefined,
+    // Reset tabs with idle state
+    aiTabs: resetTabs,
     // closedTabHistory is runtime-only and should not be persisted
     // Always reset to empty array on load
-    closedTabHistory: []
+    closedTabHistory: [],
+    // Clear error state on load - no agent is running yet so there can't be an error
+    agentError: undefined,
+    agentErrorPaused: false,
   };
 };
 
 /**
  * Prepare a session for persistence by:
  * 1. Truncating logs in each AI tab to MAX_PERSISTED_LOGS_PER_TAB entries
- * 2. Excluding closedTabHistory (runtime-only, not persisted)
+ * 2. Resetting runtime-only state (busy state, thinking time, etc.)
+ * 3. Excluding runtime-only fields (closedTabHistory, agentError, etc.)
+ *
+ * This ensures sessions don't get stuck in busy state after app restart,
+ * since underlying processes are gone after restart.
  */
 const prepareSessionForPersistence = (session: Session): Session => {
   // If no aiTabs, return as-is (shouldn't happen after migration)
@@ -48,8 +73,13 @@ const prepareSessionForPersistence = (session: Session): Session => {
     busySource: undefined,
     thinkingStartTime: undefined,
     currentCycleTokens: undefined,
+    currentCycleBytes: undefined,
+    statusMessage: undefined,
     // Explicitly exclude closedTabHistory - it's runtime-only
-    closedTabHistory: []
+    closedTabHistory: [],
+    // Don't persist error state - no agent is running on next launch
+    agentError: undefined,
+    agentErrorPaused: false,
   };
 };
 
@@ -189,28 +219,12 @@ export function useSessionManager(): UseSessionManagerReturn {
       return;
     }
 
-    // Spawn AI process (terminal uses runCommand which spawns fresh shells per command)
+    // Don't eagerly spawn AI processes on new session creation:
+    // - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
+    // - Terminal uses runCommand (fresh shells per command)
+    // aiPid stays at 0 until user sends their first message
     try {
-      // Check if agent requires a prompt to start (Codex, OpenCode) - skip eager spawn for those
-      const capabilities = await window.maestro.agents.getCapabilities(agentId);
-      let aiSpawnResult = { pid: 0, success: true }; // Default for agents that don't need eager spawn
-
-      if (!capabilities.requiresPromptToStart) {
-        // Spawn for agents that support interactive mode (Claude Code)
-        aiSpawnResult = await window.maestro.process.spawn({
-          sessionId: `${newId}-ai`,
-          toolType: agentId,
-          cwd: workingDir,
-          command: agent.command,
-          args: agent.args || []
-        });
-
-        if (!aiSpawnResult.success || aiSpawnResult.pid <= 0) {
-          throw new Error('Failed to spawn AI agent process');
-        }
-      }
-
-      // Terminal processes are spawned lazily via runCommand() - no persistent PTY needed
+      const aiSpawnResult = { pid: 0, success: true };
 
       // Check if the working directory is a Git repository
       const isGitRepo = await gitService.isRepo(workingDir);

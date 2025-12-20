@@ -115,6 +115,12 @@ export function useKeyboardNavigation(
     // Only handle when sidebar has focus
     if (focus !== 'sidebar') return false;
 
+    // Skip if event originated from an input element (text areas, inputs)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return false;
+    }
+
     // Skip if Alt+Cmd+Arrow is pressed (layout toggle shortcut)
     const isToggleLayoutShortcut = e.altKey && (e.metaKey || e.ctrlKey) &&
       (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
@@ -354,10 +360,18 @@ export function useKeyboardNavigation(
   /**
    * Handle Enter to load selected session from sidebar.
    * Returns true if the event was handled.
+   * Only triggers on plain Enter (no modifiers) to avoid interfering with Cmd+Enter.
    */
   const handleEnterToActivate = useCallback((e: KeyboardEvent): boolean => {
     const focus = activeFocusRef.current;
-    if (focus !== 'sidebar' || e.key !== 'Enter') return false;
+    // Only handle plain Enter, not Cmd+Enter or other modifier combinations
+    if (focus !== 'sidebar' || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.altKey) return false;
+
+    // Skip if event originated from an input element (text areas, inputs)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return false;
+    }
 
     e.preventDefault();
     const sessions = sortedSessionsRef.current;

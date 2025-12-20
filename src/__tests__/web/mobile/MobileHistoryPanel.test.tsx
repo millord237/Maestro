@@ -34,6 +34,12 @@ vi.mock('../../../web/mobile/constants', () => ({
     send: [20],
     interrupt: [50],
   },
+  GESTURE_THRESHOLDS: {
+    swipeDistance: 50,
+    swipeTime: 300,
+    pullToRefresh: 80,
+    longPress: 500,
+  },
 }));
 
 vi.mock('../../../web/utils/logger', () => ({

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Plus, X, List, Database, BarChart3, ChevronDown, User, Bot, DollarSign, Star, Zap, Timer, Hash, ArrowDownToLine, ArrowUpFromLine, Edit3 } from 'lucide-react';
-import type { Theme, Session, LogEntry } from '../types';
+import type { Theme, Session, LogEntry, UsageStats } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { SessionActivityGraph, type ActivityEntry } from './SessionActivityGraph';
@@ -25,7 +25,7 @@ interface AgentSessionsBrowserProps {
   activeSession: Session | undefined;
   activeAgentSessionId: string | null;
   onClose: () => void;
-  onResumeSession: (agentSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean) => void;
+  onResumeSession: (agentSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean, usageStats?: UsageStats) => void;
   onNewSession: () => void;
   onUpdateTab?: (agentSessionId: string, updates: { name?: string | null; starred?: boolean }) => void;
 }
@@ -61,6 +61,7 @@ export function AgentSessionsBrowser({
   const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
 
   // Session pagination hook for paginated loading
+  // Use projectRoot (not cwd) for consistent session storage access
   const {
     sessions,
     loading,
@@ -71,7 +72,7 @@ export function AgentSessionsBrowser({
     sessionsContainerRef,
     updateSession,
   } = useSessionPagination({
-    cwd: activeSession?.cwd,
+    projectPath: activeSession?.projectRoot,
     agentId,
     onStarredSessionsLoaded: setStarredSessions,
   });
@@ -182,13 +183,14 @@ export function AgentSessionsBrowser({
 
   // Listen for progressive stats updates (Claude-specific)
   useEffect(() => {
-    if (!activeSession?.cwd) return;
+    // Use projectRoot for consistent session storage access (same as useSessionPagination)
+    if (!activeSession?.projectRoot) return;
     // Only subscribe for Claude Code sessions
     if (activeSession.toolType !== 'claude-code') return;
 
     const unsubscribe = window.maestro.claude.onProjectStatsUpdate((stats) => {
-      // Only update if this is for our project
-      if (stats.projectPath === activeSession.cwd) {
+      // Only update if this is for our project (use projectRoot, not cwd)
+      if (stats.projectPath === activeSession.projectRoot) {
         setAggregateStats({
           totalSessions: stats.totalSessions,
           totalMessages: stats.totalMessages,
@@ -202,7 +204,7 @@ export function AgentSessionsBrowser({
     });
 
     return unsubscribe;
-  }, [activeSession?.cwd, activeSession?.toolType]);
+  }, [activeSession?.projectRoot, activeSession?.toolType]);
 
   // Toggle star status for a session
   const toggleStar = useCallback(async (sessionId: string, e: React.MouseEvent) => {
@@ -218,9 +220,10 @@ export function AgentSessionsBrowser({
     setStarredSessions(newStarred);
 
     // Persist to Claude session origins
-    if (activeSession?.cwd) {
+    // Use projectRoot (not cwd) for consistent session storage access
+    if (activeSession?.projectRoot) {
       await window.maestro.claude.updateSessionStarred(
-        activeSession.cwd,
+        activeSession.projectRoot,
         sessionId,
         isNowStarred
       );
@@ -228,7 +231,7 @@ export function AgentSessionsBrowser({
 
     // Update the tab if this session is open as a tab
     onUpdateTab?.(sessionId, { starred: isNowStarred });
-  }, [starredSessions, activeSession?.cwd, onUpdateTab]);
+  }, [starredSessions, activeSession?.projectRoot, onUpdateTab]);
 
   // Start renaming a session
   const startRename = useCallback((session: ClaudeSession, e: React.MouseEvent) => {
@@ -247,13 +250,14 @@ export function AgentSessionsBrowser({
 
   // Submit rename
   const submitRename = useCallback(async (sessionId: string) => {
-    if (!activeSession?.cwd) return;
+    // Use projectRoot (not cwd) for consistent session storage access
+    if (!activeSession?.projectRoot) return;
 
     const trimmedName = renameValue.trim();
     try {
       // Update session origins store (single source of truth for session names)
       await window.maestro.agentSessions.updateSessionName(
-        activeSession.cwd,
+        activeSession.projectRoot,
         sessionId,
         trimmedName
       );
@@ -273,7 +277,7 @@ export function AgentSessionsBrowser({
     }
 
     cancelRename();
-  }, [activeSession?.cwd, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab, updateSession]);
+  }, [activeSession?.projectRoot, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab, updateSession]);
 
   // Auto-view session when activeAgentSessionId is provided (e.g., from history panel click)
   useEffect(() => {
@@ -414,6 +418,20 @@ export function AgentSessionsBrowser({
     }
   };
 
+  // Helper to build UsageStats from session data
+  const buildUsageStats = useCallback((session: ClaudeSession): UsageStats | undefined => {
+    // Only build if we have token data
+    if (!session.inputTokens && !session.outputTokens) return undefined;
+    return {
+      inputTokens: session.inputTokens || 0,
+      outputTokens: session.outputTokens || 0,
+      cacheReadInputTokens: session.cacheReadTokens || 0,
+      cacheCreationInputTokens: session.cacheCreationTokens || 0,
+      totalCostUsd: session.costUsd || 0,
+      contextWindow: 200000, // Default Claude context window
+    };
+  }, []);
+
   // Handle resuming a session
   const handleResume = useCallback(() => {
     if (viewingSession) {
@@ -426,19 +444,23 @@ export function AgentSessionsBrowser({
       }));
       // Pass session name and starred status for the new tab
       const isStarred = starredSessions.has(viewingSession.sessionId);
-      onResumeSession(viewingSession.sessionId, logEntries, viewingSession.sessionName, isStarred);
+      // Build usageStats from session metadata so restored tabs show context/cost
+      const usageStats = buildUsageStats(viewingSession);
+      onResumeSession(viewingSession.sessionId, logEntries, viewingSession.sessionName, isStarred, usageStats);
       onClose();
     }
-  }, [viewingSession, messages, onResumeSession, onClose, starredSessions]);
+  }, [viewingSession, messages, onResumeSession, onClose, starredSessions, buildUsageStats]);
 
   // Handle quick resume from the list view (without going to detail view)
   const handleQuickResume = useCallback((session: ClaudeSession, e: React.MouseEvent) => {
     e.stopPropagation(); // Don't trigger session view
     const isStarred = starredSessions.has(session.sessionId);
+    // Build usageStats from session metadata so restored tabs show context/cost
+    const usageStats = buildUsageStats(session);
     // Pass empty messages array - the history will be loaded when the session is resumed
-    onResumeSession(session.sessionId, [], session.sessionName, isStarred);
+    onResumeSession(session.sessionId, [], session.sessionName, isStarred, usageStats);
     onClose();
-  }, [starredSessions, onResumeSession, onClose]);
+  }, [starredSessions, onResumeSession, onClose, buildUsageStats]);
 
   // Activity entries for the graph - cached in state to prevent re-renders during pagination
   // Only updates when: switching TO graph view, or filters change while graph is visible

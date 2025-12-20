@@ -41,7 +41,7 @@ Download the latest release for your platform from the [Releases](https://github
 - At least one supported AI coding agent installed and authenticated:
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) - Anthropic's AI coding assistant
   - [OpenAI Codex](https://github.com/openai/codex) - OpenAI's coding agent
-  - [OpenCode](https://github.com/opencode-ai/opencode) - Open-source AI coding assistant
+  - [OpenCode](https://github.com/sst/opencode) - Open-source AI coding assistant
 - Git (optional, for git-aware features)
 
 ## Features
@@ -49,15 +49,16 @@ Download the latest release for your platform from the [Releases](https://github
 ### Power Features
 
 - 🤖 **[Auto Run & Playbooks](#auto-run)** - File-system-based task runner that batch-processes markdown checklists through AI agents. Create playbooks for repeatable workflows, run in loops, and track progress with full history. Each task gets its own AI session for clean conversation context.
+- 💬 **[Group Chat](#group-chat)** - Coordinate multiple AI agents in a single conversation. A moderator AI orchestrates discussions, routing questions to the right agents and synthesizing their responses for cross-project questions and architecture discussions.
 - 🌐 **[Mobile Remote Control](#remote-access)** - Built-in web server with QR code access. Monitor and control all your agents from your phone. Supports local network access and remote tunneling via Cloudflare for access from anywhere.
 - 💻 **[Command Line Interface](#command-line-interface)** - Full CLI (`maestro-cli`) for headless operation. List agents/groups, run playbooks from cron jobs or CI/CD pipelines, with human-readable or JSONL output for scripting.
-- 🚀 **Multi-Instance Management** - Run unlimited Claude Code instances and terminal sessions in parallel. Each agent has its own workspace, conversation history, and isolated context.
+- 🚀 **Multi-Instance Management** - Run unlimited agentss and terminal sessions in parallel. Each agent has its own workspace, conversation history, and isolated context.
 - 📬 **Message Queueing** - Queue messages while AI is busy; they're sent automatically when the agent becomes ready. Never lose a thought.
 
 ### Core Features
 
 - 🔄 **Dual-Mode Sessions** - Each agent has both an AI Terminal and Command Terminal. Switch seamlessly between AI conversation and shell commands with `Cmd+J`.
-- ⌨️ **[Keyboard-First Design](#keyboard-shortcuts)** - Full keyboard control with customizable shortcuts. `Cmd+K` quick actions, vim-style navigation, rapid agent switching, and focus management designed for flow state.
+- ⌨️ **[Keyboard-First Design](#keyboard-shortcuts)** - Full keyboard control with customizable shortcuts. `Cmd+K` quick actions, rapid agent switching, and focus management designed for flow state.
 - 📋 **Session Discovery** - Automatically discovers and imports all Claude Code sessions, including conversations from before Maestro was installed. Browse, search, star, rename, and resume any session.
 - 🔀 **Git Integration** - Automatic repo detection, branch display, diff viewer, commit logs, and git-aware file completion. Work with git without leaving the app.
 - 📁 **[File Explorer](#ui-overview)** - Browse project files with syntax highlighting, markdown preview, and image viewing. Reference files in prompts with `@` mentions.
@@ -109,6 +110,7 @@ This approach mirrors methodologies like [Spec-Kit](https://github.com/github/sp
 |---------|-------------|
 | **Agent** | A workspace tied to a project directory and AI provider (Claude Code, Codex, or OpenCode). Contains one Command Terminal and one AI Terminal with full conversation history. |
 | **Group** | Organizational container for agents. Group by project, client, or workflow. |
+| **Group Chat** | Multi-agent conversation coordinated by a moderator. Ask questions across multiple agents and get synthesized answers. |
 | **AI Terminal** | The conversation interface with your AI agent. Supports `@` file mentions, slash commands, and image attachments. |
 | **Command Terminal** | A PTY shell session for running commands directly. Tab completion for files, git branches, and command history. |
 | **Session Explorer** | Browse all past conversations for an agent. Star, rename, search, and resume any previous session. |
@@ -437,6 +439,26 @@ Each task executes in a completely fresh AI session with its own unique session 
 
 This isolation is critical for playbooks with `Reset on Completion` documents that loop indefinitely. Without it, the AI might "remember" completing a task and skip re-execution on subsequent loops.
 
+### Environment Variables {#environment-variables}
+
+Maestro sets environment variables that your agent hooks can use to customize behavior:
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `MAESTRO_SESSION_RESUMED` | `1` | Set when resuming an existing session (not set for new sessions) |
+
+**Example: Conditional Hook Execution**
+
+Since Maestro spawns a new agent process for each message (batch mode), agent "session start" hooks will run on every turn. Use `MAESTRO_SESSION_RESUMED` to skip hooks on resumed sessions:
+
+```bash
+# In your agent's session start hook
+[ "$MAESTRO_SESSION_RESUMED" = "1" ] && exit 0
+# ... rest of your hook logic for new sessions only
+```
+
+This works with any agent provider (Claude Code, Codex, OpenCode) since the environment variable is set by Maestro before spawning the agent process.
+
 ### History & Tracking
 
 Each completed task is logged to the History panel with:
@@ -468,6 +490,66 @@ Click the **Stop** button at any time. The runner will:
 ### Parallel Batches
 
 You can run separate batch processes in different Maestro sessions simultaneously. Each session maintains its own independent batch state. With Git worktrees enabled, you can work on the main branch while Auto Run operates in an isolated worktree.
+
+## Group Chat
+
+Group Chat lets you coordinate multiple AI agents in a single conversation. A moderator AI orchestrates the discussion, routing questions to the right agents and synthesizing their responses.
+
+### When to Use Group Chat
+
+- **Cross-project questions**: "How does the frontend authentication relate to the backend API?"
+- **Architecture discussions**: Get perspectives from agents with different codebase contexts
+- **Comparative analysis**: "Compare the testing approach in these three repositories"
+- **Knowledge synthesis**: Combine expertise from specialized agents
+
+### How It Works
+
+1. **Create a Group Chat** from the sidebar menu
+2. **Add participants** by @mentioning agent names (e.g., `@Frontend`, `@Backend`)
+3. **Send your question** - the moderator receives it first
+4. **Moderator coordinates** - routes to relevant agents via @mentions
+5. **Agents respond** - each agent works in their own project context
+6. **Moderator synthesizes** - combines responses into a coherent answer
+
+### The Moderator's Role
+
+The moderator is an AI that controls the conversation flow:
+
+- **Direct answers**: For simple questions, the moderator responds directly
+- **Delegation**: For complex questions, @mentions the appropriate agents
+- **Follow-up**: If agent responses are incomplete, keeps asking until satisfied
+- **Synthesis**: Combines multiple agent perspectives into a final answer
+
+The moderator won't return to you until your question is properly answered—it will keep going back to agents as many times as needed.
+
+### Example Conversation
+
+```
+You: "How does @Maestro relate to @RunMaestro.ai?"
+
+Moderator: "Let me gather information from both projects.
+            @Maestro @RunMaestro.ai - please explain your role in the ecosystem."
+
+[Agents work in parallel...]
+
+Maestro: "I'm the core Electron desktop app for AI orchestration..."
+
+RunMaestro.ai: "I'm the marketing website and leaderboard..."
+
+Moderator: "Here's how they relate:
+            - Maestro is the desktop app (the product)
+            - RunMaestro.ai is the website (discovery and community)
+            - They share theme definitions for visual consistency
+
+            Next steps: Would you like details on any specific integration?"
+```
+
+### Tips for Effective Group Chats
+
+- **Name agents descriptively** - Agent names appear in the chat, so "Frontend-React" is clearer than "Agent1"
+- **Be specific in questions** - The more context you provide, the better the moderator can route
+- **@mention explicitly** - You can direct questions to specific agents: "What does @Backend think?"
+- **Let the moderator work** - It may take multiple rounds for complex questions
 
 ## Achievements
 
@@ -601,6 +683,49 @@ maestro-cli playbook <playbook-id> --json
 - At least one AI agent CLI must be installed and in PATH (Claude Code, Codex, or OpenCode)
 - Maestro config files must exist (created automatically when you use the GUI)
 
+## Provider Nuances
+
+Each AI agent has unique capabilities and limitations. Maestro adapts its UI based on what each provider supports.
+
+### Claude Code
+
+| Feature | Support |
+|---------|---------|
+| Image attachments | ✅ New and resumed sessions |
+| Session resume | ✅ `--resume` flag |
+| Read-only mode | ✅ `--permission-mode plan` |
+| Slash commands | ✅ `/help`, `/compact`, etc. |
+| Cost tracking | ✅ Full cost breakdown |
+| Model selection | ✅ `--model` flag (via custom CLI args) |
+
+### OpenAI Codex
+
+| Feature | Support |
+|---------|---------|
+| Image attachments | ⚠️ New sessions only (not on resume) |
+| Session resume | ✅ `exec resume <id>` |
+| Read-only mode | ✅ `--sandbox read-only` |
+| Slash commands | ⚠️ Interactive TUI only (not in exec mode) |
+| Cost tracking | ❌ Token counts only (no pricing) |
+| Model selection | ✅ `-m, --model` flag |
+
+**Notes**:
+- Codex's `resume` subcommand doesn't accept the `-i/--image` flag. Images can only be attached when starting a new session. Maestro hides the attach image button when resuming Codex sessions.
+- Codex has [slash commands](https://github.com/openai/codex/blob/main/docs/slash_commands.md) (`/compact`, `/undo`, `/diff`, etc.) but they only work in interactive TUI mode, not in `exec` mode which Maestro uses.
+
+### OpenCode
+
+| Feature | Support |
+|---------|---------|
+| Image attachments | ✅ New and resumed sessions |
+| Session resume | ✅ `--session` flag |
+| Read-only mode | ✅ `--agent plan` |
+| Slash commands | ❌ Not investigated |
+| Cost tracking | ✅ Per-step costs |
+| Model selection | ✅ `--model provider/model` |
+
+**Note**: OpenCode uses the `run` subcommand which auto-approves all permissions (similar to Codex's YOLO mode).
+
 ## Configuration
 
 Settings are stored in:
@@ -608,6 +733,40 @@ Settings are stored in:
 - **macOS**: `~/Library/Application Support/maestro/`
 - **Windows**: `%APPDATA%/maestro/`
 - **Linux**: `~/.config/maestro/`
+
+### Cross-Device Sync (Beta)
+
+Maestro can sync settings, sessions, and groups across multiple devices by storing them in a cloud-synced folder like iCloud Drive, Dropbox, or OneDrive.
+
+**Setup:**
+
+1. Open **Settings** (`Cmd+,`) → **General** tab
+2. Scroll to **Storage Location**
+3. Click **Choose Folder...** and select a synced folder:
+   - **iCloud Drive**: `~/Library/Mobile Documents/com~apple~CloudDocs/Maestro`
+   - **Dropbox**: `~/Dropbox/Maestro`
+   - **OneDrive**: `~/OneDrive/Maestro`
+4. Maestro will migrate your existing settings to the new location
+5. Restart Maestro for changes to take effect
+6. Repeat on your other devices, selecting the same synced folder
+
+**What syncs:**
+- Settings and preferences
+- Session configurations
+- Groups and organization
+- Agent configurations
+- Session origins and metadata
+
+**What stays local:**
+- Window size and position (device-specific)
+- The bootstrap file that points to your sync location
+
+**Important limitations:**
+- **Single-device usage**: Only run Maestro on one device at a time. Running simultaneously on multiple devices can cause sync conflicts where the last write wins.
+- **No conflict resolution**: If settings are modified on two devices before syncing completes, one set of changes will be lost.
+- **Restart required**: Changes to storage location require an app restart to take effect.
+
+To reset to the default location, click **Use Default** in the Storage Location settings.
 
 ## Remote Access
 
@@ -644,6 +803,57 @@ To access Maestro from outside your local network (e.g., on mobile data or from 
 4. A secure Cloudflare tunnel URL will be generated
 5. Use the Local/Remote pill selector to switch between QR codes
 6. The tunnel stays active as long as Maestro is running - no time limits, no account required
+
+## Troubleshooting & Support
+
+### Debug Package
+
+If you encounter deep-seated issues that are difficult to diagnose, Maestro can generate a **Debug Package**—a compressed bundle of diagnostic information that you can safely share when reporting bugs.
+
+**To create a Debug Package:**
+1. Press `Cmd+K` (Mac) or `Ctrl+K` (Windows/Linux) to open Quick Actions
+2. Search for "Create Debug Package"
+3. Choose a save location for the `.zip` file
+4. Attach the file to your [GitHub issue](https://github.com/pedramamini/Maestro/issues)
+
+#### What's Included
+
+The debug package collects metadata and configuration—never your conversations or sensitive data:
+
+| File | Contents |
+|------|----------|
+| `system-info.json` | OS, CPU, memory, Electron/Node versions, app uptime |
+| `settings.json` | App preferences with sensitive values redacted |
+| `agents.json` | Agent configurations, availability, and capability flags |
+| `external-tools.json` | Shell, git, GitHub CLI, and cloudflared availability |
+| `sessions.json` | Session metadata (names, states, tab counts—no conversations) |
+| `processes.json` | Active process information |
+| `logs.json` | Recent system log entries |
+| `errors.json` | Current error states and recent error events |
+| `storage-info.json` | Storage paths and sizes |
+
+#### Privacy Protections
+
+The debug package is designed to be **safe to share publicly**:
+
+- **API keys and tokens** — Replaced with `[REDACTED]`
+- **Passwords and secrets** — Never included
+- **Conversation content** — Excluded entirely (no AI responses, no user messages)
+- **File contents** — Not included from your projects
+- **Custom prompts** — Not included (may contain sensitive context)
+- **File paths** — Sanitized to replace your username with `~`
+- **Environment variables** — Only counts shown, not values (may contain secrets)
+- **Custom agent arguments** — Only `[SET]` or `[NOT SET]` shown, not actual values
+
+**Example path sanitization:**
+- Before: `/Users/johndoe/Projects/MyApp`
+- After: `~/Projects/MyApp`
+
+### Getting Help
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/pedramamini/Maestro/issues)
+- **Discord**: [Join the community](https://discord.gg/86crXbGb)
+- **Documentation**: This README, [CONTRIBUTING.md](CONTRIBUTING.md), and [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Contributing
 

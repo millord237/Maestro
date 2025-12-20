@@ -95,7 +95,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         // Allow system utility shortcuts (Alt+Cmd+L for logs, Alt+Cmd+P for processes) even when modals are open
         // NOTE: Must use e.code for Alt key combos on macOS because e.key produces special characters (e.g., Alt+P = π)
         const codeKeyLower = e.code?.replace('Key', '').toLowerCase() || '';
-        const isSystemUtilShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (codeKeyLower === 'l' || codeKeyLower === 'p');
+        const isSystemUtilShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (codeKeyLower === 'l' || codeKeyLower === 'p' || codeKeyLower === 'd');
         // Allow session jump shortcuts (Alt+Cmd+NUMBER) even when modals are open
         // NOTE: Must use e.code for Alt key combos on macOS because e.key produces special characters
         const isSessionJumpShortcut = e.altKey && (e.metaKey || e.ctrlKey) && /^Digit[0-9]$/.test(e.code || '');
@@ -148,7 +148,18 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'toggleRightPanel')) ctx.setRightPanelOpen((p: boolean) => !p);
       else if (ctx.isShortcut(e, 'newInstance')) ctx.addNewSession();
-      else if (ctx.isShortcut(e, 'killInstance')) ctx.deleteSession(ctx.activeSessionId!);
+      else if (ctx.isShortcut(e, 'newGroupChat')) {
+        e.preventDefault();
+        ctx.setShowNewGroupChatModal(true);
+      }
+      else if (ctx.isShortcut(e, 'killInstance')) {
+        // Delete whichever is currently active: group chat or agent session
+        if (ctx.activeGroupChatId) {
+          ctx.deleteGroupChatWithConfirmation(ctx.activeGroupChatId);
+        } else if (ctx.activeSessionId) {
+          ctx.deleteSession(ctx.activeSessionId);
+        }
+      }
       else if (ctx.isShortcut(e, 'moveToGroup')) {
         if (ctx.activeSession) {
           ctx.setQuickActionInitialMode('move-to-group');
@@ -183,14 +194,36 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'help')) ctx.setShortcutsHelpOpen(true);
       else if (ctx.isShortcut(e, 'settings')) { ctx.setSettingsModalOpen(true); ctx.setSettingsTab('general'); }
-      else if (ctx.isShortcut(e, 'goToFiles')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('files'); ctx.setActiveFocus('right'); }
-      else if (ctx.isShortcut(e, 'goToHistory')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('history'); ctx.setActiveFocus('right'); }
+      else if (ctx.isShortcut(e, 'goToFiles')) {
+        e.preventDefault();
+        ctx.setRightPanelOpen(true);
+        // In group chat, Cmd+Shift+F goes to Participants tab (no Files tab in group chat)
+        if (ctx.activeGroupChatId) {
+          ctx.setGroupChatRightTab('participants');
+        } else {
+          ctx.handleSetActiveRightTab('files');
+        }
+        ctx.setActiveFocus('right');
+      }
+      else if (ctx.isShortcut(e, 'goToHistory')) {
+        e.preventDefault();
+        ctx.setRightPanelOpen(true);
+        // In group chat, Cmd+Shift+H goes to History tab (same concept)
+        if (ctx.activeGroupChatId) {
+          ctx.setGroupChatRightTab('history');
+        } else {
+          ctx.handleSetActiveRightTab('history');
+        }
+        ctx.setActiveFocus('right');
+      }
       else if (ctx.isShortcut(e, 'goToAutoRun')) { e.preventDefault(); ctx.setRightPanelOpen(true); ctx.handleSetActiveRightTab('autorun'); ctx.setActiveFocus('right'); }
       else if (ctx.isShortcut(e, 'fuzzyFileSearch')) { e.preventDefault(); if (ctx.activeSession) ctx.setFuzzyFileSearchOpen(true); }
       else if (ctx.isShortcut(e, 'openImageCarousel')) {
         e.preventDefault();
-        if (ctx.stagedImages.length > 0) {
-          ctx.handleSetLightboxImage(ctx.stagedImages[0], ctx.stagedImages);
+        // Use group chat staged images when group chat is active
+        const images = ctx.activeGroupChatId ? ctx.groupChatStagedImages : ctx.stagedImages;
+        if (images && images.length > 0) {
+          ctx.handleSetLightboxImage(images[0], images);
         }
       }
       else if (ctx.isShortcut(e, 'toggleTabStar')) {
@@ -210,15 +243,17 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'focusInput')) {
         e.preventDefault();
+        // Use group chat input ref when group chat is active
+        const targetInputRef = ctx.activeGroupChatId ? ctx.groupChatInputRef : ctx.inputRef;
         // Toggle between input and main panel output for keyboard scrolling
-        if (document.activeElement === ctx.inputRef.current) {
+        if (document.activeElement === targetInputRef?.current) {
           // Input is focused - blur and focus main panel output
-          ctx.inputRef.current?.blur();
+          targetInputRef?.current?.blur();
           ctx.terminalOutputRef.current?.focus();
         } else {
           // Main panel output (or elsewhere) - focus input
           ctx.setActiveFocus('main');
-          setTimeout(() => ctx.inputRef.current?.focus(), 0);
+          setTimeout(() => targetInputRef?.current?.focus(), 0);
         }
       }
       else if (ctx.isShortcut(e, 'focusSidebar')) {
@@ -231,11 +266,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         ctx.setActiveFocus('sidebar');
         setTimeout(() => ctx.sidebarContainerRef?.current?.focus(), 0);
       }
-      else if (ctx.isShortcut(e, 'viewGitDiff')) {
+      else if (ctx.isShortcut(e, 'viewGitDiff') && !ctx.activeGroupChatId) {
         e.preventDefault();
         ctx.handleViewGitDiff();
       }
-      else if (ctx.isShortcut(e, 'viewGitLog')) {
+      else if (ctx.isShortcut(e, 'viewGitLog') && !ctx.activeGroupChatId) {
         e.preventDefault();
         if (ctx.activeSession?.isGitRepo) {
           ctx.setGitLogOpen(true);
@@ -243,7 +278,8 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'agentSessions')) {
         e.preventDefault();
-        if (ctx.activeSession?.toolType === 'claude-code') {
+        // Use capability check instead of hardcoded toolType
+        if (ctx.hasActiveSessionCapability('supportsSessionStorage')) {
           ctx.setActiveAgentSessionId(null);
           ctx.setAgentSessionsOpen(true);
         }
@@ -255,6 +291,10 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       else if (ctx.isShortcut(e, 'processMonitor')) {
         e.preventDefault();
         ctx.setProcessMonitorOpen(true);
+      }
+      else if (ctx.isShortcut(e, 'createDebugPackage')) {
+        e.preventDefault();
+        ctx.handleCreateDebugPackage();
       }
       else if (ctx.isShortcut(e, 'jumpToBottom')) {
         e.preventDefault();
@@ -299,8 +339,8 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         }
       }
 
-      // Tab shortcuts (AI mode only, requires an explicitly selected session)
-      if (ctx.activeSessionId && ctx.activeSession?.inputMode === 'ai' && ctx.activeSession?.aiTabs) {
+      // Tab shortcuts (AI mode only, requires an explicitly selected session, disabled in group chat view)
+      if (ctx.activeSessionId && ctx.activeSession?.inputMode === 'ai' && ctx.activeSession?.aiTabs && !ctx.activeGroupChatId) {
         if (ctx.isTabShortcut(e, 'tabSwitcher')) {
           e.preventDefault();
           ctx.setTabSwitcherOpen(true);

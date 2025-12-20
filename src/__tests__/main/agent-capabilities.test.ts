@@ -16,6 +16,7 @@ describe('agent-capabilities', () => {
         supportsJsonOutput: false,
         supportsSessionId: false,
         supportsImageInput: false,
+        supportsImageInputOnResume: false,
         supportsSlashCommands: false,
         supportsSessionStorage: false,
         supportsCostTracking: false,
@@ -30,6 +31,7 @@ describe('agent-capabilities', () => {
       expect(capabilities.supportsJsonOutput).toBe(false);
       expect(capabilities.supportsSessionId).toBe(false);
       expect(capabilities.supportsImageInput).toBe(false);
+      expect(capabilities.supportsImageInputOnResume).toBe(false);
       expect(capabilities.supportsSlashCommands).toBe(false);
       expect(capabilities.supportsSessionStorage).toBe(false);
       expect(capabilities.supportsCostTracking).toBe(false);
@@ -47,6 +49,7 @@ describe('agent-capabilities', () => {
       expect(DEFAULT_CAPABILITIES.supportsJsonOutput).toBe(false);
       expect(DEFAULT_CAPABILITIES.supportsSessionId).toBe(false);
       expect(DEFAULT_CAPABILITIES.supportsImageInput).toBe(false);
+      expect(DEFAULT_CAPABILITIES.supportsImageInputOnResume).toBe(false);
       expect(DEFAULT_CAPABILITIES.supportsSlashCommands).toBe(false);
       expect(DEFAULT_CAPABILITIES.supportsSessionStorage).toBe(false);
       expect(DEFAULT_CAPABILITIES.supportsCostTracking).toBe(false);
@@ -152,6 +155,7 @@ describe('agent-capabilities', () => {
         expect(typeof AGENT_CAPABILITIES[agentId].supportsJsonOutput).toBe('boolean');
         expect(typeof AGENT_CAPABILITIES[agentId].supportsSessionId).toBe('boolean');
         expect(typeof AGENT_CAPABILITIES[agentId].supportsImageInput).toBe('boolean');
+        expect(typeof AGENT_CAPABILITIES[agentId].supportsImageInputOnResume).toBe('boolean');
         expect(typeof AGENT_CAPABILITIES[agentId].supportsSlashCommands).toBe('boolean');
         expect(typeof AGENT_CAPABILITIES[agentId].supportsSessionStorage).toBe('boolean');
         expect(typeof AGENT_CAPABILITIES[agentId].supportsCostTracking).toBe('boolean');
@@ -215,6 +219,7 @@ describe('agent-capabilities', () => {
         'supportsJsonOutput',
         'supportsSessionId',
         'supportsImageInput',
+        'supportsImageInputOnResume',
         'supportsSlashCommands',
         'supportsSessionStorage',
         'supportsCostTracking',
@@ -241,12 +246,14 @@ describe('agent-capabilities', () => {
         'supportsJsonOutput',
         'supportsSessionId',
         'supportsImageInput',
+        'supportsImageInputOnResume',
         'supportsSlashCommands',
         'supportsSessionStorage',
         'supportsCostTracking',
         'supportsUsageStats',
         'supportsBatchMode',
         'supportsStreaming',
+        'supportsStreamJsonInput',
         'supportsResultMessages',
         'supportsModelSelection',
         'requiresPromptToStart',

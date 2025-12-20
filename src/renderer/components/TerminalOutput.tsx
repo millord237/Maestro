@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState, useCallback, memo } from 'react';
-import { Activity, X, ChevronDown, ChevronUp, Trash2, Copy, Volume2, Square, Check, ArrowDown, Eye, FileText, RotateCcw } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Trash2, Copy, Volume2, Square, Check, ArrowDown, Eye, FileText, RotateCcw, AlertCircle } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import type { FileNode } from '../hooks/useFileExplorer';
 import Convert from 'ansi-to-html';
@@ -50,7 +50,7 @@ interface LogItemProps {
   onSetDeleteConfirmLogId: (logId: string | null) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement>;
   // Other callbacks
-  setLightboxImage: (image: string | null, contextImages?: string[]) => void;
+  setLightboxImage: (image: string | null, contextImages?: string[], source?: 'staged' | 'history') => void;
   copyToClipboard: (text: string) => void;
   speakText?: (text: string, logId: string) => void;
   stopSpeaking?: () => void;
@@ -68,6 +68,8 @@ interface LogItemProps {
   cwd?: string;
   projectRoot?: string;
   onFileClick?: (path: string) => void;
+  // Error details callback
+  onShowErrorDetails?: () => void;
 }
 
 const LogItemComponent = memo(({
@@ -107,6 +109,7 @@ const LogItemComponent = memo(({
   cwd,
   projectRoot,
   onFileClick,
+  onShowErrorDetails,
 }: LogItemProps) => {
   // Ref for the log item container - used for scroll-into-view on expand
   const logItemRef = useRef<HTMLDivElement>(null);
@@ -311,36 +314,19 @@ const LogItemComponent = memo(({
           );
         })()}
       </div>
-      <div className={`flex-1 min-w-0 p-4 pb-10 ${isUserMessage && log.readOnly ? 'pt-8' : ''} rounded-xl border ${isUserMessage ? 'rounded-tr-none' : 'rounded-tl-none'} relative overflow-hidden`}
+      <div className={`flex-1 min-w-0 p-4 pb-10 rounded-xl border ${isUserMessage ? 'rounded-tr-none' : 'rounded-tl-none'} relative overflow-hidden`}
            style={{
              backgroundColor: isUserMessage
                ? isAIMode
                  ? `color-mix(in srgb, ${theme.colors.accent} 20%, ${theme.colors.bgSidebar})`
                  : `color-mix(in srgb, ${theme.colors.accent} 15%, ${theme.colors.bgActivity})`
-               : log.source === 'stderr'
+               : log.source === 'stderr' || log.source === 'error'
                  ? `color-mix(in srgb, ${theme.colors.error} 8%, ${theme.colors.bgActivity})`
                  : isAIMode ? theme.colors.bgActivity : 'transparent',
              borderColor: isUserMessage && isAIMode
                ? theme.colors.accent + '40'
-               : log.source === 'stderr' ? theme.colors.error : theme.colors.border
+               : (log.source === 'stderr' || log.source === 'error') ? theme.colors.error : theme.colors.border
            }}>
-        {/* Read-only badge - top right of message for user messages sent in read-only mode */}
-        {isUserMessage && log.readOnly && (
-          <div className="absolute top-2 right-2">
-            <span
-              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
-              style={{
-                backgroundColor: `${theme.colors.warning}25`,
-                color: theme.colors.warning,
-                border: `1px solid ${theme.colors.warning}50`
-              }}
-              title="Sent in read-only mode (Claude won't modify files)"
-            >
-              <Eye className="w-3 h-3" />
-              <span>Read-only</span>
-            </span>
-          </div>
-        )}
         {/* Local filter icon for system output only */}
         {log.source !== 'user' && isTerminal && (
           <div className="absolute top-2 right-2 flex items-center gap-2">
@@ -366,7 +352,7 @@ const LogItemComponent = memo(({
                 src={img}
                 className="h-20 rounded border cursor-zoom-in shrink-0"
                 style={{ objectFit: 'contain', maxWidth: '200px' }}
-                onClick={() => setLightboxImage(img, log.images)}
+                onClick={() => setLightboxImage(img, log.images, 'history')}
               />
             ))}
           </div>
@@ -384,7 +370,35 @@ const LogItemComponent = memo(({
             </span>
           </div>
         )}
-        {hasNoMatches ? (
+        {/* Special rendering for error log entries */}
+        {log.source === 'error' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" style={{ color: theme.colors.error }} />
+              <span className="text-sm font-medium" style={{ color: theme.colors.error }}>
+                Error
+              </span>
+            </div>
+            <p className="text-sm" style={{ color: theme.colors.textMain }}>
+              {log.text}
+            </p>
+            {log.agentError?.parsedJson && onShowErrorDetails && (
+              <button
+                onClick={onShowErrorDetails}
+                className="self-start flex items-center gap-2 px-3 py-1.5 text-xs rounded border hover:opacity-80 transition-opacity"
+                style={{
+                  backgroundColor: theme.colors.error + '15',
+                  borderColor: theme.colors.error + '40',
+                  color: theme.colors.error,
+                }}
+              >
+                <Eye className="w-3 h-3" />
+                View Details
+              </button>
+            )}
+          </div>
+        )}
+        {log.source !== 'error' && (hasNoMatches ? (
           <div className="flex items-center justify-center py-8 text-sm" style={{ color: theme.colors.textDim }}>
             <span>No matches found for filter</span>
           </div>
@@ -564,7 +578,7 @@ const LogItemComponent = memo(({
               </div>
             )}
           </>
-        )}
+        ))}
         {/* Action buttons - bottom right corner */}
         <div
           className="absolute bottom-2 right-2 flex items-center gap-1"
@@ -753,7 +767,7 @@ interface TerminalOutputProps {
   setOutputSearchOpen: (open: boolean) => void;
   setOutputSearchQuery: (query: string) => void;
   setActiveFocus: (focus: string) => void;
-  setLightboxImage: (image: string | null, contextImages?: string[]) => void;
+  setLightboxImage: (image: string | null, contextImages?: string[], source?: 'staged' | 'history') => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   logsEndRef: React.RefObject<HTMLDivElement>;
   maxOutputLines: number;
@@ -771,6 +785,7 @@ interface TerminalOutputProps {
   cwd?: string; // Current working directory for proximity-based matching
   projectRoot?: string; // Project root absolute path for converting absolute paths to relative
   onFileClick?: (path: string) => void; // Callback when a file link is clicked
+  onShowErrorDetails?: () => void; // Callback to show the error modal (for error log entries)
 }
 
 export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((props, ref) => {
@@ -780,7 +795,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedItem, onInterrupt,
     audioFeedbackCommand, onScrollPositionChange, onAtBottomChange, initialScrollTop,
     markdownEditMode, setMarkdownEditMode, onReplayMessage,
-    fileTree, cwd, projectRoot, onFileClick
+    fileTree, cwd, projectRoot, onFileClick, onShowErrorDetails
   } = props;
 
   // Use the forwarded ref if provided, otherwise create a local one
@@ -1280,46 +1295,47 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   const isAIMode = session.inputMode === 'ai';
 
   // Memoized prose styles - applied once at container level instead of per-log-item
+  // IMPORTANT: Scoped to .terminal-output to avoid CSS conflicts with other prose containers (e.g., AutoRun panel)
   const proseStyles = useMemo(() => `
-    .prose { line-height: 1.4; overflow: visible; }
-    .prose > *:first-child { margin-top: 0 !important; }
-    .prose > *:last-child { margin-bottom: 0 !important; }
-    .prose * { margin-top: 0; margin-bottom: 0; }
-    .prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .prose h2 { color: ${theme.colors.success}; font-size: 1.75em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .prose h3 { color: ${theme.colors.warning}; font-size: 1.5em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .prose h4 { color: ${theme.colors.textMain}; font-size: 1.35em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .prose h5 { color: ${theme.colors.textMain}; font-size: 1.2em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .prose h6 { color: ${theme.colors.textDim}; font-size: 1.1em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .prose p { color: ${theme.colors.textMain}; margin: 0 !important; line-height: 1.4; }
-    .prose p + p { margin-top: 0.5em !important; }
-    .prose p:empty { display: none; }
-    .prose > ul, .prose > ol { color: ${theme.colors.textMain}; margin: 0.25em 0 !important; padding-left: 2em; list-style-position: outside; }
-    .prose li ul, .prose li ol { margin: 0 !important; padding-left: 1.5em; list-style-position: outside; }
-    .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-    .prose li > p { margin: 0 !important; display: inline; }
-    .prose li > p + ul, .prose li > p + ol { margin-top: 0 !important; }
-    .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
-    .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-    .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.35em 0 !important; }
-    .prose pre code { background: none; padding: 0; }
-    .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0.25em 0 !important; color: ${theme.colors.textDim}; }
-    .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
-    .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.5em 0 !important; }
-    .prose table { border-collapse: collapse; width: 100%; margin: 0.35em 0 !important; }
-    .prose th, .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
-    .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
-    .prose strong { font-weight: bold; }
-    .prose em { font-style: italic; }
-    .prose li > strong:first-child, .prose li > b:first-child, .prose li > em:first-child, .prose li > code:first-child, .prose li > a:first-child { vertical-align: baseline; line-height: inherit; }
-    .prose li::marker { font-weight: normal; }
+    .terminal-output .prose { line-height: 1.4; overflow: visible; }
+    .terminal-output .prose > *:first-child { margin-top: 0 !important; }
+    .terminal-output .prose > *:last-child { margin-bottom: 0 !important; }
+    .terminal-output .prose * { margin-top: 0; margin-bottom: 0; }
+    .terminal-output .prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
+    .terminal-output .prose h2 { color: ${theme.colors.success}; font-size: 1.75em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
+    .terminal-output .prose h3 { color: ${theme.colors.warning}; font-size: 1.5em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
+    .terminal-output .prose h4 { color: ${theme.colors.textMain}; font-size: 1.35em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
+    .terminal-output .prose h5 { color: ${theme.colors.textMain}; font-size: 1.2em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
+    .terminal-output .prose h6 { color: ${theme.colors.textDim}; font-size: 1.1em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
+    .terminal-output .prose p { color: ${theme.colors.textMain}; margin: 0 !important; line-height: 1.4; }
+    .terminal-output .prose p + p { margin-top: 0.5em !important; }
+    .terminal-output .prose p:empty { display: none; }
+    .terminal-output .prose > ul, .terminal-output .prose > ol { color: ${theme.colors.textMain}; margin: 0.25em 0 !important; padding-left: 2em; list-style-position: outside; }
+    .terminal-output .prose li ul, .terminal-output .prose li ol { margin: 0 !important; padding-left: 1.5em; list-style-position: outside; }
+    .terminal-output .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
+    .terminal-output .prose li > p { margin: 0 !important; display: inline; }
+    .terminal-output .prose li > p + ul, .terminal-output .prose li > p + ol { margin-top: 0 !important; }
+    .terminal-output .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
+    .terminal-output .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
+    .terminal-output .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.35em 0 !important; }
+    .terminal-output .prose pre code { background: none; padding: 0; }
+    .terminal-output .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0.25em 0 !important; color: ${theme.colors.textDim}; }
+    .terminal-output .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
+    .terminal-output .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.5em 0 !important; }
+    .terminal-output .prose table { border-collapse: collapse; width: 100%; margin: 0.35em 0 !important; }
+    .terminal-output .prose th, .terminal-output .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
+    .terminal-output .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
+    .terminal-output .prose strong { font-weight: bold; }
+    .terminal-output .prose em { font-style: italic; }
+    .terminal-output .prose li > strong:first-child, .terminal-output .prose li > b:first-child, .terminal-output .prose li > em:first-child, .terminal-output .prose li > code:first-child, .terminal-output .prose li > a:first-child { vertical-align: baseline; line-height: inherit; }
+    .terminal-output .prose li::marker { font-weight: normal; }
   `, [theme.colors]);
 
   return (
     <div
       ref={terminalOutputRef}
       tabIndex={0}
-      className="flex-1 flex flex-col overflow-hidden transition-colors outline-none relative"
+      className="terminal-output flex-1 flex flex-col overflow-hidden transition-colors outline-none relative"
       style={{ backgroundColor: session.inputMode === 'ai' ? theme.colors.bgMain : theme.colors.bgActivity }}
       onKeyDown={(e) => {
         // Cmd+F to open search
@@ -1443,6 +1459,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             cwd={cwd}
             projectRoot={projectRoot}
             onFileClick={onFileClick}
+            onShowErrorDetails={onShowErrorDetails}
           />
         ))}
 

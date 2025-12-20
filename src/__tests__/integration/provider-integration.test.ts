@@ -5,6 +5,7 @@
  * works correctly end-to-end:
  * 1. Initial message → get response + session ID
  * 2. Follow-up message with session resume → get response
+ * 3. Image input handling (for agents that support it)
  *
  * REQUIREMENTS:
  * - These tests require the actual provider CLIs to be installed
@@ -12,14 +13,28 @@
  *
  * These tests are SKIPPED by default. To run them:
  *   RUN_INTEGRATION_TESTS=true npm test -- provider-integration --run
+ *
+ * IMPORTANT: These tests mirror the actual argument building logic from:
+ * - src/main/agent-detector.ts (agent definitions with arg builders)
+ * - src/main/ipc/handlers/process.ts (IPC spawn handler)
+ * - src/main/process-manager.ts (ProcessManager.spawn)
+ *
+ * If those files change, these tests should be updated to match.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { getAgentCapabilities } from '../../main/agent-capabilities';
 
 const execAsync = promisify(exec);
+
+// Path to test image fixture
+const TEST_IMAGE_PATH = path.join(__dirname, '../fixtures/maestro-test-image.png');
 
 // Skip integration tests by default - they make real API calls and may incur costs.
 // Set RUN_INTEGRATION_TESTS=true to enable them.
@@ -33,11 +48,23 @@ const TEST_CWD = process.cwd();
 
 interface ProviderConfig {
   name: string;
+  /** Agent ID matching agent-detector.ts (e.g., 'claude-code', 'codex') */
+  agentId: string;
   command: string;
   /** Check if the provider CLI is available */
   checkCommand: string;
-  /** Build args for initial message (no session) */
-  buildInitialArgs: (prompt: string) => string[];
+  /**
+   * Build args for initial message (no session).
+   * These should mirror the logic in:
+   * - agent-detector.ts (base args, batchModePrefix, batchModeArgs, jsonOutputArgs, etc.)
+   * - process.ts IPC handler (arg assembly order)
+   * - process-manager.ts (--input-format stream-json for images)
+   */
+  buildInitialArgs: (prompt: string, options?: { images?: string[] }) => string[];
+  /** Build args for message with image (file path) - for agents that use file-based image args */
+  buildImageArgs?: (prompt: string, imagePath: string) => string[];
+  /** Build stdin content for stream-json mode (for Claude Code) */
+  buildStreamJsonInput?: (prompt: string, imageBase64: string, mediaType: string) => string;
   /** Build args for follow-up message (with session) */
   buildResumeArgs: (sessionId: string, prompt: string) => string[];
   /** Parse session ID from output */
@@ -51,16 +78,37 @@ interface ProviderConfig {
 const PROVIDERS: ProviderConfig[] = [
   {
     name: 'Claude Code',
+    agentId: 'claude-code',
     command: 'claude',
     checkCommand: 'claude --version',
-    buildInitialArgs: (prompt: string) => [
-      '--print',
-      '--verbose',
-      '--output-format', 'stream-json',
-      '--dangerously-skip-permissions',
-      '--',
-      prompt,
-    ],
+    /**
+     * Mirrors agent-detector.ts Claude Code definition:
+     *   args: ['--print', '--verbose', '--output-format', 'stream-json', '--dangerously-skip-permissions']
+     *
+     * And process-manager.ts spawn() logic for images:
+     *   if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
+     *     finalArgs = [...args, '--input-format', 'stream-json'];
+     *   }
+     */
+    buildInitialArgs: (prompt: string, options?: { images?: string[] }) => {
+      const baseArgs = [
+        '--print',
+        '--verbose',
+        '--output-format', 'stream-json',
+        '--dangerously-skip-permissions',
+      ];
+
+      const hasImages = options?.images && options.images.length > 0;
+      const capabilities = getAgentCapabilities('claude-code');
+
+      if (hasImages && capabilities.supportsStreamJsonInput) {
+        // With images: add --input-format stream-json (prompt sent via stdin)
+        return [...baseArgs, '--input-format', 'stream-json'];
+      } else {
+        // Without images: prompt as CLI argument
+        return [...baseArgs, '--', prompt];
+      }
+    },
     buildResumeArgs: (sessionId: string, prompt: string) => [
       '--print',
       '--verbose',
@@ -93,25 +141,90 @@ const PROVIDERS: ProviderConfig[] = [
     isSuccessful: (output: string, exitCode: number) => {
       return exitCode === 0;
     },
+    /**
+     * Build stream-json input for Claude Code with image.
+     * This mirrors buildStreamJsonMessage() in process-manager.ts
+     */
+    buildStreamJsonInput: (prompt: string, imageBase64: string, mediaType: string) => {
+      const message = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: imageBase64,
+              },
+            },
+            {
+              type: 'text',
+              text: prompt,
+            },
+          ],
+        },
+      };
+      return JSON.stringify(message);
+    },
   },
   {
     name: 'Codex',
+    agentId: 'codex',
     command: 'codex',
     checkCommand: 'codex --version',
-    buildInitialArgs: (prompt: string) => [
-      'exec',
-      '--json',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--skip-git-repo-check',
-      '-C', TEST_CWD,
-      '--',
-      prompt,
-    ],
+    /**
+     * Mirrors agent-detector.ts Codex definition:
+     *   batchModePrefix: ['exec']
+     *   batchModeArgs: ['--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check']
+     *   jsonOutputArgs: ['--json']
+     *   workingDirArgs: (dir) => ['-C', dir]
+     *
+     * And process-manager.ts spawn() logic for images:
+     *   if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
+     *     // Only for agents that support stream-json input (NOT Codex)
+     *   }
+     *
+     * This tests that Codex does NOT get --input-format stream-json
+     */
+    buildInitialArgs: (prompt: string, options?: { images?: string[] }) => {
+      // Codex arg order from process.ts IPC handler:
+      // 1. batchModePrefix: ['exec']
+      // 2. base args: [] (empty for Codex)
+      // 3. batchModeArgs: ['--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check']
+      // 4. jsonOutputArgs: ['--json']
+      // 5. workingDirArgs: ['-C', dir]
+      // 6. prompt via '--' separator (process-manager.ts)
+
+      const args = [
+        'exec',
+        '--dangerously-bypass-approvals-and-sandbox',
+        '--skip-git-repo-check',
+        '--json',
+        '-C', TEST_CWD,
+      ];
+
+      // IMPORTANT: This mirrors process-manager.ts logic
+      // Codex does NOT support --input-format stream-json (supportsStreamJsonInput: false)
+      // So even with images, we use the regular prompt-as-argument approach
+      const hasImages = options?.images && options.images.length > 0;
+      const capabilities = getAgentCapabilities('codex');
+
+      if (hasImages && capabilities.supportsStreamJsonInput) {
+        // Codex would add --input-format here, but supportsStreamJsonInput is false
+        // This branch should NEVER execute for Codex
+        throw new Error('Codex should not support stream-json input - capability misconfigured');
+      }
+
+      // Regular batch mode - prompt as CLI arg
+      return [...args, '--', prompt];
+    },
     buildResumeArgs: (sessionId: string, prompt: string) => [
       'exec',
-      '--json',
       '--dangerously-bypass-approvals-and-sandbox',
       '--skip-git-repo-check',
+      '--json',
       '-C', TEST_CWD,
       'resume', sessionId,
       '--',
@@ -156,17 +269,61 @@ const PROVIDERS: ProviderConfig[] = [
       }
       return false;
     },
-  },
-  {
-    name: 'OpenCode',
-    command: 'opencode',
-    checkCommand: 'opencode --version',
-    buildInitialArgs: (prompt: string) => [
-      'run',
-      '--format', 'json',
+    /**
+     * Build args with image file path for Codex.
+     * Mirrors agent-detector.ts: imageArgs: (imagePath) => ['-i', imagePath]
+     */
+    buildImageArgs: (prompt: string, imagePath: string) => [
+      'exec',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      '--json',
+      '-C', TEST_CWD,
+      '-i', imagePath,
       '--',
       prompt,
     ],
+  },
+  {
+    name: 'OpenCode',
+    agentId: 'opencode',
+    command: 'opencode',
+    checkCommand: 'opencode --version',
+    /**
+     * Mirrors agent-detector.ts OpenCode definition:
+     *   batchModePrefix: ['run']
+     *   jsonOutputArgs: ['--format', 'json']
+     *
+     * And process-manager.ts spawn() logic for images:
+     *   OpenCode does NOT support --input-format stream-json (supportsStreamJsonInput: false)
+     *   It uses -f, --file flag instead for images
+     */
+    buildInitialArgs: (prompt: string, options?: { images?: string[] }) => {
+      // OpenCode arg order from process.ts IPC handler:
+      // 1. batchModePrefix: ['run']
+      // 2. base args: [] (empty for OpenCode)
+      // 3. jsonOutputArgs: ['--format', 'json']
+      // 4. prompt via '--' separator (process-manager.ts)
+
+      const args = [
+        'run',
+        '--format', 'json',
+      ];
+
+      // IMPORTANT: This mirrors process-manager.ts logic
+      // OpenCode does NOT support --input-format stream-json (supportsStreamJsonInput: false)
+      const hasImages = options?.images && options.images.length > 0;
+      const capabilities = getAgentCapabilities('opencode');
+
+      if (hasImages && capabilities.supportsStreamJsonInput) {
+        // OpenCode would add --input-format here, but supportsStreamJsonInput is false
+        // This branch should NEVER execute for OpenCode
+        throw new Error('OpenCode should not support stream-json input - capability misconfigured');
+      }
+
+      // Regular batch mode - prompt as CLI arg
+      return [...args, '--', prompt];
+    },
     buildResumeArgs: (sessionId: string, prompt: string) => [
       'run',
       '--format', 'json',
@@ -202,6 +359,21 @@ const PROVIDERS: ProviderConfig[] = [
     isSuccessful: (output: string, exitCode: number) => {
       return exitCode === 0;
     },
+    /**
+     * Build args with image file path for OpenCode.
+     * Mirrors agent-detector.ts: imageArgs: (imagePath) => ['-f', imagePath]
+     *
+     * Uses qwen3-vl model via ollama for image tests since it supports vision.
+     * The default model may not support image input.
+     */
+    buildImageArgs: (prompt: string, imagePath: string) => [
+      'run',
+      '--format', 'json',
+      '--model', 'ollama/qwen3-vl',
+      '-f', imagePath,
+      '--',
+      prompt,
+    ],
   },
 ];
 
@@ -219,11 +391,13 @@ async function isProviderAvailable(provider: ProviderConfig): Promise<boolean> {
 
 /**
  * Run a provider command and capture output
+ * @param stdinContent - Optional content to write to stdin before closing (for stream-json mode)
  */
 function runProvider(
   provider: ProviderConfig,
   args: string[],
-  cwd: string = TEST_CWD
+  cwd: string = TEST_CWD,
+  stdinContent?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     let stdout = '';
@@ -236,7 +410,11 @@ function runProvider(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Close stdin immediately to signal EOF (prevents processes waiting for input)
+    // If we have stdin content, write it and then close
+    if (stdinContent) {
+      proc.stdin?.write(stdinContent + '\n');
+    }
+    // Close stdin to signal EOF (prevents processes waiting for input)
     proc.stdin?.end();
 
     proc.stdout?.on('data', (data) => {
@@ -365,6 +543,133 @@ describe.skipIf(SKIP_INTEGRATION)('Provider Integration Tests', () => {
           `${provider.name} should remember the number 42 from session context`
         ).toBe(true);
       }, PROVIDER_TIMEOUT * 2); // Double timeout for two calls
+
+      it('should build valid args when images option is provided', () => {
+        // This test verifies that the buildInitialArgs correctly handles the image capability check
+        // It mirrors the bug fix in process-manager.ts where --input-format stream-json was being
+        // added unconditionally to all agents, but only Claude Code supports it.
+        //
+        // This test runs synchronously (no API calls) and validates that:
+        // 1. Claude Code: adds --input-format stream-json when images are present
+        // 2. Codex/OpenCode: does NOT add --input-format (they use different image flags)
+
+        const prompt = 'Test prompt';
+        const fakeImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+        // Build args with images
+        const argsWithImages = provider.buildInitialArgs(prompt, { images: [fakeImage] });
+
+        console.log(`\n🖼️  ${provider.name} args with images: ${argsWithImages.join(' ')}`);
+
+        // Verify the args don't contain --input-format unless the agent supports it
+        const capabilities = getAgentCapabilities(provider.agentId);
+        const hasInputFormat = argsWithImages.includes('--input-format');
+
+        if (capabilities.supportsStreamJsonInput) {
+          // Claude Code should have --input-format stream-json
+          expect(hasInputFormat, `${provider.name} should include --input-format when it supports stream-json input`).toBe(true);
+          expect(argsWithImages.includes('stream-json'), `${provider.name} should use stream-json format`).toBe(true);
+          // Should NOT have the prompt as an arg (it's sent via stdin)
+          expect(argsWithImages.includes(prompt), `${provider.name} should not include prompt in args when using stream-json input`).toBe(false);
+        } else {
+          // Codex, OpenCode should NOT have --input-format
+          expect(hasInputFormat, `${provider.name} should NOT include --input-format (supportsStreamJsonInput: false)`).toBe(false);
+          // Should have the prompt as an arg
+          expect(argsWithImages.includes(prompt), `${provider.name} should include prompt in args`).toBe(true);
+        }
+
+        // Compare with args without images
+        const argsWithoutImages = provider.buildInitialArgs(prompt);
+        console.log(`📝 ${provider.name} args without images: ${argsWithoutImages.join(' ')}`);
+
+        // Without images, no agent should have --input-format
+        const hasInputFormatWithoutImages = argsWithoutImages.includes('--input-format');
+        expect(hasInputFormatWithoutImages, `${provider.name} should not include --input-format without images`).toBe(false);
+      });
+
+      it('should process image and identify text content', async () => {
+        // This test verifies that images are properly passed to the provider and processed.
+        // It uses a test image containing the word "Maestro" and asks the provider to
+        // identify the text. This validates the full image processing pipeline.
+        //
+        // For agents that support image input (supportsImageInput: true):
+        // - Claude Code: Uses --input-format stream-json with base64 via stdin
+        // - Codex: Uses -i <file> flag
+        // - OpenCode: Uses -f <file> flag
+
+        if (!providerAvailable) {
+          console.log(`Skipping: ${provider.name} not available`);
+          return;
+        }
+
+        const capabilities = getAgentCapabilities(provider.agentId);
+        if (!capabilities.supportsImageInput) {
+          console.log(`Skipping: ${provider.name} does not support image input`);
+          return;
+        }
+
+        // Verify test image exists
+        if (!fs.existsSync(TEST_IMAGE_PATH)) {
+          console.log(`⚠️  Test image not found at ${TEST_IMAGE_PATH}, skipping`);
+          return;
+        }
+
+        const prompt = 'What word is shown in this image? Reply with ONLY the single word shown, nothing else.';
+
+        console.log(`\n🖼️  Testing image processing for ${provider.name}`);
+        console.log(`📁 Image path: ${TEST_IMAGE_PATH}`);
+
+        let result: { stdout: string; stderr: string; exitCode: number };
+
+        if (capabilities.supportsStreamJsonInput && provider.buildStreamJsonInput) {
+          // Claude Code: Use stream-json input with base64 image via stdin
+          const imageBuffer = fs.readFileSync(TEST_IMAGE_PATH);
+          const imageBase64 = imageBuffer.toString('base64');
+          const mediaType = 'image/png';
+
+          const args = provider.buildInitialArgs(prompt, { images: ['placeholder'] });
+          const stdinContent = provider.buildStreamJsonInput(prompt, imageBase64, mediaType);
+
+          console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
+          console.log(`📥 Sending ${imageBase64.length} bytes of base64 image data via stdin`);
+
+          result = await runProvider(provider, args, TEST_CWD, stdinContent);
+        } else if (provider.buildImageArgs) {
+          // Codex/OpenCode: Use file-based image args
+          const args = provider.buildImageArgs(prompt, TEST_IMAGE_PATH);
+
+          console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
+
+          result = await runProvider(provider, args);
+        } else {
+          console.log(`⚠️  ${provider.name} has no image args builder, skipping`);
+          return;
+        }
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+        console.log(`📤 Stdout (first 1000 chars): ${result.stdout.substring(0, 1000)}`);
+        if (result.stderr) {
+          console.log(`📤 Stderr: ${result.stderr.substring(0, 500)}`);
+        }
+
+        // Check for success
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} image processing should complete successfully`
+        ).toBe(true);
+
+        // Parse and verify response contains "Maestro"
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // The response should contain "Maestro" (case-insensitive)
+        const responseContainsMaestro = response?.toLowerCase().includes('maestro');
+        expect(
+          responseContainsMaestro,
+          `${provider.name} should identify "Maestro" in the image. Got: "${response}"`
+        ).toBe(true);
+      }, PROVIDER_TIMEOUT);
     });
   }
 });

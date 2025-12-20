@@ -8,7 +8,8 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   navBack: { id: 'navBack', label: 'Navigate Back', keys: ['Meta', 'Shift', ','] },
   navForward: { id: 'navForward', label: 'Navigate Forward', keys: ['Meta', 'Shift', '.'] },
   newInstance: { id: 'newInstance', label: 'New Agent', keys: ['Meta', 'n'] },
-  killInstance: { id: 'killInstance', label: 'Remove Agent', keys: ['Meta', 'Shift', 'Backspace'] },
+  newGroupChat: { id: 'newGroupChat', label: 'New Group Chat', keys: ['Alt', 'Meta', 'c'] },
+  killInstance: { id: 'killInstance', label: 'Remove', keys: ['Meta', 'Shift', 'Backspace'] },
   moveToGroup: { id: 'moveToGroup', label: 'Move Session to Group', keys: ['Meta', 'Shift', 'm'] },
   toggleMode: { id: 'toggleMode', label: 'Switch AI/Shell Mode', keys: ['Meta', 'j'] },
   quickAction: { id: 'quickAction', label: 'Quick Actions', keys: ['Meta', 'k'] },
@@ -35,6 +36,7 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   openPromptComposer: { id: 'openPromptComposer', label: 'Open Prompt Composer', keys: ['Meta', 'Shift', 'p'] },
   openWizard: { id: 'openWizard', label: 'New Agent Wizard', keys: ['Meta', 'Shift', 'n'] },
   fuzzyFileSearch: { id: 'fuzzyFileSearch', label: 'Fuzzy File Search', keys: ['Meta', 'g'] },
+  createDebugPackage: { id: 'createDebugPackage', label: 'Create Debug Package', keys: ['Alt', 'Meta', 'd'] },
 };
 
 // Non-editable shortcuts (displayed in help but not configurable)

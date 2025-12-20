@@ -554,7 +554,7 @@ describe('useSessionManager', () => {
       expect(typeof result.current.createNewSession).toBe('function');
     });
 
-    it('should create a new session for claude-code (spawns process)', async () => {
+    it('should create a new session for claude-code (deferred spawn)', async () => {
       vi.mocked(window.maestro.agents.get).mockResolvedValue({
         id: 'claude-code',
         name: 'Claude Code',
@@ -576,12 +576,13 @@ describe('useSessionManager', () => {
         expect(result.current.sessions[0].name).toBe('New Session');
         expect(result.current.sessions[0].cwd).toBe('/test/path');
         expect(result.current.sessions[0].toolType).toBe('claude-code');
-        // Claude Code has requiresPromptToStart: false, so it spawns immediately
-        expect(result.current.sessions[0].aiPid).toBe(12345);
+        // AI processes are no longer spawned eagerly - they spawn on first message
+        // aiPid stays at 0 until user sends their first message
+        expect(result.current.sessions[0].aiPid).toBe(0);
       });
     });
 
-    it('should spawn AI process for non-batch agents (aider)', async () => {
+    it('should create session for aider agent (deferred spawn)', async () => {
       vi.mocked(window.maestro.agents.get).mockResolvedValue({
         id: 'aider',
         name: 'Aider',
@@ -589,7 +590,6 @@ describe('useSessionManager', () => {
         args: [],
         available: true,
       });
-      vi.mocked(window.maestro.process.spawn).mockResolvedValue({ pid: 12345, success: true });
       vi.mocked(window.maestro.git.isRepo).mockResolvedValue(false);
 
       const { result } = renderHook(() => useSessionManager());
@@ -602,17 +602,14 @@ describe('useSessionManager', () => {
       await waitFor(() => {
         expect(result.current.sessions).toHaveLength(1);
         expect(result.current.sessions[0].name).toBe('Aider Session');
-        expect(result.current.sessions[0].aiPid).toBe(12345);
+        // AI processes are no longer spawned eagerly - they spawn on first message
+        expect(result.current.sessions[0].aiPid).toBe(0);
         expect(result.current.sessions[0].isGitRepo).toBe(false);
       });
 
-      expect(window.maestro.process.spawn).toHaveBeenCalledWith({
-        sessionId: expect.stringMatching(/^mock-id-\d+-ai$/),
-        toolType: 'aider',
-        cwd: '/projects/my-app',
-        command: 'aider',
-        args: [],
-      });
+      // process.spawn should NOT be called at session creation time
+      // Spawning is deferred until user sends their first message
+      expect(window.maestro.process.spawn).not.toHaveBeenCalled();
     });
 
     it('should handle agent not found error', async () => {
@@ -632,8 +629,10 @@ describe('useSessionManager', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should handle spawn failure for non-batch agents', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('should create session with isGitRepo false when git check fails', async () => {
+      // This test verifies that sessions are created even if git.isRepo throws
+      // gitService.isRepo uses createIpcMethod with defaultValue: false, so it
+      // returns false on error instead of throwing
       vi.mocked(window.maestro.agents.get).mockResolvedValue({
         id: 'aider',
         name: 'Aider',
@@ -641,7 +640,7 @@ describe('useSessionManager', () => {
         args: [],
         available: true,
       });
-      vi.mocked(window.maestro.process.spawn).mockResolvedValue({ pid: 0, success: false });
+      vi.mocked(window.maestro.git.isRepo).mockRejectedValue(new Error('Git check failed'));
 
       const { result } = renderHook(() => useSessionManager());
       await waitFor(() => expect(result.current.sessions).toEqual([]));
@@ -650,10 +649,12 @@ describe('useSessionManager', () => {
         await result.current.createNewSession('aider', '/test', 'Session');
       });
 
-      // Session should not be created on spawn failure
-      expect(result.current.sessions).toHaveLength(0);
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to create session:', expect.any(Error));
-      consoleSpy.mockRestore();
+      // gitService.isRepo returns false on error (defaultValue), so session is created
+      // with isGitRepo: false
+      await waitFor(() => {
+        expect(result.current.sessions).toHaveLength(1);
+        expect(result.current.sessions[0].isGitRepo).toBe(false);
+      });
     });
 
     it('should set new session as active', async () => {

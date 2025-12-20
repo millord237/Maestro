@@ -142,11 +142,14 @@ function AttachmentImage({
       return;
     }
 
+    // Decode URL-encoded paths (e.g., "images/Image%20Test.png" -> "images/Image Test.png")
+    const decodedSrc = decodeURIComponent(src);
+
     // Check if this is a relative path (e.g., images/{docName}-{timestamp}.{ext})
-    if (src.startsWith('images/') && folderPath) {
-      const fname = src.split('/').pop() || src;
+    if (decodedSrc.startsWith('images/') && folderPath) {
+      const fname = decodedSrc.split('/').pop() || decodedSrc;
       setFilename(fname);
-      const cacheKey = `${folderPath}:${src}`;
+      const cacheKey = `${folderPath}:${decodedSrc}`;
 
       // Check cache first
       if (imageCache.has(cacheKey)) {
@@ -156,7 +159,7 @@ function AttachmentImage({
       }
 
       // Load from folder using absolute path
-      const absolutePath = `${folderPath}/${src}`;
+      const absolutePath = `${folderPath}/${decodedSrc}`;
       window.maestro.fs.readFile(absolutePath)
         .then((result) => {
           if (result.startsWith('data:')) {
@@ -245,10 +248,13 @@ function AttachmentImage({
     return null;
   }
 
+  // For lightbox, pass the decoded path (which matches attachmentsList)
+  // rather than the URL-encoded src from markdown
+  const decodedSrcForClick = src ? decodeURIComponent(src) : '';
   return (
     <span
       className="inline-block align-middle mx-1 my-1 cursor-pointer group relative"
-      onClick={() => onImageClick?.(filename || src || '')}
+      onClick={() => onImageClick?.(decodedSrcForClick)}
       title={filename ? `Click to enlarge: ${filename}` : 'Click to enlarge'}
     >
       <img
@@ -949,10 +955,13 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 
     // Command-E to toggle between edit and preview (without Shift)
     // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+    // Skip if edit mode is locked (during Auto Run) - matches button disabled state
     if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
-      toggleMode();
+      if (!isLocked) {
+        toggleMode();
+      }
       return;
     }
 
@@ -1148,15 +1157,18 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   return (
     <div
       ref={containerRef}
-      className="h-full flex flex-col outline-none relative"
+      className="autorun-panel h-full flex flex-col outline-none relative"
       tabIndex={-1}
       onKeyDown={(e) => {
         // CMD+E to toggle edit/preview (without Shift)
         // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+        // Skip if edit mode is locked (during Auto Run) - matches button disabled state
         if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
           e.preventDefault();
           e.stopPropagation();
-          toggleMode();
+          if (!isLocked) {
+            toggleMode();
+          }
         }
         // CMD+F to open search (works in both modes from container)
         // Only intercept Cmd+F (without Shift) - let Cmd+Shift+F propagate to global "Go to Files" handler
@@ -1560,10 +1572,13 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             onKeyDown={(e) => {
               // CMD+E to toggle edit/preview (without Shift)
               // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+              // Skip if edit mode is locked (during Auto Run) - matches button disabled state
               if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
-                toggleMode();
+                if (!isLocked) {
+                  toggleMode();
+                }
               }
               // Cmd+F to open search in preview mode (without Shift)
               // Cmd+Shift+F is allowed to propagate to global handler for "Go to Files"

@@ -213,7 +213,9 @@ export function useAutoRunImageHandling({
               const cursorPos = textarea.selectionStart;
               const textBefore = localContent.substring(0, cursorPos);
               const textAfter = localContent.substring(cursorPos);
-              const imageMarkdown = `![${filename}](${result.relativePath})`;
+              // URL-encode the path to handle spaces and special characters
+              const encodedPath = result.relativePath!.split('/').map(part => encodeURIComponent(part)).join('/');
+              const imageMarkdown = `![${filename}](${encodedPath})`;
 
               // Push undo state before modifying content
               pushUndoState();
@@ -274,7 +276,9 @@ export function useAutoRunImageHandling({
         pushUndoState();
 
         // Insert at end of content - update local and sync to parent immediately
-        const imageMarkdown = `\n![${filename}](${result.relativePath})\n`;
+        // URL-encode the path to handle spaces and special characters
+        const encodedPath = result.relativePath!.split('/').map(part => encodeURIComponent(part)).join('/');
+        const imageMarkdown = `\n![${filename}](${encodedPath})\n`;
         const newContent = localContent + imageMarkdown;
         setLocalContent(newContent);
         handleContentChange(newContent);
@@ -306,11 +310,15 @@ export function useAutoRunImageHandling({
     // Extract just the filename for the alt text pattern
     const filename = relativePath.split('/').pop() || relativePath;
     // Remove the markdown reference from content - update local and sync to parent immediately
-    // Match both the full relative path and just filename in the alt text
-    const escapedPath = relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedFilename = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedPath}\\)\\n?`, 'g');
-    const newContent = localContent.replace(regex, '');
+    // The markdown content uses URL-encoded paths, so we need to match the encoded version
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const encodedPath = relativePath.split('/').map(part => encodeURIComponent(part)).join('/');
+    const escapedEncodedPath = escapeRegExp(encodedPath);
+    const escapedRawPath = escapeRegExp(relativePath);
+    const escapedFilename = escapeRegExp(filename);
+    const encodedRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedEncodedPath}\\)\\n?`, 'g');
+    const rawRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedRawPath}\\)\\n?`, 'g');
+    const newContent = localContent.replace(encodedRegex, '').replace(rawRegex, '');
     setLocalContent(newContent);
     handleContentChange(newContent);
     lastUndoSnapshotRef.current = newContent;
@@ -361,9 +369,11 @@ export function useAutoRunImageHandling({
     // Extract just the filename for the alt text pattern
     const filename = relativePath.split('/').pop() || relativePath;
     // Remove the markdown reference from content - update local and sync to parent immediately
-    const escapedPath = relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // The markdown content uses URL-encoded paths, so we need to match the encoded version
+    const encodedPath = relativePath.split('/').map(part => encodeURIComponent(part)).join('/');
+    const escapedEncodedPath = encodedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const escapedFilename = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedPath}\\)\\n?`, 'g');
+    const regex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedEncodedPath}\\)\\n?`, 'g');
     const newContent = localContent.replace(regex, '');
     setLocalContent(newContent);
     handleContentChange(newContent);

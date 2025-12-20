@@ -64,6 +64,7 @@ describe('agent-detector', () => {
           supportsJsonOutput: false,
           supportsSessionId: false,
           supportsImageInput: false,
+          supportsImageInputOnResume: false,
           supportsSlashCommands: false,
           supportsSessionStorage: false,
           supportsCostTracking: false,
@@ -96,6 +97,7 @@ describe('agent-detector', () => {
           supportsJsonOutput: true,
           supportsSessionId: true,
           supportsImageInput: false,
+          supportsImageInputOnResume: false,
           supportsSlashCommands: false,
           supportsSessionStorage: false,
           supportsCostTracking: false,
@@ -119,6 +121,7 @@ describe('agent-detector', () => {
         supportsJsonOutput: true,
         supportsSessionId: true,
         supportsImageInput: true,
+        supportsImageInputOnResume: true,
         supportsSlashCommands: true,
         supportsSessionStorage: true,
         supportsCostTracking: true,
@@ -131,6 +134,7 @@ describe('agent-detector', () => {
       expect(capabilities.supportsResume).toBe(true);
       expect(capabilities.supportsModelSelection).toBe(true);
       expect(capabilities.supportsImageInput).toBe(true);
+      expect(capabilities.supportsImageInputOnResume).toBe(true);
     });
 
     it('should support select type with options in AgentConfigOption', () => {

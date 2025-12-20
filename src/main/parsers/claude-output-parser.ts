@@ -89,9 +89,16 @@ export class ClaudeOutputParser implements AgentOutputParser {
 
     // Handle result messages (final complete response)
     if (msg.type === 'result') {
+      // The result field contains the complete formatted response
+      // Fall back to message.content if result is not present
+      let resultText = msg.result;
+      if (!resultText && msg.message?.content) {
+        resultText = this.extractTextFromMessage(msg);
+      }
+
       const event: ParsedEvent = {
         type: 'result',
-        text: msg.result,
+        text: resultText,
         sessionId: msg.session_id,
         raw: msg,
       };
@@ -242,8 +249,12 @@ export class ClaudeOutputParser implements AgentOutputParser {
     try {
       const parsed = JSON.parse(line);
       // Check for error type messages
+      // Claude Code uses type: 'error' for some errors and type: 'turn.failed' for others
       if (parsed.type === 'error' && parsed.message) {
         errorText = parsed.message;
+      } else if ((parsed.type === 'turn.failed' || parsed.type === 'turn_failed') && parsed.error?.message) {
+        // Handle turn.failed/turn_failed format: {"type":"turn.failed","error":{"message":"..."}}
+        errorText = parsed.error.message;
       } else if (parsed.error) {
         errorText = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
       }

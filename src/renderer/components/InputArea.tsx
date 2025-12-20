@@ -23,7 +23,7 @@ interface InputAreaProps {
   setEnterToSend: (value: boolean) => void;
   stagedImages: string[];
   setStagedImages: React.Dispatch<React.SetStateAction<string[]>>;
-  setLightboxImage: (image: string | null, contextImages?: string[]) => void;
+  setLightboxImage: (image: string | null, contextImages?: string[], source?: 'staged' | 'history') => void;
   commandHistoryOpen: boolean;
   setCommandHistoryOpen: (open: boolean) => void;
   commandHistoryFilter: string;
@@ -80,6 +80,8 @@ interface InputAreaProps {
   onToggleTabSaveToHistory?: () => void;
   // Prompt composer modal
   onOpenPromptComposer?: () => void;
+  // Flash notification callback
+  showFlashNotification?: (message: string) => void;
 }
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
@@ -106,15 +108,46 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     onOpenQueueBrowser,
     tabReadOnlyMode = false, onToggleTabReadOnlyMode,
     tabSaveToHistory = false, onToggleTabSaveToHistory,
-    onOpenPromptComposer
+    onOpenPromptComposer,
+    showFlashNotification
   } = props;
 
   // Get agent capabilities for conditional feature rendering
   const { hasCapability } = useAgentCapabilities(session.toolType);
 
-  // Check if we're in read-only mode (auto mode OR manual toggle - Claude will be in plan mode)
-  const isAutoReadOnly = isAutoModeActive && session.inputMode === 'ai';
-  const isReadOnlyMode = isAutoReadOnly || (tabReadOnlyMode && session.inputMode === 'ai');
+  // PERF: Memoize activeTab lookup to avoid O(n) search on every render
+  const activeTab = useMemo(
+    () => session.aiTabs?.find(tab => tab.id === session.activeTabId),
+    [session.aiTabs, session.activeTabId]
+  );
+
+  // PERF: Memoize derived state to avoid recalculation on every render
+  const isResumingSession = !!activeTab?.agentSessionId;
+  const canAttachImages = useMemo(() => {
+    // Check if images are supported - depends on whether we're resuming an existing session
+    // If the active tab has an agentSessionId, we're resuming and need to check supportsImageInputOnResume
+    return isResumingSession
+      ? hasCapability('supportsImageInputOnResume')
+      : hasCapability('supportsImageInput');
+  }, [isResumingSession, hasCapability]);
+
+  // PERF: Memoize mode-related derived state
+  const { isReadOnlyMode, showQueueingBorder } = useMemo(() => {
+    // Check if we're in read-only mode (manual toggle only - Claude will be in plan mode)
+    // NOTE: Auto Run no longer forces read-only mode. Instead:
+    // - Yellow border shows during Auto Run to indicate queuing will happen for write messages
+    // - User can freely toggle read-only mode during Auto Run
+    // - If read-only is ON: message sends immediately (parallel read-only operations allowed)
+    // - If read-only is OFF: message queues until Auto Run completes (prevents file conflicts)
+    const readOnly = tabReadOnlyMode && session.inputMode === 'ai';
+    // Check if Auto Run is active - used for yellow border indication (queuing will happen for write messages)
+    const autoRunActive = isAutoModeActive && session.inputMode === 'ai';
+    // Show yellow border when: read-only mode is on OR Auto Run is active (both indicate special input handling)
+    return {
+      isReadOnlyMode: readOnly,
+      showQueueingBorder: readOnly || autoRunActive
+    };
+  }, [tabReadOnlyMode, isAutoModeActive, session.inputMode]);
 
   // Filter slash commands based on input and current mode
   const isTerminalMode = session.inputMode === 'terminal';
@@ -244,7 +277,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                 src={img}
                 className="h-16 rounded border cursor-pointer hover:opacity-80 transition-opacity"
                 style={{ borderColor: theme.colors.border, objectFit: 'contain', maxWidth: '200px' }}
-                onClick={() => setLightboxImage(img, stagedImages)}
+                onClick={() => setLightboxImage(img, stagedImages, 'staged')}
               />
               <button
                 onClick={(e) => {
@@ -528,8 +561,8 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
         <div
           className="flex-1 relative border rounded-lg bg-opacity-50 flex flex-col"
           style={{
-            borderColor: isReadOnlyMode ? theme.colors.warning : theme.colors.border,
-            backgroundColor: isReadOnlyMode ? `${theme.colors.warning}15` : theme.colors.bgMain
+            borderColor: showQueueingBorder ? theme.colors.warning : theme.colors.border,
+            backgroundColor: showQueueingBorder ? `${theme.colors.warning}15` : theme.colors.bgMain
           }}
         >
           <div className="flex items-start">
@@ -610,7 +643,10 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
               }}
               onKeyDown={handleInputKeyDown}
               onPaste={handlePaste}
-              onDrop={handleDrop}
+              onDrop={(e) => {
+                e.stopPropagation();
+                handleDrop(e);
+              }}
               onDragOver={e => e.preventDefault()}
               rows={1}
             />
@@ -632,7 +668,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                   <PenLine className="w-4 h-4"/>
                 </button>
               )}
-              {session.inputMode === 'ai' && hasCapability('supportsImageInput') && (
+              {session.inputMode === 'ai' && canAttachImages && (
                 <button
                   onClick={() => document.getElementById('image-file-input')?.click()}
                   className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
@@ -653,7 +689,14 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
                       if (event.target?.result) {
-                        setStagedImages(prev => [...prev, event.target!.result as string]);
+                        const imageData = event.target!.result as string;
+                        setStagedImages(prev => {
+                          if (prev.includes(imageData)) {
+                            showFlashNotification?.('Duplicate image ignored');
+                            return prev;
+                          }
+                          return [...prev, imageData];
+                        });
                       }
                     };
                     reader.readAsDataURL(file);
@@ -683,14 +726,11 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                 </button>
               )}
               {/* Read-only mode toggle - AI mode only, if agent supports it */}
-              {/* When AutoRun is active, pill is locked to enabled state */}
+              {/* User can freely toggle read-only during Auto Run */}
               {session.inputMode === 'ai' && onToggleTabReadOnlyMode && hasCapability('supportsReadOnlyMode') && (
                 <button
-                  onClick={isAutoReadOnly ? undefined : onToggleTabReadOnlyMode}
-                  disabled={isAutoReadOnly}
-                  className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full transition-all ${
-                    isAutoReadOnly ? 'cursor-not-allowed' : 'cursor-pointer'
-                  } ${
+                  onClick={onToggleTabReadOnlyMode}
+                  className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full cursor-pointer transition-all ${
                     isReadOnlyMode ? '' : 'opacity-40 hover:opacity-70'
                   }`}
                   style={{
@@ -698,7 +738,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                     color: isReadOnlyMode ? theme.colors.warning : theme.colors.textDim,
                     border: isReadOnlyMode ? `1px solid ${theme.colors.warning}50` : '1px solid transparent'
                   }}
-                  title={isAutoReadOnly ? "Read-only mode locked during AutoRun" : "Toggle read-only mode (agent won't modify files)"}
+                  title="Toggle read-only mode (agent won't modify files)"
                 >
                   <Eye className="w-3 h-3" />
                   <span>Read-only</span>

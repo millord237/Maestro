@@ -3,6 +3,7 @@ import Store from 'electron-store';
 import { ProcessManager } from '../../process-manager';
 import { AgentDetector } from '../../agent-detector';
 import { logger } from '../../utils/logger';
+import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../../utils/agent-args';
 import {
   withIpcErrorLogging,
   requireProcessManager,
@@ -36,6 +37,9 @@ interface AgentConfigsData {
  */
 interface MaestroSettings {
   defaultShell: string;
+  customShellPath?: string;  // Custom path to shell binary (overrides auto-detected path)
+  shellArgs?: string;        // Additional CLI arguments for shell sessions
+  shellEnvVars?: Record<string, string>;  // Environment variables for shell sessions
   [key: string]: any;
 }
 
@@ -82,6 +86,11 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       readOnlyMode?: boolean;   // For read-only/plan mode
       modelId?: string;         // For model selection
       yoloMode?: boolean;       // For YOLO/full-access mode (bypasses confirmations)
+      // Per-session overrides (take precedence over agent-level config)
+      sessionCustomPath?: string;     // Session-specific custom path
+      sessionCustomArgs?: string;     // Session-specific custom args
+      sessionCustomEnvVars?: Record<string, string>; // Session-specific env vars
+      sessionCustomModel?: string;    // Session-specific model selection
     }) => {
       const processManager = requireProcessManager(getProcessManager);
       const agentDetector = requireDependency(getAgentDetector, 'Agent detector');
@@ -99,109 +108,60 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         promptLength: config.prompt?.length,
         promptValue: config.prompt,
       });
-      let finalArgs = [...config.args];
+      let finalArgs = buildAgentArgs(agent, {
+        baseArgs: config.args,
+        prompt: config.prompt,
+        cwd: config.cwd,
+        readOnlyMode: config.readOnlyMode,
+        modelId: config.modelId,
+        yoloMode: config.yoloMode,
+        agentSessionId: config.agentSessionId,
+      });
 
       // ========================================================================
-      // Build args from agent argument builders (for multi-agent support)
-      // ========================================================================
-      if (agent) {
-        // For batch mode agents: prepend batch mode prefix (e.g., 'run' for OpenCode, 'exec' for Codex)
-        // This must come BEFORE base args to form: opencode run --format json ...
-        if (agent.batchModePrefix && config.prompt) {
-          finalArgs = [...agent.batchModePrefix, ...finalArgs];
-        }
-
-        // Add batch mode args if the agent has them and we're in batch mode (have a prompt)
-        // These are args that are only valid when using the batch subcommand (e.g., --skip-git-repo-check for Codex exec)
-        if (agent.batchModeArgs && config.prompt) {
-          finalArgs = [...finalArgs, ...agent.batchModeArgs];
-        }
-
-        // Add JSON output args if the agent supports it
-        // For Claude: already in base args (--output-format stream-json)
-        // For OpenCode: added here (--format json)
-        if (agent.jsonOutputArgs && !finalArgs.some(arg => agent.jsonOutputArgs!.includes(arg))) {
-          finalArgs = [...finalArgs, ...agent.jsonOutputArgs];
-        }
-
-        // Add working directory args for agents that support it
-        // For Codex, this adds -C <dir> to set the working directory
-        // IMPORTANT: Must come BEFORE resume subcommand (Codex: -C is not valid after 'resume')
-        if (agent.workingDirArgs && config.cwd) {
-          const workingDirArgArray = agent.workingDirArgs(config.cwd);
-          finalArgs = [...finalArgs, ...workingDirArgArray];
-        }
-
-        // Add read-only mode args if readOnlyMode is true
-        // For Codex: --sandbox read-only (must come before resume subcommand)
-        if (config.readOnlyMode && agent.readOnlyArgs) {
-          finalArgs = [...finalArgs, ...agent.readOnlyArgs];
-        }
-
-        // Add model selection args if modelId is provided
-        if (config.modelId && agent.modelArgs) {
-          const modelArgArray = agent.modelArgs(config.modelId);
-          finalArgs = [...finalArgs, ...modelArgArray];
-        }
-
-        // Add YOLO mode args if yoloMode is true (bypasses all confirmations)
-        // Note: For Claude Code, YOLO mode is always enabled via base args
-        // For Codex, this adds --dangerously-bypass-approvals-and-sandbox
-        if (config.yoloMode && agent.yoloModeArgs) {
-          finalArgs = [...finalArgs, ...agent.yoloModeArgs];
-        }
-
-        // Add session resume args if agentSessionId is provided
-        // IMPORTANT: Must come AFTER global options like -C, --sandbox (for Codex subcommand structure)
-        if (config.agentSessionId && agent.resumeArgs) {
-          const resumeArgArray = agent.resumeArgs(config.agentSessionId);
-          finalArgs = [...finalArgs, ...resumeArgArray];
-        }
-      }
-
-      // ========================================================================
-      // Build additional args from agent configuration (legacy support)
-      // ========================================================================
-      if (agent && agent.configOptions) {
-        const agentConfig = agentConfigsStore.get('configs', {})[config.toolType] || {};
-
-        for (const option of agent.configOptions) {
-          if (option.argBuilder) {
-            // Get config value, fallback to default
-            const value = agentConfig[option.key] !== undefined
-              ? agentConfig[option.key]
-              : option.default;
-
-            // Build args from this config value
-            const additionalArgs = option.argBuilder(value);
-            finalArgs = [...finalArgs, ...additionalArgs];
-          }
-        }
-      }
-
-      // ========================================================================
-      // Append custom CLI arguments from user configuration
+      // Apply agent config options and session overrides
+      // Session-level overrides take precedence over agent-level config
       // ========================================================================
       const allConfigs = agentConfigsStore.get('configs', {});
-      const agentCustomArgs = allConfigs[config.toolType]?.customArgs;
-      if (agentCustomArgs && typeof agentCustomArgs === 'string') {
-        // Parse the custom args string - split on whitespace but respect quoted strings
-        const customArgsArray = agentCustomArgs.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-        // Remove surrounding quotes from quoted args
-        const cleanedArgs = customArgsArray.map(arg => {
-          if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
-            return arg.slice(1, -1);
-          }
-          return arg;
-        });
-        if (cleanedArgs.length > 0) {
-          logger.debug(`Appending custom args for agent ${config.toolType}`, LOG_CONTEXT, { customArgs: cleanedArgs });
-          finalArgs = [...finalArgs, ...cleanedArgs];
-        }
+      const agentConfigValues = allConfigs[config.toolType] || {};
+      const configResolution = applyAgentConfigOverrides(agent, finalArgs, {
+        agentConfigValues,
+        sessionCustomModel: config.sessionCustomModel,
+        sessionCustomArgs: config.sessionCustomArgs,
+        sessionCustomEnvVars: config.sessionCustomEnvVars,
+      });
+      finalArgs = configResolution.args;
+
+      if (configResolution.modelSource === 'session' && config.sessionCustomModel) {
+        logger.debug(`Using session-level model for ${config.toolType}`, LOG_CONTEXT, { model: config.sessionCustomModel });
+      }
+
+      if (configResolution.customArgsSource !== 'none') {
+        logger.debug(`Appending custom args for ${config.toolType} (${configResolution.customArgsSource}-level)`, LOG_CONTEXT);
+      }
+
+      const effectiveCustomEnvVars = configResolution.effectiveCustomEnvVars;
+      if (configResolution.customEnvSource !== 'none' && effectiveCustomEnvVars) {
+        logger.debug(`Custom env vars configured for ${config.toolType} (${configResolution.customEnvSource}-level)`, LOG_CONTEXT, { keys: Object.keys(effectiveCustomEnvVars) });
       }
 
       // If no shell is specified and this is a terminal session, use the default shell from settings
-      const shellToUse = config.shell || (config.toolType === 'terminal' ? settingsStore.get('defaultShell', 'zsh') : undefined);
+      // For terminal sessions, we also load custom shell path, args, and env vars
+      let shellToUse = config.shell || (config.toolType === 'terminal' ? settingsStore.get('defaultShell', 'zsh') : undefined);
+      let shellArgsStr: string | undefined;
+      let shellEnvVars: Record<string, string> | undefined;
+
+      if (config.toolType === 'terminal') {
+        // Custom shell path overrides the detected/selected shell path
+        const customShellPath = settingsStore.get('customShellPath', '');
+        if (customShellPath && customShellPath.trim()) {
+          shellToUse = customShellPath.trim();
+          logger.debug('Using custom shell path for terminal', LOG_CONTEXT, { customShellPath });
+        }
+        // Load additional shell args and env vars
+        shellArgsStr = settingsStore.get('shellArgs', '');
+        shellEnvVars = settingsStore.get('shellEnvVars', {}) as Record<string, string>;
+      }
 
       // Extract session ID from args for logging (supports both --resume and --session flags)
       const resumeArgIndex = finalArgs.indexOf('--resume');
@@ -230,10 +190,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 
       // Get contextWindow from agent config (for agents like OpenCode/Codex that need user configuration)
       // Falls back to the agent's configOptions default (e.g., 200000 for Codex, 128000 for OpenCode)
-      const agentConfig = agentConfigsStore.get('configs', {})[config.toolType] || {};
-      const contextWindowOption = agent?.configOptions?.find(opt => opt.key === 'contextWindow');
-      const contextWindowDefault = contextWindowOption?.default ?? 0;
-      const contextWindow = typeof agentConfig.contextWindow === 'number' ? agentConfig.contextWindow : contextWindowDefault;
+      const contextWindow = getContextWindowValue(agent, agentConfigValues);
 
       const result = processManager.spawn({
         ...config,
@@ -241,7 +198,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         requiresPty: agent?.requiresPty,
         prompt: config.prompt,
         shell: shellToUse,
+        shellArgs: shellArgsStr,         // Shell-specific CLI args (for terminal sessions)
+        shellEnvVars: shellEnvVars,      // Shell-specific env vars (for terminal sessions)
         contextWindow, // Pass configured context window to process manager
+        customEnvVars: effectiveCustomEnvVars, // Pass custom env vars (session-level or agent-level)
+        imageArgs: agent?.imageArgs,     // Function to build image CLI args (for Codex, OpenCode)
+        noPromptSeparator: agent?.noPromptSeparator, // OpenCode doesn't support '--' before prompt
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {
@@ -322,20 +284,29 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       const processManager = requireProcessManager(getProcessManager);
 
       // Get the shell from settings if not provided
-      // Shell name (e.g., 'zsh') will be resolved to full path in process-manager
-      const shell = config.shell || settingsStore.get('defaultShell', 'zsh');
+      // Custom shell path takes precedence over the selected shell ID
+      let shell = config.shell || settingsStore.get('defaultShell', 'zsh');
+      const customShellPath = settingsStore.get('customShellPath', '');
+      if (customShellPath && customShellPath.trim()) {
+        shell = customShellPath.trim();
+      }
+
+      // Get shell env vars for passing to runCommand
+      const shellEnvVars = settingsStore.get('shellEnvVars', {}) as Record<string, string>;
 
       logger.debug(`Running command: ${config.command}`, LOG_CONTEXT, {
         sessionId: config.sessionId,
         cwd: config.cwd,
-        shell
+        shell,
+        hasCustomEnvVars: Object.keys(shellEnvVars).length > 0
       });
 
       return processManager.runCommand(
         config.sessionId,
         config.command,
         config.cwd,
-        shell
+        shell,
+        shellEnvVars
       );
     })
   );

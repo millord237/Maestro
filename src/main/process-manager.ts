@@ -1,11 +1,15 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { stripControlSequences, stripAllAnsiCodes } from './utils/terminalFilter';
 import { logger } from './utils/logger';
 import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './parsers';
 import { aggregateModelUsage } from './parsers/usage-aggregator';
 import type { AgentError } from '../shared/types';
+import { getAgentCapabilities } from './agent-capabilities';
 
 // Re-export parser types for consumers
 export type { ParsedEvent, AgentOutputParser } from './parsers';
@@ -46,9 +50,14 @@ interface ProcessConfig {
   args: string[];
   requiresPty?: boolean; // Whether this agent needs a pseudo-terminal
   prompt?: string; // For batch mode agents like Claude (passed as CLI argument)
-  shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish')
-  images?: string[]; // Base64 data URLs for images (passed via stream-json input)
+  shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish', or full path)
+  shellArgs?: string; // Additional CLI arguments for shell sessions (e.g., '--login')
+  shellEnvVars?: Record<string, string>; // Environment variables for shell sessions
+  images?: string[]; // Base64 data URLs for images (passed via stream-json input or file args)
+  imageArgs?: (imagePath: string) => string[]; // Function to build image CLI args (e.g., ['-i', path] for Codex)
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
+  customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
+  noPromptSeparator?: boolean; // If true, don't add '--' before the prompt (e.g., OpenCode doesn't support it)
 }
 
 interface ManagedProcess {
@@ -72,6 +81,7 @@ interface ManagedProcess {
   stdoutBuffer?: string; // Buffer for accumulating stdout output (for error detection at exit)
   streamedText?: string; // Buffer for accumulating streamed text from partial events (OpenCode, Codex)
   contextWindow?: number; // Configured context window size (0 or undefined = not configured)
+  tempImageFiles?: string[]; // Temp files to clean up when process exits (for file-based image args)
 }
 
 /**
@@ -134,6 +144,50 @@ function buildStreamJsonMessage(prompt: string, images: string[]): string {
   return JSON.stringify(message);
 }
 
+/**
+ * Save a base64 data URL image to a temp file.
+ * Returns the full path to the temp file.
+ */
+function saveImageToTempFile(dataUrl: string, index: number): string | null {
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) {
+    logger.warn('[ProcessManager] Failed to parse data URL for temp file', 'ProcessManager');
+    return null;
+  }
+
+  // Determine file extension from media type
+  const ext = parsed.mediaType.split('/')[1] || 'png';
+  const filename = `maestro-image-${Date.now()}-${index}.${ext}`;
+  const tempPath = path.join(os.tmpdir(), filename);
+
+  try {
+    // Convert base64 to buffer and write to file
+    const buffer = Buffer.from(parsed.base64, 'base64');
+    fs.writeFileSync(tempPath, buffer);
+    logger.debug('[ProcessManager] Saved image to temp file', 'ProcessManager', { tempPath, size: buffer.length });
+    return tempPath;
+  } catch (error) {
+    logger.error('[ProcessManager] Failed to save image to temp file', 'ProcessManager', { error: String(error) });
+    return null;
+  }
+}
+
+/**
+ * Clean up temp image files.
+ */
+function cleanupTempFiles(files: string[]): void {
+  for (const file of files) {
+    try {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+        logger.debug('[ProcessManager] Cleaned up temp file', 'ProcessManager', { file });
+      }
+    } catch (error) {
+      logger.warn('[ProcessManager] Failed to clean up temp file', 'ProcessManager', { file, error: String(error) });
+    }
+  }
+}
+
 export class ProcessManager extends EventEmitter {
   private processes: Map<string, ManagedProcess> = new Map();
 
@@ -141,21 +195,51 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for a session
    */
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
-    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, images, contextWindow } = config;
+    const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, shellArgs, shellEnvVars, images, imageArgs, contextWindow, customEnvVars, noPromptSeparator } = config;
 
     // For batch mode with images, use stream-json mode and send message via stdin
-    // For batch mode without images, append prompt to args with -- separator
+    // For batch mode without images, append prompt to args with -- separator (unless noPromptSeparator is true)
     const hasImages = images && images.length > 0;
+    const capabilities = getAgentCapabilities(toolType);
     let finalArgs: string[];
+    let tempImageFiles: string[] = [];
 
-    if (hasImages && prompt) {
-      // For images, add stream-json input format (output format and --verbose already in base args)
+    if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
+      // For agents that support stream-json input (like Claude Code), add the flag
       // The prompt will be sent via stdin as a JSON message with image data
       finalArgs = [...args, '--input-format', 'stream-json'];
+    } else if (hasImages && prompt && imageArgs) {
+      // For agents that use file-based image args (like Codex, OpenCode),
+      // save images to temp files and add CLI args
+      finalArgs = [...args]; // Start with base args
+      tempImageFiles = [];
+      for (let i = 0; i < images.length; i++) {
+        const tempPath = saveImageToTempFile(images[i], i);
+        if (tempPath) {
+          tempImageFiles.push(tempPath);
+          finalArgs = [...finalArgs, ...imageArgs(tempPath)];
+        }
+      }
+      // Add the prompt at the end (with or without -- separator)
+      if (noPromptSeparator) {
+        finalArgs = [...finalArgs, prompt];
+      } else {
+        finalArgs = [...finalArgs, '--', prompt];
+      }
+      logger.debug('[ProcessManager] Using file-based image args', 'ProcessManager', {
+        sessionId,
+        imageCount: images.length,
+        tempFiles: tempImageFiles,
+      });
     } else if (prompt) {
       // Regular batch mode - prompt as CLI arg
       // The -- ensures prompt is treated as positional arg, not a flag (even if it starts with --)
-      finalArgs = [...args, '--', prompt];
+      // Some agents (e.g., OpenCode) don't support the -- separator
+      if (noPromptSeparator) {
+        finalArgs = [...args, prompt];
+      } else {
+        finalArgs = [...args, '--', prompt];
+      }
     } else {
       finalArgs = args;
     }
@@ -165,6 +249,8 @@ export class ProcessManager extends EventEmitter {
       toolType,
       hasPrompt: !!prompt,
       hasImages,
+      hasImageArgs: !!imageArgs,
+      tempImageFilesCount: tempImageFiles.length,
       promptValue: prompt,
       baseArgs: args,
       finalArgs
@@ -185,7 +271,7 @@ export class ProcessManager extends EventEmitter {
 
         if (isTerminal) {
           // Full shell emulation for terminal mode
-          // Use the provided shell, or default based on platform
+          // Use the provided shell (can be a shell ID like 'zsh' or a full path like '/usr/local/bin/zsh')
           if (shell) {
             ptyCommand = shell;
           } else {
@@ -196,6 +282,22 @@ export class ProcessManager extends EventEmitter {
           // - Interactive shells source .zshrc/.bashrc (user customizations, aliases, functions)
           // Both are needed to match the user's regular terminal environment
           ptyArgs = process.platform === 'win32' ? [] : ['-l', '-i'];
+
+          // Append custom shell arguments from user configuration
+          if (shellArgs && shellArgs.trim()) {
+            const customShellArgsArray = shellArgs.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+            // Remove surrounding quotes from quoted args
+            const cleanedArgs = customShellArgsArray.map(arg => {
+              if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
+                return arg.slice(1, -1);
+              }
+              return arg;
+            });
+            if (cleanedArgs.length > 0) {
+              logger.debug('Appending custom shell args', 'ProcessManager', { shellArgs: cleanedArgs });
+              ptyArgs = [...ptyArgs, ...cleanedArgs];
+            }
+          }
         } else {
           // Spawn the AI agent directly with PTY support
           ptyCommand = command;
@@ -217,6 +319,16 @@ export class ProcessManager extends EventEmitter {
             // Provide base system PATH - shell startup files will prepend user paths
             PATH: '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
           };
+
+          // Apply custom shell environment variables from user configuration
+          if (shellEnvVars && Object.keys(shellEnvVars).length > 0) {
+            for (const [key, value] of Object.entries(shellEnvVars)) {
+              ptyEnv[key] = value;
+            }
+            logger.debug('Applied custom shell env vars to PTY', 'ProcessManager', {
+              keys: Object.keys(shellEnvVars)
+            });
+          }
         } else {
           // For AI agents in PTY mode: pass full env (they need NODE_PATH, etc.)
           ptyEnv = process.env;
@@ -289,6 +401,26 @@ export class ProcessManager extends EventEmitter {
           env.PATH = standardPaths;
         }
 
+        // Set MAESTRO_SESSION_RESUMED env var when resuming an existing session
+        // This allows user hooks to differentiate between new sessions and resumed ones
+        // See: https://github.com/pedramamini/Maestro/issues/42
+        const isResuming = finalArgs.includes('--resume') || finalArgs.includes('--session');
+        if (isResuming) {
+          env.MAESTRO_SESSION_RESUMED = '1';
+        }
+
+        // Apply custom environment variables from user configuration
+        // See: https://github.com/pedramamini/Maestro/issues/41
+        if (customEnvVars && Object.keys(customEnvVars).length > 0) {
+          for (const [key, value] of Object.entries(customEnvVars)) {
+            env[key] = value;
+          }
+          logger.debug('[ProcessManager] Applied custom env vars', 'ProcessManager', {
+            sessionId,
+            keys: Object.keys(customEnvVars)
+          });
+        }
+
         logger.debug('[ProcessManager] About to spawn child process', 'ProcessManager', {
           command,
           finalArgs,
@@ -351,6 +483,7 @@ export class ProcessManager extends EventEmitter {
           stderrBuffer: '', // Initialize stderr buffer for error detection at exit
           stdoutBuffer: '', // Initialize stdout buffer for error detection at exit
           contextWindow, // User-configured context window size (0 = not configured)
+          tempImageFiles: tempImageFiles.length > 0 ? tempImageFiles : undefined, // Temp files to clean up on exit
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -370,6 +503,13 @@ export class ProcessManager extends EventEmitter {
           });
           childProcess.stdout.on('data', (data: Buffer | string) => {
           const output = data.toString();
+
+          // Debug: Log all stdout data for group chat sessions
+          if (sessionId.includes('group-chat-')) {
+            console.log(`[GroupChat:Debug:ProcessManager] STDOUT received for session ${sessionId}`);
+            console.log(`[GroupChat:Debug:ProcessManager] Raw output length: ${output.length}`);
+            console.log(`[GroupChat:Debug:ProcessManager] Raw output preview: "${output.substring(0, 500)}${output.length > 500 ? '...' : ''}"`);
+          }
 
           if (isStreamJsonMode) {
             // In stream-json mode, each line is a JSONL message
@@ -443,6 +583,11 @@ export class ProcessManager extends EventEmitter {
                     const eventSessionId = outputParser.extractSessionId(event);
                     if (eventSessionId && !managedProcess.sessionIdEmitted) {
                       managedProcess.sessionIdEmitted = true;
+                      logger.debug('[ProcessManager] Emitting session-id event', 'ProcessManager', {
+                        sessionId,
+                        eventSessionId,
+                        toolType: managedProcess.toolType,
+                      });
                       this.emit('session-id', sessionId, eventSessionId);
                     }
 
@@ -453,8 +598,14 @@ export class ProcessManager extends EventEmitter {
                     }
 
                     // Accumulate text from partial streaming events (OpenCode text messages)
+                    // Skip error events - they're handled separately by detectErrorFromLine
                     if (event.type === 'text' && event.isPartial && event.text) {
                       managedProcess.streamedText = (managedProcess.streamedText || '') + event.text;
+                    }
+
+                    // Skip processing error events further - they're handled by agent-error emission
+                    if (event.type === 'error') {
+                      continue;
                     }
 
                     // Extract text data from result events (final complete response)
@@ -478,6 +629,12 @@ export class ProcessManager extends EventEmitter {
                 } else {
                   // Fallback for agents without parsers (legacy Claude Code format)
                   // Handle different message types from stream-json output
+
+                  // Skip error messages in fallback mode - they're handled by detectErrorFromLine
+                  if (msg.type === 'error' || msg.error) {
+                    continue;
+                  }
+
                   if (msg.type === 'result' && msg.result && !managedProcess.resultEmitted) {
                     managedProcess.resultEmitted = true;
                     logger.debug('[ProcessManager] Emitting result data', 'ProcessManager', { sessionId, resultLength: msg.result.length });
@@ -528,6 +685,13 @@ export class ProcessManager extends EventEmitter {
             const stderrData = data.toString();
             logger.debug('[ProcessManager] stderr event fired', 'ProcessManager', { sessionId, dataPreview: stderrData.substring(0, 100) });
 
+            // Debug: Log all stderr data for group chat sessions
+            if (sessionId.includes('group-chat-')) {
+              console.log(`[GroupChat:Debug:ProcessManager] STDERR received for session ${sessionId}`);
+              console.log(`[GroupChat:Debug:ProcessManager] Stderr length: ${stderrData.length}`);
+              console.log(`[GroupChat:Debug:ProcessManager] Stderr preview: "${stderrData.substring(0, 500)}${stderrData.length > 500 ? '...' : ''}"`);
+            }
+
             // Accumulate stderr for error detection at exit (with size limit to prevent memory exhaustion)
             managedProcess.stderrBuffer = appendToBuffer(managedProcess.stderrBuffer || '', stderrData);
 
@@ -565,6 +729,19 @@ export class ProcessManager extends EventEmitter {
             jsonBufferLength: managedProcess.jsonBuffer?.length || 0,
             jsonBufferPreview: managedProcess.jsonBuffer?.substring(0, 200)
           });
+
+          // Debug: Log exit details for group chat sessions
+          if (sessionId.includes('group-chat-')) {
+            console.log(`[GroupChat:Debug:ProcessManager] EXIT for session ${sessionId}`);
+            console.log(`[GroupChat:Debug:ProcessManager] Exit code: ${code}`);
+            console.log(`[GroupChat:Debug:ProcessManager] isStreamJsonMode: ${isStreamJsonMode}`);
+            console.log(`[GroupChat:Debug:ProcessManager] isBatchMode: ${isBatchMode}`);
+            console.log(`[GroupChat:Debug:ProcessManager] resultEmitted: ${managedProcess.resultEmitted}`);
+            console.log(`[GroupChat:Debug:ProcessManager] streamedText length: ${managedProcess.streamedText?.length || 0}`);
+            console.log(`[GroupChat:Debug:ProcessManager] jsonBuffer length: ${managedProcess.jsonBuffer?.length || 0}`);
+            console.log(`[GroupChat:Debug:ProcessManager] stderrBuffer length: ${managedProcess.stderrBuffer?.length || 0}`);
+            console.log(`[GroupChat:Debug:ProcessManager] stderrBuffer preview: "${(managedProcess.stderrBuffer || '').substring(0, 500)}"`);
+          }
           if (isBatchMode && !isStreamJsonMode && managedProcess.jsonBuffer) {
             // Parse JSON response from regular batch mode (not stream-json)
             try {
@@ -598,12 +775,15 @@ export class ProcessManager extends EventEmitter {
             }
           }
 
-          // Check for errors on non-zero exit code using the parser (if not already emitted)
-          if (code !== 0 && outputParser && !managedProcess.errorEmitted) {
+          // Check for errors using the parser (if not already emitted)
+          // Note: Some agents (OpenCode) may exit with code 0 but still have errors
+          // The parser's detectErrorFromExit handles both non-zero exit and the
+          // "exit 0 with stderr but no stdout" case
+          if (outputParser && !managedProcess.errorEmitted) {
             const agentError = outputParser.detectErrorFromExit(
-              code || 1,
+              code || 0,
               managedProcess.stderrBuffer || '',
-              managedProcess.stdoutBuffer || ''
+              managedProcess.stdoutBuffer || managedProcess.streamedText || ''
             );
             if (agentError) {
               managedProcess.errorEmitted = true;
@@ -616,6 +796,11 @@ export class ProcessManager extends EventEmitter {
               });
               this.emit('agent-error', sessionId, agentError);
             }
+          }
+
+          // Clean up temp image files if any
+          if (managedProcess.tempImageFiles && managedProcess.tempImageFiles.length > 0) {
+            cleanupTempFiles(managedProcess.tempImageFiles);
           }
 
           this.emit('exit', sessionId, code || 0);
@@ -640,6 +825,11 @@ export class ProcessManager extends EventEmitter {
               },
             };
             this.emit('agent-error', sessionId, agentError);
+          }
+
+          // Clean up temp image files if any
+          if (managedProcess.tempImageFiles && managedProcess.tempImageFiles.length > 0) {
+            cleanupTempFiles(managedProcess.tempImageFiles);
           }
 
           this.emit('data', sessionId, `[error] ${error.message}`);
@@ -842,16 +1032,18 @@ export class ProcessManager extends EventEmitter {
    * @param command - The shell command to execute
    * @param cwd - Working directory
    * @param shell - Shell to use (default: bash)
+   * @param shellEnvVars - Additional environment variables for the shell
    * @returns Promise that resolves when command completes
    */
   runCommand(
     sessionId: string,
     command: string,
     cwd: string,
-    shell: string = 'bash'
+    shell: string = 'bash',
+    shellEnvVars?: Record<string, string>
   ): Promise<{ exitCode: number }> {
     return new Promise((resolve) => {
-      logger.debug('[ProcessManager] runCommand()', 'ProcessManager', { sessionId, command, cwd, shell });
+      logger.debug('[ProcessManager] runCommand()', 'ProcessManager', { sessionId, command, cwd, shell, hasEnvVars: !!shellEnvVars });
 
       // Build the command with shell config sourcing
       // This ensures PATH, aliases, and functions are available
@@ -888,6 +1080,16 @@ export class ProcessManager extends EventEmitter {
         // Provide base system PATH - shell startup files will prepend user paths (homebrew, go, etc.)
         PATH: '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
       };
+
+      // Apply custom shell environment variables from user configuration
+      if (shellEnvVars && Object.keys(shellEnvVars).length > 0) {
+        for (const [key, value] of Object.entries(shellEnvVars)) {
+          env[key] = value;
+        }
+        logger.debug('[ProcessManager] Applied custom shell env vars to runCommand', 'ProcessManager', {
+          keys: Object.keys(shellEnvVars)
+        });
+      }
 
       // Resolve shell to full path - Electron's internal PATH may not include /bin
       // where common shells like zsh and bash are located

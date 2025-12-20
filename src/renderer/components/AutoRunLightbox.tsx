@@ -1,6 +1,9 @@
-import React, { useState, useCallback, memo } from 'react';
-import { X, ChevronLeft, ChevronRight, Copy, Check, Trash2 } from 'lucide-react';
+import React, { useState, useCallback, memo, useEffect, useRef } from 'react';
+import { X, ChevronLeft, ChevronRight, Copy, Check, Trash2, FileText } from 'lucide-react';
 import type { Theme } from '../types';
+import { useLayerStack } from '../contexts/LayerStackContext';
+import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { ConfirmModal } from './ConfirmModal';
 
 // ============================================================================
 // AutoRunLightbox - Full-screen image viewer with navigation, copy, delete
@@ -43,6 +46,45 @@ export const AutoRunLightbox = memo(({
   onDelete,
 }: AutoRunLightboxProps) => {
   const [copied, setCopied] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const layerIdRef = useRef<string>();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Determine if lightbox is visible
+  const isVisible = Boolean(lightboxFilename);
+
+  // Register with layer stack when lightbox is visible
+  // This ensures Escape closes the lightbox first before the expanded modal
+  useEffect(() => {
+    if (isVisible) {
+      const id = registerLayer({
+        type: 'modal',
+        priority: MODAL_PRIORITIES.AUTORUN_LIGHTBOX,
+        onEscape: () => {
+          onCloseRef.current();
+        },
+      });
+      layerIdRef.current = id;
+
+      return () => {
+        if (layerIdRef.current) {
+          unregisterLayer(layerIdRef.current);
+        }
+      };
+    }
+  }, [isVisible, registerLayer, unregisterLayer]);
+
+  // Keep escape handler up to date
+  useEffect(() => {
+    if (layerIdRef.current) {
+      updateLayerHandler(layerIdRef.current, () => {
+        onCloseRef.current();
+      });
+    }
+  }, [onClose, updateLayerHandler]);
 
   // Calculate current index and navigation availability
   const currentIndex = lightboxFilename ? attachmentsList.indexOf(lightboxFilename) : -1;
@@ -82,8 +124,34 @@ export const AutoRunLightbox = memo(({
     }
   }, [lightboxFilename, lightboxExternalUrl, attachmentPreviews]);
 
-  // Delete the current image
-  const handleDelete = useCallback(() => {
+  // Copy markdown reference to clipboard
+  const copyMarkdownReference = useCallback(async () => {
+    if (!lightboxFilename) return;
+
+    // For external URLs, use the URL directly; for local images, URL-encode the path
+    const imagePath = lightboxExternalUrl ||
+      lightboxFilename.split('/').map(part => encodeURIComponent(part)).join('/');
+    // Extract just the filename for the alt text
+    const altText = lightboxFilename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'image';
+    const markdownString = `![${altText}](${imagePath})`;
+
+    try {
+      await navigator.clipboard.writeText(markdownString);
+      setCopiedMarkdown(true);
+      setTimeout(() => setCopiedMarkdown(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy markdown reference:', err);
+    }
+  }, [lightboxFilename, lightboxExternalUrl]);
+
+  // Show delete confirmation modal
+  const promptDelete = useCallback(() => {
+    if (!lightboxFilename || !onDelete || lightboxExternalUrl) return;
+    setShowDeleteConfirm(true);
+  }, [lightboxFilename, lightboxExternalUrl, onDelete]);
+
+  // Actually delete the current image (called after confirmation)
+  const handleDeleteConfirmed = useCallback(() => {
     if (!lightboxFilename || !onDelete || lightboxExternalUrl) return;
 
     const totalImages = attachmentsList.length;
@@ -106,12 +174,11 @@ export const AutoRunLightbox = memo(({
   }, [lightboxFilename, lightboxExternalUrl, attachmentsList, currentIndex, onDelete, onNavigate, onClose]);
 
   // Handle keyboard events
+  // Note: Escape is handled by the LayerStack system to ensure proper priority
+  // over the expanded modal - don't handle it here
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     e.stopPropagation();
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'ArrowLeft') {
+    if (e.key === 'ArrowLeft') {
       e.preventDefault();
       goToPrevImage();
     } else if (e.key === 'ArrowRight') {
@@ -120,10 +187,10 @@ export const AutoRunLightbox = memo(({
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       if (!lightboxExternalUrl && onDelete) {
-        handleDelete();
+        promptDelete();
       }
     }
-  }, [onClose, goToPrevImage, goToNextImage, lightboxExternalUrl, onDelete, handleDelete]);
+  }, [goToPrevImage, goToNextImage, lightboxExternalUrl, onDelete, promptDelete]);
 
   // Don't render if no image is selected
   const imageUrl = lightboxExternalUrl || (lightboxFilename ? attachmentPreviews.get(lightboxFilename) : undefined);
@@ -158,9 +225,19 @@ export const AutoRunLightbox = memo(({
         onClick={(e) => e.stopPropagation()}
       />
 
-      {/* Top right buttons: Copy and Delete */}
+      {/* Top right buttons: Copy Markdown, Copy Image, Delete, Close */}
       <div className="absolute top-4 right-4 flex gap-2">
-        {/* Copy to clipboard */}
+        {/* Copy markdown reference to clipboard */}
+        <button
+          onClick={(e) => { e.stopPropagation(); copyMarkdownReference(); }}
+          className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors flex items-center gap-2"
+          title="Copy markdown reference (e.g., ![alt](path))"
+        >
+          {copiedMarkdown ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+          {copiedMarkdown && <span className="text-sm">Copied!</span>}
+        </button>
+
+        {/* Copy image to clipboard */}
         <button
           onClick={(e) => { e.stopPropagation(); copyToClipboard(); }}
           className="bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors flex items-center gap-2"
@@ -173,7 +250,7 @@ export const AutoRunLightbox = memo(({
         {/* Delete image - only for attachments, not external URLs */}
         {!lightboxExternalUrl && onDelete && (
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={(e) => { e.stopPropagation(); promptDelete(); }}
             className="bg-red-500/80 hover:bg-red-500 text-white rounded-full p-3 backdrop-blur-sm transition-colors"
             title="Delete image (Delete key)"
           >
@@ -202,14 +279,25 @@ export const AutoRunLightbox = memo(({
         </button>
       )}
 
-      {/* Bottom info */}
+      {/* Bottom info - unified format matching LightboxModal */}
       <div className="absolute bottom-10 text-white text-sm opacity-70 text-center max-w-[80%]">
         <div className="truncate">{lightboxFilename}</div>
         <div className="mt-1">
-          {canNavigate ? `Image ${currentIndex + 1} of ${attachmentsList.length} • ← → to navigate • ` : ''}
-          {!lightboxExternalUrl && onDelete ? 'Delete to remove • ' : ''}ESC to close
+          {canNavigate && <span>Image {currentIndex + 1} of {attachmentsList.length} • ← → to navigate • </span>}
+          {!lightboxExternalUrl && onDelete && <span>Delete to remove • </span>}
+          <span>ESC to close</span>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <ConfirmModal
+          theme={theme}
+          message={`Are you sure you want to delete "${lightboxFilename?.split('/').pop() || 'this image'}"? This action cannot be undone.`}
+          onConfirm={handleDeleteConfirmed}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 });

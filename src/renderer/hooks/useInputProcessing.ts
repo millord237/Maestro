@@ -4,7 +4,7 @@ import { getActiveTab } from '../utils/tabHelpers';
 import { generateId } from '../utils/ids';
 import { substituteTemplateVariables } from '../utils/templateVariables';
 import { gitService } from '../services/git';
-import { imageOnlyDefaultPrompt } from '../../prompts';
+import { imageOnlyDefaultPrompt, maestroSystemPrompt } from '../../prompts';
 
 /**
  * Default prompt used when user sends only an image without text.
@@ -62,6 +62,8 @@ export interface UseInputProcessingDeps {
   processQueuedItemRef: React.MutableRefObject<((sessionId: string, item: QueuedItem) => Promise<void>) | null>;
   /** Flush any pending batched session updates (ensures AI output is flushed before user message appears) */
   flushBatchedUpdates?: () => void;
+  /** Handler for the /history built-in command (requests synopsis and saves to history) */
+  onHistoryCommand?: () => Promise<void>;
 }
 
 /**
@@ -107,6 +109,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
     activeBatchRunState,
     processQueuedItemRef,
     flushBatchedUpdates,
+    onHistoryCommand,
   } = deps;
 
   // Ref for the processInput function so external code can access the latest version
@@ -134,11 +137,27 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
       return;
     }
 
-    // Handle slash commands (custom AI commands only - built-in commands have been removed)
+    // Handle slash commands
     // Note: slash commands are queued like regular messages when agent is busy
     if (effectiveInputValue.trim().startsWith('/')) {
       const commandText = effectiveInputValue.trim();
       const isTerminalMode = activeSession.inputMode === 'terminal';
+
+      // Handle built-in /history command (only in AI mode)
+      // This is intercepted here because it requires Maestro to handle the synopsis generation
+      // rather than passing through to the agent (which may not support it or require special permissions)
+      if (!isTerminalMode && commandText === '/history' && onHistoryCommand) {
+        setInputValue('');
+        setSlashCommandOpen(false);
+        syncAiInputToSession('');
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+
+        // Execute the history command handler asynchronously
+        onHistoryCommand().catch((error) => {
+          console.error('[processInput] /history command failed:', error);
+        });
+        return;
+      }
 
       // Check for custom AI commands (only in AI mode)
       if (!isTerminalMode) {
@@ -561,8 +580,33 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
           // If user sends only an image without text, inject the default image-only prompt
           const hasImages = capturedImages.length > 0;
           const hasNoText = !capturedInputValue.trim();
-          const effectivePrompt =
+          let effectivePrompt =
             hasImages && hasNoText ? DEFAULT_IMAGE_ONLY_PROMPT : capturedInputValue;
+
+          // For NEW sessions (no agentSessionId), prepend Maestro system prompt
+          // This introduces Maestro and sets directory restrictions for the agent
+          const isNewSession = !tabAgentSessionId;
+          if (isNewSession && maestroSystemPrompt) {
+            // Get git branch for template substitution
+            let gitBranch: string | undefined;
+            if (freshSession.isGitRepo) {
+              try {
+                const status = await gitService.getStatus(freshSession.cwd);
+                gitBranch = status.branch;
+              } catch {
+                // Ignore git errors
+              }
+            }
+
+            // Substitute template variables in the system prompt
+            const substitutedSystemPrompt = substituteTemplateVariables(maestroSystemPrompt, {
+              session: freshSession,
+              gitBranch,
+            });
+
+            // Prepend system prompt to user's message
+            effectivePrompt = `${substitutedSystemPrompt}\n\n---\n\n# User Request\n\n${effectivePrompt}`;
+          }
 
           // Spawn agent with generic config - the main process will use agent-specific
           // argument builders (resumeArgs, readOnlyArgs, etc.) to construct the final args
@@ -577,6 +621,11 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
             // Generic spawn options - main process builds agent-specific args
             agentSessionId: tabAgentSessionId,
             readOnlyMode: isReadOnly,
+            // Per-session config overrides (if set)
+            sessionCustomPath: freshSession.customPath,
+            sessionCustomArgs: freshSession.customArgs,
+            sessionCustomEnvVars: freshSession.customEnvVars,
+            sessionCustomModel: freshSession.customModel,
           });
         } catch (error) {
           console.error('Failed to spawn agent batch process:', error);
@@ -721,6 +770,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
     processQueuedItemRef,
     setSessions,
     flushBatchedUpdates,
+    onHistoryCommand,
   ]);
 
   // Update ref for external access

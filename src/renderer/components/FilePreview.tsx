@@ -4,10 +4,11 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen } from 'lucide-react';
+import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen, AlertTriangle } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+import { Modal, ModalFooter } from './ui/Modal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { getEncoding } from 'js-tiktoken';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
@@ -428,13 +429,16 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
   // Edit mode state
   const [editContent, setEditContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const markdownContainerRef = useRef<HTMLDivElement>(null);
   const layerIdRef = useRef<string>();
   const matchElementsRef = useRef<HTMLElement[]>([]);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   // Track if content has been modified
   const hasChanges = markdownEditMode && editContent !== file?.content;
@@ -590,6 +594,21 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     containerRef.current?.focus();
   }, [file.path]); // Run on mount and when navigating to a different file
 
+  // Helper to handle escape key - shows confirmation modal if there are unsaved changes
+  const handleEscapeRequest = useCallback(() => {
+    if (searchOpen) {
+      setSearchOpen(false);
+      setSearchQuery('');
+      // Refocus container so keyboard navigation (arrow keys) still works
+      containerRef.current?.focus();
+    } else if (hasChanges) {
+      // Show confirmation modal if there are unsaved changes
+      setShowUnsavedChangesModal(true);
+    } else {
+      onClose();
+    }
+  }, [searchOpen, hasChanges, onClose]);
+
   // Register layer on mount
   useEffect(() => {
     layerIdRef.current = registerLayer({
@@ -599,16 +618,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
       capturesFocus: true,
       focusTrap: 'lenient',
       ariaLabel: 'File Preview',
-      onEscape: () => {
-        if (searchOpen) {
-          setSearchOpen(false);
-          setSearchQuery('');
-          // Refocus container so keyboard navigation (arrow keys) still works
-          containerRef.current?.focus();
-        } else {
-          onClose();
-        }
-      },
+      onEscape: handleEscapeRequest,
       allowClickOutside: false
     });
 
@@ -617,23 +627,14 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         unregisterLayer(layerIdRef.current);
       }
     };
-  }, [registerLayer, unregisterLayer]);
+  }, [registerLayer, unregisterLayer, handleEscapeRequest]);
 
   // Update handler when dependencies change
   useEffect(() => {
     if (layerIdRef.current) {
-      updateLayerHandler(layerIdRef.current, () => {
-        if (searchOpen) {
-          setSearchOpen(false);
-          setSearchQuery('');
-          // Refocus container so keyboard navigation (arrow keys) still works
-          containerRef.current?.focus();
-        } else {
-          onClose();
-        }
-      });
+      updateLayerHandler(layerIdRef.current, handleEscapeRequest);
     }
-  }, [searchOpen, onClose, updateLayerHandler]);
+  }, [handleEscapeRequest, updateLayerHandler]);
 
   // Keep search input focused when search is open
   useEffect(() => {
@@ -730,6 +731,118 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     };
   }, [searchQuery, file.content, isMarkdown, isImage, theme.colors.accent]);
 
+  // Search matches in markdown preview mode - use CSS Custom Highlight API
+  useEffect(() => {
+    if (!isMarkdown || markdownEditMode || !searchQuery.trim() || !markdownContainerRef.current) {
+      if (isMarkdown && !markdownEditMode) {
+        setTotalMatches(0);
+        setCurrentMatchIndex(0);
+        matchElementsRef.current = [];
+        // Clear any existing highlights
+        if ('highlights' in CSS) {
+          (CSS as any).highlights.delete('search-results');
+          (CSS as any).highlights.delete('search-current');
+        }
+      }
+      return;
+    }
+
+    const container = markdownContainerRef.current;
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedQuery, 'gi');
+
+    // Check if CSS Custom Highlight API is available
+    if ('highlights' in CSS) {
+      const allRanges: Range[] = [];
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+
+      // Find all text nodes and create ranges for matches
+      let textNode;
+      while ((textNode = walker.nextNode())) {
+        const text = textNode.textContent || '';
+        let match;
+        const localRegex = new RegExp(escapedQuery, 'gi');
+        while ((match = localRegex.exec(text)) !== null) {
+          const range = document.createRange();
+          range.setStart(textNode, match.index);
+          range.setEnd(textNode, match.index + match[0].length);
+          allRanges.push(range);
+        }
+      }
+
+      // Update match count
+      setTotalMatches(allRanges.length);
+      if (allRanges.length > 0 && currentMatchIndex >= allRanges.length) {
+        setCurrentMatchIndex(0);
+      }
+
+      // Create highlights
+      if (allRanges.length > 0) {
+        const targetIndex = Math.max(0, Math.min(currentMatchIndex, allRanges.length - 1));
+
+        // Create highlight for all matches (yellow)
+        const allHighlight = new (window as any).Highlight(...allRanges);
+        (CSS as any).highlights.set('search-results', allHighlight);
+
+        // Create highlight for current match (accent color)
+        const currentHighlight = new (window as any).Highlight(allRanges[targetIndex]);
+        (CSS as any).highlights.set('search-current', currentHighlight);
+
+        // Scroll to current match
+        const currentRange = allRanges[targetIndex];
+        const rect = currentRange.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const scrollParent = contentRef.current;
+
+        if (scrollParent && rect) {
+          // Calculate scroll position to center the match
+          const scrollTop = scrollParent.scrollTop + rect.top - containerRect.top - scrollParent.clientHeight / 2 + rect.height / 2;
+          scrollParent.scrollTo({ top: scrollTop, behavior: 'smooth' });
+        }
+      } else {
+        (CSS as any).highlights.delete('search-results');
+        (CSS as any).highlights.delete('search-current');
+      }
+
+      // Cleanup function
+      return () => {
+        (CSS as any).highlights.delete('search-results');
+        (CSS as any).highlights.delete('search-current');
+      };
+    } else {
+      // Fallback: count matches and scroll to location (no highlighting)
+      const matches = file.content.match(searchRegex);
+      const count = matches ? matches.length : 0;
+      setTotalMatches(count);
+
+      if (count > 0) {
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+        let matchCount = 0;
+        const targetIndex = Math.max(0, Math.min(currentMatchIndex, count - 1));
+
+        let textNode;
+        while ((textNode = walker.nextNode())) {
+          const text = textNode.textContent || '';
+          const nodeMatches = text.match(searchRegex);
+          if (nodeMatches) {
+            for (const _ of nodeMatches) {
+              if (matchCount === targetIndex) {
+                const parentElement = (textNode as Text).parentElement;
+                if (parentElement) {
+                  parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return;
+              }
+              matchCount++;
+            }
+          }
+        }
+      }
+    }
+
+    matchElementsRef.current = [];
+  }, [searchQuery, file.content, isMarkdown, markdownEditMode, currentMatchIndex, theme.colors.accent]);
+
   const [copyNotificationMessage, setCopyNotificationMessage] = useState('');
 
   const copyPathToClipboard = () => {
@@ -766,47 +879,53 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
   // Navigate to next search match
   const goToNextMatch = () => {
     if (totalMatches === 0) return;
-    const matches = matchElementsRef.current;
-
-    // Reset current match highlight
-    if (matches[currentMatchIndex]) {
-      matches[currentMatchIndex].style.backgroundColor = '#ffd700';
-      matches[currentMatchIndex].style.color = '#000';
-    }
 
     // Move to next match (wrap around)
     const nextIndex = (currentMatchIndex + 1) % totalMatches;
     setCurrentMatchIndex(nextIndex);
 
-    // Highlight new current match and scroll to it
-    if (matches[nextIndex]) {
-      matches[nextIndex].style.backgroundColor = theme.colors.accent;
-      matches[nextIndex].style.color = '#fff';
-      matches[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // For code files, handle DOM-based highlighting
+    const matches = matchElementsRef.current;
+    if (matches.length > 0) {
+      // Reset previous highlight
+      if (matches[currentMatchIndex]) {
+        matches[currentMatchIndex].style.backgroundColor = '#ffd700';
+        matches[currentMatchIndex].style.color = '#000';
+      }
+      // Highlight new current match and scroll to it
+      if (matches[nextIndex]) {
+        matches[nextIndex].style.backgroundColor = theme.colors.accent;
+        matches[nextIndex].style.color = '#fff';
+        matches[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
+    // For markdown edit mode, the effect will handle selecting text
   };
 
   // Navigate to previous search match
   const goToPrevMatch = () => {
     if (totalMatches === 0) return;
-    const matches = matchElementsRef.current;
-
-    // Reset current match highlight
-    if (matches[currentMatchIndex]) {
-      matches[currentMatchIndex].style.backgroundColor = '#ffd700';
-      matches[currentMatchIndex].style.color = '#000';
-    }
 
     // Move to previous match (wrap around)
     const prevIndex = (currentMatchIndex - 1 + totalMatches) % totalMatches;
     setCurrentMatchIndex(prevIndex);
 
-    // Highlight new current match and scroll to it
-    if (matches[prevIndex]) {
-      matches[prevIndex].style.backgroundColor = theme.colors.accent;
-      matches[prevIndex].style.color = '#fff';
-      matches[prevIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // For code files, handle DOM-based highlighting
+    const matches = matchElementsRef.current;
+    if (matches.length > 0) {
+      // Reset previous highlight
+      if (matches[currentMatchIndex]) {
+        matches[currentMatchIndex].style.backgroundColor = '#ffd700';
+        matches[currentMatchIndex].style.color = '#000';
+      }
+      // Highlight new current match and scroll to it
+      if (matches[prevIndex]) {
+        matches[prevIndex].style.backgroundColor = theme.colors.accent;
+        matches[prevIndex].style.color = '#fff';
+        matches[prevIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
+    // For markdown edit mode, the effect will handle selecting text
   };
 
   // Format shortcut keys for display
@@ -816,61 +935,52 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     return formatShortcutKeys(shortcut.keys);
   };
 
-  // Highlight search matches in content (for markdown/text)
-  const highlightMatches = (content: string): string => {
-    if (!searchQuery.trim()) return content;
+  // Handle search in markdown edit mode - jump to and select the match in textarea
+  useEffect(() => {
+    if (!isMarkdown || !markdownEditMode || !searchQuery.trim() || !textareaRef.current) {
+      return;
+    }
 
+    const content = editContent;
     const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    const regex = new RegExp(escapedQuery, 'gi');
 
-    // Count matches and highlight with special class for navigation
-    let matchIndex = 0;
-    return content.replace(regex, (match) => {
-      const isCurrentMatch = matchIndex === currentMatchIndex;
-      const style = isCurrentMatch
-        ? `background-color: ${theme.colors.accent}; color: #fff;`
-        : 'background-color: #ffd700; color: #000;';
-      matchIndex++;
-      return `<mark class="search-match-md" data-match-index="${matchIndex - 1}" style="${style}">${match}</mark>`;
-    });
-  };
+    // Find all matches and their positions
+    const matches: { start: number; end: number }[] = [];
+    let matchResult;
+    while ((matchResult = regex.exec(content)) !== null) {
+      matches.push({ start: matchResult.index, end: matchResult.index + matchResult[0].length });
+    }
 
-  // Update match count for markdown/text content
-  useEffect(() => {
-    if ((isMarkdown || isImage) && searchQuery.trim()) {
-      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedQuery, 'gi');
-      const matches = file.content.match(regex);
-      const count = matches ? matches.length : 0;
-      setTotalMatches(count);
-      if (count > 0 && currentMatchIndex >= count) {
-        setCurrentMatchIndex(0);
-      }
-    } else if (isMarkdown || isImage) {
-      setTotalMatches(0);
+    setTotalMatches(matches.length);
+    if (matches.length === 0) {
       setCurrentMatchIndex(0);
+      return;
     }
-  }, [searchQuery, file.content, isMarkdown, isImage]);
 
-  // Scroll to current match for markdown content (only when searching, not in edit mode)
-  useEffect(() => {
-    if (isMarkdown && searchQuery.trim() && !markdownEditMode) {
-      const marks = contentRef.current?.querySelectorAll('mark.search-match-md');
-      if (marks && marks.length > 0 && currentMatchIndex >= 0 && currentMatchIndex < marks.length) {
-        marks.forEach((mark, i) => {
-          const el = mark as HTMLElement;
-          if (i === currentMatchIndex) {
-            el.style.backgroundColor = theme.colors.accent;
-            el.style.color = '#fff';
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else {
-            el.style.backgroundColor = '#ffd700';
-            el.style.color = '#000';
-          }
-        });
-      }
+    // Clamp current match index
+    const validIndex = Math.min(currentMatchIndex, matches.length - 1);
+    if (validIndex !== currentMatchIndex) {
+      setCurrentMatchIndex(validIndex);
+      return;
     }
-  }, [currentMatchIndex, isMarkdown, markdownEditMode, searchQuery, theme.colors.accent]);
+
+    // Select the current match in the textarea
+    const currentMatch = matches[validIndex];
+    if (currentMatch) {
+      const textarea = textareaRef.current;
+      textarea.focus();
+      textarea.setSelectionRange(currentMatch.start, currentMatch.end);
+
+      // Scroll to make the selection visible
+      // Calculate approximate line number and scroll to it
+      const textBeforeMatch = content.substring(0, currentMatch.start);
+      const lineNumber = textBeforeMatch.split('\n').length;
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 24;
+      const targetScroll = (lineNumber - 5) * lineHeight; // Leave some lines above
+      textarea.scrollTop = Math.max(0, targetScroll);
+    }
+  }, [searchQuery, currentMatchIndex, isMarkdown, markdownEditMode, editContent]);
 
   // Helper to check if a shortcut matches
   const isShortcut = (e: React.KeyboardEvent, shortcutId: string) => {
@@ -953,14 +1063,16 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         container.scrollTop += 40;
       }
     } else if (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey)) {
-      // Cmd+Left: Navigate back in history
+      // Cmd+Left: Navigate back in history (disabled in edit mode)
+      if (isMarkdown && markdownEditMode) return;
       e.preventDefault();
       e.stopPropagation();
       if (canGoBack && onNavigateBack) {
         onNavigateBack();
       }
     } else if (e.key === 'ArrowRight' && (e.metaKey || e.ctrlKey)) {
-      // Cmd+Right: Navigate forward in history
+      // Cmd+Right: Navigate forward in history (disabled in edit mode)
+      if (isMarkdown && markdownEditMode) return;
       e.preventDefault();
       e.stopPropagation();
       if (canGoForward && onNavigateForward) {
@@ -977,6 +1089,18 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
+      {/* CSS for Custom Highlight API */}
+      <style>{`
+        ::highlight(search-results) {
+          background-color: #ffd700;
+          color: #000;
+        }
+        ::highlight(search-current) {
+          background-color: ${theme.colors.accent};
+          color: #fff;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="shrink-0" style={{ backgroundColor: theme.colors.bgSidebar }}>
         {/* Main header row */}
@@ -1095,8 +1219,8 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                 </div>
               )}
             </div>
-            {/* Navigation buttons - show when either direction is available */}
-            {(canGoBack || canGoForward) && (
+            {/* Navigation buttons - show when either direction is available, disabled in edit mode */}
+            {(canGoBack || canGoForward) && !markdownEditMode && (
               <div className="flex items-center gap-1">
                 {/* Back button with popup */}
                 <div
@@ -1295,7 +1419,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
             </div>
           </div>
         ) : isMarkdown && markdownEditMode ? (
-          // Edit mode - show editable textarea
+          // Edit mode - show editable textarea with search highlighting via selection
           <textarea
             ref={textareaRef}
             value={editContent}
@@ -1380,38 +1504,32 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
               }
             }}
           />
-        ) : isMarkdown && searchQuery.trim() ? (
-          // When searching in markdown, show plain text with search highlights
-          <div
-            className="font-mono text-sm whitespace-pre-wrap"
-            style={{ color: theme.colors.textMain }}
-            dangerouslySetInnerHTML={{ __html: highlightMatches(file.content) }}
-          />
         ) : isMarkdown ? (
-          <div className="prose prose-sm max-w-none" style={{ color: theme.colors.textMain }}>
+          <div ref={markdownContainerRef} className="file-preview-content prose prose-sm max-w-none" style={{ color: theme.colors.textMain }}>
+            {/* Scoped prose styles to avoid CSS conflicts with other prose containers */}
             <style>{`
-              .prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.67em 0; }
-              .prose h2 { color: ${theme.colors.success}; font-size: 1.5em; font-weight: bold; margin: 0.75em 0; }
-              .prose h3 { color: ${theme.colors.warning}; font-size: 1.17em; font-weight: bold; margin: 0.83em 0; }
-              .prose h4 { color: ${theme.colors.textMain}; font-size: 1em; font-weight: bold; margin: 1em 0; opacity: 0.9; }
-              .prose h5 { color: ${theme.colors.textMain}; font-size: 0.83em; font-weight: bold; margin: 1.17em 0; opacity: 0.8; }
-              .prose h6 { color: ${theme.colors.textDim}; font-size: 0.67em; font-weight: bold; margin: 1.33em 0; }
-              .prose p { color: ${theme.colors.textMain}; margin: 0.5em 0; }
-              .prose ul, .prose ol { color: ${theme.colors.textMain}; margin: 0.5em 0; padding-left: 1.5em; }
-              .prose li { margin: 0.25em 0; }
-              .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
-              .prose code { background-color: ${theme.colors.bgActivity}; color: ${theme.colors.textMain}; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-              .prose pre { background-color: ${theme.colors.bgActivity}; color: ${theme.colors.textMain}; padding: 1em; border-radius: 6px; overflow-x: auto; }
-              .prose pre code { background: none; padding: 0; }
-              .prose blockquote { border-left: 4px solid ${theme.colors.border}; padding-left: 1em; margin: 0.5em 0; color: ${theme.colors.textDim}; }
-              .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
-              .prose hr { border: none; border-top: 2px solid ${theme.colors.border}; margin: 1em 0; }
-              .prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
-              .prose th, .prose td { border: 1px solid ${theme.colors.border}; padding: 0.5em; text-align: left; }
-              .prose th { background-color: ${theme.colors.bgActivity}; font-weight: bold; }
-              .prose strong { font-weight: bold; }
-              .prose em { font-style: italic; }
-              .prose img { display: block; max-width: 100%; height: auto; }
+              .file-preview-content.prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.67em 0; }
+              .file-preview-content.prose h2 { color: ${theme.colors.success}; font-size: 1.5em; font-weight: bold; margin: 0.75em 0; }
+              .file-preview-content.prose h3 { color: ${theme.colors.warning}; font-size: 1.17em; font-weight: bold; margin: 0.83em 0; }
+              .file-preview-content.prose h4 { color: ${theme.colors.textMain}; font-size: 1em; font-weight: bold; margin: 1em 0; opacity: 0.9; }
+              .file-preview-content.prose h5 { color: ${theme.colors.textMain}; font-size: 0.83em; font-weight: bold; margin: 1.17em 0; opacity: 0.8; }
+              .file-preview-content.prose h6 { color: ${theme.colors.textDim}; font-size: 0.67em; font-weight: bold; margin: 1.33em 0; }
+              .file-preview-content.prose p { color: ${theme.colors.textMain}; margin: 0.5em 0; }
+              .file-preview-content.prose ul, .file-preview-content.prose ol { color: ${theme.colors.textMain}; margin: 0.5em 0; padding-left: 1.5em; }
+              .file-preview-content.prose li { margin: 0.25em 0; }
+              .file-preview-content.prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
+              .file-preview-content.prose code { background-color: ${theme.colors.bgActivity}; color: ${theme.colors.textMain}; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+              .file-preview-content.prose pre { background-color: ${theme.colors.bgActivity}; color: ${theme.colors.textMain}; padding: 1em; border-radius: 6px; overflow-x: auto; }
+              .file-preview-content.prose pre code { background: none; padding: 0; }
+              .file-preview-content.prose blockquote { border-left: 4px solid ${theme.colors.border}; padding-left: 1em; margin: 0.5em 0; color: ${theme.colors.textDim}; }
+              .file-preview-content.prose a { color: ${theme.colors.accent}; text-decoration: underline; }
+              .file-preview-content.prose hr { border: none; border-top: 2px solid ${theme.colors.border}; margin: 1em 0; }
+              .file-preview-content.prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+              .file-preview-content.prose th, .file-preview-content.prose td { border: 1px solid ${theme.colors.border}; padding: 0.5em; text-align: left; }
+              .file-preview-content.prose th { background-color: ${theme.colors.bgActivity}; font-weight: bold; }
+              .file-preview-content.prose strong { font-weight: bold; }
+              .file-preview-content.prose em { font-style: italic; }
+              .file-preview-content.prose img { display: block; max-width: 100%; height: auto; }
             `}</style>
             <ReactMarkdown
               remarkPlugins={[
@@ -1555,6 +1673,38 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         >
           {copyNotificationMessage}
         </div>
+      )}
+
+      {/* Unsaved Changes Confirmation Modal */}
+      {showUnsavedChangesModal && (
+        <Modal
+          theme={theme}
+          title="Unsaved Changes"
+          priority={MODAL_PRIORITIES.CONFIRM}
+          onClose={() => setShowUnsavedChangesModal(false)}
+          width={450}
+          zIndex={10000}
+          headerIcon={<AlertTriangle className="w-5 h-5" style={{ color: theme.colors.warning }} />}
+          initialFocusRef={cancelButtonRef}
+          footer={
+            <ModalFooter
+              theme={theme}
+              onCancel={() => setShowUnsavedChangesModal(false)}
+              onConfirm={() => {
+                setShowUnsavedChangesModal(false);
+                onClose();
+              }}
+              cancelLabel="No, Stay"
+              confirmLabel="Yes, Discard"
+              destructive
+              cancelButtonRef={cancelButtonRef}
+            />
+          }
+        >
+          <p className="text-sm leading-relaxed" style={{ color: theme.colors.textMain }}>
+            You have unsaved changes. Are you sure you want to close without saving?
+          </p>
+        </Modal>
       )}
 
     </div>

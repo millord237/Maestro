@@ -28,6 +28,9 @@ export interface AgentCapabilities {
   /** Agent can accept image inputs (screenshots, diagrams, etc.) */
   supportsImageInput: boolean;
 
+  /** Agent can accept image inputs when resuming an existing session */
+  supportsImageInputOnResume: boolean;
+
   /** Agent supports slash commands (e.g., /help, /compact) */
   supportsSlashCommands: boolean;
 
@@ -54,6 +57,9 @@ export interface AgentCapabilities {
 
   /** Agent supports selecting different models (e.g., --model flag) */
   supportsModelSelection: boolean;
+
+  /** Agent supports --input-format stream-json for image input via stdin */
+  supportsStreamJsonInput: boolean;
 }
 
 /**
@@ -66,6 +72,7 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = {
   supportsJsonOutput: false,
   supportsSessionId: false,
   supportsImageInput: false,
+  supportsImageInputOnResume: false,
   supportsSlashCommands: false,
   supportsSessionStorage: false,
   supportsCostTracking: false,
@@ -75,6 +82,7 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = {
   supportsStreaming: false,
   supportsResultMessages: false,
   supportsModelSelection: false,
+  supportsStreamJsonInput: false,
 };
 
 /**
@@ -99,6 +107,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,    // --output-format stream-json
     supportsSessionId: true,     // session_id in JSON output
     supportsImageInput: true,    // Supports image attachments
+    supportsImageInputOnResume: true, // Can send images via --input-format stream-json on resumed sessions
     supportsSlashCommands: true, // /help, /compact, etc.
     supportsSessionStorage: true, // ~/.claude/projects/
     supportsCostTracking: true,  // Cost info in usage stats
@@ -108,6 +117,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,     // Stream JSON events
     supportsResultMessages: true, // "result" event type
     supportsModelSelection: false, // Model is configured via Anthropic account
+    supportsStreamJsonInput: true, // --input-format stream-json for images via stdin
   },
 
   /**
@@ -120,6 +130,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: false,
+    supportsImageInputOnResume: false,
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false,
@@ -129,6 +140,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,  // PTY streams output
     supportsResultMessages: false,
     supportsModelSelection: false,
+    supportsStreamJsonInput: false,
   },
 
   /**
@@ -144,6 +156,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,     // --json flag - Verified
     supportsSessionId: true,      // thread_id in thread.started event - Verified
     supportsImageInput: true,     // -i, --image flag - Documented
+    supportsImageInputOnResume: false, // Codex resume subcommand doesn't support -i flag - Verified
     supportsSlashCommands: false, // None - Verified
     supportsSessionStorage: true, // ~/.codex/sessions/YYYY/MM/DD/*.jsonl - Verified
     supportsCostTracking: false,  // Token counts only - Codex doesn't provide cost, pricing varies by model
@@ -153,6 +166,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,      // Streams JSONL events - Verified
     supportsResultMessages: false, // All messages are agent_message type (no distinct result) - Verified
     supportsModelSelection: true, // -m, --model flag - Documented
+    supportsStreamJsonInput: false, // Uses -i, --image flag instead
   },
 
   /**
@@ -167,6 +181,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: true,    // Gemini supports multimodal
+    supportsImageInputOnResume: false, // Not yet investigated
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false,
@@ -176,6 +191,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,     // Likely streams
     supportsResultMessages: false,
     supportsModelSelection: false, // Not yet investigated
+    supportsStreamJsonInput: false,
   },
 
   /**
@@ -190,6 +206,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: false,
+    supportsImageInputOnResume: false,
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false, // Local model - no cost
@@ -199,6 +216,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,     // Likely streams
     supportsResultMessages: false,
     supportsModelSelection: false, // Not yet investigated
+    supportsStreamJsonInput: false,
   },
 
   /**
@@ -214,6 +232,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,   // Not yet investigated
     supportsSessionId: false,    // Not yet investigated
     supportsImageInput: true,    // Aider supports vision models
+    supportsImageInputOnResume: false, // Not yet investigated
     supportsSlashCommands: true, // Aider has /commands
     supportsSessionStorage: false, // Not yet investigated
     supportsCostTracking: true,  // Aider tracks costs
@@ -223,6 +242,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,     // Likely streams
     supportsResultMessages: false, // Not yet investigated
     supportsModelSelection: true, // --model flag
+    supportsStreamJsonInput: false,
   },
 
   /**
@@ -238,6 +258,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,     // --format json - Verified
     supportsSessionId: true,      // sessionID in JSON output (camelCase) - Verified
     supportsImageInput: true,     // -f, --file flag documented - Documented
+    supportsImageInputOnResume: true, // -f flag works with --session flag - Documented
     supportsSlashCommands: false, // Not investigated
     supportsSessionStorage: true, // ~/.local/share/opencode/storage/ (JSON files) - Verified
     supportsCostTracking: true,   // part.cost in step_finish events - Verified
@@ -247,6 +268,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsStreaming: true,      // Streams JSONL events - Verified
     supportsResultMessages: true, // step_finish with part.reason:"stop" - Verified
     supportsModelSelection: true, // --model provider/model (e.g., 'ollama/qwen3:8b') - Verified
+    supportsStreamJsonInput: false, // Uses -f, --file flag instead
   },
 };
 

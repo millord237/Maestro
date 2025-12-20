@@ -5,6 +5,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { validateNewSession, validateEditSession } from '../utils/sessionValidation';
 import { FormInput } from './ui/FormInput';
 import { Modal, ModalFooter } from './ui/Modal';
+import { AgentConfigPanel } from './shared/AgentConfigPanel';
 
 // Maximum character length for nudge message
 const NUDGE_MESSAGE_MAX_LENGTH = 1000;
@@ -24,7 +25,16 @@ interface AgentDebugInfo {
 interface NewInstanceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (agentId: string, workingDir: string, name: string, nudgeMessage?: string) => void;
+  onCreate: (
+    agentId: string,
+    workingDir: string,
+    name: string,
+    nudgeMessage?: string,
+    customPath?: string,
+    customArgs?: string,
+    customEnvVars?: Record<string, string>,
+    customModel?: string
+  ) => void;
   theme: any;
   existingSessions: Session[];
 }
@@ -32,7 +42,15 @@ interface NewInstanceModalProps {
 interface EditAgentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (sessionId: string, name: string, nudgeMessage?: string) => void;
+  onSave: (
+    sessionId: string,
+    name: string,
+    nudgeMessage?: string,
+    customPath?: string,
+    customArgs?: string,
+    customEnvVars?: Record<string, string>,
+    customModel?: string
+  ) => void;
   theme: any;
   session: Session | null;
   existingSessions: Session[];
@@ -54,7 +72,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   const [homeDir, setHomeDir] = useState<string>('');
   const [customAgentPaths, setCustomAgentPaths] = useState<Record<string, string>>({});
   const [customAgentArgs, setCustomAgentArgs] = useState<Record<string, string>>({});
+  const [customAgentEnvVars, setCustomAgentEnvVars] = useState<Record<string, Record<string, string>>>({});
   const [agentConfigs, setAgentConfigs] = useState<Record<string, Record<string, any>>>({});
+  const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
+  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,13 +109,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       const detectedAgents = await window.maestro.agents.detect();
       setAgents(detectedAgents);
 
-      // Load custom paths and args for agents
-      const paths = await window.maestro.agents.getAllCustomPaths();
-      setCustomAgentPaths(paths);
-      const args = await window.maestro.agents.getAllCustomArgs();
-      setCustomAgentArgs(args);
+      // Per-agent config (path, args, env vars) starts empty - each agent gets its own config
+      // No provider-level loading - config is set per-agent during creation
+      setCustomAgentPaths({});
+      setCustomAgentArgs({});
+      setCustomAgentEnvVars({});
 
-      // Load configurations for all agents
+      // Load configurations for all agents (model, contextWindow - these are provider-level)
       const configs: Record<string, Record<string, any>> = {};
       for (const agent of detectedAgents) {
         const config = await window.maestro.agents.getConfig(agent.id);
@@ -102,8 +123,9 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       }
       setAgentConfigs(configs);
 
-      // Select first available agent
-      const firstAvailable = detectedAgents.find((a: AgentConfig) => a.available);
+      // Select first available non-hidden agent
+      // (hidden agents like 'terminal' should never be auto-selected)
+      const firstAvailable = detectedAgents.find((a: AgentConfig) => a.available && !a.hidden);
       if (firstAvailable) {
         setSelectedAgent(firstAvailable.id);
       }
@@ -137,6 +159,26 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     }
   }, []);
 
+  // Load available models for an agent that supports model selection
+  const loadModelsForAgent = React.useCallback(async (agentId: string, forceRefresh = false) => {
+    // Check if agent supports model selection
+    const agent = agents.find(a => a.id === agentId);
+    if (!agent?.capabilities?.supportsModelSelection) return;
+
+    // Skip if already loaded and not forcing refresh
+    if (!forceRefresh && availableModels[agentId]?.length > 0) return;
+
+    setLoadingModels(prev => ({ ...prev, [agentId]: true }));
+    try {
+      const models = await window.maestro.agents.getModels(agentId, forceRefresh);
+      setAvailableModels(prev => ({ ...prev, [agentId]: models }));
+    } catch (error) {
+      console.error(`Failed to load models for ${agentId}:`, error);
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [agentId]: false }));
+    }
+  }, [agents, availableModels]);
+
   const handleCreate = React.useCallback(() => {
     const name = instanceName.trim();
     if (!name) return; // Name is required
@@ -147,14 +189,36 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     const result = validateNewSession(name, expandedWorkingDir, selectedAgent as ToolType, existingSessions);
     if (!result.valid) return;
 
-    onCreate(selectedAgent, expandedWorkingDir, name, nudgeMessage.trim() || undefined);
+    // Get per-agent config values
+    const agentCustomPath = customAgentPaths[selectedAgent]?.trim() || undefined;
+    const agentCustomArgs = customAgentArgs[selectedAgent]?.trim() || undefined;
+    const agentCustomEnvVars = customAgentEnvVars[selectedAgent] && Object.keys(customAgentEnvVars[selectedAgent]).length > 0
+      ? customAgentEnvVars[selectedAgent]
+      : undefined;
+    // Get model from agent config - this will become per-session
+    const agentCustomModel = agentConfigs[selectedAgent]?.model?.trim() || undefined;
+
+    onCreate(
+      selectedAgent,
+      expandedWorkingDir,
+      name,
+      nudgeMessage.trim() || undefined,
+      agentCustomPath,
+      agentCustomArgs,
+      agentCustomEnvVars,
+      agentCustomModel
+    );
     onClose();
 
     // Reset
     setInstanceName('');
     setWorkingDir('');
     setNudgeMessage('');
-  }, [instanceName, selectedAgent, workingDir, nudgeMessage, onCreate, onClose, expandTilde, existingSessions]);
+    // Reset per-agent config for selected agent
+    setCustomAgentPaths(prev => ({ ...prev, [selectedAgent]: '' }));
+    setCustomAgentArgs(prev => ({ ...prev, [selectedAgent]: '' }));
+    setCustomAgentEnvVars(prev => ({ ...prev, [selectedAgent]: {} }));
+  }, [instanceName, selectedAgent, workingDir, nudgeMessage, customAgentPaths, customAgentArgs, customAgentEnvVars, agentConfigs, onCreate, onClose, expandTilde, existingSessions]);
 
   // Check if form is valid for submission
   const isFormValid = useMemo(() => {
@@ -269,10 +333,15 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                         onClick={() => {
                           if (isSupported) {
                             // Toggle expansion
-                            setExpandedAgent(isExpanded ? null : agent.id);
+                            const nowExpanded = !isExpanded;
+                            setExpandedAgent(nowExpanded ? agent.id : null);
                             // Auto-select if available
                             if (canSelect) {
                               setSelectedAgent(agent.id);
+                            }
+                            // Load models when expanding an agent that supports model selection
+                            if (nowExpanded && agent.capabilities?.supportsModelSelection) {
+                              loadModelsForAgent(agent.id);
                             }
                           }
                         }}
@@ -294,16 +363,16 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                             />
                           )}
                           <span className="font-medium">{agent.name}</span>
-                          {/* "New" badge for Codex and OpenCode */}
+                          {/* "Beta" badge for Codex and OpenCode */}
                           {(agent.id === 'codex' || agent.id === 'opencode') && (
                             <span
-                              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase"
                               style={{
-                                backgroundColor: '#22c55e30',
-                                color: '#22c55e',
+                                backgroundColor: theme.colors.warning + '30',
+                                color: theme.colors.warning,
                               }}
                             >
-                              New
+                              Beta
                             </span>
                           )}
                         </div>
@@ -340,197 +409,109 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                       </div>
 
                       {/* Expanded details for supported agents */}
+                      {/* Per-agent config (path, args, env vars) is local state only - saved to agent on create */}
                       {isSupported && isExpanded && (
-                        <div className="px-3 pb-3 pt-2 space-y-3">
-                          {/* Show detected path if available */}
-                          {agent.path && (
-                            <div
-                              className="text-xs font-mono px-3 py-2 rounded"
-                              style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-                            >
-                              <span className="opacity-60">Detected:</span> {agent.path}
-                            </div>
-                          )}
-                          {/* Custom path input */}
-                          <div
-                            className="p-3 rounded border"
-                            style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
-                          >
-                            <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-                              Custom Path (optional)
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={customAgentPaths[agent.id] || ''}
-                                onChange={(e) => {
-                                  const newPaths = { ...customAgentPaths, [agent.id]: e.target.value };
-                                  setCustomAgentPaths(newPaths);
-                                }}
-                                onBlur={async () => {
-                                  const path = customAgentPaths[agent.id]?.trim() || null;
-                                  await window.maestro.agents.setCustomPath(agent.id, path);
-                                  loadAgents();
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                placeholder={`/path/to/${agent.binaryName}`}
-                                className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                                style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                              />
-                              {customAgentPaths[agent.id] && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const newPaths = { ...customAgentPaths };
-                                    delete newPaths[agent.id];
-                                    setCustomAgentPaths(newPaths);
-                                    await window.maestro.agents.setCustomPath(agent.id, null);
-                                    loadAgents();
-                                  }}
-                                  className="px-2 py-1.5 rounded text-xs"
-                                  style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-                                >
-                                  Clear
-                                </button>
-                              )}
-                            </div>
-                            <p className="text-xs opacity-50 mt-2">
-                              Specify a custom path if the agent is not in your PATH
-                            </p>
-                          </div>
-                          {/* Custom CLI arguments input */}
-                          <div
-                            className="p-3 rounded border"
-                            style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
-                          >
-                            <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-                              Custom Arguments (optional)
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={customAgentArgs[agent.id] || ''}
-                                onChange={(e) => {
-                                  const newArgs = { ...customAgentArgs, [agent.id]: e.target.value };
-                                  setCustomAgentArgs(newArgs);
-                                }}
-                                onBlur={async () => {
-                                  const args = customAgentArgs[agent.id]?.trim() || null;
-                                  await window.maestro.agents.setCustomArgs(agent.id, args);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                placeholder="--flag value --another-flag"
-                                className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                                style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                              />
-                              {customAgentArgs[agent.id] && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const newArgs = { ...customAgentArgs };
-                                    delete newArgs[agent.id];
-                                    setCustomAgentArgs(newArgs);
-                                    await window.maestro.agents.setCustomArgs(agent.id, null);
-                                  }}
-                                  className="px-2 py-1.5 rounded text-xs"
-                                  style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-                                >
-                                  Clear
-                                </button>
-                              )}
-                            </div>
-                            <p className="text-xs opacity-50 mt-2">
-                              Additional CLI arguments appended to all calls to this agent
-                            </p>
-                          </div>
-
-                          {/* Agent-specific configuration options (contextWindow, model, etc.) */}
-                          {agent.configOptions && agent.configOptions.length > 0 && agent.configOptions.map((option: any) => (
-                            <div
-                              key={option.key}
-                              className="p-3 rounded border"
-                              style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
-                            >
-                              <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-                                {option.label}
-                              </label>
-                              {option.type === 'number' && (
-                                <input
-                                  type="number"
-                                  value={agentConfigs[agent.id]?.[option.key] ?? option.default}
-                                  onChange={(e) => {
-                                    const value = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                                    const newConfig = {
-                                      ...agentConfigs[agent.id],
-                                      [option.key]: isNaN(value) ? 0 : value
-                                    };
-                                    setAgentConfigs(prev => ({
-                                      ...prev,
-                                      [agent.id]: newConfig
-                                    }));
-                                  }}
-                                  onBlur={() => {
-                                    const currentConfig = agentConfigs[agent.id] || {};
-                                    window.maestro.agents.setConfig(agent.id, currentConfig);
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  placeholder={option.default?.toString() || '0'}
-                                  min={0}
-                                  className="w-full p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                                  style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                                />
-                              )}
-                              {option.type === 'text' && (
-                                <input
-                                  type="text"
-                                  value={agentConfigs[agent.id]?.[option.key] ?? option.default}
-                                  onChange={(e) => {
-                                    const newConfig = {
-                                      ...agentConfigs[agent.id],
-                                      [option.key]: e.target.value
-                                    };
-                                    setAgentConfigs(prev => ({
-                                      ...prev,
-                                      [agent.id]: newConfig
-                                    }));
-                                  }}
-                                  onBlur={() => {
-                                    const currentConfig = agentConfigs[agent.id] || {};
-                                    window.maestro.agents.setConfig(agent.id, currentConfig);
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  placeholder={option.default || ''}
-                                  className="w-full p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                                  style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                                />
-                              )}
-                              {option.type === 'checkbox' && (
-                                <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={agentConfigs[agent.id]?.[option.key] ?? option.default}
-                                    onChange={(e) => {
-                                      const newConfig = {
-                                        ...agentConfigs[agent.id],
-                                        [option.key]: e.target.checked
-                                      };
-                                      setAgentConfigs(prev => ({
-                                        ...prev,
-                                        [agent.id]: newConfig
-                                      }));
-                                      window.maestro.agents.setConfig(agent.id, newConfig);
-                                    }}
-                                    className="w-4 h-4"
-                                    style={{ accentColor: theme.colors.accent }}
-                                  />
-                                  <span className="text-xs" style={{ color: theme.colors.textMain }}>Enabled</span>
-                                </label>
-                              )}
-                              <p className="text-xs opacity-50 mt-2">
-                                {option.description}
-                              </p>
-                            </div>
-                          ))}
+                        <div className="px-3 pb-3 pt-2">
+                          <AgentConfigPanel
+                            theme={theme}
+                            agent={agent}
+                            customPath={customAgentPaths[agent.id] || ''}
+                            onCustomPathChange={(value) => {
+                              setCustomAgentPaths(prev => ({ ...prev, [agent.id]: value }));
+                            }}
+                            onCustomPathBlur={() => {/* Saved on agent create */}}
+                            onCustomPathClear={() => {
+                              setCustomAgentPaths(prev => {
+                                const newPaths = { ...prev };
+                                delete newPaths[agent.id];
+                                return newPaths;
+                              });
+                            }}
+                            customArgs={customAgentArgs[agent.id] || ''}
+                            onCustomArgsChange={(value) => {
+                              setCustomAgentArgs(prev => ({ ...prev, [agent.id]: value }));
+                            }}
+                            onCustomArgsBlur={() => {/* Saved on agent create */}}
+                            onCustomArgsClear={() => {
+                              setCustomAgentArgs(prev => {
+                                const newArgs = { ...prev };
+                                delete newArgs[agent.id];
+                                return newArgs;
+                              });
+                            }}
+                            customEnvVars={customAgentEnvVars[agent.id] || {}}
+                            onEnvVarKeyChange={(oldKey, newKey, value) => {
+                              const currentVars = { ...customAgentEnvVars[agent.id] };
+                              delete currentVars[oldKey];
+                              currentVars[newKey] = value;
+                              setCustomAgentEnvVars(prev => ({
+                                ...prev,
+                                [agent.id]: currentVars
+                              }));
+                            }}
+                            onEnvVarValueChange={(key, value) => {
+                              setCustomAgentEnvVars(prev => ({
+                                ...prev,
+                                [agent.id]: {
+                                  ...prev[agent.id],
+                                  [key]: value
+                                }
+                              }));
+                            }}
+                            onEnvVarRemove={(key) => {
+                              const currentVars = { ...customAgentEnvVars[agent.id] };
+                              delete currentVars[key];
+                              if (Object.keys(currentVars).length > 0) {
+                                setCustomAgentEnvVars(prev => ({
+                                  ...prev,
+                                  [agent.id]: currentVars
+                                }));
+                              } else {
+                                setCustomAgentEnvVars(prev => {
+                                  const newVars = { ...prev };
+                                  delete newVars[agent.id];
+                                  return newVars;
+                                });
+                              }
+                            }}
+                            onEnvVarAdd={() => {
+                              const currentVars = customAgentEnvVars[agent.id] || {};
+                              let newKey = 'NEW_VAR';
+                              let counter = 1;
+                              while (currentVars[newKey]) {
+                                newKey = `NEW_VAR_${counter}`;
+                                counter++;
+                              }
+                              setCustomAgentEnvVars(prev => ({
+                                ...prev,
+                                [agent.id]: {
+                                  ...prev[agent.id],
+                                  [newKey]: ''
+                                }
+                              }));
+                            }}
+                            onEnvVarsBlur={() => {/* Saved on agent create */}}
+                            agentConfig={agentConfigs[agent.id] || {}}
+                            onConfigChange={(key, value) => {
+                              setAgentConfigs(prev => ({
+                                ...prev,
+                                [agent.id]: {
+                                  ...prev[agent.id],
+                                  [key]: value
+                                }
+                              }));
+                            }}
+                            onConfigBlur={() => {
+                              const currentConfig = agentConfigs[agent.id] || {};
+                              window.maestro.agents.setConfig(agent.id, currentConfig);
+                            }}
+                            availableModels={availableModels[agent.id] || []}
+                            loadingModels={loadingModels[agent.id] || false}
+                            onRefreshModels={() => loadModelsForAgent(agent.id, true)}
+                            onRefreshAgent={() => handleRefreshAgent(agent.id)}
+                            refreshingAgent={refreshingAgent === agent.id}
+                            showBuiltInEnvVars
+                          />
                         </div>
                       )}
                     </div>
@@ -538,6 +519,21 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                 })}
               </div>
             )}
+
+            {/* Hook behavior note */}
+            <p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
+              Agent hooks run per-message. Use{' '}
+              <a
+                href="https://github.com/pedramamini/Maestro#environment-variables"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:opacity-80"
+                style={{ color: theme.colors.accent }}
+              >
+                MAESTRO_SESSION_RESUMED
+              </a>
+              {' '}to skip on resumed sessions.
+            </p>
 
             {/* Debug Info Display */}
             {debugInfo && (
@@ -641,19 +637,47 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
   const [nudgeMessage, setNudgeMessage] = useState('');
   const [agent, setAgent] = useState<AgentConfig | null>(null);
   const [agentConfig, setAgentConfig] = useState<Record<string, any>>({});
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [customPath, setCustomPath] = useState('');
+  const [customArgs, setCustomArgs] = useState('');
+  const [customEnvVars, setCustomEnvVars] = useState<Record<string, string>>({});
+  const [customModel, setCustomModel] = useState('');
+  const [refreshingAgent, setRefreshingAgent] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Load agent info and config when modal opens
+  // Load agent info, config, custom settings, and models when modal opens
   useEffect(() => {
     if (isOpen && session) {
       // Load agent definition to get configOptions
       window.maestro.agents.detect().then((agents: AgentConfig[]) => {
         const foundAgent = agents.find(a => a.id === session.toolType);
         setAgent(foundAgent || null);
+
+        // Load models if agent supports model selection
+        if (foundAgent?.capabilities?.supportsModelSelection) {
+          setLoadingModels(true);
+          window.maestro.agents.getModels(session.toolType)
+            .then((models) => setAvailableModels(models))
+            .catch((err) => console.error('Failed to load models:', err))
+            .finally(() => setLoadingModels(false));
+        }
       });
-      // Load agent config
-      window.maestro.agents.getConfig(session.toolType).then(setAgentConfig);
+      // Load agent config for non-per-session options (like contextWindow)
+      // Model is now per-session, so we only use global config for defaults
+      window.maestro.agents.getConfig(session.toolType).then((globalConfig) => {
+        // Use session-level model if set, otherwise use global default
+        const modelValue = session.customModel ?? globalConfig.model ?? '';
+        setAgentConfig({ ...globalConfig, model: modelValue });
+      });
+
+      // Load per-session config (stored on the session/agent instance)
+      // No provider-level fallback - each agent has its own config
+      setCustomPath(session.customPath ?? '');
+      setCustomArgs(session.customArgs ?? '');
+      setCustomEnvVars(session.customEnvVars ?? {});
+      setCustomModel(session.customModel ?? '');
     }
   }, [isOpen, session]);
 
@@ -683,9 +707,50 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
     const result = validateEditSession(name, session.id, existingSessions);
     if (!result.valid) return;
 
-    onSave(session.id, name, nudgeMessage.trim() || undefined);
+    // Get model from agentConfig (which is updated via onConfigChange)
+    const modelValue = agentConfig.model?.trim() || undefined;
+
+    // Save with per-session config fields including model
+    onSave(
+      session.id,
+      name,
+      nudgeMessage.trim() || undefined,
+      customPath.trim() || undefined,
+      customArgs.trim() || undefined,
+      Object.keys(customEnvVars).length > 0 ? customEnvVars : undefined,
+      modelValue
+    );
     onClose();
-  }, [session, instanceName, nudgeMessage, onSave, onClose, existingSessions]);
+  }, [session, instanceName, nudgeMessage, customPath, customArgs, customEnvVars, agentConfig, onSave, onClose, existingSessions]);
+
+  // Refresh available models
+  const refreshModels = useCallback(async () => {
+    if (!session || !agent?.capabilities?.supportsModelSelection) return;
+    setLoadingModels(true);
+    try {
+      const models = await window.maestro.agents.getModels(session.toolType, true);
+      setAvailableModels(models);
+    } catch (err) {
+      console.error('Failed to refresh models:', err);
+    } finally {
+      setLoadingModels(false);
+    }
+  }, [session, agent]);
+
+  // Refresh agent detection
+  const handleRefreshAgent = useCallback(async () => {
+    if (!session) return;
+    setRefreshingAgent(true);
+    try {
+      const result = await window.maestro.agents.refresh(session.toolType);
+      const foundAgent = result.agents.find((a: AgentConfig) => a.id === session.toolType);
+      setAgent(foundAgent || null);
+    } catch (error) {
+      console.error('Failed to refresh agent:', error);
+    } finally {
+      setRefreshingAgent(false);
+    }
+  }, [session]);
 
   // Check if form is valid for submission
   const isFormValid = useMemo(() => {
@@ -812,85 +877,66 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
             </p>
           </div>
 
-          {/* Agent-specific configuration options (contextWindow, model, etc.) */}
-          {agent?.configOptions && agent.configOptions.length > 0 && (
+          {/* Agent Configuration (custom path, args, env vars, agent-specific settings) */}
+          {/* Per-session config (path, args, env vars) saved on modal save, not on blur */}
+          {agent && (
             <div>
               <label className="block text-xs font-bold opacity-70 uppercase mb-2" style={{ color: theme.colors.textMain }}>
                 {agentName} Settings
               </label>
-              <div className="space-y-3">
-                {agent.configOptions.map((option: any) => (
-                  <div
-                    key={option.key}
-                    className="p-3 rounded border"
-                    style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
-                  >
-                    <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-                      {option.label}
-                    </label>
-                    {option.type === 'number' && (
-                      <input
-                        type="number"
-                        value={agentConfig[option.key] ?? option.default}
-                        onChange={(e) => {
-                          const value = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                          setAgentConfig(prev => ({
-                            ...prev,
-                            [option.key]: isNaN(value) ? 0 : value
-                          }));
-                        }}
-                        onBlur={() => {
-                          window.maestro.agents.setConfig(session.toolType, agentConfig);
-                        }}
-                        placeholder={option.default?.toString() || '0'}
-                        min={0}
-                        className="w-full p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                        style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                      />
-                    )}
-                    {option.type === 'text' && (
-                      <input
-                        type="text"
-                        value={agentConfig[option.key] ?? option.default}
-                        onChange={(e) => {
-                          setAgentConfig(prev => ({
-                            ...prev,
-                            [option.key]: e.target.value
-                          }));
-                        }}
-                        onBlur={() => {
-                          window.maestro.agents.setConfig(session.toolType, agentConfig);
-                        }}
-                        placeholder={option.default || ''}
-                        className="w-full p-2 rounded border bg-transparent outline-none text-xs font-mono"
-                        style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                      />
-                    )}
-                    {option.type === 'checkbox' && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={agentConfig[option.key] ?? option.default}
-                          onChange={(e) => {
-                            const newConfig = {
-                              ...agentConfig,
-                              [option.key]: e.target.checked
-                            };
-                            setAgentConfig(newConfig);
-                            window.maestro.agents.setConfig(session.toolType, newConfig);
-                          }}
-                          className="w-4 h-4"
-                          style={{ accentColor: theme.colors.accent }}
-                        />
-                        <span className="text-xs" style={{ color: theme.colors.textMain }}>Enabled</span>
-                      </label>
-                    )}
-                    <p className="text-xs opacity-50 mt-2">
-                      {option.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <AgentConfigPanel
+                theme={theme}
+                agent={agent}
+                customPath={customPath}
+                onCustomPathChange={setCustomPath}
+                onCustomPathBlur={() => {/* Saved on modal save */}}
+                onCustomPathClear={() => setCustomPath('')}
+                customArgs={customArgs}
+                onCustomArgsChange={setCustomArgs}
+                onCustomArgsBlur={() => {/* Saved on modal save */}}
+                onCustomArgsClear={() => setCustomArgs('')}
+                customEnvVars={customEnvVars}
+                onEnvVarKeyChange={(oldKey, newKey, value) => {
+                  const newVars = { ...customEnvVars };
+                  delete newVars[oldKey];
+                  newVars[newKey] = value;
+                  setCustomEnvVars(newVars);
+                }}
+                onEnvVarValueChange={(key, value) => {
+                  setCustomEnvVars(prev => ({ ...prev, [key]: value }));
+                }}
+                onEnvVarRemove={(key) => {
+                  const newVars = { ...customEnvVars };
+                  delete newVars[key];
+                  setCustomEnvVars(newVars);
+                }}
+                onEnvVarAdd={() => {
+                  let newKey = 'NEW_VAR';
+                  let counter = 1;
+                  while (customEnvVars[newKey]) {
+                    newKey = `NEW_VAR_${counter}`;
+                    counter++;
+                  }
+                  setCustomEnvVars(prev => ({ ...prev, [newKey]: '' }));
+                }}
+                onEnvVarsBlur={() => {/* Saved on modal save */}}
+                agentConfig={agentConfig}
+                onConfigChange={(key, value) => {
+                  setAgentConfig(prev => ({ ...prev, [key]: value }));
+                }}
+                onConfigBlur={() => {
+                  // Save non-model config options at agent level (e.g., contextWindow as default)
+                  // Model is saved per-session on modal save, not globally
+                  const { model: _model, ...nonModelConfig } = agentConfig;
+                  window.maestro.agents.setConfig(session.toolType, nonModelConfig);
+                }}
+                availableModels={availableModels}
+                loadingModels={loadingModels}
+                onRefreshModels={refreshModels}
+                onRefreshAgent={handleRefreshAgent}
+                refreshingAgent={refreshingAgent}
+                showBuiltInEnvVars
+              />
             </div>
           )}
         </div>

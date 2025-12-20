@@ -309,6 +309,11 @@ export function useAgentExecution(
           args: agent.args || [],
           prompt,
           readOnlyMode: true, // Batch operations run in read-only/plan mode
+          // Per-session config overrides (if set)
+          sessionCustomPath: session.customPath,
+          sessionCustomArgs: session.customArgs,
+          sessionCustomEnvVars: session.customEnvVars,
+          sessionCustomModel: session.customModel,
         }).catch(() => {
           cleanup();
           resolve({ success: false });

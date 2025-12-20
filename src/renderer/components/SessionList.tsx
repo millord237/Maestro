@@ -5,11 +5,12 @@ import {
   ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { Session, Group, Theme, Shortcut, AutoRunStats } from '../types';
+import type { Session, Group, Theme, Shortcut, AutoRunStats, GroupChat, GroupChatState } from '../types';
 import { CONDUCTOR_BADGES, getBadgeForTime } from '../constants/conductorBadges';
 import { getStatusColor, getContextColor, formatActiveTime } from '../utils/theme';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { SessionItem } from './SessionItem';
+import { GroupChatList } from './GroupChatList';
 import { useLiveOverlay, useClickOutside } from '../hooks';
 import { useGitStatus } from '../contexts/GitStatusContext';
 
@@ -45,7 +46,9 @@ function SessionContextMenu({
   onDismiss
 }: SessionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const moveToGroupRef = useRef<HTMLDivElement>(null);
   const [showMoveSubmenu, setShowMoveSubmenu] = useState(false);
+  const [submenuPosition, setSubmenuPosition] = useState<{ vertical: 'below' | 'above'; horizontal: 'right' | 'left' }>({ vertical: 'below', horizontal: 'right' });
 
   // Close on click outside
   useClickOutside(menuRef, onDismiss);
@@ -65,6 +68,29 @@ function SessionContextMenu({
   const adjustedPosition = {
     left: Math.min(x, window.innerWidth - 200),
     top: Math.min(y, window.innerHeight - 250)
+  };
+
+  // Calculate submenu position when showing
+  const handleMoveToGroupHover = () => {
+    setShowMoveSubmenu(true);
+
+    if (moveToGroupRef.current) {
+      const rect = moveToGroupRef.current.getBoundingClientRect();
+      // Estimate submenu height: ~28px per item + 8px padding + divider
+      const itemHeight = 28;
+      const submenuHeight = (groups.length + 1) * itemHeight + 16 + (groups.length > 0 ? 8 : 0);
+      const submenuWidth = 160; // minWidth + some padding
+      const spaceBelow = window.innerHeight - rect.top;
+      const spaceRight = window.innerWidth - rect.right;
+
+      // Determine vertical position
+      const vertical = (spaceBelow < submenuHeight && rect.top > submenuHeight) ? 'above' : 'below';
+
+      // Determine horizontal position
+      const horizontal = (spaceRight < submenuWidth && rect.left > submenuWidth) ? 'left' : 'right';
+
+      setSubmenuPosition({ vertical, horizontal });
+    }
   };
 
   return (
@@ -123,8 +149,9 @@ function SessionContextMenu({
 
       {/* Move to Group - with submenu */}
       <div
+        ref={moveToGroupRef}
         className="relative"
-        onMouseEnter={() => setShowMoveSubmenu(true)}
+        onMouseEnter={handleMoveToGroupHover}
         onMouseLeave={() => setShowMoveSubmenu(false)}
       >
         <button
@@ -141,11 +168,13 @@ function SessionContextMenu({
         {/* Submenu */}
         {showMoveSubmenu && (
           <div
-            className="absolute left-full top-0 ml-1 py-1 rounded-md shadow-xl border"
+            className="absolute py-1 rounded-md shadow-xl border"
             style={{
               backgroundColor: theme.colors.bgSidebar,
               borderColor: theme.colors.border,
-              minWidth: '140px'
+              minWidth: '140px',
+              ...(submenuPosition.vertical === 'above' ? { bottom: 0 } : { top: 0 }),
+              ...(submenuPosition.horizontal === 'left' ? { right: '100%', marginRight: 4 } : { left: '100%', marginLeft: 4 })
             }}
           >
             {/* No Group option */}
@@ -317,6 +346,27 @@ interface SessionListProps {
 
   // Ref for the sidebar container (for focus management)
   sidebarContainerRef?: React.RefObject<HTMLDivElement>;
+
+  // Group Chat props
+  groupChats?: GroupChat[];
+  activeGroupChatId?: string | null;
+  onOpenGroupChat?: (id: string) => void;
+  onNewGroupChat?: () => void;
+  onEditGroupChat?: (id: string) => void;
+  onRenameGroupChat?: (id: string) => void;
+  onDeleteGroupChat?: (id: string) => void;
+  /** Controlled expanded state for group chats (lifted to parent for keyboard navigation) */
+  groupChatsExpanded?: boolean;
+  /** Callback when group chats expanded state changes */
+  onGroupChatsExpandedChange?: (expanded: boolean) => void;
+  /** Current state of the active group chat (for status indicator) */
+  groupChatState?: GroupChatState;
+  /** Per-participant working states for the active group chat */
+  participantStates?: Map<string, 'idle' | 'working'>;
+  /** State for ALL group chats (groupChatId -> state), for showing busy indicator when not active */
+  groupChatStates?: Map<string, GroupChatState>;
+  /** Participant states for ALL group chats (groupChatId -> Map<participantName, state>) */
+  allGroupChatParticipantStates?: Map<string, Map<string, 'idle' | 'working'>>;
 }
 
 export function SessionList(props: SessionListProps) {
@@ -343,7 +393,21 @@ export function SessionList(props: SessionListProps) {
     autoRunStats,
     openWizard,
     startTour,
-    sidebarContainerRef
+    sidebarContainerRef,
+    // Group Chat props
+    groupChats = [],
+    activeGroupChatId = null,
+    onOpenGroupChat,
+    onNewGroupChat,
+    onEditGroupChat,
+    onRenameGroupChat,
+    onDeleteGroupChat,
+    groupChatsExpanded,
+    onGroupChatsExpandedChange,
+    groupChatState = 'idle',
+    participantStates,
+    groupChatStates,
+    allGroupChatParticipantStates,
   } = props;
 
   const [sessionFilter, setSessionFilter] = useState('');
@@ -594,7 +658,7 @@ export function SessionList(props: SessionListProps) {
     <div
       ref={sidebarContainerRef}
       tabIndex={0}
-      className={`border-r flex flex-col shrink-0 transition-all duration-300 outline-none relative z-20 ${activeFocus === 'sidebar' ? 'ring-1 ring-inset' : ''}`}
+      className={`border-r flex flex-col shrink-0 transition-all duration-300 outline-none relative z-20 ${activeFocus === 'sidebar' && !activeGroupChatId ? 'ring-1 ring-inset' : ''}`}
       style={{
         width: leftSidebarOpen ? `${leftSidebarWidthState}px` : '64px',
         backgroundColor: theme.colors.bgSidebar,
@@ -679,7 +743,7 @@ export function SessionList(props: SessionListProps) {
                   title={isLiveMode ? "Web interface active - Click to show URL" : "Click to enable web interface"}
                 >
                   <Radio className={`w-3 h-3 ${isLiveMode ? 'animate-pulse' : ''}`} />
-                  {leftSidebarWidthState >= 280 && (isLiveMode ? 'LIVE' : 'OFFLINE')}
+                  {leftSidebarWidthState >= (isLiveMode ? 280 : 310) && (isLiveMode ? 'LIVE' : 'OFFLINE')}
                 </button>
 
                 {/* LIVE Overlay with URL and QR Code - Single QR with pill selector */}
@@ -1329,7 +1393,7 @@ export function SessionList(props: SessionListProps) {
 
       {/* SIDEBAR CONTENT: EXPANDED */}
       {leftSidebarOpen ? (
-        <div className="flex-1 overflow-y-auto py-2 select-none scrollbar-thin" data-tour="session-list">
+        <div className="flex-1 overflow-y-auto py-2 select-none scrollbar-thin flex flex-col" data-tour="session-list">
           {/* Session Filter */}
           {sessionFilterOpen && (
             <div className="mx-3 mb-3">
@@ -1377,7 +1441,7 @@ export function SessionList(props: SessionListProps) {
                         session={session}
                         variant="bookmark"
                         theme={theme}
-                        isActive={activeSessionId === session.id}
+                        isActive={activeSessionId === session.id && !activeGroupChatId}
                         isKeyboardSelected={isKeyboardSelected}
                         isDragging={draggingSessionId === session.id}
                         isEditing={editingSessionId === `bookmark-${session.id}`}
@@ -1578,7 +1642,7 @@ export function SessionList(props: SessionListProps) {
                           session={session}
                           variant="group"
                           theme={theme}
-                          isActive={activeSessionId === session.id}
+                          isActive={activeSessionId === session.id && !activeGroupChatId}
                           isKeyboardSelected={isKeyboardSelected}
                           isDragging={draggingSessionId === session.id}
                           isEditing={editingSessionId === `group-${group.id}-${session.id}`}
@@ -1734,7 +1798,7 @@ export function SessionList(props: SessionListProps) {
                     session={session}
                     variant="flat"
                     theme={theme}
-                    isActive={activeSessionId === session.id}
+                    isActive={activeSessionId === session.id && !activeGroupChatId}
                     isKeyboardSelected={isKeyboardSelected}
                     isDragging={draggingSessionId === session.id}
                     isEditing={editingSessionId === `flat-${session.id}`}
@@ -1797,7 +1861,7 @@ export function SessionList(props: SessionListProps) {
                       session={session}
                       variant="ungrouped"
                       theme={theme}
-                      isActive={activeSessionId === session.id}
+                      isActive={activeSessionId === session.id && !activeGroupChatId}
                       isKeyboardSelected={isKeyboardSelected}
                       isDragging={draggingSessionId === session.id}
                       isEditing={editingSessionId === `ungrouped-${session.id}`}
@@ -1936,6 +2000,30 @@ export function SessionList(props: SessionListProps) {
               </div>
             )}
           </div>
+          )}
+
+          {/* Flexible spacer to push group chats to bottom */}
+          <div className="flex-grow min-h-4" />
+
+          {/* GROUP CHATS SECTION - Only show when at least 2 AI agents exist */}
+          {onNewGroupChat && onOpenGroupChat && onEditGroupChat && onRenameGroupChat && onDeleteGroupChat &&
+           sessions.filter(s => s.toolType !== 'terminal').length >= 2 && (
+            <GroupChatList
+              theme={theme}
+              groupChats={groupChats}
+              activeGroupChatId={activeGroupChatId}
+              onOpenGroupChat={onOpenGroupChat}
+              onNewGroupChat={onNewGroupChat}
+              onEditGroupChat={onEditGroupChat}
+              onRenameGroupChat={onRenameGroupChat}
+              onDeleteGroupChat={onDeleteGroupChat}
+              isExpanded={groupChatsExpanded}
+              onExpandedChange={onGroupChatsExpandedChange}
+              groupChatState={groupChatState}
+              participantStates={participantStates}
+              groupChatStates={groupChatStates}
+              allGroupChatParticipantStates={allGroupChatParticipantStates}
+            />
           )}
         </div>
       ) : (
