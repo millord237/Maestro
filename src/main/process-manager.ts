@@ -566,6 +566,11 @@ export class ProcessManager extends EventEmitter {
                     const eventSessionId = outputParser.extractSessionId(event);
                     if (eventSessionId && !managedProcess.sessionIdEmitted) {
                       managedProcess.sessionIdEmitted = true;
+                      logger.debug('[ProcessManager] Emitting session-id event', 'ProcessManager', {
+                        sessionId,
+                        eventSessionId,
+                        toolType: managedProcess.toolType,
+                      });
                       this.emit('session-id', sessionId, eventSessionId);
                     }
 

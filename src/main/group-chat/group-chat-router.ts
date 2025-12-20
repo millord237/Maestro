@@ -646,12 +646,20 @@ Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active
         groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'working');
         console.log(`[GroupChat:Debug] Emitted participant state: working`);
 
+        // Log spawn details for debugging
+        const spawnCommand = agent.path || agent.command;
+        const spawnArgs = configResolution.args;
+        console.log(`[GroupChat:Debug] Spawn command: ${spawnCommand}`);
+        console.log(`[GroupChat:Debug] Spawn args: ${JSON.stringify(spawnArgs)}`);
+        console.log(`[GroupChat:Debug] Prompt length: ${participantPrompt.length}`);
+        console.log(`[GroupChat:Debug] CustomEnvVars: ${JSON.stringify(configResolution.effectiveCustomEnvVars || {})}`);
+
         const spawnResult = processManager.spawn({
           sessionId,
           toolType: participant.agentId,
           cwd,
-          command: agent.path || agent.command,
-          args: configResolution.args,
+          command: spawnCommand,
+          args: spawnArgs,
           readOnlyMode: readOnly ?? false, // Propagate read-only mode from caller
           prompt: participantPrompt,
           contextWindow: getContextWindowValue(agent, agentConfigValues),

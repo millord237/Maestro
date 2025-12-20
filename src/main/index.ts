@@ -2068,8 +2068,29 @@ function setupProcessListeners() {
         console.log(`[GroupChat:Debug] Emitted participant state: idle`);
 
         // Route the buffered output now that process is complete
+        // IMPORTANT: We must wait for the response to be logged before triggering synthesis
+        // to avoid a race condition where synthesis reads the log before the response is written
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         console.log(`[GroupChat:Debug] Buffered output length: ${bufferedOutput?.length ?? 0}`);
+
+        // Helper function to mark participant and potentially trigger synthesis
+        const markAndMaybeSynthesize = () => {
+          const isLastParticipant = markParticipantResponded(groupChatId, participantName);
+          console.log(`[GroupChat:Debug] Is last participant to respond: ${isLastParticipant}`);
+          if (isLastParticipant && processManager && agentDetector) {
+            // All participants have responded - spawn moderator synthesis round
+            console.log(`[GroupChat:Debug] All participants responded - spawning synthesis round...`);
+            logger.info('[GroupChat] All participants responded, spawning moderator synthesis', 'ProcessListener', { groupChatId });
+            spawnModeratorSynthesis(groupChatId, processManager, agentDetector).catch(err => {
+              console.error(`[GroupChat:Debug] ERROR spawning synthesis:`, err);
+              logger.error('[GroupChat] Failed to spawn moderator synthesis', 'ProcessListener', { error: String(err), groupChatId });
+            });
+          } else if (!isLastParticipant) {
+            // More participants pending
+            console.log(`[GroupChat:Debug] Waiting for more participants to respond...`);
+          }
+        };
+
         if (bufferedOutput) {
           console.log(`[GroupChat:Debug] Raw buffered output preview: "${bufferedOutput.substring(0, 300)}${bufferedOutput.length > 300 ? '...' : ''}"`);
           void (async () => {
@@ -2083,46 +2104,35 @@ function setupProcessListeners() {
               console.log(`[GroupChat:Debug] Parsed text preview: "${parsedText.substring(0, 200)}${parsedText.length > 200 ? '...' : ''}"`);
               if (parsedText.trim()) {
                 console.log(`[GroupChat:Debug] Routing agent response from ${participantName}...`);
-                routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(err => {
-                  console.error(`[GroupChat:Debug] ERROR routing agent response:`, err);
-                  logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
-                });
+                // Await the response logging before marking participant as responded
+                await routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined);
+                console.log(`[GroupChat:Debug] Successfully routed agent response from ${participantName}`);
               } else {
                 console.log(`[GroupChat:Debug] WARNING: Parsed text is empty for ${participantName}!`);
               }
             } catch (err) {
               console.error(`[GroupChat:Debug] ERROR loading chat for participant:`, err);
               logger.error('[GroupChat] Failed to load chat for participant output parsing', 'ProcessListener', { error: String(err), participant: participantName });
-              const parsedText = extractTextFromStreamJson(bufferedOutput);
-              if (parsedText.trim()) {
-                routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(routeErr => {
-                  console.error(`[GroupChat:Debug] ERROR routing agent response (fallback):`, routeErr);
-                  logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(routeErr), participant: participantName });
-                });
+              try {
+                const parsedText = extractTextFromStreamJson(bufferedOutput);
+                if (parsedText.trim()) {
+                  await routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined);
+                }
+              } catch (routeErr) {
+                console.error(`[GroupChat:Debug] ERROR routing agent response (fallback):`, routeErr);
+                logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(routeErr), participant: participantName });
               }
             }
           })().finally(() => {
             groupChatOutputBuffers.delete(sessionId);
             console.log(`[GroupChat:Debug] Cleared output buffer for participant session`);
+            // Mark participant and trigger synthesis AFTER logging is complete
+            markAndMaybeSynthesize();
           });
         } else {
           console.log(`[GroupChat:Debug] WARNING: No buffered output for participant ${participantName}!`);
-        }
-
-        // Mark participant as responded and check if we should spawn synthesis
-        const isLastParticipant = markParticipantResponded(groupChatId, participantName);
-        console.log(`[GroupChat:Debug] Is last participant to respond: ${isLastParticipant}`);
-        if (isLastParticipant && processManager && agentDetector) {
-          // All participants have responded - spawn moderator synthesis round
-          console.log(`[GroupChat:Debug] All participants responded - spawning synthesis round...`);
-          logger.info('[GroupChat] All participants responded, spawning moderator synthesis', 'ProcessListener', { groupChatId });
-          spawnModeratorSynthesis(groupChatId, processManager, agentDetector).catch(err => {
-            console.error(`[GroupChat:Debug] ERROR spawning synthesis:`, err);
-            logger.error('[GroupChat] Failed to spawn moderator synthesis', 'ProcessListener', { error: String(err), groupChatId });
-          });
-        } else if (!isLastParticipant) {
-          // More participants pending
-          console.log(`[GroupChat:Debug] Waiting for more participants to respond...`);
+          // No output to log, so mark participant as responded immediately
+          markAndMaybeSynthesize();
         }
         console.log(`[GroupChat:Debug] ===============================================`);
         // Don't send to regular exit handler
