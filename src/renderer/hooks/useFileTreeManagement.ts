@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import type { RightPanelHandle } from '../components/RightPanel';
 import type { Session } from '../types';
+import type { FileNode } from '../types/fileTree';
 import { loadFileTree, compareFileTrees, type FileTreeChanges } from '../utils/fileExplorer';
 import { fuzzyMatch } from '../utils/search';
 import { gitService } from '../services/git';
 
-/**
- * Handle for RightPanel component to refresh history.
- */
-export interface RightPanelHandle {
-  refreshHistoryPanel: () => void;
-}
+export type { RightPanelHandle } from '../components/RightPanel';
 
 /**
  * Dependencies for the useFileTreeManagement hook.
@@ -40,7 +37,7 @@ export interface UseFileTreeManagementReturn {
   /** Refresh both file tree and git state for a session */
   refreshGitFileState: (sessionId: string) => Promise<void>;
   /** Filtered file tree based on current filter */
-  filteredFileTree: any[];
+  filteredFileTree: FileNode[];
 }
 
 /**
@@ -195,8 +192,8 @@ export function useFileTreeManagement(
       return activeSession?.fileTree || [];
     }
 
-    const filterTree = (nodes: any[]): any[] => {
-      return nodes.reduce((acc: any[], node) => {
+    const filterTree = (nodes: FileNode[]): FileNode[] => {
+      return nodes.reduce((acc: FileNode[], node) => {
         const matchesFilter = fuzzyMatch(node.name, fileTreeFilter);
 
         if (node.type === 'folder' && node.children) {
