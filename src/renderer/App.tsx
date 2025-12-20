@@ -5106,7 +5106,9 @@ export default function MaestroConsole() {
     // Group chat context
     activeGroupChatId, groupChatInputRef, groupChatStagedImages,
     // Navigation handlers from useKeyboardNavigation hook
-    handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
+    handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain,
+    // Agent capabilities
+    hasActiveSessionCapability
   };
 
   // Update flat file list when active session's tree, expanded folders, filter, or hidden files setting changes
@@ -5481,6 +5483,7 @@ export default function MaestroConsole() {
           onCloseGroupChat={handleCloseGroupChat}
           onDeleteGroupChat={deleteGroupChatWithConfirmation}
           activeGroupChatId={activeGroupChatId}
+          hasActiveSessionCapability={hasActiveSessionCapability}
           onToggleRemoteControl={async () => {
             await toggleGlobalLive();
             // Show flash notification based on the NEW state (opposite of current)

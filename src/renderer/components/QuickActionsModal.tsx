@@ -77,6 +77,7 @@ interface QuickActionsModalProps {
   onCloseGroupChat?: () => void;
   onDeleteGroupChat?: (id: string) => void;
   activeGroupChatId?: string | null;
+  hasActiveSessionCapability?: (capability: string) => boolean;
 }
 
 export function QuickActionsModal(props: QuickActionsModalProps) {
@@ -92,7 +93,8 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setAgentSessionsOpen, setActiveAgentSessionId, setGitDiffPreview, setGitLogOpen,
     onRenameTab, onToggleReadOnlyMode, onOpenTabSwitcher, tabShortcuts, isAiMode, setPlaygroundOpen, onRefreshGitFileState,
     onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep, setDebugWizardModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent,
-    groupChats, onNewGroupChat, onOpenGroupChat, onCloseGroupChat, onDeleteGroupChat, activeGroupChatId
+    groupChats, onNewGroupChat, onOpenGroupChat, onCloseGroupChat, onDeleteGroupChat, activeGroupChatId,
+    hasActiveSessionCapability
   } = props;
 
   const [search, setSearch] = useState('');
@@ -274,7 +276,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     ...(startTour ? [{ id: 'tour', label: 'Start Introductory Tour', subtext: 'Take a guided tour of the interface', action: () => { startTour(); setQuickActionOpen(false); } }] : []),
     { id: 'logs', label: 'View System Logs', shortcut: shortcuts.systemLogs, action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
     { id: 'processes', label: 'View System Processes', shortcut: shortcuts.processMonitor, action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
-    ...(activeSession ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveAgentSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
+    ...(activeSession && hasActiveSessionCapability?.('supportsSessionStorage') ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveAgentSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
     ...(activeSession?.isGitRepo ? [{ id: 'gitDiff', label: 'View Git Diff', shortcut: shortcuts.viewGitDiff, action: async () => {
       const cwd = activeSession.inputMode === 'terminal' ? (activeSession.shellCwd || activeSession.cwd) : activeSession.cwd;
       const diff = await gitService.getDiff(cwd);

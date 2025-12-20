@@ -254,7 +254,8 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
       }
       else if (ctx.isShortcut(e, 'agentSessions')) {
         e.preventDefault();
-        if (ctx.activeSession?.toolType === 'claude-code') {
+        // Use capability check instead of hardcoded toolType
+        if (ctx.hasActiveSessionCapability('supportsSessionStorage')) {
           ctx.setActiveAgentSessionId(null);
           ctx.setAgentSessionsOpen(true);
         }
