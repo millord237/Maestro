@@ -63,7 +63,8 @@ export interface UseAgentSessionManagementReturn {
     agentSessionId: string,
     providedMessages?: LogEntry[],
     sessionName?: string,
-    starred?: boolean
+    starred?: boolean,
+    usageStats?: UsageStats
   ) => Promise<void>;
 }
 
@@ -191,7 +192,8 @@ export function useAgentSessionManagement(
     agentSessionId: string,
     providedMessages?: LogEntry[],
     sessionName?: string,
-    starred?: boolean
+    starred?: boolean,
+    usageStats?: UsageStats
   ) => {
     // Use projectRoot (not cwd) for consistent session storage access
     if (!activeSession?.projectRoot) return;
@@ -269,6 +271,7 @@ export function useAgentSessionManagement(
           logs: messages,
           name,
           starred: isStarred,
+          usageStats,
           saveToHistory: defaultSaveToHistory
         });
         if (!result) return s;

@@ -27,6 +27,7 @@ interface BatchRunnerModalProps {
   folderPath: string;
   currentDocument: string;
   allDocuments: string[]; // All available docs in folder (without .md)
+  documentTree?: Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }>; // Tree structure for folder selection
   getDocumentTaskCount: (filename: string) => Promise<number>; // Get task count for a document
   onRefreshDocuments: () => Promise<void>; // Refresh document list from folder
   // Session ID for playbook storage
@@ -74,6 +75,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     folderPath,
     currentDocument,
     allDocuments,
+    documentTree,
     getDocumentTaskCount,
     onRefreshDocuments,
     sessionId,
@@ -589,6 +591,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
             maxLoops={maxLoops}
             setMaxLoops={setMaxLoops}
             allDocuments={allDocuments}
+            documentTree={documentTree as import('./DocumentsPanel').DocTreeNode[] | undefined}
             onRefreshDocuments={onRefreshDocuments}
           />
 

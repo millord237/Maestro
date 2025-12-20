@@ -14,7 +14,7 @@ import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
 import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
-import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, markParticipantResponded, spawnModeratorSynthesis } from './group-chat/group-chat-router';
+import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState } from './group-chat/group-chat-router';
 import { updateParticipant, loadGroupChat } from './group-chat/group-chat-storage';
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
@@ -1862,7 +1862,7 @@ function setupProcessListeners() {
   if (processManager) {
     processManager.on('data', (sessionId: string, data: string) => {
       // Handle group chat moderator output - buffer it
-      // Session ID format: group-chat-{groupChatId}-moderator-{uuid}
+      // Session ID format: group-chat-{groupChatId}-moderator-{uuid} or group-chat-{groupChatId}-moderator-synthesis-{uuid}
       const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
       if (moderatorMatch) {
         // Buffer the output - will be routed on process exit
@@ -1893,9 +1893,16 @@ function setupProcessListeners() {
           return;
         }
 
-        // Extract base session ID and tab ID from formats: {id}-ai-{tabId}, {id}-batch-{timestamp}, {id}-synopsis-{timestamp}
-        const baseSessionId = sessionId.replace(/-ai-[^-]+$|-batch-\d+$|-synopsis-\d+$/, '');
-        const isAiOutput = sessionId.includes('-ai-') || sessionId.includes('-batch-') || sessionId.includes('-synopsis-');
+        // Don't broadcast background batch/synopsis output to web clients
+        // These are internal Auto Run operations that should only appear in history, not as chat messages
+        if (sessionId.includes('-batch-') || sessionId.includes('-synopsis-')) {
+          console.log(`[WebBroadcast] SKIPPING batch/synopsis output for web: session=${sessionId}`);
+          return;
+        }
+
+        // Extract base session ID and tab ID from format: {id}-ai-{tabId}
+        const baseSessionId = sessionId.replace(/-ai-[^-]+$/, '');
+        const isAiOutput = sessionId.includes('-ai-');
 
         // Extract tab ID from session ID format: {id}-ai-{tabId}
         const tabIdMatch = sessionId.match(/-ai-([^-]+)$/);
@@ -1918,6 +1925,10 @@ function setupProcessListeners() {
     processManager.on('exit', (sessionId: string, code: number) => {
       // Handle group chat moderator exit - route buffered output and set state back to idle
       // Session ID format: group-chat-{groupChatId}-moderator-{uuid}
+      // This handles BOTH initial moderator responses AND synthesis responses.
+      // The routeModeratorResponse function will check for @mentions:
+      // - If @mentions present: route to agents (continue conversation)
+      // - If no @mentions: final response to user (conversation complete for this turn)
       const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
       if (moderatorMatch) {
         const groupChatId = moderatorMatch[1];
@@ -1930,7 +1941,8 @@ function setupProcessListeners() {
               const agentType = chat?.moderatorAgentId;
               const parsedText = extractTextFromStreamJson(bufferedOutput, agentType);
               if (parsedText.trim()) {
-                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
+                const readOnly = getGroupChatReadOnlyState(groupChatId);
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined, readOnly).catch(err => {
                   logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
                 });
               }
@@ -1938,7 +1950,8 @@ function setupProcessListeners() {
               logger.error('[GroupChat] Failed to load chat for moderator output parsing', 'ProcessListener', { error: String(err) });
               const parsedText = extractTextFromStreamJson(bufferedOutput);
               if (parsedText.trim()) {
-                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(routeErr => {
+                const readOnly = getGroupChatReadOnlyState(groupChatId);
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined, readOnly).catch(routeErr => {
                   logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(routeErr) });
                 });
               }

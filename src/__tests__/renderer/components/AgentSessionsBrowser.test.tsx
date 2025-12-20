@@ -2176,7 +2176,12 @@ describe('AgentSessionsBrowser', () => {
           expect.objectContaining({ text: 'Hi!', source: 'stdout' }),
         ]),
         'My Session',
-        false // not starred
+        false, // not starred
+        expect.objectContaining({
+          inputTokens: 5000,
+          outputTokens: 2000,
+          totalCostUsd: 0.15,
+        })
       );
       expect(onClose).toHaveBeenCalled();
     });
@@ -2217,7 +2222,12 @@ describe('AgentSessionsBrowser', () => {
         'session-1',
         expect.any(Array),
         undefined,
-        true // starred
+        true, // starred
+        expect.objectContaining({
+          inputTokens: 5000,
+          outputTokens: 2000,
+          totalCostUsd: 0.15,
+        })
       );
     });
 
@@ -2290,7 +2300,12 @@ describe('AgentSessionsBrowser', () => {
         'session-1',
         [], // Empty messages for quick resume
         'Quick Session',
-        false
+        false,
+        expect.objectContaining({
+          inputTokens: 5000,
+          outputTokens: 2000,
+          totalCostUsd: 0.15,
+        })
       );
       expect(onClose).toHaveBeenCalled();
     });

@@ -35,6 +35,8 @@ interface GroupChatPanelProps {
   inputRef?: React.RefObject<HTMLTextAreaElement>;
   // Image paste handler from App
   handlePaste?: (e: React.ClipboardEvent) => void;
+  // Image drop handler from App
+  handleDrop?: (e: React.DragEvent) => void;
   // Image lightbox handler
   onOpenLightbox?: (image: string, contextImages?: string[], source?: 'staged' | 'history') => void;
   // Execution queue props
@@ -76,6 +78,7 @@ export function GroupChatPanel({
   setReadOnlyMode,
   inputRef,
   handlePaste,
+  handleDrop,
   onOpenLightbox,
   executionQueue,
   onRemoveQueuedItem,
@@ -132,6 +135,7 @@ export function GroupChatPanel({
         setReadOnlyMode={setReadOnlyMode}
         inputRef={inputRef}
         handlePaste={handlePaste}
+        handleDrop={handleDrop}
         onOpenLightbox={onOpenLightbox}
         executionQueue={executionQueue}
         onRemoveQueuedItem={onRemoveQueuedItem}

@@ -613,7 +613,10 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
               }}
               onKeyDown={handleInputKeyDown}
               onPaste={handlePaste}
-              onDrop={handleDrop}
+              onDrop={(e) => {
+                e.stopPropagation();
+                handleDrop(e);
+              }}
               onDragOver={e => e.preventDefault()}
               rows={1}
             />

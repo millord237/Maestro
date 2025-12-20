@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
-import { GripVertical, Plus, Repeat, RotateCcw, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { GripVertical, Plus, Repeat, RotateCcw, X, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Folder, CheckSquare } from 'lucide-react';
 import type { Theme, BatchDocumentEntry } from '../types';
+
+// Tree node type for folder structure
+export interface DocTreeNode {
+  name: string;
+  type: 'file' | 'folder';
+  path: string;
+  children?: DocTreeNode[];
+}
 
 interface DocumentsPanelProps {
   theme: Theme;
@@ -13,6 +21,7 @@ interface DocumentsPanelProps {
   maxLoops: number | null;
   setMaxLoops: (maxLoops: number | null) => void;
   allDocuments: string[];
+  documentTree?: DocTreeNode[];
   onRefreshDocuments: () => Promise<void>;
 }
 
@@ -20,6 +29,7 @@ interface DocumentsPanelProps {
 interface DocumentSelectorModalProps {
   theme: Theme;
   allDocuments: string[];
+  documentTree?: DocTreeNode[];
   taskCounts: Record<string, number>;
   loadingTaskCounts: boolean;
   documents: BatchDocumentEntry[];
@@ -31,6 +41,7 @@ interface DocumentSelectorModalProps {
 function DocumentSelectorModal({
   theme,
   allDocuments,
+  documentTree,
   taskCounts,
   loadingTaskCounts,
   documents,
@@ -45,6 +56,7 @@ function DocumentSelectorModal({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [prevDocCount, setPrevDocCount] = useState(allDocuments.length);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Toggle document selection
   const toggleDoc = useCallback((filename: string) => {
@@ -58,6 +70,82 @@ function DocumentSelectorModal({
       return next;
     });
   }, []);
+
+  // Select all documents
+  const selectAll = useCallback(() => {
+    setSelectedDocs(new Set(allDocuments));
+  }, [allDocuments]);
+
+  // Deselect all documents
+  const deselectAll = useCallback(() => {
+    setSelectedDocs(new Set());
+  }, []);
+
+  // Toggle folder expansion
+  const toggleFolder = useCallback((folderPath: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderPath)) {
+        next.delete(folderPath);
+      } else {
+        next.add(folderPath);
+      }
+      return next;
+    });
+  }, []);
+
+  // Get all file paths under a folder (recursive)
+  const getFilesInFolder = useCallback((node: DocTreeNode): string[] => {
+    if (node.type === 'file') {
+      return [node.path];
+    }
+    if (node.children) {
+      return node.children.flatMap(child => getFilesInFolder(child));
+    }
+    return [];
+  }, []);
+
+  // Check if all files in a folder are selected
+  const isFolderFullySelected = useCallback((node: DocTreeNode): boolean => {
+    const files = getFilesInFolder(node);
+    return files.length > 0 && files.every(f => selectedDocs.has(f));
+  }, [getFilesInFolder, selectedDocs]);
+
+  // Check if some (but not all) files in a folder are selected
+  const isFolderPartiallySelected = useCallback((node: DocTreeNode): boolean => {
+    const files = getFilesInFolder(node);
+    const selectedCount = files.filter(f => selectedDocs.has(f)).length;
+    return selectedCount > 0 && selectedCount < files.length;
+  }, [getFilesInFolder, selectedDocs]);
+
+  // Toggle all files in a folder
+  const toggleFolder_ = useCallback((node: DocTreeNode) => {
+    const files = getFilesInFolder(node);
+    const allSelected = files.every(f => selectedDocs.has(f));
+
+    setSelectedDocs(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // Deselect all
+        files.forEach(f => next.delete(f));
+      } else {
+        // Select all
+        files.forEach(f => next.add(f));
+      }
+      return next;
+    });
+  }, [getFilesInFolder, selectedDocs]);
+
+  // Get total task count for files in a folder
+  const getFolderTaskCount = useCallback((node: DocTreeNode): number => {
+    const files = getFilesInFolder(node);
+    return files.reduce((sum, f) => sum + (taskCounts[f] ?? 0), 0);
+  }, [getFilesInFolder, taskCounts]);
+
+  // Get total task count for all documents
+  const totalTaskCount = useMemo(() => {
+    return allDocuments.reduce((sum, f) => sum + (taskCounts[f] ?? 0), 0);
+  }, [allDocuments, taskCounts]);
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
@@ -94,13 +182,175 @@ function DocumentSelectorModal({
     }
   }, [allDocuments.length, prevDocCount, refreshing]);
 
+  // Render a tree node recursively with checkboxes
+  const renderTreeNode = (node: DocTreeNode, depth: number = 0): React.ReactNode => {
+    const paddingLeft = depth * 20 + 12;
+
+    if (node.type === 'folder') {
+      const isExpanded = expandedFolders.has(node.path);
+      const isFullySelected = isFolderFullySelected(node);
+      const isPartiallySelected = isFolderPartiallySelected(node);
+      const filesInFolder = getFilesInFolder(node);
+
+      return (
+        <div key={node.path}>
+          <div
+            className={`w-full flex items-center gap-2 py-1.5 rounded transition-colors ${
+              isFullySelected ? 'bg-white/10' : 'hover:bg-white/5'
+            }`}
+            style={{ paddingLeft }}
+          >
+            {/* Expand/Collapse button */}
+            <button
+              onClick={() => toggleFolder(node.path)}
+              className="p-0.5 rounded hover:bg-white/10 shrink-0"
+              style={{ color: theme.colors.textDim }}
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </button>
+
+            {/* Folder checkbox */}
+            <button
+              onClick={() => toggleFolder_(node)}
+              className="flex items-center gap-2 flex-1 min-w-0"
+            >
+              <div
+                className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
+                style={{
+                  borderColor: isFullySelected || isPartiallySelected ? theme.colors.accent : theme.colors.border,
+                  backgroundColor: isFullySelected ? theme.colors.accent : 'transparent'
+                }}
+              >
+                {isFullySelected && (
+                  <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+                {isPartiallySelected && (
+                  <div
+                    className="w-2 h-2 rounded-sm"
+                    style={{ backgroundColor: theme.colors.accent }}
+                  />
+                )}
+              </div>
+
+              <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: theme.colors.accent }} />
+              <span className="text-sm truncate" style={{ color: theme.colors.textMain }}>
+                {node.name}
+              </span>
+            </button>
+
+            {/* File count badge */}
+            <span
+              className="text-xs px-2 py-0.5 rounded shrink-0"
+              style={{
+                backgroundColor: theme.colors.textDim + '20',
+                color: theme.colors.textDim
+              }}
+            >
+              {filesInFolder.length} {filesInFolder.length === 1 ? 'file' : 'files'}
+            </span>
+
+            {/* Task count badge */}
+            {(() => {
+              const folderTaskCount = getFolderTaskCount(node);
+              return (
+                <span
+                  className="text-xs px-2 py-0.5 rounded shrink-0 mr-3"
+                  style={{
+                    backgroundColor: folderTaskCount === 0 ? theme.colors.textDim + '20' : theme.colors.success + '20',
+                    color: folderTaskCount === 0 ? theme.colors.textDim : theme.colors.success
+                  }}
+                >
+                  {loadingTaskCounts ? '...' : `${folderTaskCount} ${folderTaskCount === 1 ? 'task' : 'tasks'}`}
+                </span>
+              );
+            })()}
+          </div>
+
+          {/* Children */}
+          {isExpanded && node.children && (
+            <div>
+              {node.children.map(child => renderTreeNode(child, depth + 1))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // File node
+    const isSelected = selectedDocs.has(node.path);
+    const docTaskCount = taskCounts[node.path] ?? 0;
+
+    return (
+      <button
+        key={node.path}
+        onClick={() => toggleDoc(node.path)}
+        className={`w-full flex items-center gap-3 py-1.5 rounded transition-colors ${
+          isSelected ? 'bg-white/10' : 'hover:bg-white/5'
+        }`}
+        style={{ paddingLeft: paddingLeft + 20 }} // Extra indent for files
+      >
+        {/* Checkbox */}
+        <div
+          className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
+          style={{
+            borderColor: isSelected ? theme.colors.accent : theme.colors.border,
+            backgroundColor: isSelected ? theme.colors.accent : 'transparent'
+          }}
+        >
+          {isSelected && (
+            <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+
+        {/* Filename */}
+        <span
+          className="flex-1 text-sm text-left truncate"
+          style={{ color: theme.colors.textMain }}
+        >
+          {node.name}.md
+        </span>
+
+        {/* Task Count */}
+        <span
+          className="text-xs px-2 py-0.5 rounded shrink-0 mr-3"
+          style={{
+            backgroundColor: docTaskCount === 0 ? theme.colors.textDim + '20' : theme.colors.success + '20',
+            color: docTaskCount === 0 ? theme.colors.textDim : theme.colors.success
+          }}
+        >
+          {loadingTaskCounts ? '...' : `${docTaskCount} ${docTaskCount === 1 ? 'task' : 'tasks'}`}
+        </span>
+      </button>
+    );
+  };
+
+  const allSelected = selectedDocs.size === allDocuments.length && allDocuments.length > 0;
+  const someSelected = selectedDocs.size > 0;
+
+  // Calculate task count for selected documents
+  const selectedTaskCount = useMemo(() => {
+    let count = 0;
+    selectedDocs.forEach(doc => {
+      count += taskCounts[doc] ?? 0;
+    });
+    return count;
+  }, [selectedDocs, taskCounts]);
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]"
       onClick={onClose}
     >
       <div
-        className="w-[400px] max-h-[60vh] border rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        className="w-[550px] max-h-[70vh] border rounded-lg shadow-2xl overflow-hidden flex flex-col"
         style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -110,6 +360,16 @@ function DocumentSelectorModal({
             <h3 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
               Select Documents
             </h3>
+            {/* Total task count badge */}
+            <span
+              className="text-xs px-2 py-0.5 rounded"
+              style={{
+                backgroundColor: totalTaskCount === 0 ? theme.colors.textDim + '20' : theme.colors.success + '20',
+                color: totalTaskCount === 0 ? theme.colors.textDim : theme.colors.success
+              }}
+            >
+              {loadingTaskCounts ? '...' : `${totalTaskCount} ${totalTaskCount === 1 ? 'task' : 'tasks'}`}
+            </span>
             {refreshMessage && (
               <span
                 className="text-xs px-2 py-0.5 rounded animate-in fade-in"
@@ -123,6 +383,16 @@ function DocumentSelectorModal({
             )}
           </div>
           <div className="flex items-center gap-1">
+            {/* Select All / Deselect All button */}
+            <button
+              onClick={allSelected ? deselectAll : selectAll}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-white/10 transition-colors"
+              style={{ color: theme.colors.accent }}
+              title={allSelected ? 'Deselect all documents' : 'Select all documents'}
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              {allSelected ? 'Deselect All' : 'Select All'}
+            </button>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -144,7 +414,13 @@ function DocumentSelectorModal({
             <div className="p-4 text-center" style={{ color: theme.colors.textDim }}>
               <p className="text-sm">No documents found in folder</p>
             </div>
+          ) : documentTree && documentTree.length > 0 ? (
+            // Render tree structure with folder checkboxes
+            <div className="space-y-0.5">
+              {documentTree.map(node => renderTreeNode(node))}
+            </div>
           ) : (
+            // Fallback to flat list
             <div className="space-y-1">
               {allDocuments.map((filename) => {
                 const isSelected = selectedDocs.has(filename);
@@ -214,7 +490,7 @@ function DocumentSelectorModal({
             className="px-4 py-2 rounded text-white font-bold"
             style={{ backgroundColor: theme.colors.accent }}
           >
-            Add ({selectedDocs.size})
+            Add {selectedDocs.size} {selectedDocs.size === 1 ? 'file' : 'files'} · {loadingTaskCounts ? '...' : `${selectedTaskCount} ${selectedTaskCount === 1 ? 'task' : 'tasks'}`}
           </button>
         </div>
       </div>
@@ -233,6 +509,7 @@ export function DocumentsPanel({
   maxLoops,
   setMaxLoops,
   allDocuments,
+  documentTree,
   onRefreshDocuments
 }: DocumentsPanelProps) {
   // Document selector modal state
@@ -703,6 +980,7 @@ export function DocumentsPanel({
         <DocumentSelectorModal
           theme={theme}
           allDocuments={allDocuments}
+          documentTree={documentTree}
           taskCounts={taskCounts}
           loadingTaskCounts={loadingTaskCounts}
           documents={documents}

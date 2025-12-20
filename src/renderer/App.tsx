@@ -289,6 +289,7 @@ export default function MaestroConsole() {
 
   // Drag and Drop State
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
 
   // Modals
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -2722,6 +2723,7 @@ export default function MaestroConsole() {
 
       // Focus the input after the component renders
       setTimeout(() => {
+        setActiveFocus('main');
         groupChatInputRef.current?.focus();
       }, 100);
     }
@@ -4792,9 +4794,13 @@ export default function MaestroConsole() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDraggingImage(false);
 
-    // Only allow image dropping in AI mode
-    if (!activeSession || activeSession.inputMode !== 'ai') return;
+    // Allow image dropping in group chat or direct AI mode
+    const isGroupChatActive = !!activeGroupChatId;
+    const isDirectAIMode = activeSession && activeSession.inputMode === 'ai';
+
+    if (!isGroupChatActive && !isDirectAIMode) return;
 
     const files = e.dataTransfer.files;
     for (let i = 0; i < files.length; i++) {
@@ -4803,20 +4809,55 @@ export default function MaestroConsole() {
         reader.onload = (event) => {
           if (event.target?.result) {
             const imageData = event.target!.result as string;
-            setStagedImages(prev => {
-              if (prev.includes(imageData)) {
-                setSuccessFlashNotification('Duplicate image ignored');
-                setTimeout(() => setSuccessFlashNotification(null), 2000);
-                return prev;
-              }
-              return [...prev, imageData];
-            });
+            if (isGroupChatActive) {
+              setGroupChatStagedImages(prev => {
+                if (prev.includes(imageData)) {
+                  setSuccessFlashNotification('Duplicate image ignored');
+                  setTimeout(() => setSuccessFlashNotification(null), 2000);
+                  return prev;
+                }
+                return [...prev, imageData];
+              });
+            } else {
+              setStagedImages(prev => {
+                if (prev.includes(imageData)) {
+                  setSuccessFlashNotification('Duplicate image ignored');
+                  setTimeout(() => setSuccessFlashNotification(null), 2000);
+                  return prev;
+                }
+                return [...prev, imageData];
+              });
+            }
           }
         };
         reader.readAsDataURL(files[i]);
       }
     }
   };
+
+  // Drag event handlers for app-level image drop zone
+  const handleImageDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Check if dragging files that include images
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingImage(true);
+    }
+  }, []);
+
+  const handleImageDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only hide overlay when leaving the root element
+    if (e.currentTarget === e.target) {
+      setIsDraggingImage(false);
+    }
+  }, []);
+
+  const handleImageDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   // --- RENDER ---
 
@@ -5172,7 +5213,40 @@ export default function MaestroConsole() {
              color: theme.colors.textMain,
              fontFamily: fontFamily,
              fontSize: `${fontSize}px`
-           }}>
+           }}
+           onDragEnter={handleImageDragEnter}
+           onDragLeave={handleImageDragLeave}
+           onDragOver={handleImageDragOver}
+           onDrop={handleDrop}>
+
+      {/* Image Drop Overlay */}
+      {isDraggingImage && (
+        <div
+          className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center"
+          style={{ backgroundColor: `${theme.colors.accent}20` }}
+        >
+          <div
+            className="pointer-events-none rounded-xl border-2 border-dashed p-8 flex flex-col items-center gap-4"
+            style={{
+              borderColor: theme.colors.accent,
+              backgroundColor: `${theme.colors.bgMain}ee`,
+            }}
+          >
+            <svg
+              className="w-16 h-16"
+              style={{ color: theme.colors.accent }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-lg font-medium" style={{ color: theme.colors.textMain }}>
+              Drop image to attach
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* --- DRAGGABLE TITLE BAR (hidden in mobile landscape) --- */}
       {!isMobileLandscape && (
@@ -5774,6 +5848,7 @@ export default function MaestroConsole() {
               setReadOnlyMode={setGroupChatReadOnlyMode}
               inputRef={groupChatInputRef}
               handlePaste={handlePaste}
+              handleDrop={handleDrop}
               onOpenLightbox={handleSetLightboxImage}
               executionQueue={groupChatExecutionQueue}
               onRemoveQueuedItem={handleRemoveGroupChatQueueItem}
@@ -5860,9 +5935,9 @@ export default function MaestroConsole() {
         setLogViewerOpen={setLogViewerOpen}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}
-        onResumeAgentSession={(agentSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean) => {
+        onResumeAgentSession={(agentSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean, usageStats?: UsageStats) => {
           // Opens the Claude session as a new tab (or switches to existing tab if duplicate)
-          handleResumeSession(agentSessionId, messages, sessionName, starred);
+          handleResumeSession(agentSessionId, messages, sessionName, starred, usageStats);
         }}
         onNewAgentSession={() => {
           // Create a fresh AI tab
@@ -6444,6 +6519,7 @@ export default function MaestroConsole() {
           folderPath={activeSession.autoRunFolderPath}
           currentDocument={activeSession.autoRunSelectedFile || ''}
           allDocuments={autoRunDocumentList}
+          documentTree={autoRunDocumentTree}
           getDocumentTaskCount={getDocumentTaskCount}
           onRefreshDocuments={handleAutoRunRefresh}
           sessionId={activeSession.id}

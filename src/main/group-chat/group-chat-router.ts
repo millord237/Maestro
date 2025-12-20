@@ -33,6 +33,7 @@ import {
   getModeratorSessionId,
   isModeratorActive,
   MODERATOR_SYSTEM_PROMPT,
+  MODERATOR_SYNTHESIS_PROMPT,
 } from './group-chat-moderator';
 import {
   addParticipant,
@@ -74,6 +75,27 @@ let getCustomEnvVarsCallback: GetCustomEnvVarsCallback | null = null;
  * Maps groupChatId -> Set<participantName>
  */
 const pendingParticipantResponses = new Map<string, Set<string>>();
+
+/**
+ * Tracks read-only mode state for each group chat.
+ * Set when user sends a message with readOnly flag, cleared on next non-readOnly message.
+ * Maps groupChatId -> boolean
+ */
+const groupChatReadOnlyState = new Map<string, boolean>();
+
+/**
+ * Gets the current read-only state for a group chat.
+ */
+export function getGroupChatReadOnlyState(groupChatId: string): boolean {
+  return groupChatReadOnlyState.get(groupChatId) ?? false;
+}
+
+/**
+ * Sets the read-only state for a group chat.
+ */
+export function setGroupChatReadOnlyState(groupChatId: string, readOnly: boolean): void {
+  groupChatReadOnlyState.set(groupChatId, readOnly);
+}
 
 /**
  * Gets the pending participants for a group chat.
@@ -267,6 +289,9 @@ export async function routeUserMessage(
   // Log the message as coming from user
   await appendToLog(chat.logPath, 'user', message, readOnly);
 
+  // Store the read-only state for this group chat so it can be propagated to participants
+  setGroupChatReadOnlyState(groupChatId, readOnly ?? false);
+
   // Emit message event to renderer so it shows immediately
   const userMessage: GroupChatMessage = {
     timestamp: new Date().toISOString(),
@@ -374,12 +399,14 @@ ${message}`;
  * @param message - The message from the moderator
  * @param processManager - The process manager (optional)
  * @param agentDetector - The agent detector for resolving agent commands (optional)
+ * @param readOnly - Optional flag indicating read-only mode (propagates to participants)
  */
 export async function routeModeratorResponse(
   groupChatId: string,
   message: string,
   processManager?: IProcessManager,
-  agentDetector?: AgentDetector
+  agentDetector?: AgentDetector,
+  readOnly?: boolean
 ): Promise<void> {
   const chat = await loadGroupChat(groupChatId);
   if (!chat) {
@@ -495,10 +522,13 @@ export async function routeModeratorResponse(
       }
 
       // Build the prompt with context for this participant
+      const readOnlyNote = readOnly
+        ? '\n\n**READ-ONLY MODE:** Do not make any file changes. Only analyze, review, or provide information.'
+        : '';
       const participantPrompt = `You are "${participantName}" in a group chat named "${updatedChat.name}".
 
 ## Your Role
-Respond to the moderator's request below. Your response will be shared with the moderator and other participants.
+Respond to the moderator's request below. Your response will be shared with the moderator and other participants.${readOnlyNote}
 
 **IMPORTANT RESPONSE FORMAT:**
 Your response MUST begin with a single-sentence summary of what you accomplished or are reporting. This first sentence will be extracted for the group chat history. Keep it concise and action-oriented.
@@ -506,10 +536,10 @@ Your response MUST begin with a single-sentence summary of what you accomplished
 ## Recent Chat History:
 ${historyContext}
 
-## Moderator's Request:
+## Moderator's Request${readOnly ? ' (READ-ONLY MODE)' : ''}:
 ${message}
 
-Please respond to this request. If you need to perform any actions, do so and report your findings.`;
+Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active, do not modify any files.' : ' If you need to perform any actions, do so and report your findings.'}`;
 
       // Create a unique session ID for this batch process
       const sessionId = `group-chat-${groupChatId}-participant-${participantName}-${Date.now()}`;
@@ -524,14 +554,14 @@ Please respond to this request. If you need to perform any actions, do so and re
           cwd,
           command: agent.path || agent.command,
           args: [...agent.args],
-          readOnlyMode: false, // Participants can make changes
+          readOnlyMode: readOnly ?? false, // Propagate read-only mode from caller
           prompt: participantPrompt,
           customEnvVars,
         });
 
         // Track this participant as pending response
         participantsToRespond.add(participantName);
-        console.log(`[GroupChatRouter] Spawned batch process for participant @${participantName} (session ${sessionId})`);
+        console.log(`[GroupChatRouter] Spawned batch process for participant @${participantName} (session ${sessionId}, readOnly=${readOnly ?? false})`);
       } catch (error) {
         console.error(`[GroupChatRouter] Failed to spawn batch process for ${participantName}:`, error);
         // Continue with other participants even if one fails
@@ -666,6 +696,9 @@ export async function spawnModeratorSynthesis(
   }
 
   // Create a unique session ID for this synthesis round
+  // Note: We use the regular moderator session ID format (no -synthesis- marker)
+  // so the exit handler routes through routeModeratorResponse, which will
+  // check for @mentions - if present, route to agents; if not, it's the final response
   const sessionId = `${sessionIdPrefix}-${Date.now()}`;
 
   // Resolve the agent configuration
@@ -692,16 +725,25 @@ export async function spawnModeratorSynthesis(
     `[${m.from}]: ${m.content}`
   ).join('\n');
 
+  // Build participant context for potential follow-up @mentions
+  const participantContext = chat.participants.length > 0
+    ? chat.participants.map(p => `- @${p.name} (${p.agentId} session)`).join('\n')
+    : '(No agents currently in this group chat)';
+
   const synthesisPrompt = `${MODERATOR_SYSTEM_PROMPT}
 
-## Context
-You previously delegated tasks to participants and they have now responded. Please synthesize their responses into a coherent summary for the user.
+${MODERATOR_SYNTHESIS_PROMPT}
+
+## Current Participants (you can @mention these for follow-up):
+${participantContext}
 
 ## Recent Chat History (including participant responses):
 ${historyContext}
 
 ## Your Task:
-Provide a brief synthesis of the participant responses above. Highlight key findings, agreements, or differences between the participants. Be concise.`;
+Review the agent responses above. Either:
+1. Synthesize into a final answer for the user (NO @mentions) if the question is fully answered
+2. @mention specific agents for follow-up if you need more information`;
 
   // Spawn the synthesis process
   try {

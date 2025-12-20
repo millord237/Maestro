@@ -49,6 +49,7 @@ Download the latest release for your platform from the [Releases](https://github
 ### Power Features
 
 - 🤖 **[Auto Run & Playbooks](#auto-run)** - File-system-based task runner that batch-processes markdown checklists through AI agents. Create playbooks for repeatable workflows, run in loops, and track progress with full history. Each task gets its own AI session for clean conversation context.
+- 💬 **[Group Chat](#group-chat)** - Coordinate multiple AI agents in a single conversation. A moderator AI orchestrates discussions, routing questions to the right agents and synthesizing their responses for cross-project questions and architecture discussions.
 - 🌐 **[Mobile Remote Control](#remote-access)** - Built-in web server with QR code access. Monitor and control all your agents from your phone. Supports local network access and remote tunneling via Cloudflare for access from anywhere.
 - 💻 **[Command Line Interface](#command-line-interface)** - Full CLI (`maestro-cli`) for headless operation. List agents/groups, run playbooks from cron jobs or CI/CD pipelines, with human-readable or JSONL output for scripting.
 - 🚀 **Multi-Instance Management** - Run unlimited Claude Code instances and terminal sessions in parallel. Each agent has its own workspace, conversation history, and isolated context.
@@ -109,6 +110,7 @@ This approach mirrors methodologies like [Spec-Kit](https://github.com/github/sp
 |---------|-------------|
 | **Agent** | A workspace tied to a project directory and AI provider (Claude Code, Codex, or OpenCode). Contains one Command Terminal and one AI Terminal with full conversation history. |
 | **Group** | Organizational container for agents. Group by project, client, or workflow. |
+| **Group Chat** | Multi-agent conversation coordinated by a moderator. Ask questions across multiple agents and get synthesized answers. |
 | **AI Terminal** | The conversation interface with your AI agent. Supports `@` file mentions, slash commands, and image attachments. |
 | **Command Terminal** | A PTY shell session for running commands directly. Tab completion for files, git branches, and command history. |
 | **Session Explorer** | Browse all past conversations for an agent. Star, rename, search, and resume any previous session. |
@@ -488,6 +490,66 @@ Click the **Stop** button at any time. The runner will:
 ### Parallel Batches
 
 You can run separate batch processes in different Maestro sessions simultaneously. Each session maintains its own independent batch state. With Git worktrees enabled, you can work on the main branch while Auto Run operates in an isolated worktree.
+
+## Group Chat
+
+Group Chat lets you coordinate multiple AI agents in a single conversation. A moderator AI orchestrates the discussion, routing questions to the right agents and synthesizing their responses.
+
+### When to Use Group Chat
+
+- **Cross-project questions**: "How does the frontend authentication relate to the backend API?"
+- **Architecture discussions**: Get perspectives from agents with different codebase contexts
+- **Comparative analysis**: "Compare the testing approach in these three repositories"
+- **Knowledge synthesis**: Combine expertise from specialized agents
+
+### How It Works
+
+1. **Create a Group Chat** from the sidebar menu
+2. **Add participants** by @mentioning agent names (e.g., `@Frontend`, `@Backend`)
+3. **Send your question** - the moderator receives it first
+4. **Moderator coordinates** - routes to relevant agents via @mentions
+5. **Agents respond** - each agent works in their own project context
+6. **Moderator synthesizes** - combines responses into a coherent answer
+
+### The Moderator's Role
+
+The moderator is an AI that controls the conversation flow:
+
+- **Direct answers**: For simple questions, the moderator responds directly
+- **Delegation**: For complex questions, @mentions the appropriate agents
+- **Follow-up**: If agent responses are incomplete, keeps asking until satisfied
+- **Synthesis**: Combines multiple agent perspectives into a final answer
+
+The moderator won't return to you until your question is properly answered—it will keep going back to agents as many times as needed.
+
+### Example Conversation
+
+```
+You: "How does @Maestro relate to @RunMaestro.ai?"
+
+Moderator: "Let me gather information from both projects.
+            @Maestro @RunMaestro.ai - please explain your role in the ecosystem."
+
+[Agents work in parallel...]
+
+Maestro: "I'm the core Electron desktop app for AI orchestration..."
+
+RunMaestro.ai: "I'm the marketing website and leaderboard..."
+
+Moderator: "Here's how they relate:
+            - Maestro is the desktop app (the product)
+            - RunMaestro.ai is the website (discovery and community)
+            - They share theme definitions for visual consistency
+
+            Next steps: Would you like details on any specific integration?"
+```
+
+### Tips for Effective Group Chats
+
+- **Name agents descriptively** - Agent names appear in the chat, so "Frontend-React" is clearer than "Agent1"
+- **Be specific in questions** - The more context you provide, the better the moderator can route
+- **@mention explicitly** - You can direct questions to specific agents: "What does @Backend think?"
+- **Let the moderator work** - It may take multiple rounds for complex questions
 
 ## Achievements
 

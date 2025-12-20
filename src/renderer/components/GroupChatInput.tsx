@@ -43,6 +43,8 @@ interface GroupChatInputProps {
   inputRef?: React.RefObject<HTMLTextAreaElement>;
   // Image paste handler from App
   handlePaste?: (e: React.ClipboardEvent) => void;
+  // Image drop handler from App
+  handleDrop?: (e: React.DragEvent) => void;
   // Image lightbox handler
   onOpenLightbox?: (image: string, contextImages?: string[], source?: 'staged' | 'history') => void;
   // Execution queue props
@@ -72,6 +74,7 @@ export function GroupChatInput({
   setReadOnlyMode: setReadOnlyModeProp,
   inputRef: inputRefProp,
   handlePaste,
+  handleDrop,
   onOpenLightbox,
   executionQueue,
   onRemoveQueuedItem,
@@ -408,6 +411,11 @@ export function GroupChatInput({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onDrop={(e) => {
+              e.stopPropagation();
+              handleDrop?.(e);
+            }}
+            onDragOver={(e) => e.preventDefault()}
             placeholder={isBusy ? 'Type to queue message...' : 'Type a message... (@ to mention agent)'}
             rows={2}
             className="flex-1 bg-transparent text-sm outline-none pl-3 pt-3 pr-3 resize-none min-h-[2.5rem] scrollbar-thin"

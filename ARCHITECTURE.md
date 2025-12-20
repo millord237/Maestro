@@ -19,6 +19,7 @@ Deep technical documentation for Maestro's architecture and design patterns. For
 - [AI Tab System](#ai-tab-system)
 - [Execution Queue](#execution-queue)
 - [Navigation History](#navigation-history)
+- [Group Chat System](#group-chat-system)
 - [Web/Mobile Interface](#webmobile-interface)
 - [CLI Tool](#cli-tool)
 - [Shared Module](#shared-module)
@@ -1069,6 +1070,243 @@ interface NavigationEntry {
 |----------|--------|
 | `Cmd+Shift+,` | Navigate back |
 | `Cmd+Shift+.` | Navigate forward |
+
+---
+
+## Group Chat System
+
+Multi-agent coordination system where a moderator AI orchestrates conversations between multiple Maestro agents, synthesizing their responses into cohesive answers.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GROUP CHAT FLOW                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   User sends message                                                     │
+│          │                                                               │
+│          ▼                                                               │
+│   ┌─────────────┐                                                        │
+│   │  MODERATOR  │ ◄─── Receives user message + chat history              │
+│   └──────┬──────┘                                                        │
+│          │                                                               │
+│          ▼                                                               │
+│   Has @mentions? ───No───► Return directly to user                       │
+│          │                                                               │
+│         Yes                                                              │
+│          │                                                               │
+│          ▼                                                               │
+│   ┌──────────────────────────────────────┐                               │
+│   │      Route to mentioned agents       │                               │
+│   │  @AgentA  @AgentB  @AgentC  ...      │                               │
+│   └──────────────────────────────────────┘                               │
+│          │         │         │                                           │
+│          ▼         ▼         ▼                                           │
+│   ┌─────────┐ ┌─────────┐ ┌─────────┐                                    │
+│   │ Agent A │ │ Agent B │ │ Agent C │  (work in parallel)                │
+│   └────┬────┘ └────┬────┘ └────┬────┘                                    │
+│        │           │           │                                         │
+│        └───────────┴───────────┘                                         │
+│                    │                                                     │
+│                    ▼                                                     │
+│          All agents responded                                            │
+│                    │                                                     │
+│                    ▼                                                     │
+│   ┌─────────────────────────────┐                                        │
+│   │  MODERATOR reviews results  │ ◄─── Synthesis round                   │
+│   └──────────────┬──────────────┘                                        │
+│                  │                                                       │
+│                  ▼                                                       │
+│   Need more info? ───Yes───► @mention agents again (loop back)           │
+│                  │                                                       │
+│                 No                                                       │
+│                  │                                                       │
+│                  ▼                                                       │
+│   ┌─────────────────────────────┐                                        │
+│   │  Final synthesis to user   │ ◄─── No @mentions = conversation ends  │
+│   └─────────────────────────────┘                                        │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Principle: Moderator Controls the Flow
+
+The moderator is the traffic controller. After agents respond, the **moderator decides** what happens next:
+
+1. **Continue with agents** - If responses are incomplete or unclear, @mention agents for follow-up
+2. **Return to user** - If the question is fully answered, provide a synthesis WITHOUT any @mentions
+
+This allows the moderator to go back and forth with agents as many times as needed until the user's question is properly answered.
+
+### Component Architecture
+
+```
+src/main/group-chat/
+├── group-chat-storage.ts      # Persistence (JSON files in app data)
+├── group-chat-log.ts          # Chat history logging
+├── group-chat-moderator.ts    # Moderator process management & prompts
+├── group-chat-router.ts       # Message routing logic
+└── group-chat-agent.ts        # Participant agent management
+```
+
+| Component | Purpose |
+|-----------|---------|
+| `group-chat-storage.ts` | CRUD operations for group chats, participants, history entries |
+| `group-chat-log.ts` | Append-only log of all messages (user, moderator, agents) |
+| `group-chat-moderator.ts` | Spawns moderator AI, defines system prompts |
+| `group-chat-router.ts` | Routes messages between user, moderator, and agents |
+| `group-chat-agent.ts` | Adds/removes participant agents |
+
+### Message Routing
+
+#### Session ID Patterns
+
+The router uses session ID patterns to identify message sources:
+
+| Pattern | Source |
+|---------|--------|
+| `group-chat-{chatId}-moderator-{timestamp}` | Moderator process |
+| `group-chat-{chatId}-participant-{name}-{timestamp}` | Agent participant |
+
+#### Routing Functions
+
+```typescript
+// User → Moderator
+routeUserMessage(groupChatId, message, processManager, agentDetector, readOnly)
+
+// Moderator → Agents (extracts @mentions, spawns agent processes)
+routeModeratorResponse(groupChatId, message, processManager, agentDetector, readOnly)
+
+// Agent → Back to moderator (triggers synthesis when all agents respond)
+routeAgentResponse(groupChatId, participantName, message, processManager)
+
+// Synthesis round (after all agents respond)
+spawnModeratorSynthesis(groupChatId, processManager, agentDetector)
+```
+
+### The Synthesis Flow
+
+When all agents finish responding:
+
+1. `markParticipantResponded()` tracks pending responses
+2. When last agent responds, `spawnModeratorSynthesis()` is called
+3. Moderator receives all agent responses in chat history
+4. Moderator either:
+   - **@mentions agents** → Routes back to agents (loop continues)
+   - **No @mentions** → Final response to user (loop ends)
+
+This is enforced by `routeModeratorResponse()` which checks for @mentions:
+
+```typescript
+// Extract mentions and route to agents
+const mentions = extractMentions(message, participants);
+if (mentions.length > 0) {
+  // Spawn agent processes, track pending responses
+  for (const participantName of mentions) {
+    // ... spawn batch process for agent
+    participantsToRespond.add(participantName);
+  }
+  pendingParticipantResponses.set(groupChatId, participantsToRespond);
+}
+// If no mentions, message is logged but no agents are spawned
+// = conversation turn complete, ball is back with user
+```
+
+### Moderator Prompts
+
+Two key prompts control moderator behavior:
+
+**MODERATOR_SYSTEM_PROMPT** - Base instructions for all moderator interactions:
+- Assist user directly for simple questions
+- Coordinate agents via @mentions when needed
+- Control conversation flow
+- Return to user only when answer is complete
+
+**MODERATOR_SYNTHESIS_PROMPT** - Used when reviewing agent responses:
+- Synthesize if responses are complete (NO @mentions)
+- @mention agents if more info needed
+- Keep going until user's question is answered
+
+### Data Flow Example
+
+```
+User: "How does @Maestro and @RunMaestro.ai relate?"
+
+1. routeUserMessage()
+   - Logs message as "user"
+   - Auto-adds @Maestro and @RunMaestro.ai as participants
+   - Spawns moderator process with user message
+
+2. Moderator responds: "Let me ask the agents. @Maestro @RunMaestro.ai explain..."
+   routeModeratorResponse()
+   - Logs message as "moderator"
+   - Extracts mentions: ["Maestro", "RunMaestro.ai"]
+   - Spawns batch processes for each agent
+   - Sets pendingParticipantResponses = {"Maestro", "RunMaestro.ai"}
+
+3. Agent "Maestro" responds
+   routeAgentResponse()
+   - Logs message as "Maestro"
+   - markParticipantResponded() → pendingParticipantResponses = {"RunMaestro.ai"}
+   - Not last agent, so no synthesis yet
+
+4. Agent "RunMaestro.ai" responds
+   routeAgentResponse()
+   - Logs message as "RunMaestro.ai"
+   - markParticipantResponded() → pendingParticipantResponses = {} (empty)
+   - Last agent! Triggers spawnModeratorSynthesis()
+
+5. Moderator synthesis
+   - Receives all agent responses in chat history
+   - Decision point:
+     a) If needs more info: "@Maestro can you clarify..." → back to step 2
+     b) If satisfied: "Here's how they relate..." (no @mentions) → done
+
+6. Final response to user (no @mentions = turn complete)
+```
+
+### IPC Handlers
+
+```typescript
+// Group chat management
+'groupchat:create': (name, moderatorAgentId) => Promise<GroupChat>
+'groupchat:get': (id) => Promise<GroupChat | null>
+'groupchat:list': () => Promise<GroupChat[]>
+'groupchat:delete': (id) => Promise<void>
+
+// Participant management
+'groupchat:addParticipant': (chatId, name, agentId, cwd) => Promise<void>
+'groupchat:removeParticipant': (chatId, name) => Promise<void>
+
+// Messaging
+'groupchat:sendMessage': (chatId, message, readOnly?) => Promise<void>
+
+// State
+'groupchat:getMessages': (chatId, limit?) => Promise<GroupChatMessage[]>
+'groupchat:getHistory': (chatId) => Promise<GroupChatHistoryEntry[]>
+```
+
+### Events
+
+```typescript
+// Real-time updates to renderer
+groupChatEmitters.emitMessage(chatId, message)           // New message
+groupChatEmitters.emitStateChange(chatId, state)         // 'idle' | 'agent-working'
+groupChatEmitters.emitParticipantsChanged(chatId, list)  // Participant list updated
+groupChatEmitters.emitHistoryEntry(chatId, entry)        // New history entry
+groupChatEmitters.emitModeratorUsage(chatId, usage)      // Token usage stats
+```
+
+### Storage Structure
+
+```
+~/Library/Application Support/maestro/group-chats/
+├── {chatId}/
+│   ├── chat.json           # Group chat metadata
+│   ├── log.jsonl           # Append-only message log
+│   └── history.json        # Summarized history entries
+```
 
 ---
 

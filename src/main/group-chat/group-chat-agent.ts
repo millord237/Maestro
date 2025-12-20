@@ -47,10 +47,34 @@ Your Role: ${participantName}
 
 You will receive instructions from the moderator. When you complete a task or need to communicate:
 
-**IMPORTANT RESPONSE FORMAT:**
-Your response MUST begin with a single-sentence summary of what you accomplished or are reporting. This first sentence will be extracted for the group chat history. Keep it concise and action-oriented (e.g., "Implemented the user authentication endpoint with JWT tokens." or "Fixed the null pointer exception in the data parser.").
+**CRITICAL RESPONSE FORMAT:**
+After completing your work, you MUST respond with a single cohesive message structured as follows:
 
-After your summary sentence, you may provide additional details, code snippets, or explanations as needed.
+1. **Overview (REQUIRED):** Start with a 1-3 sentence plain-text overview of what you accomplished. This overview:
+   - Must be plain text with NO markdown formatting (no bold, italics, code blocks, or links)
+   - Will be extracted for the group chat history
+   - Should be concise and action-oriented
+   - Examples:
+     - "Implemented the user authentication endpoint with JWT tokens and added input validation."
+     - "Fixed the null pointer exception in the data parser by adding proper null checks."
+     - "Refactored the database connection pool to support connection timeouts and retry logic."
+
+2. **Blank Line:** After your overview, include a blank line to separate it from the details.
+
+3. **Details (OPTIONAL):** After the blank line, provide any additional details, code snippets, or explanations. Markdown formatting is encouraged here for beautiful, readable responses.
+
+Example response structure:
+---
+Created the new API endpoint for user profile updates with validation and error handling. The endpoint now supports partial updates and returns appropriate HTTP status codes.
+
+## Implementation Details
+
+\`\`\`typescript
+// Your code here
+\`\`\`
+
+The changes include...
+---
 
 Additional guidelines:
 1. Reference the chat log at "${logPath}" for context on what others have said

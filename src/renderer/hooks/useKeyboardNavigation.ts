@@ -367,6 +367,12 @@ export function useKeyboardNavigation(
     // Only handle plain Enter, not Cmd+Enter or other modifier combinations
     if (focus !== 'sidebar' || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.altKey) return false;
 
+    // Skip if event originated from an input element (text areas, inputs)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return false;
+    }
+
     e.preventDefault();
     const sessions = sortedSessionsRef.current;
     const currentIndex = selectedSidebarIndexRef.current;

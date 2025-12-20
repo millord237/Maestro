@@ -3,11 +3,13 @@
  * @description Unit tests for the Group Chat moderator management.
  *
  * Tests cover:
- * - Spawning moderator in read-only mode (3.1)
+ * - Spawning moderator session mapping (3.1)
  * - Sending introduction message (3.2)
  * - Sending messages to moderator and logging (3.3)
  * - Killing moderator session (3.4)
  * - Getting moderator session ID (3.5)
+ *
+ * Note: Read-only mode propagation is tested in group-chat-router.test.ts (5.6)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

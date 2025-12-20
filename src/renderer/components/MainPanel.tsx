@@ -78,7 +78,7 @@ interface MainPanelProps {
   setLogViewerOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
-  onResumeAgentSession: (agentSessionId: string, messages: import('../types').LogEntry[], sessionName?: string, starred?: boolean) => void;
+  onResumeAgentSession: (agentSessionId: string, messages: import('../types').LogEntry[], sessionName?: string, starred?: boolean, usageStats?: import('../types').UsageStats) => void;
   onNewAgentSession: () => void;
   setActiveFocus: (focus: FocusArea) => void;
   setOutputSearchOpen: (open: boolean) => void;

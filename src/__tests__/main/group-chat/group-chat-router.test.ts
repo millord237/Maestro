@@ -7,6 +7,7 @@
  * - Routing user messages (5.3)
  * - Routing moderator responses (5.4)
  * - Routing agent responses (5.5)
+ * - Read-only mode propagation (5.6)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -42,6 +43,7 @@ import {
   routeUserMessage,
   routeModeratorResponse,
   routeAgentResponse,
+  getGroupChatReadOnlyState,
 } from '../../../main/group-chat/group-chat-router';
 import {
   spawnModerator,
@@ -514,6 +516,124 @@ describe('group-chat-router', () => {
       const messages = await readLog(chat.logPath);
       const clientMessages = messages.filter(m => m.from === 'Client');
       expect(clientMessages).toHaveLength(2);
+    });
+  });
+
+  // ===========================================================================
+  // Test 5.6: Read-only mode propagation
+  // ===========================================================================
+  describe('read-only mode propagation', () => {
+    it('moderator spawns with readOnlyMode: true', async () => {
+      const chat = await createTestChatWithModerator('Moderator ReadOnly Test');
+
+      await routeUserMessage(chat.id, 'Hello', mockProcessManager, mockAgentDetector);
+
+      // Moderator should always be spawned with readOnlyMode: true
+      expect(mockProcessManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          readOnlyMode: true,
+        })
+      );
+    });
+
+    it('includes READ-ONLY MODE in prompt when readOnly flag is set', async () => {
+      const chat = await createTestChatWithModerator('ReadOnly Prompt Test');
+
+      await routeUserMessage(chat.id, 'Hello', mockProcessManager, mockAgentDetector, true);
+
+      // Prompt should include READ-ONLY MODE indicator
+      expect(mockProcessManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('READ-ONLY MODE'),
+        })
+      );
+    });
+
+    it('logs message with readOnly flag when set', async () => {
+      const chat = await createTestChatWithModerator('ReadOnly Log Test');
+
+      await routeUserMessage(chat.id, 'Read-only message', mockProcessManager, mockAgentDetector, true);
+
+      const messages = await readLog(chat.logPath);
+      const userMessage = messages.find(m => m.from === 'user');
+      expect(userMessage).toBeDefined();
+      expect(userMessage?.readOnly).toBe(true);
+    });
+
+    it('stores readOnly state for the group chat', async () => {
+      const chat = await createTestChatWithModerator('ReadOnly State Test');
+
+      // Initially should be false
+      expect(getGroupChatReadOnlyState(chat.id)).toBe(false);
+
+      // After sending read-only message, state should be true
+      await routeUserMessage(chat.id, 'Read-only message', mockProcessManager, mockAgentDetector, true);
+      expect(getGroupChatReadOnlyState(chat.id)).toBe(true);
+
+      // After sending non-read-only message, state should be false
+      await routeUserMessage(chat.id, 'Normal message', mockProcessManager, mockAgentDetector, false);
+      expect(getGroupChatReadOnlyState(chat.id)).toBe(false);
+    });
+
+    it('does not include READ-ONLY MODE in prompt when readOnly flag is not set', async () => {
+      const chat = await createTestChatWithModerator('No ReadOnly Prompt Test');
+
+      await routeUserMessage(chat.id, 'Normal message', mockProcessManager, mockAgentDetector, false);
+
+      // Prompt should NOT include READ-ONLY MODE indicator
+      const spawnCall = mockProcessManager.spawn.mock.calls.find(
+        call => call[0].prompt?.includes('Normal message')
+      );
+      expect(spawnCall).toBeDefined();
+      expect(spawnCall?.[0].prompt).not.toContain('READ-ONLY MODE');
+    });
+
+    it('participants spawn with readOnlyMode matching the readOnly flag', async () => {
+      const chat = await createTestChatWithModerator('Participant ReadOnly Test');
+      await addParticipant(chat.id, 'Client', 'claude-code', mockProcessManager);
+
+      // Clear spawn mock to only capture the participant batch spawn
+      mockProcessManager.spawn.mockClear();
+
+      // This should trigger participant batch process with readOnly propagated
+      await routeModeratorResponse(
+        chat.id,
+        '@Client: Please analyze this code',
+        mockProcessManager,
+        mockAgentDetector,
+        true // readOnly flag
+      );
+
+      // Participant should be spawned with readOnlyMode matching the flag
+      const participantSpawnCall = mockProcessManager.spawn.mock.calls.find(
+        call => call[0].sessionId?.includes('participant')
+      );
+      expect(participantSpawnCall).toBeDefined();
+      expect(participantSpawnCall?.[0].readOnlyMode).toBe(true);
+    });
+
+    it('participants spawn with readOnlyMode: false when readOnly is not set', async () => {
+      const chat = await createTestChatWithModerator('Participant No ReadOnly Test');
+      await addParticipant(chat.id, 'Client', 'claude-code', mockProcessManager);
+
+      // Clear spawn mock to only capture the participant batch spawn
+      mockProcessManager.spawn.mockClear();
+
+      // This should trigger participant batch process without readOnly
+      await routeModeratorResponse(
+        chat.id,
+        '@Client: Please implement this feature',
+        mockProcessManager,
+        mockAgentDetector
+        // no readOnly flag = false
+      );
+
+      // Participant should be spawned with readOnlyMode: false
+      const participantSpawnCall = mockProcessManager.spawn.mock.calls.find(
+        call => call[0].sessionId?.includes('participant')
+      );
+      expect(participantSpawnCall).toBeDefined();
+      expect(participantSpawnCall?.[0].readOnlyMode).toBe(false);
     });
   });
 
