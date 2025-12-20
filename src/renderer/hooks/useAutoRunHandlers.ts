@@ -8,7 +8,7 @@ export interface AutoRunTreeNode {
   name: string;
   type: 'file' | 'folder';
   path: string;
-  children?: unknown[];
+  children?: AutoRunTreeNode[];
 }
 
 /**
@@ -96,11 +96,18 @@ export function useAutoRunHandlers(
   const handleAutoRunFolderSelected = useCallback(async (folderPath: string) => {
     if (!activeSession) return;
 
-    // Load the document list from the folder
-    const result = await window.maestro.autorun.listDocs(folderPath);
-    if (result.success) {
+    let result: { success: boolean; files?: string[]; tree?: AutoRunTreeNode[] } | null = null;
+
+    try {
+      // Load the document list from the folder
+      result = await window.maestro.autorun.listDocs(folderPath);
+    } catch {
+      result = null;
+    }
+
+    if (result?.success) {
       setAutoRunDocumentList(result.files || []);
-      setAutoRunDocumentTree((result.tree as AutoRunTreeNode[]) || []);
+      setAutoRunDocumentTree(result.tree || []);
       // Auto-select first document if available
       const firstFile = result.files?.[0];
       // Load content of first document
@@ -124,9 +131,17 @@ export function useAutoRunHandlers(
           : s
       ));
     } else {
+      setAutoRunDocumentList([]);
+      setAutoRunDocumentTree([]);
       setSessions(prev => prev.map(s =>
         s.id === activeSession.id
-          ? { ...s, autoRunFolderPath: folderPath, autoRunContent: '', autoRunContentVersion: (s.autoRunContentVersion || 0) + 1 }
+          ? {
+              ...s,
+              autoRunFolderPath: folderPath,
+              autoRunSelectedFile: undefined,
+              autoRunContent: '',
+              autoRunContentVersion: (s.autoRunContentVersion || 0) + 1,
+            }
           : s
       ));
     }
@@ -139,7 +154,6 @@ export function useAutoRunHandlers(
 
   // Handler to start batch run from modal with multi-document support
   const handleStartBatchRun = useCallback((config: BatchRunConfig) => {
-    console.log('[useAutoRunHandlers] handleStartBatchRun called with config:', config);
     window.maestro.logger.log('info', 'handleStartBatchRun called', 'AutoRunHandlers', {
       hasActiveSession: !!activeSession,
       sessionId: activeSession?.id,
@@ -149,11 +163,9 @@ export function useAutoRunHandlers(
       worktreeBranch: config.worktree?.branchName
     });
     if (!activeSession || !activeSession.autoRunFolderPath) {
-      console.log('[useAutoRunHandlers] handleStartBatchRun early return - no active session or autoRunFolderPath');
       window.maestro.logger.log('warn', 'handleStartBatchRun early return - missing session or folder', 'AutoRunHandlers');
       return;
     }
-    console.log('[useAutoRunHandlers] Starting batch run for session:', activeSession.id, 'folder:', activeSession.autoRunFolderPath);
     window.maestro.logger.log('info', 'Starting batch run', 'AutoRunHandlers', { sessionId: activeSession.id, folderPath: activeSession.autoRunFolderPath });
     setBatchRunnerModalOpen(false);
     startBatchRun(activeSession.id, config, activeSession.autoRunFolderPath);
@@ -236,28 +248,30 @@ export function useAutoRunHandlers(
     if (!activeSession?.autoRunFolderPath) return;
     const previousCount = autoRunDocumentList.length;
     setAutoRunIsLoadingDocuments(true);
-    const result = await window.maestro.autorun.listDocs(activeSession.autoRunFolderPath);
-    if (result.success) {
-      const newFiles = result.files || [];
-      setAutoRunDocumentList(newFiles);
-      setAutoRunDocumentTree((result.tree as AutoRunTreeNode[]) || []);
-      setAutoRunIsLoadingDocuments(false);
+    try {
+      const result = await window.maestro.autorun.listDocs(activeSession.autoRunFolderPath);
+      if (result.success) {
+        const newFiles = result.files || [];
+        setAutoRunDocumentList(newFiles);
+        setAutoRunDocumentTree(result.tree || []);
 
-      // Show flash notification with result
-      const diff = newFiles.length - previousCount;
-      let message: string;
-      if (diff > 0) {
-        message = `Found ${diff} new document${diff === 1 ? '' : 's'}`;
-      } else if (diff < 0) {
-        message = `${Math.abs(diff)} document${Math.abs(diff) === 1 ? '' : 's'} removed`;
-      } else {
-        message = 'Refresh complete, no new documents';
+        // Show flash notification with result
+        const diff = newFiles.length - previousCount;
+        let message: string;
+        if (diff > 0) {
+          message = `Found ${diff} new document${diff === 1 ? '' : 's'}`;
+        } else if (diff < 0) {
+          message = `${Math.abs(diff)} document${Math.abs(diff) === 1 ? '' : 's'} removed`;
+        } else {
+          message = 'Refresh complete, no new documents';
+        }
+        setSuccessFlashNotification(message);
+        setTimeout(() => setSuccessFlashNotification(null), 2000);
+        return;
       }
-      setSuccessFlashNotification(message);
-      setTimeout(() => setSuccessFlashNotification(null), 2000);
-      return;
+    } finally {
+      setAutoRunIsLoadingDocuments(false);
     }
-    setAutoRunIsLoadingDocuments(false);
   }, [activeSession?.autoRunFolderPath, autoRunDocumentList.length, setAutoRunDocumentList, setAutoRunDocumentTree, setAutoRunIsLoadingDocuments, setSuccessFlashNotification]);
 
   // Auto Run open setup handler
@@ -282,6 +296,7 @@ export function useAutoRunHandlers(
         const listResult = await window.maestro.autorun.listDocs(activeSession.autoRunFolderPath);
         if (listResult.success) {
           setAutoRunDocumentList(listResult.files || []);
+          setAutoRunDocumentTree(listResult.tree || []);
         }
 
         // Select the new document, set content, and switch to edit mode (atomically)

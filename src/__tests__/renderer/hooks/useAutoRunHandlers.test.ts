@@ -637,7 +637,7 @@ describe('useAutoRunHandlers', () => {
       vi.mocked(window.maestro.autorun.listDocs).mockResolvedValue({
         success: true,
         files: ['Phase 1', 'New Doc'],
-        tree: [],
+        tree: [{ name: 'Phase 1', type: 'file', path: 'Phase 1.md' }],
       });
 
       const { result } = renderHook(() =>
@@ -650,6 +650,9 @@ describe('useAutoRunHandlers', () => {
 
       expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/test/autorun');
       expect(mockDeps.setAutoRunDocumentList).toHaveBeenCalledWith(['Phase 1', 'New Doc']);
+      expect(mockDeps.setAutoRunDocumentTree).toHaveBeenCalledWith([
+        { name: 'Phase 1', type: 'file', path: 'Phase 1.md' }
+      ]);
     });
 
     it('should select the new document and switch to edit mode', async () => {
@@ -1074,9 +1077,12 @@ describe('useAutoRunHandlers', () => {
         await result.current.handleAutoRunFolderSelected('/bad/folder');
       });
 
+      expect(mockDeps.setAutoRunDocumentList).toHaveBeenCalledWith([]);
+      expect(mockDeps.setAutoRunDocumentTree).toHaveBeenCalledWith([]);
       const updateFn = mockDeps.setSessions.mock.calls[0][0];
       const updatedSessions = updateFn([mockSession]);
       expect(updatedSessions[0].autoRunFolderPath).toBe('/bad/folder');
+      expect(updatedSessions[0].autoRunSelectedFile).toBeUndefined();
       expect(updatedSessions[0].autoRunContent).toBe('');
     });
 
