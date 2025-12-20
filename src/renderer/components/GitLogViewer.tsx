@@ -16,8 +16,8 @@ interface GitLogEntry {
   date: string;
   refs: string[];
   subject: string;
-  additions: number;
-  deletions: number;
+  additions?: number;
+  deletions?: number;
 }
 
 interface GitLogViewerProps {

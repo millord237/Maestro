@@ -156,6 +156,7 @@ export function PlaygroundPanel({ theme, themeMode, onClose }: PlaygroundPanelPr
     totalRuns: mockTotalRuns,
     currentBadgeLevel: getBadgeForTime(mockCumulativeTime)?.level || 0,
     lastBadgeUnlockLevel: mockBadgeHistory.length > 0 ? mockBadgeHistory[mockBadgeHistory.length - 1].level : 0,
+    lastAcknowledgedBadgeLevel: mockBadgeHistory.length > 0 ? mockBadgeHistory[mockBadgeHistory.length - 1].level : 0,
     badgeHistory: mockBadgeHistory,
   };
 

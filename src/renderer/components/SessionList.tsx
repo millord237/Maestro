@@ -912,8 +912,8 @@ export function SessionList(props: SessionListProps) {
         width: leftSidebarOpen ? `${leftSidebarWidthState}px` : '64px',
         backgroundColor: theme.colors.bgSidebar,
         borderColor: theme.colors.border,
-        ringColor: theme.colors.accent
-      }}
+        '--tw-ring-color': theme.colors.accent
+      } as React.CSSProperties}
       onClick={() => setActiveFocus('sidebar')}
       onFocus={() => setActiveFocus('sidebar')}
       onKeyDown={(e) => {
@@ -1900,7 +1900,7 @@ export function SessionList(props: SessionListProps) {
               onClick={() => setActiveSessionId(session.id)}
               onContextMenu={(e) => handleContextMenu(e, session.id)}
               className={`group relative w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${activeSessionId === session.id ? 'ring-2' : 'hover:bg-white/10'}`}
-              style={{ ringColor: theme.colors.accent }}
+              style={{ '--tw-ring-color': theme.colors.accent } as React.CSSProperties}
             >
               <div className="relative">
                 <div

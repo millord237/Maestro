@@ -608,7 +608,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                   </span>
                 )}
                 {currentSessionBatchState?.worktreeActive && (
-                  <GitBranch className="w-4 h-4 ml-1" title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`} />
+                  <span title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`}>
+                    <GitBranch className="w-4 h-4 ml-1" />
+                  </span>
                 )}
               </button>
             )}

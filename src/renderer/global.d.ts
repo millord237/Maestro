@@ -477,10 +477,10 @@ interface MaestroAPI {
     toggle: () => Promise<void>;
   };
   logger: {
-    log: (level: string, message: string, context?: string, data?: unknown) => Promise<void>;
+    log: (level: 'debug' | 'info' | 'warn' | 'error' | 'toast' | 'autorun', message: string, context?: string, data?: unknown) => Promise<void>;
     getLogs: (filter?: { level?: string; context?: string; limit?: number }) => Promise<Array<{
       timestamp: number;
-      level: string;
+      level: 'debug' | 'info' | 'warn' | 'error' | 'toast' | 'autorun';
       message: string;
       context?: string;
       data?: unknown;
@@ -492,7 +492,7 @@ interface MaestroAPI {
     getMaxLogBuffer: () => Promise<number>;
     toast: (title: string, data?: unknown) => Promise<void>;
     autorun: (message: string, context?: string, data?: unknown) => Promise<void>;
-    onNewLog: (callback: (log: { timestamp: number; level: string; message: string; context?: string; data?: unknown }) => void) => () => void;
+    onNewLog: (callback: (log: { timestamp: number; level: 'debug' | 'info' | 'warn' | 'error' | 'toast' | 'autorun'; message: string; context?: string; data?: unknown }) => void) => () => void;
   };
   claude: {
     listSessions: (projectPath: string) => Promise<Array<{
@@ -703,39 +703,37 @@ interface MaestroAPI {
       updatedAt: number;
       documents: Array<{ filename: string; resetOnCompletion: boolean }>;
       loopEnabled: boolean;
+      maxLoops?: number | null;
       prompt: string;
       worktreeSettings?: {
-        enabled: boolean;
-        branchPrefix: string;
-        createPR: boolean;
-        baseBranch?: string;
-        keepWorktree: boolean;
+        branchNameTemplate: string;
+        createPROnCompletion: boolean;
+        prTargetBranch?: string;
       };
     }>; error?: string }>;
     create: (sessionId: string, playbook: {
       name: string;
       documents: Array<{ filename: string; resetOnCompletion: boolean }>;
       loopEnabled: boolean;
+      maxLoops?: number | null;
       prompt: string;
       worktreeSettings?: {
-        enabled: boolean;
-        branchPrefix: string;
-        createPR: boolean;
-        baseBranch?: string;
-        keepWorktree: boolean;
+        branchNameTemplate: string;
+        createPROnCompletion: boolean;
+        prTargetBranch?: string;
       };
     }) => Promise<{ success: boolean; playbook?: any; error?: string }>;
     update: (sessionId: string, playbookId: string, updates: Partial<{
       name: string;
       documents: Array<{ filename: string; resetOnCompletion: boolean }>;
       loopEnabled: boolean;
+      maxLoops?: number | null;
       prompt: string;
+      updatedAt: number;
       worktreeSettings?: {
-        enabled: boolean;
-        branchPrefix: string;
-        createPR: boolean;
-        baseBranch?: string;
-        keepWorktree: boolean;
+        branchNameTemplate: string;
+        createPROnCompletion: boolean;
+        prTargetBranch?: string;
       };
     }>) => Promise<{ success: boolean; playbook?: any; error?: string }>;
     delete: (sessionId: string, playbookId: string) => Promise<{ success: boolean; error?: string }>;

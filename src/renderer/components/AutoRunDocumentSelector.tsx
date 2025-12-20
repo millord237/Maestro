@@ -57,7 +57,7 @@ export function AutoRunDocumentSelector({
   const fullNewPath = selectedCreateFolder
     ? `${selectedCreateFolder}/${normalizedNewName}`.toLowerCase()
     : normalizedNewName;
-  const isDuplicate = fullNewPath && documents.some(
+  const isDuplicate = !!fullNewPath && documents.some(
     doc => doc.toLowerCase() === fullNewPath
   );
 

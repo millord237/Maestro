@@ -501,7 +501,9 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
                 {currentSessionBatchState.isStopping ? 'Stopping...' : 'Auto Run Active'}
               </span>
               {currentSessionBatchState.worktreeActive && (
-                <GitBranch className="w-4 h-4" style={{ color: theme.colors.warning }} title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`} />
+                <span title={`Worktree: ${currentSessionBatchState.worktreeBranch || 'active'}`}>
+                  <GitBranch className="w-4 h-4" style={{ color: theme.colors.warning }} />
+                </span>
               )}
             </div>
             {/* Elapsed time */}

@@ -636,8 +636,8 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 style={{
                   borderColor: theme.colors.border,
                   backgroundColor: t.colors.bgSidebar,
-                  ringColor: t.colors.accent
-                }}
+                  '--tw-ring-color': t.colors.accent
+                } as React.CSSProperties}
                 tabIndex={-1}
               >
                 <div className="flex justify-between items-center mb-2">
@@ -840,9 +840,9 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                           style={{
                             borderColor: theme.colors.border,
                             backgroundColor: props.defaultShell === shell.id ? theme.colors.accentDim : theme.colors.bgMain,
-                            ringColor: theme.colors.accent,
+                            '--tw-ring-color': theme.colors.accent,
                             color: theme.colors.textMain,
-                          }}
+                          } as React.CSSProperties}
                         >
                           <div className="flex items-center justify-between">
                             <div>
@@ -884,9 +884,9 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                           style={{
                             borderColor: theme.colors.border,
                             backgroundColor: theme.colors.accentDim,
-                            ringColor: theme.colors.accent,
+                            '--tw-ring-color': theme.colors.accent,
                             color: theme.colors.textMain,
-                          }}
+                          } as React.CSSProperties}
                         >
                           <div className="flex items-center justify-between">
                             <div>
@@ -1429,8 +1429,8 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                           borderColor: recordingId === sc.id ? theme.colors.accent : theme.colors.border,
                           backgroundColor: recordingId === sc.id ? theme.colors.accentDim : theme.colors.bgActivity,
                           color: recordingId === sc.id ? theme.colors.accent : theme.colors.textDim,
-                          ringColor: theme.colors.accent
-                        }}
+                          '--tw-ring-color': theme.colors.accent
+                        } as React.CSSProperties}
                       >
                         {recordingId === sc.id ? 'Press keys...' : formatShortcutKeys(sc.keys)}
                       </button>
