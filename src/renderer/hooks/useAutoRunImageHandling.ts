@@ -64,6 +64,19 @@ export interface UseAutoRunImageHandlingReturn {
   handleLightboxDelete: (relativePath: string) => Promise<void>;
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const removeImageMarkdownReference = (content: string, relativePath: string): string => {
+  const filename = relativePath.split('/').pop() || relativePath;
+  const encodedPath = relativePath.split('/').map(part => encodeURIComponent(part)).join('/');
+  const escapedFilename = escapeRegExp(filename);
+  const escapedEncodedPath = escapeRegExp(encodedPath);
+  const escapedRawPath = escapeRegExp(relativePath);
+  const encodedRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedEncodedPath}\\)\\n?`, 'g');
+  const rawRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedRawPath}\\)\\n?`, 'g');
+  return content.replace(encodedRegex, '').replace(rawRegex, '');
+};
+
 /**
  * Custom hook for managing image attachments in the Auto Run editor.
  *
@@ -130,24 +143,45 @@ export function useAutoRunImageHandling({
   // Load existing images for the current document from the Auto Run folder
   useEffect(() => {
     if (folderPath && selectedFile) {
-      window.maestro.autorun.listImages(folderPath, selectedFile).then((result: { success: boolean; images?: { filename: string; relativePath: string }[]; error?: string }) => {
-        if (result.success && result.images) {
-          // Store relative paths (e.g., "images/{docName}-{timestamp}.{ext}")
-          const relativePaths = result.images.map((img: { filename: string; relativePath: string }) => img.relativePath);
-          setAttachmentsList(relativePaths);
-          // Load previews for existing images
-          result.images.forEach((img: { filename: string; relativePath: string }) => {
-            const absolutePath = `${folderPath}/${img.relativePath}`;
-            window.maestro.fs.readFile(absolutePath).then(dataUrl => {
-              if (dataUrl.startsWith('data:')) {
-                setAttachmentPreviews(prev => new Map(prev).set(img.relativePath, dataUrl));
-              }
-            }).catch(() => {
-              // Image file might be missing, ignore
+      let isStale = false;
+
+      setAttachmentsList([]);
+      setAttachmentPreviews(new Map());
+
+      window.maestro.autorun
+        .listImages(folderPath, selectedFile)
+        .then((result: { success: boolean; images?: { filename: string; relativePath: string }[]; error?: string }) => {
+          if (isStale) return;
+          if (result.success && result.images) {
+            // Store relative paths (e.g., "images/{docName}-{timestamp}.{ext}")
+            const relativePaths = result.images.map((img: { filename: string; relativePath: string }) => img.relativePath);
+            setAttachmentsList(relativePaths);
+            // Load previews for existing images
+            result.images.forEach((img: { filename: string; relativePath: string }) => {
+              const absolutePath = `${folderPath}/${img.relativePath}`;
+              window.maestro.fs.readFile(absolutePath).then(dataUrl => {
+                if (isStale) return;
+                if (dataUrl.startsWith('data:')) {
+                  setAttachmentPreviews(prev => new Map(prev).set(img.relativePath, dataUrl));
+                }
+              }).catch(() => {
+                // Image file might be missing, ignore
+              });
             });
-          });
-        }
-      });
+          } else {
+            setAttachmentsList([]);
+            setAttachmentPreviews(new Map());
+          }
+        })
+        .catch(() => {
+          if (isStale) return;
+          setAttachmentsList([]);
+          setAttachmentPreviews(new Map());
+        });
+
+      return () => {
+        isStale = true;
+      };
     } else {
       // Clear attachments when no document is selected
       setAttachmentsList([]);
@@ -158,37 +192,29 @@ export function useAutoRunImageHandling({
   // Handle image paste
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     if (isLocked || !folderPath || !selectedFile) {
-      console.log('[AutoRun] Paste blocked:', { isLocked, folderPath, selectedFile });
       return;
     }
 
     const items = e.clipboardData?.items;
     if (!items) {
-      console.log('[AutoRun] No clipboard items');
       return;
     }
 
-    console.log('[AutoRun] Clipboard items:', items.length);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      console.log('[AutoRun] Item', i, ':', item.type);
       if (item.type.startsWith('image/')) {
         e.preventDefault();
 
         const file = item.getAsFile();
         if (!file) {
-          console.log('[AutoRun] Could not get file from item');
           continue;
         }
-
-        console.log('[AutoRun] Processing image:', file.name, file.type, file.size);
 
         // Read as base64
         const reader = new FileReader();
         reader.onload = async (event) => {
           const base64Data = event.target?.result as string;
           if (!base64Data) {
-            console.log('[AutoRun] No base64 data');
             return;
           }
 
@@ -196,11 +222,8 @@ export function useAutoRunImageHandling({
           const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, '');
           const extension = item.type.split('/')[1] || 'png';
 
-          console.log('[AutoRun] Saving image to:', folderPath, 'doc:', selectedFile, 'ext:', extension);
-
           // Save to Auto Run folder using the new API
           const result = await window.maestro.autorun.saveImage(folderPath, selectedFile, base64Content, extension);
-          console.log('[AutoRun] Save result:', result);
           if (result.success && result.relativePath) {
             // Update attachments list with the relative path
             const filename = result.relativePath.split('/').pop() || result.relativePath;
@@ -307,18 +330,9 @@ export function useAutoRunImageHandling({
     // Push undo state before modifying content
     pushUndoState();
 
-    // Extract just the filename for the alt text pattern
-    const filename = relativePath.split('/').pop() || relativePath;
     // Remove the markdown reference from content - update local and sync to parent immediately
     // The markdown content uses URL-encoded paths, so we need to match the encoded version
-    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const encodedPath = relativePath.split('/').map(part => encodeURIComponent(part)).join('/');
-    const escapedEncodedPath = escapeRegExp(encodedPath);
-    const escapedRawPath = escapeRegExp(relativePath);
-    const escapedFilename = escapeRegExp(filename);
-    const encodedRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedEncodedPath}\\)\\n?`, 'g');
-    const rawRegex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedRawPath}\\)\\n?`, 'g');
-    const newContent = localContent.replace(encodedRegex, '').replace(rawRegex, '');
+    const newContent = removeImageMarkdownReference(localContent, relativePath);
     setLocalContent(newContent);
     handleContentChange(newContent);
     lastUndoSnapshotRef.current = newContent;
@@ -366,15 +380,9 @@ export function useAutoRunImageHandling({
     // Push undo state before modifying content
     pushUndoState();
 
-    // Extract just the filename for the alt text pattern
-    const filename = relativePath.split('/').pop() || relativePath;
     // Remove the markdown reference from content - update local and sync to parent immediately
     // The markdown content uses URL-encoded paths, so we need to match the encoded version
-    const encodedPath = relativePath.split('/').map(part => encodeURIComponent(part)).join('/');
-    const escapedEncodedPath = encodedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedFilename = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`!\\[${escapedFilename}\\]\\(${escapedEncodedPath}\\)\\n?`, 'g');
-    const newContent = localContent.replace(regex, '');
+    const newContent = removeImageMarkdownReference(localContent, relativePath);
     setLocalContent(newContent);
     handleContentChange(newContent);
     lastUndoSnapshotRef.current = newContent;

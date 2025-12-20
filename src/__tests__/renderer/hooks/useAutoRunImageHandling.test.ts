@@ -1045,6 +1045,21 @@ describe('useAutoRunImageHandling', () => {
         expect(mockDeps.setLocalContent).toHaveBeenCalled();
       });
 
+      it('should remove markdown reference with raw path characters', async () => {
+        const mockDeps = createMockDeps({
+          localContent: '# Doc\n\n![file (1).png](images/file (1).png)\n',
+        });
+
+        const { result } = renderHook(() => useAutoRunImageHandling(mockDeps));
+
+        await act(async () => {
+          await result.current.handleLightboxDelete('images/file (1).png');
+        });
+
+        const newContent = (mockDeps.setLocalContent as any).mock.calls[0][0];
+        expect(newContent).not.toContain('file (1).png');
+      });
+
       it('should remove from attachmentsList', async () => {
         const mockDeps = createMockDeps();
 
