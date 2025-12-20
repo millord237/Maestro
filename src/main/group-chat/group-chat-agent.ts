@@ -19,6 +19,7 @@ import {
 import { appendToLog } from './group-chat-log';
 import { IProcessManager, isModeratorActive } from './group-chat-moderator';
 import type { AgentDetector } from '../agent-detector';
+import { buildAgentArgs } from '../utils/agent-args';
 
 /**
  * In-memory store for active participant sessions.
@@ -136,27 +137,33 @@ export async function addParticipant(
   // Resolve the agent configuration to get the executable command
   let command = agentId;
   let args: string[] = [];
+  let agentConfig: Awaited<ReturnType<AgentDetector['getAgent']>> | null = null;
 
   if (agentDetector) {
-    const agent = await agentDetector.getAgent(agentId);
-    console.log(`[GroupChat:Debug] Agent resolved: ${agent?.command || 'null'}, available: ${agent?.available ?? false}`);
-    if (!agent || !agent.available) {
+    agentConfig = await agentDetector.getAgent(agentId);
+    console.log(`[GroupChat:Debug] Agent resolved: ${agentConfig?.command || 'null'}, available: ${agentConfig?.available ?? false}`);
+    if (!agentConfig || !agentConfig.available) {
       console.log(`[GroupChat:Debug] ERROR: Agent not available!`);
       throw new Error(`Agent '${agentId}' is not available`);
     }
-    command = agent.path || agent.command;
-    args = [...agent.args];
+    command = agentConfig.path || agentConfig.command;
+    args = [...agentConfig.args];
   }
 
+  const prompt = getParticipantSystemPrompt(name, chat.name, chat.logPath);
+  const finalArgs = buildAgentArgs(agentConfig, {
+    baseArgs: args,
+    prompt,
+    cwd,
+    readOnlyMode: false,
+  });
+
   console.log(`[GroupChat:Debug] Command: ${command}`);
-  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(args)}`);
+  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
 
   // Generate session ID for this participant
   const sessionId = `group-chat-${groupChatId}-participant-${name}-${uuidv4()}`;
   console.log(`[GroupChat:Debug] Generated session ID: ${sessionId}`);
-
-  // Generate system prompt for the participant
-  const prompt = getParticipantSystemPrompt(name, chat.name, chat.logPath);
 
   // Spawn the participant agent
   console.log(`[GroupChat:Debug] Spawning participant agent...`);
@@ -165,7 +172,7 @@ export async function addParticipant(
     toolType: agentId,
     cwd,
     command,
-    args,
+    args: finalArgs,
     readOnlyMode: false, // Participants can make changes
     prompt,
     customEnvVars,

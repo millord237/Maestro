@@ -115,27 +115,39 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
   // Get agent capabilities for conditional feature rendering
   const { hasCapability } = useAgentCapabilities(session.toolType);
 
-  // Check if images are supported - depends on whether we're resuming an existing session
-  // If the active tab has an agentSessionId, we're resuming and need to check supportsImageInputOnResume
-  const activeTab = session.aiTabs?.find(tab => tab.id === session.activeTabId);
+  // PERF: Memoize activeTab lookup to avoid O(n) search on every render
+  const activeTab = useMemo(
+    () => session.aiTabs?.find(tab => tab.id === session.activeTabId),
+    [session.aiTabs, session.activeTabId]
+  );
+
+  // PERF: Memoize derived state to avoid recalculation on every render
   const isResumingSession = !!activeTab?.agentSessionId;
-  const canAttachImages = isResumingSession
-    ? hasCapability('supportsImageInputOnResume')
-    : hasCapability('supportsImageInput');
+  const canAttachImages = useMemo(() => {
+    // Check if images are supported - depends on whether we're resuming an existing session
+    // If the active tab has an agentSessionId, we're resuming and need to check supportsImageInputOnResume
+    return isResumingSession
+      ? hasCapability('supportsImageInputOnResume')
+      : hasCapability('supportsImageInput');
+  }, [isResumingSession, hasCapability]);
 
-  // Check if we're in read-only mode (manual toggle only - Claude will be in plan mode)
-  // NOTE: Auto Run no longer forces read-only mode. Instead:
-  // - Yellow border shows during Auto Run to indicate queuing will happen for write messages
-  // - User can freely toggle read-only mode during Auto Run
-  // - If read-only is ON: message sends immediately (parallel read-only operations allowed)
-  // - If read-only is OFF: message queues until Auto Run completes (prevents file conflicts)
-  const isReadOnlyMode = tabReadOnlyMode && session.inputMode === 'ai';
-
-  // Check if Auto Run is active - used for yellow border indication (queuing will happen for write messages)
-  const isAutoRunActive = isAutoModeActive && session.inputMode === 'ai';
-
-  // Show yellow border when: read-only mode is on OR Auto Run is active (both indicate special input handling)
-  const showQueueingBorder = isReadOnlyMode || isAutoRunActive;
+  // PERF: Memoize mode-related derived state
+  const { isReadOnlyMode, showQueueingBorder } = useMemo(() => {
+    // Check if we're in read-only mode (manual toggle only - Claude will be in plan mode)
+    // NOTE: Auto Run no longer forces read-only mode. Instead:
+    // - Yellow border shows during Auto Run to indicate queuing will happen for write messages
+    // - User can freely toggle read-only mode during Auto Run
+    // - If read-only is ON: message sends immediately (parallel read-only operations allowed)
+    // - If read-only is OFF: message queues until Auto Run completes (prevents file conflicts)
+    const readOnly = tabReadOnlyMode && session.inputMode === 'ai';
+    // Check if Auto Run is active - used for yellow border indication (queuing will happen for write messages)
+    const autoRunActive = isAutoModeActive && session.inputMode === 'ai';
+    // Show yellow border when: read-only mode is on OR Auto Run is active (both indicate special input handling)
+    return {
+      isReadOnlyMode: readOnly,
+      showQueueingBorder: readOnly || autoRunActive
+    };
+  }, [tabReadOnlyMode, isAutoModeActive, session.inputMode]);
 
   // Filter slash commands based on input and current mode
   const isTerminalMode = session.inputMode === 'terminal';

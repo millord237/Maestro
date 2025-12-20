@@ -22,6 +22,7 @@ import {
   addParticipant,
 } from './group-chat-agent';
 import { AgentDetector } from '../agent-detector';
+import { buildAgentArgs } from '../utils/agent-args';
 
 // Import emitters from IPC handlers (will be populated after handlers are registered)
 import { groupChatEmitters } from '../ipc/handlers/groupChat';
@@ -325,20 +326,6 @@ export async function routeUserMessage(
       const command = chat.moderatorConfig?.customPath || agent.path || agent.command;
       console.log(`[GroupChat:Debug] Command to execute: ${command}`);
 
-      // Get the base args from the agent configuration
-      const args = [...agent.args];
-      // Append custom args from moderator config if set
-      if (chat.moderatorConfig?.customArgs) {
-        // Parse custom args string into array (simple space-split, handles quoted strings)
-        const customArgsStr = chat.moderatorConfig.customArgs.trim();
-        if (customArgsStr) {
-          // Match quoted strings or non-space sequences
-          const customArgsArray = customArgsStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-          args.push(...customArgsArray.map(arg => arg.replace(/^["']|["']$/g, '')));
-        }
-      }
-      console.log(`[GroupChat:Debug] Args: ${JSON.stringify(args)}`);
-
       // Build participant context
       const participantContext = chat.participants.length > 0
         ? chat.participants.map(p => `- @${p.name} (${p.agentId} session)`).join('\n')
@@ -377,6 +364,26 @@ ${historyContext}
 ## User Request${readOnly ? ' (READ-ONLY MODE - do not make changes)' : ''}:
 ${message}`;
 
+      // Get the base args from the agent configuration
+      const args = [...agent.args];
+      // Append custom args from moderator config if set
+      if (chat.moderatorConfig?.customArgs) {
+        // Parse custom args string into array (simple space-split, handles quoted strings)
+        const customArgsStr = chat.moderatorConfig.customArgs.trim();
+        if (customArgsStr) {
+          // Match quoted strings or non-space sequences
+          const customArgsArray = customArgsStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+          args.push(...customArgsArray.map(arg => arg.replace(/^["']|["']$/g, '')));
+        }
+      }
+      const finalArgs = buildAgentArgs(agent, {
+        baseArgs: args,
+        prompt: fullPrompt,
+        cwd: process.env.HOME || '/tmp',
+        readOnlyMode: true,
+      });
+      console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
+
       console.log(`[GroupChat:Debug] Full prompt length: ${fullPrompt.length} chars`);
       console.log(`[GroupChat:Debug] ========== SPAWNING MODERATOR PROCESS ==========`);
       console.log(`[GroupChat:Debug] Session ID: ${sessionId}`);
@@ -396,7 +403,7 @@ ${message}`;
           toolType: chat.moderatorAgentId,
           cwd: process.env.HOME || '/tmp',
           command,
-          args,
+          args: finalArgs,
           readOnlyMode: true,
           prompt: fullPrompt,
           customEnvVars: chat.moderatorConfig?.customEnvVars,
@@ -615,12 +622,19 @@ Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active
         groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'working');
         console.log(`[GroupChat:Debug] Emitted participant state: working`);
 
+        const finalArgs = buildAgentArgs(agent, {
+          baseArgs: [...agent.args],
+          prompt: participantPrompt,
+          cwd,
+          readOnlyMode: readOnly ?? false,
+        });
+
         const spawnResult = processManager.spawn({
           sessionId,
           toolType: participant.agentId,
           cwd,
           command: agent.path || agent.command,
-          args: [...agent.args],
+          args: finalArgs,
           readOnlyMode: readOnly ?? false, // Propagate read-only mode from caller
           prompt: participantPrompt,
           customEnvVars,
@@ -823,8 +837,6 @@ export async function spawnModeratorSynthesis(
       args.push(...customArgsArray.map(arg => arg.replace(/^["']|["']$/g, '')));
     }
   }
-  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(args)}`);
-
   // Build the synthesis prompt with recent chat history
   const chatHistory = await readLog(chat.logPath);
   console.log(`[GroupChat:Debug] Chat history entries for synthesis: ${chatHistory.length}`);
@@ -853,6 +865,14 @@ Review the agent responses above. Either:
 1. Synthesize into a final answer for the user (NO @mentions) if the question is fully answered
 2. @mention specific agents for follow-up if you need more information`;
 
+  const finalArgs = buildAgentArgs(agent, {
+    baseArgs: args,
+    prompt: synthesisPrompt,
+    cwd: process.env.HOME || '/tmp',
+    readOnlyMode: true,
+  });
+  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
+
   console.log(`[GroupChat:Debug] Synthesis prompt length: ${synthesisPrompt.length} chars`);
 
   // Spawn the synthesis process
@@ -867,7 +887,7 @@ Review the agent responses above. Either:
       toolType: chat.moderatorAgentId,
       cwd: process.env.HOME || '/tmp',
       command,
-      args,
+      args: finalArgs,
       readOnlyMode: true,
       prompt: synthesisPrompt,
       customEnvVars: chat.moderatorConfig?.customEnvVars,

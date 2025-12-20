@@ -11,7 +11,7 @@
  * through integration testing and manual testing.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import { createZipPackage, PackageContents } from '../packager';
 import AdmZip from 'adm-zip';

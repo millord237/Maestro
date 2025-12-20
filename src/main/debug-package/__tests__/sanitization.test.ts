@@ -120,7 +120,7 @@ describe('Debug Package Sanitization', () => {
       });
 
       it('should handle Windows-style home directory', async () => {
-        const { sanitizePath } = await import('../collectors/settings');
+        const { sanitizePath: _sanitizePath } = await import('../collectors/settings');
 
         // Mock homedir to return Windows-style path
         const originalHomedir = os.homedir();

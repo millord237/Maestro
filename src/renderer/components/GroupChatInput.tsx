@@ -12,7 +12,7 @@
  * - Disabled state when moderator/agent is working
  */
 
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { ArrowUp, ImageIcon, Eye, Keyboard, PenLine } from 'lucide-react';
 import type { Theme, GroupChatParticipant, GroupChatState, Session, QueuedItem } from '../types';
 import { QueuedItemsList } from './QueuedItemsList';
@@ -58,7 +58,8 @@ interface GroupChatInputProps {
   showFlashNotification?: (message: string) => void;
 }
 
-export function GroupChatInput({
+// PERF: Wrap in React.memo to prevent unnecessary re-renders when parent state changes
+export const GroupChatInput = React.memo(function GroupChatInput({
   theme,
   state,
   onSend,
@@ -507,4 +508,4 @@ export function GroupChatInput({
       </div>
     </div>
   );
-}
+});

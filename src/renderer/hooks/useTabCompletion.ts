@@ -100,9 +100,15 @@ export function useTabCompletion(session: Session | null): UseTabCompletionRetur
     return session?.shellCommandHistory || [];
   }, [session?.shellCommandHistory]);
 
-  // Memoize getSuggestions to maintain stable function reference
+  // PERF: Memoize git-related data separately to avoid getSuggestions re-creation
+  const isGitRepo = session?.isGitRepo ?? false;
+  const gitBranches = useMemo(() => session?.gitBranches || [], [session?.gitBranches]);
+  const gitTags = useMemo(() => session?.gitTags || [], [session?.gitTags]);
+
+  // PERF: Only depend on memoized values, NOT the session object itself
+  // This prevents callback recreation on every session state change
   const getSuggestions = useCallback((input: string, filter: TabCompletionFilter = 'all'): TabCompletionSuggestion[] => {
-    if (!session || !input.trim()) return [];
+    if (!input.trim()) return [];
 
     const suggestions: TabCompletionSuggestion[] = [];
     const inputLower = input.toLowerCase();
@@ -136,9 +142,7 @@ export function useTabCompletion(session: Session | null): UseTabCompletionRetur
     }
 
     // 2. Check git branches and tags (always show in git repos, not just for "git" commands)
-    if (session.isGitRepo) {
-      const gitBranches = session.gitBranches || [];
-      const gitTags = session.gitTags || [];
+    if (isGitRepo) {
 
       // Add matching branches
       if (filter === 'all' || filter === 'branch') {
@@ -234,7 +238,7 @@ export function useTabCompletion(session: Session | null): UseTabCompletionRetur
 
     // Limit to reasonable number (more when showing all types)
     return suggestions.slice(0, 15);
-  }, [session, fileNames, shellHistory]);
+  }, [fileNames, shellHistory, isGitRepo, gitBranches, gitTags]);
 
   return { getSuggestions };
 }

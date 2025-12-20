@@ -3,6 +3,7 @@ import Store from 'electron-store';
 import { ProcessManager } from '../../process-manager';
 import { AgentDetector } from '../../agent-detector';
 import { logger } from '../../utils/logger';
+import { buildAgentArgs } from '../../utils/agent-args';
 import {
   withIpcErrorLogging,
   requireProcessManager,
@@ -107,65 +108,15 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         promptLength: config.prompt?.length,
         promptValue: config.prompt,
       });
-      let finalArgs = [...config.args];
-
-      // ========================================================================
-      // Build args from agent argument builders (for multi-agent support)
-      // ========================================================================
-      if (agent) {
-        // For batch mode agents: prepend batch mode prefix (e.g., 'run' for OpenCode, 'exec' for Codex)
-        // This must come BEFORE base args to form: opencode run --format json ...
-        if (agent.batchModePrefix && config.prompt) {
-          finalArgs = [...agent.batchModePrefix, ...finalArgs];
-        }
-
-        // Add batch mode args if the agent has them and we're in batch mode (have a prompt)
-        // These are args that are only valid when using the batch subcommand (e.g., --skip-git-repo-check for Codex exec)
-        if (agent.batchModeArgs && config.prompt) {
-          finalArgs = [...finalArgs, ...agent.batchModeArgs];
-        }
-
-        // Add JSON output args if the agent supports it
-        // For Claude: already in base args (--output-format stream-json)
-        // For OpenCode: added here (--format json)
-        if (agent.jsonOutputArgs && !finalArgs.some(arg => agent.jsonOutputArgs!.includes(arg))) {
-          finalArgs = [...finalArgs, ...agent.jsonOutputArgs];
-        }
-
-        // Add working directory args for agents that support it
-        // For Codex, this adds -C <dir> to set the working directory
-        // IMPORTANT: Must come BEFORE resume subcommand (Codex: -C is not valid after 'resume')
-        if (agent.workingDirArgs && config.cwd) {
-          const workingDirArgArray = agent.workingDirArgs(config.cwd);
-          finalArgs = [...finalArgs, ...workingDirArgArray];
-        }
-
-        // Add read-only mode args if readOnlyMode is true
-        // For Codex: --sandbox read-only (must come before resume subcommand)
-        if (config.readOnlyMode && agent.readOnlyArgs) {
-          finalArgs = [...finalArgs, ...agent.readOnlyArgs];
-        }
-
-        // Add model selection args if modelId is provided
-        if (config.modelId && agent.modelArgs) {
-          const modelArgArray = agent.modelArgs(config.modelId);
-          finalArgs = [...finalArgs, ...modelArgArray];
-        }
-
-        // Add YOLO mode args if yoloMode is true (bypasses all confirmations)
-        // Note: For Claude Code, YOLO mode is always enabled via base args
-        // For Codex, this adds --dangerously-bypass-approvals-and-sandbox
-        if (config.yoloMode && agent.yoloModeArgs) {
-          finalArgs = [...finalArgs, ...agent.yoloModeArgs];
-        }
-
-        // Add session resume args if agentSessionId is provided
-        // IMPORTANT: Must come AFTER global options like -C, --sandbox (for Codex subcommand structure)
-        if (config.agentSessionId && agent.resumeArgs) {
-          const resumeArgArray = agent.resumeArgs(config.agentSessionId);
-          finalArgs = [...finalArgs, ...resumeArgArray];
-        }
-      }
+      let finalArgs = buildAgentArgs(agent, {
+        baseArgs: config.args,
+        prompt: config.prompt,
+        cwd: config.cwd,
+        readOnlyMode: config.readOnlyMode,
+        modelId: config.modelId,
+        yoloMode: config.yoloMode,
+        agentSessionId: config.agentSessionId,
+      });
 
       // ========================================================================
       // Build additional args from agent configuration

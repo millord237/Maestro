@@ -2148,21 +2148,27 @@ export default function MaestroConsole() {
     addLogToTab(sessionId, logEntry);
   }, [addLogToTab]);
 
+  // PERF: Extract only the properties we need to avoid re-memoizing on every session change
+  // Note: activeSessionId already exists as state; we just need inputMode
+  const activeSessionInputMode = activeSession?.inputMode;
+
   // Tab completion suggestions (must be after inputValue is defined)
+  // PERF: Depend on specific session properties, not the entire activeSession object
   const tabCompletionSuggestions = useMemo(() => {
-    if (!tabCompletionOpen || !activeSession || activeSession.inputMode !== 'terminal') {
+    if (!tabCompletionOpen || !activeSessionId || activeSessionInputMode !== 'terminal') {
       return [];
     }
     return getTabCompletionSuggestions(inputValue, tabCompletionFilter);
-  }, [tabCompletionOpen, activeSession, inputValue, tabCompletionFilter, getTabCompletionSuggestions]);
+  }, [tabCompletionOpen, activeSessionId, activeSessionInputMode, inputValue, tabCompletionFilter, getTabCompletionSuggestions]);
 
   // @ mention suggestions for AI mode
+  // PERF: Depend on specific session properties, not the entire activeSession object
   const atMentionSuggestions = useMemo(() => {
-    if (!atMentionOpen || !activeSession || activeSession.inputMode !== 'ai') {
+    if (!atMentionOpen || !activeSessionId || activeSessionInputMode !== 'ai') {
       return [];
     }
     return getAtMentionSuggestions(atMentionFilter);
-  }, [atMentionOpen, activeSession, atMentionFilter, getAtMentionSuggestions]);
+  }, [atMentionOpen, activeSessionId, activeSessionInputMode, atMentionFilter, getAtMentionSuggestions]);
 
   // Sync file tree selection to match tab completion suggestion
   // This highlights the corresponding file/folder in the right panel when navigating tab completion

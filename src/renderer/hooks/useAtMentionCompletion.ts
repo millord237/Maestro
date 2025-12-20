@@ -44,8 +44,12 @@ export function useAtMentionCompletion(session: Session | null): UseAtMentionCom
     return files;
   }, [session?.fileTree]);
 
+  // PERF: Only depend on allFiles, NOT session - session dependency causes
+  // this callback to be recreated on every session state change, which
+  // invalidates memoized suggestions in App.tsx and causes cascading re-renders
   const getSuggestions = useCallback((filter: string): AtMentionSuggestion[] => {
-    if (!session) return [];
+    // Early return if no files available (allFiles is empty when session is null)
+    if (allFiles.length === 0) return [];
 
     const suggestions: AtMentionSuggestion[] = [];
 
@@ -82,7 +86,7 @@ export function useAtMentionCompletion(session: Session | null): UseAtMentionCom
 
     // Limit to reasonable number
     return suggestions.slice(0, 15);
-  }, [session, allFiles]);
+  }, [allFiles]);
 
   return { getSuggestions };
 }
