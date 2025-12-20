@@ -28,6 +28,9 @@ export interface AgentCapabilities {
   /** Agent can accept image inputs (screenshots, diagrams, etc.) */
   supportsImageInput: boolean;
 
+  /** Agent can accept image inputs when resuming an existing session */
+  supportsImageInputOnResume: boolean;
+
   /** Agent supports slash commands (e.g., /help, /compact) */
   supportsSlashCommands: boolean;
 
@@ -69,6 +72,7 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = {
   supportsJsonOutput: false,
   supportsSessionId: false,
   supportsImageInput: false,
+  supportsImageInputOnResume: false,
   supportsSlashCommands: false,
   supportsSessionStorage: false,
   supportsCostTracking: false,
@@ -103,6 +107,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,    // --output-format stream-json
     supportsSessionId: true,     // session_id in JSON output
     supportsImageInput: true,    // Supports image attachments
+    supportsImageInputOnResume: true, // Can send images via --input-format stream-json on resumed sessions
     supportsSlashCommands: true, // /help, /compact, etc.
     supportsSessionStorage: true, // ~/.claude/projects/
     supportsCostTracking: true,  // Cost info in usage stats
@@ -125,6 +130,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: false,
+    supportsImageInputOnResume: false,
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false,
@@ -150,6 +156,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,     // --json flag - Verified
     supportsSessionId: true,      // thread_id in thread.started event - Verified
     supportsImageInput: true,     // -i, --image flag - Documented
+    supportsImageInputOnResume: false, // Codex resume subcommand doesn't support -i flag - Verified
     supportsSlashCommands: false, // None - Verified
     supportsSessionStorage: true, // ~/.codex/sessions/YYYY/MM/DD/*.jsonl - Verified
     supportsCostTracking: false,  // Token counts only - Codex doesn't provide cost, pricing varies by model
@@ -174,6 +181,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: true,    // Gemini supports multimodal
+    supportsImageInputOnResume: false, // Not yet investigated
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false,
@@ -198,6 +206,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,
     supportsSessionId: false,
     supportsImageInput: false,
+    supportsImageInputOnResume: false,
     supportsSlashCommands: false,
     supportsSessionStorage: false,
     supportsCostTracking: false, // Local model - no cost
@@ -223,6 +232,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: false,   // Not yet investigated
     supportsSessionId: false,    // Not yet investigated
     supportsImageInput: true,    // Aider supports vision models
+    supportsImageInputOnResume: false, // Not yet investigated
     supportsSlashCommands: true, // Aider has /commands
     supportsSessionStorage: false, // Not yet investigated
     supportsCostTracking: true,  // Aider tracks costs
@@ -248,6 +258,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
     supportsJsonOutput: true,     // --format json - Verified
     supportsSessionId: true,      // sessionID in JSON output (camelCase) - Verified
     supportsImageInput: true,     // -f, --file flag documented - Documented
+    supportsImageInputOnResume: true, // -f flag works with --session flag - Documented
     supportsSlashCommands: false, // Not investigated
     supportsSessionStorage: true, // ~/.local/share/opencode/storage/ (JSON files) - Verified
     supportsCostTracking: true,   // part.cost in step_finish events - Verified

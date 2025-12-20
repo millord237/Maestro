@@ -27,6 +27,7 @@ interface AgentCapabilities {
   supportsJsonOutput: boolean;
   supportsSessionId: boolean;
   supportsImageInput: boolean;
+  supportsImageInputOnResume: boolean;
   supportsSlashCommands: boolean;
   supportsSessionStorage: boolean;
   supportsCostTracking: boolean;

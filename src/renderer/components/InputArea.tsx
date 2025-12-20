@@ -115,6 +115,14 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
   // Get agent capabilities for conditional feature rendering
   const { hasCapability } = useAgentCapabilities(session.toolType);
 
+  // Check if images are supported - depends on whether we're resuming an existing session
+  // If the active tab has an agentSessionId, we're resuming and need to check supportsImageInputOnResume
+  const activeTab = session.aiTabs?.find(tab => tab.id === session.activeTabId);
+  const isResumingSession = !!activeTab?.agentSessionId;
+  const canAttachImages = isResumingSession
+    ? hasCapability('supportsImageInputOnResume')
+    : hasCapability('supportsImageInput');
+
   // Check if we're in read-only mode (auto mode OR manual toggle - Claude will be in plan mode)
   const isAutoReadOnly = isAutoModeActive && session.inputMode === 'ai';
   const isReadOnlyMode = isAutoReadOnly || (tabReadOnlyMode && session.inputMode === 'ai');
@@ -638,7 +646,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                   <PenLine className="w-4 h-4"/>
                 </button>
               )}
-              {session.inputMode === 'ai' && hasCapability('supportsImageInput') && (
+              {session.inputMode === 'ai' && canAttachImages && (
                 <button
                   onClick={() => document.getElementById('image-file-input')?.click()}
                   className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"

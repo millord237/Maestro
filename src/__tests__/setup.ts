@@ -157,6 +157,7 @@ const mockMaestro = {
       supportsJsonOutput: true,
       supportsSessionId: true,
       supportsImageInput: true,
+      supportsImageInputOnResume: true,
       supportsSlashCommands: true,
       supportsSessionStorage: true,
       supportsCostTracking: true,

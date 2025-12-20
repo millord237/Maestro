@@ -223,10 +223,70 @@ export function LeaderboardRegistrationModal({
           setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
         }
       } else if (result.authTokenRequired) {
-        // Email is confirmed but we're missing the auth token - show manual entry
-        setSubmitState('error');
-        setShowManualTokenEntry(true);
-        setErrorMessage(AUTH_TOKEN_LOST_MESSAGE);
+        // Email is confirmed but auth token is missing/invalid - try to recover it automatically
+        let recovered = false;
+        if (clientToken) {
+          setSubmitState('submitting');
+          setErrorMessage('');
+          try {
+            const pollResult = await window.maestro.leaderboard.pollAuthStatus(clientToken);
+            if (pollResult.status === 'confirmed' && pollResult.authToken) {
+              // Token recovered! Save it and retry submission
+              const registration: LeaderboardRegistration = {
+                email: email.trim(),
+                displayName: displayName.trim(),
+                twitterHandle: twitterHandle.trim() || undefined,
+                githubUsername: githubUsername.trim() || undefined,
+                linkedinHandle: linkedinHandle.trim() || undefined,
+                registeredAt: existingRegistration?.registeredAt || Date.now(),
+                emailConfirmed: true,
+                lastSubmissionAt: Date.now(),
+                clientToken,
+                authToken: pollResult.authToken,
+              };
+              onSave(registration);
+
+              // Retry submission with recovered token
+              let longestRunDate: string | undefined;
+              if (autoRunStats.longestRunTimestamp > 0) {
+                longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
+              }
+
+              const retryResult = await window.maestro.leaderboard.submit({
+                email: email.trim(),
+                displayName: displayName.trim(),
+                githubUsername: githubUsername.trim() || undefined,
+                twitterHandle: twitterHandle.trim() || undefined,
+                linkedinHandle: linkedinHandle.trim() || undefined,
+                badgeLevel,
+                badgeName,
+                cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
+                totalRuns: autoRunStats.totalRuns,
+                longestRunMs: autoRunStats.longestRunMs || undefined,
+                longestRunDate,
+                theme: theme.id,
+                clientToken,
+                authToken: pollResult.authToken,
+              });
+
+              if (retryResult.success) {
+                setSubmitState('success');
+                setSuccessMessage('Auth token recovered and stats submitted successfully!');
+                recovered = true;
+              } else {
+                setErrorMessage(retryResult.error || 'Submission failed after token recovery');
+              }
+            }
+          } catch {
+            // Recovery failed - fall through to manual entry
+          }
+        }
+        // If recovery failed or wasn't possible, show manual entry
+        if (!recovered) {
+          setSubmitState('error');
+          setShowManualTokenEntry(true);
+          if (!errorMessage) setErrorMessage(AUTH_TOKEN_LOST_MESSAGE);
+        }
       } else {
         setSubmitState('error');
         setErrorMessage(result.error || result.message || 'Submission failed');
