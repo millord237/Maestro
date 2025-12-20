@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Package, Check, X, Loader2, FolderOpen, AlertCircle } from 'lucide-react';
+import { Package, Check, X, Loader2, FolderOpen, AlertCircle, Copy } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter } from './ui/Modal';
@@ -145,6 +145,19 @@ export function DebugPackageModal({ theme, isOpen, onClose }: DebugPackageModalP
     }
   }, [resultPath]);
 
+  // Copy file path to clipboard
+  const handleCopyPath = useCallback(() => {
+    if (resultPath) {
+      navigator.clipboard.writeText(resultPath).then(() => {
+        addToast({
+          type: 'success',
+          title: 'Copied',
+          message: 'File path copied to clipboard',
+        });
+      }).catch(console.error);
+    }
+  }, [resultPath, addToast]);
+
   if (!isOpen) return null;
 
   // Calculate included count
@@ -237,12 +250,23 @@ export function DebugPackageModal({ theme, isOpen, onClose }: DebugPackageModalP
             <p className="text-sm font-medium mb-2" style={{ color: theme.colors.textMain }}>
               Package created successfully!
             </p>
-            <p
-              className="text-xs break-all px-4"
-              style={{ color: theme.colors.textDim }}
-            >
-              {resultPath}
-            </p>
+            <div className="flex items-center justify-center gap-2 px-4">
+              <p
+                className="text-xs break-all"
+                style={{ color: theme.colors.textDim }}
+              >
+                {resultPath}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyPath}
+                className="p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0"
+                style={{ color: theme.colors.textDim }}
+                title="Copy file path to clipboard"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       ) : generationState === 'error' ? (
