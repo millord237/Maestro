@@ -6261,6 +6261,12 @@ export default function MaestroConsole() {
               groupChat={groupChats.find(c => c.id === activeGroupChatId)!}
               messages={groupChatMessages}
               state={groupChatState}
+              totalCost={(() => {
+                const chat = groupChats.find(c => c.id === activeGroupChatId);
+                const participantsCost = (chat?.participants || []).reduce((sum, p) => sum + (p.totalCost || 0), 0);
+                const modCost = moderatorUsage?.totalCost || 0;
+                return participantsCost + modCost;
+              })()}
               onSendMessage={handleSendGroupChatMessage}
               onClose={handleCloseGroupChat}
               onRename={() => setShowRenameGroupChatModal(activeGroupChatId)}
