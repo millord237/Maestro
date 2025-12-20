@@ -3,10 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QuickActionsModal } from '../../../renderer/components/QuickActionsModal';
 import type { Session, Group, Theme, Shortcut } from '../../../renderer/types';
 
-// Add missing window.maestro.devtools mock
+// Add missing window.maestro.devtools and debug mocks
 beforeAll(() => {
   (window.maestro as any).devtools = {
     toggle: vi.fn(),
+  };
+  (window.maestro as any).debug = {
+    createPackage: vi.fn().mockResolvedValue({ success: true, path: '/tmp/test.zip' }),
+    previewPackage: vi.fn().mockResolvedValue({ categories: [] }),
   };
 });
 
@@ -16,6 +20,12 @@ vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
     registerLayer: vi.fn(() => 'layer-123'),
     unregisterLayer: vi.fn(),
     updateLayerHandler: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../renderer/contexts/ToastContext', () => ({
+  useToast: () => ({
+    addToast: vi.fn(),
   }),
 }));
 
@@ -78,6 +88,7 @@ const mockShortcuts: Record<string, Shortcut> = {
   viewGitDiff: { id: 'viewGitDiff', keys: ['Cmd', 'D'], enabled: true },
   viewGitLog: { id: 'viewGitLog', keys: ['Cmd', 'G'], enabled: true },
   toggleMarkdownMode: { id: 'toggleMarkdownMode', keys: ['Cmd', 'M'], enabled: true },
+  createDebugPackage: { id: 'createDebugPackage', keys: ['Alt', 'Cmd', 'D'], enabled: true },
 };
 
 // Create mock session

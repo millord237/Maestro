@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import type { Session, Group, Theme, Shortcut } from '../types';
 import type { GroupChat } from '../../shared/group-chat-types';
 import { useLayerStack } from '../contexts/LayerStackContext';
+import { useToast } from '../contexts/ToastContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { gitService } from '../services/git';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
@@ -109,6 +110,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
+  const { addToast } = useToast();
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
   // Register layer on mount (handler will be updated by separate effect)
@@ -303,6 +305,22 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'website', label: 'Maestro Website', subtext: 'Open the Maestro website', action: () => { window.maestro.shell.openExternal('https://runmaestro.ai/'); setQuickActionOpen(false); } },
     { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/86crXbGb'); setQuickActionOpen(false); } },
     ...(setUpdateCheckModalOpen ? [{ id: 'updateCheck', label: 'Check for Updates', action: () => { setUpdateCheckModalOpen(true); setQuickActionOpen(false); } }] : []),
+    { id: 'createDebugPackage', label: 'Create Debug Package', shortcut: shortcuts.createDebugPackage, subtext: 'Generate a support bundle for bug reporting', action: async () => {
+      setQuickActionOpen(false);
+      addToast({ type: 'info', title: 'Debug Package', message: 'Creating debug package...' });
+      try {
+        const result = await window.maestro.debug.createPackage();
+        if (result.success && result.path) {
+          addToast({ type: 'success', title: 'Debug Package Created', message: `Saved to ${result.path}` });
+        } else if (result.error === 'Cancelled by user') {
+          // User cancelled, no need to show error
+        } else {
+          addToast({ type: 'error', title: 'Debug Package Failed', message: result.error || 'Unknown error' });
+        }
+      } catch (error) {
+        addToast({ type: 'error', title: 'Debug Package Failed', message: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    } },
     { id: 'goToFiles', label: 'Go to Files Tab', shortcut: shortcuts.goToFiles, action: () => { setRightPanelOpen(true); setActiveRightTab('files'); setQuickActionOpen(false); } },
     { id: 'goToHistory', label: 'Go to History Tab', shortcut: shortcuts.goToHistory, action: () => { setRightPanelOpen(true); setActiveRightTab('history'); setQuickActionOpen(false); } },
     { id: 'goToAutoRun', label: 'Go to Auto Run Tab', shortcut: shortcuts.goToAutoRun, action: () => { setRightPanelOpen(true); setActiveRightTab('autorun'); setQuickActionOpen(false); } },

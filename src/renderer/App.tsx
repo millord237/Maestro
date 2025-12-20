@@ -1457,10 +1457,14 @@ export default function MaestroConsole() {
         actualSessionId = sessionId;
       }
 
-      // Calculate context window usage percentage from CURRENT reported tokens
-      // Claude Code reports the actual context size in each response (inputTokens + cache tokens)
-      // This naturally reflects compaction - after /compact, the reported context is smaller
-      const currentContextTokens = usageStats.inputTokens + usageStats.cacheReadInputTokens + usageStats.cacheCreationInputTokens;
+      // Calculate context window usage percentage from CURRENT reported tokens.
+      // Claude Code reports actual context size as input + cache tokens.
+      // Codex/OpenCode cache tokens are subsets or not part of context size, so use input + output.
+      const sessionForUsage = sessionsRef.current.find(s => s.id === actualSessionId);
+      const isClaudeUsage = sessionForUsage?.toolType === 'claude-code' || sessionForUsage?.toolType === 'claude';
+      const currentContextTokens = isClaudeUsage
+        ? usageStats.inputTokens + usageStats.cacheReadInputTokens + usageStats.cacheCreationInputTokens
+        : usageStats.inputTokens + usageStats.outputTokens;
       const contextPercentage = usageStats.contextWindow > 0
         ? Math.min(Math.round((currentContextTokens / usageStats.contextWindow) * 100), 100)
         : 0;
@@ -3785,6 +3789,22 @@ export default function MaestroConsole() {
     }
   };
 
+  const handleCreateDebugPackage = async () => {
+    addToast({ type: 'info', title: 'Debug Package', message: 'Creating debug package...' });
+    try {
+      const result = await window.maestro.debug.createPackage();
+      if (result.success && result.path) {
+        addToast({ type: 'success', title: 'Debug Package Created', message: `Saved to ${result.path}` });
+      } else if (result.error === 'Cancelled by user') {
+        // User cancelled, no need to show error
+      } else {
+        addToast({ type: 'error', title: 'Debug Package Failed', message: result.error || 'Unknown error' });
+      }
+    } catch (error) {
+      addToast({ type: 'error', title: 'Debug Package Failed', message: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  };
+
 
   // startRenamingSession now accepts a unique key (e.g., 'bookmark-id', 'group-gid-id', 'ungrouped-id')
   // to support renaming the same session from different UI locations (bookmarks vs groups)
@@ -5166,7 +5186,7 @@ export default function MaestroConsole() {
     setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
     setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
     setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveAgentSessionId,
-    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
+    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, handleCreateDebugPackage, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
@@ -7088,4 +7108,3 @@ export default function MaestroConsole() {
     </GitStatusProvider>
   );
 }
-
