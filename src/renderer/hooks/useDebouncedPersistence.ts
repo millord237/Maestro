@@ -15,7 +15,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Session } from '../types';
 
-// Maximum persisted logs per AI tab (matches useSessionManager.ts)
+// Maximum persisted logs per AI tab (matches session persistence limit)
 const MAX_PERSISTED_LOGS_PER_TAB = 100;
 
 /**
@@ -27,7 +27,7 @@ const MAX_PERSISTED_LOGS_PER_TAB = 100;
  * This ensures sessions don't get stuck in busy state after app restart,
  * since underlying processes are gone after restart.
  *
- * This is a copy of the function from useSessionManager.ts to avoid circular imports.
+ * This is a local copy to avoid circular imports in session persistence logic.
  */
 const prepareSessionForPersistence = (session: Session): Session => {
   // If no aiTabs, return as-is (shouldn't happen after migration)
