@@ -575,9 +575,13 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
    * Called when a participant starts or finishes working.
    */
   groupChatEmitters.emitParticipantState = (groupChatId: string, participantName: string, state: ParticipantState): void => {
+    console.log(`[GroupChat:IPC] emitParticipantState: chatId=${groupChatId}, participant=${participantName}, state=${state}`);
     const mainWindow = getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('groupChat:participantState', groupChatId, participantName, state);
+      console.log(`[GroupChat:IPC] Sent 'groupChat:participantState' event`);
+    } else {
+      console.warn(`[GroupChat:IPC] WARNING: mainWindow not available, cannot send participant state`);
     }
   };
 

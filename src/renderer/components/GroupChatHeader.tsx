@@ -63,6 +63,9 @@ export function GroupChatHeader({
         >
           <Edit2 className="w-4 h-4" />
         </button>
+      </div>
+
+      <div className="flex items-center gap-2">
         <span
           className="text-xs px-2 py-0.5 rounded-full"
           style={{
@@ -89,9 +92,6 @@ export function GroupChatHeader({
             {totalCost.toFixed(2)}{costIncomplete && '*'}
           </span>
         )}
-      </div>
-
-      <div className="flex items-center gap-2">
         <button
           onClick={onShowInfo}
           className="p-2 rounded hover:opacity-80"

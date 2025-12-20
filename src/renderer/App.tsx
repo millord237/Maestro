@@ -1705,7 +1705,9 @@ export default function MaestroConsole() {
       }
     });
 
+    console.log(`[GroupChat:UI] Setting up onParticipantState listener, activeGroupChatId=${activeGroupChatId}`);
     const unsubParticipantState = window.maestro.groupChat.onParticipantState?.((id, participantName, state) => {
+      console.log(`[GroupChat:UI] Received participant state: chatId=${id}, participant=${participantName}, state=${state}, activeGroupChatId=${activeGroupChatId}`);
       // Track participant state for ALL group chats (for sidebar indicator)
       setAllGroupChatParticipantStates(prev => {
         const next = new Map(prev);
@@ -1713,15 +1715,20 @@ export default function MaestroConsole() {
         const updatedChatStates = new Map(chatStates);
         updatedChatStates.set(participantName, state);
         next.set(id, updatedChatStates);
+        console.log(`[GroupChat:UI] Updated allGroupChatParticipantStates for ${id}: ${JSON.stringify([...updatedChatStates.entries()])}`);
         return next;
       });
       // Also update the active group chat's participant states for immediate UI
       if (id === activeGroupChatId) {
+        console.log(`[GroupChat:UI] Updating participantStates for active chat: ${participantName}=${state}`);
         setParticipantStates(prev => {
           const next = new Map(prev);
           next.set(participantName, state);
+          console.log(`[GroupChat:UI] New participantStates: ${JSON.stringify([...next.entries()])}`);
           return next;
         });
+      } else {
+        console.log(`[GroupChat:UI] Skipping participantStates update - not active chat (${id} vs ${activeGroupChatId})`);
       }
     });
 
@@ -2970,10 +2977,9 @@ export default function MaestroConsole() {
       });
 
       // Restore participant states for this chat
-      setParticipantStates(prev => {
-        const savedParticipantStates = allGroupChatParticipantStates.get(id);
-        return savedParticipantStates ?? new Map();
-      });
+      const savedParticipantStates = allGroupChatParticipantStates.get(id);
+      console.log(`[GroupChat:UI] handleOpenGroupChat: restoring participantStates for ${id}: ${savedParticipantStates ? JSON.stringify([...savedParticipantStates.entries()]) : 'none'}`);
+      setParticipantStates(savedParticipantStates ?? new Map());
 
       // Load saved right tab preference for this group chat
       const savedTab = await window.maestro.settings.get(`groupChatRightTab:${id}`);
