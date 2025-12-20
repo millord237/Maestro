@@ -42,16 +42,17 @@ export function ParticipantCard({
 }: ParticipantCardProps): JSX.Element {
   const [copied, setCopied] = useState(false);
 
-  // Prefer agent's session ID (clean GUID) over internal process session ID
-  const displaySessionId = participant.agentSessionId || participant.sessionId;
+  // Use agent's session ID (clean GUID) when available, otherwise show pending
+  const agentSessionId = participant.agentSessionId;
+  const isPending = !agentSessionId;
 
   const copySessionId = useCallback(() => {
-    if (displaySessionId) {
-      navigator.clipboard.writeText(displaySessionId);
+    if (agentSessionId) {
+      navigator.clipboard.writeText(agentSessionId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [displaySessionId]);
+  }, [agentSessionId]);
 
   const getStatusColor = (): string => {
     switch (state) {
@@ -108,7 +109,18 @@ export function ParticipantCard({
           </span>
         </div>
         {/* Session ID pill - top right */}
-        {displaySessionId && (
+        {isPending ? (
+          <span
+            className="text-[10px] px-2 py-0.5 rounded-full shrink-0 italic"
+            style={{
+              backgroundColor: `${theme.colors.textDim}20`,
+              color: theme.colors.textDim,
+              border: `1px solid ${theme.colors.textDim}40`,
+            }}
+          >
+            pending
+          </span>
+        ) : (
           <button
             onClick={copySessionId}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer shrink-0"
@@ -117,10 +129,10 @@ export function ParticipantCard({
               color: theme.colors.accent,
               border: `1px solid ${theme.colors.accent}40`,
             }}
-            title={`Session: ${displaySessionId}\nClick to copy`}
+            title={`Session: ${agentSessionId}\nClick to copy`}
           >
             <span className="font-mono">
-              {displaySessionId.slice(0, 8)}
+              {agentSessionId.slice(0, 8)}
             </span>
             {copied ? (
               <Check className="w-2.5 h-2.5" />

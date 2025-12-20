@@ -1006,6 +1006,11 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('groupChat:historyEntry', handler);
       return () => ipcRenderer.removeListener('groupChat:historyEntry', handler);
     },
+    onParticipantState: (callback: (groupChatId: string, participantName: string, state: 'idle' | 'working') => void) => {
+      const handler = (_: any, groupChatId: string, participantName: string, state: 'idle' | 'working') => callback(groupChatId, participantName, state);
+      ipcRenderer.on('groupChat:participantState', handler);
+      return () => ipcRenderer.removeListener('groupChat:participantState', handler);
+    },
   },
 
   // Leaderboard API (runmaestro.ai integration)

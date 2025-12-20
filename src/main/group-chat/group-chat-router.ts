@@ -350,6 +350,9 @@ ${message}`;
 
       // Spawn the moderator process in batch mode
       try {
+        // Emit state change to show moderator is thinking
+        groupChatEmitters.emitStateChange?.(groupChatId, 'moderator-thinking');
+
         processManager.spawn({
           sessionId,
           toolType: chat.moderatorAgentId,
@@ -362,6 +365,7 @@ ${message}`;
         });
       } catch (error) {
         console.error(`[GroupChatRouter] Failed to spawn moderator for ${groupChatId}:`, error);
+        groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
         throw new Error(`Failed to spawn moderator: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
@@ -531,6 +535,9 @@ Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active
       const customEnvVars = getCustomEnvVarsCallback?.(participant.agentId);
 
       try {
+        // Emit participant state change to show this participant is working
+        groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'working');
+
         processManager.spawn({
           sessionId,
           toolType: participant.agentId,
@@ -731,6 +738,9 @@ Review the agent responses above. Either:
   // Spawn the synthesis process
   try {
     console.log(`[GroupChatRouter] Spawning moderator synthesis for ${groupChatId}`);
+    // Emit state change to show moderator is thinking (synthesizing)
+    groupChatEmitters.emitStateChange?.(groupChatId, 'moderator-thinking');
+
     processManager.spawn({
       sessionId,
       toolType: chat.moderatorAgentId,
@@ -743,5 +753,6 @@ Review the agent responses above. Either:
     });
   } catch (error) {
     console.error(`[GroupChatRouter] Failed to spawn moderator synthesis for ${groupChatId}:`, error);
+    groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
   }
 }

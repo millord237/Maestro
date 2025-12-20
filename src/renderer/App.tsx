@@ -224,6 +224,8 @@ export default function MaestroConsole() {
   const [groupChatRightTab, setGroupChatRightTab] = useState<GroupChatRightTab>('participants');
   const [groupChatParticipantColors, setGroupChatParticipantColors] = useState<Record<string, string>>({});
   const [moderatorUsage, setModeratorUsage] = useState<{ contextUsage: number; totalCost: number; tokenCount: number } | null>(null);
+  // Track per-participant working state (participantName -> 'idle' | 'working')
+  const [participantStates, setParticipantStates] = useState<Map<string, 'idle' | 'working'>>(new Map());
 
   // --- BATCHED SESSION UPDATES (reduces React re-renders during AI streaming) ---
   const batchedUpdater = useBatchedSessionUpdates(setSessions);
@@ -1587,11 +1589,22 @@ export default function MaestroConsole() {
       }
     });
 
+    const unsubParticipantState = window.maestro.groupChat.onParticipantState?.((id, participantName, state) => {
+      if (id === activeGroupChatId) {
+        setParticipantStates(prev => {
+          const next = new Map(prev);
+          next.set(participantName, state);
+          return next;
+        });
+      }
+    });
+
     return () => {
       unsubMessage();
       unsubState();
       unsubParticipants();
       unsubModeratorUsage?.();
+      unsubParticipantState?.();
     };
   }, [activeGroupChatId]);
 
@@ -2733,6 +2746,7 @@ export default function MaestroConsole() {
     setActiveGroupChatId(null);
     setGroupChatMessages([]);
     setGroupChatState('idle');
+    setParticipantStates(new Map());
   }, []);
 
   // Handle right panel tab change with persistence
@@ -2786,6 +2800,7 @@ export default function MaestroConsole() {
       setActiveGroupChatId(null);
       setGroupChatMessages([]);
       setGroupChatState('idle');
+      setParticipantStates(new Map());
 
       // Set the session as active
       setActiveSessionId(session.id);
@@ -5869,11 +5884,7 @@ export default function MaestroConsole() {
             theme={theme}
             groupChatId={activeGroupChatId}
             participants={groupChats.find(c => c.id === activeGroupChatId)?.participants || []}
-            participantStates={new Map(
-              sessions
-                .filter(s => groupChats.find(c => c.id === activeGroupChatId)?.participants.some(p => p.sessionId === s.id))
-                .map(s => [s.id, s.state])
-            )}
+            participantStates={participantStates}
             participantSessionPaths={new Map(
               sessions
                 .filter(s => groupChats.find(c => c.id === activeGroupChatId)?.participants.some(p => p.sessionId === s.id))

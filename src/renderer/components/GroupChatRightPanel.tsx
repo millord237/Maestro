@@ -26,7 +26,8 @@ interface GroupChatRightPanelProps {
   theme: Theme;
   groupChatId: string;
   participants: GroupChatParticipant[];
-  participantStates: Map<string, SessionState>;
+  /** Map of participant name to their working state */
+  participantStates: Map<string, 'idle' | 'working'>;
   /** Map of participant sessionId to their project root path (for color preferences) */
   participantSessionPaths?: Map<string, string>;
   isOpen: boolean;
@@ -303,15 +304,20 @@ export function GroupChatRightPanel({
               Ask the moderator to add agents.
             </div>
           ) : (
-            sortedParticipants.map((participant) => (
-              <ParticipantCard
-                key={participant.sessionId}
-                theme={theme}
-                participant={participant}
-                state={participantStates.get(participant.sessionId) || 'idle'}
-                color={participantColors[participant.name]}
-              />
-            ))
+            sortedParticipants.map((participant) => {
+              // Convert 'working' state to 'busy' for SessionState compatibility
+              const workState = participantStates.get(participant.name);
+              const sessionState = workState === 'working' ? 'busy' : 'idle';
+              return (
+                <ParticipantCard
+                  key={participant.sessionId}
+                  theme={theme}
+                  participant={participant}
+                  state={sessionState}
+                  color={participantColors[participant.name]}
+                />
+              );
+            })
           )}
         </div>
       ) : (

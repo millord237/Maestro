@@ -2017,6 +2017,10 @@ function setupProcessListeners() {
       if (participantExitInfo) {
         const { groupChatId, participantName } = participantExitInfo;
         logger.debug(`[GroupChat] Participant exit: ${participantName} (groupChatId=${groupChatId})`, 'ProcessListener', { sessionId });
+
+        // Emit participant state change to show this participant is done working
+        groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'idle');
+
         // Route the buffered output now that process is complete
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         if (bufferedOutput) {

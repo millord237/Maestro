@@ -79,6 +79,11 @@ export interface ModeratorUsage {
 }
 
 /**
+ * Participant state for tracking individual agent working status.
+ */
+export type ParticipantState = 'idle' | 'working';
+
+/**
  * Module-level object to store emitter functions after initialization.
  * These can be used by other modules to emit messages and state changes.
  */
@@ -88,6 +93,7 @@ export const groupChatEmitters: {
   emitParticipantsChanged?: (groupChatId: string, participants: GroupChatParticipant[]) => void;
   emitModeratorUsage?: (groupChatId: string, usage: ModeratorUsage) => void;
   emitHistoryEntry?: (groupChatId: string, entry: GroupChatHistoryEntry) => void;
+  emitParticipantState?: (groupChatId: string, participantName: string, state: ParticipantState) => void;
 } = {};
 
 // Helper to create handler options with consistent context
@@ -476,6 +482,17 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
     const mainWindow = getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('groupChat:historyEntry', groupChatId, entry);
+    }
+  };
+
+  /**
+   * Emit a participant state change event to the renderer.
+   * Called when a participant starts or finishes working.
+   */
+  groupChatEmitters.emitParticipantState = (groupChatId: string, participantName: string, state: ParticipantState): void => {
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('groupChat:participantState', groupChatId, participantName, state);
     }
   };
 

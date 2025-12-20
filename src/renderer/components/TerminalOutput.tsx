@@ -50,7 +50,7 @@ interface LogItemProps {
   onSetDeleteConfirmLogId: (logId: string | null) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement>;
   // Other callbacks
-  setLightboxImage: (image: string | null, contextImages?: string[]) => void;
+  setLightboxImage: (image: string | null, contextImages?: string[], source?: 'staged' | 'history') => void;
   copyToClipboard: (text: string) => void;
   speakText?: (text: string, logId: string) => void;
   stopSpeaking?: () => void;
@@ -369,7 +369,7 @@ const LogItemComponent = memo(({
                 src={img}
                 className="h-20 rounded border cursor-zoom-in shrink-0"
                 style={{ objectFit: 'contain', maxWidth: '200px' }}
-                onClick={() => setLightboxImage(img, log.images)}
+                onClick={() => setLightboxImage(img, log.images, 'history')}
               />
             ))}
           </div>
@@ -784,7 +784,7 @@ interface TerminalOutputProps {
   setOutputSearchOpen: (open: boolean) => void;
   setOutputSearchQuery: (query: string) => void;
   setActiveFocus: (focus: string) => void;
-  setLightboxImage: (image: string | null, contextImages?: string[]) => void;
+  setLightboxImage: (image: string | null, contextImages?: string[], source?: 'staged' | 'history') => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   logsEndRef: React.RefObject<HTMLDivElement>;
   maxOutputLines: number;

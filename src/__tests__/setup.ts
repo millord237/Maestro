@@ -1,5 +1,40 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import React from 'react';
+
+// Create a mock icon component factory
+const createMockIcon = (name: string) => {
+  const MockIcon = function({ className, style }: { className?: string; style?: React.CSSProperties }) {
+    return React.createElement('svg', {
+      'data-testid': `${name.toLowerCase().replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, '')}-icon`,
+      className,
+      style,
+    });
+  };
+  MockIcon.displayName = name;
+  return MockIcon;
+};
+
+// Global mock for lucide-react using Proxy to auto-generate mock icons
+// This ensures any icon import works without explicitly listing every icon
+vi.mock('lucide-react', () => {
+  const iconCache = new Map<string, ReturnType<typeof createMockIcon>>();
+
+  return new Proxy({}, {
+    get(_target, prop: string) {
+      // Ignore internal properties
+      if (prop === '__esModule' || prop === 'default' || typeof prop === 'symbol') {
+        return undefined;
+      }
+
+      // Return cached icon or create new one
+      if (!iconCache.has(prop)) {
+        iconCache.set(prop, createMockIcon(prop));
+      }
+      return iconCache.get(prop);
+    },
+  });
+});
 
 // Mock window.matchMedia for components that use media queries
 Object.defineProperty(window, 'matchMedia', {
