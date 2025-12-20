@@ -171,8 +171,9 @@ export function AutoRunExpandedModal({
       autoRunRef.current.switchMode(newMode);
     } else {
       setLocalMode(newMode);
+      onModeChange(newMode);
     }
-  }, []);
+  }, [onModeChange]);
 
   return createPortal(
     <div

@@ -19,7 +19,7 @@ import {
 import { appendToLog } from './group-chat-log';
 import { IProcessManager, isModeratorActive } from './group-chat-moderator';
 import type { AgentDetector } from '../agent-detector';
-import { buildAgentArgs } from '../utils/agent-args';
+import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../utils/agent-args';
 
 /**
  * In-memory store for active participant sessions.
@@ -94,6 +94,7 @@ Your responses will be shared with the moderator and other participants.`;
  * @param processManager - The process manager to use for spawning
  * @param cwd - Working directory for the agent (defaults to home directory)
  * @param agentDetector - Optional agent detector for resolving agent paths
+ * @param agentConfigValues - Optional agent config values (from config store)
  * @param customEnvVars - Optional custom environment variables for the agent
  * @returns The created participant
  */
@@ -104,6 +105,7 @@ export async function addParticipant(
   processManager: IProcessManager,
   cwd: string = process.env.HOME || '/tmp',
   agentDetector?: AgentDetector,
+  agentConfigValues?: Record<string, any>,
   customEnvVars?: Record<string, string>
 ): Promise<GroupChatParticipant> {
   console.log(`[GroupChat:Debug] ========== ADD PARTICIPANT ==========`);
@@ -151,15 +153,19 @@ export async function addParticipant(
   }
 
   const prompt = getParticipantSystemPrompt(name, chat.name, chat.logPath);
-  const finalArgs = buildAgentArgs(agentConfig, {
+  const baseArgs = buildAgentArgs(agentConfig, {
     baseArgs: args,
     prompt,
     cwd,
     readOnlyMode: false,
   });
+  const configResolution = applyAgentConfigOverrides(agentConfig, baseArgs, {
+    agentConfigValues: agentConfigValues || {},
+    sessionCustomEnvVars: customEnvVars,
+  });
 
   console.log(`[GroupChat:Debug] Command: ${command}`);
-  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
+  console.log(`[GroupChat:Debug] Args: ${JSON.stringify(configResolution.args)}`);
 
   // Generate session ID for this participant
   const sessionId = `group-chat-${groupChatId}-participant-${name}-${uuidv4()}`;
@@ -172,10 +178,11 @@ export async function addParticipant(
     toolType: agentId,
     cwd,
     command,
-    args: finalArgs,
+    args: configResolution.args,
     readOnlyMode: false, // Participants can make changes
     prompt,
-    customEnvVars,
+    contextWindow: getContextWindowValue(agentConfig, agentConfigValues || {}),
+    customEnvVars: configResolution.effectiveCustomEnvVars ?? customEnvVars,
   });
 
   console.log(`[GroupChat:Debug] Spawn result: ${JSON.stringify(result)}`);

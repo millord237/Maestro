@@ -3,7 +3,7 @@ import Store from 'electron-store';
 import { ProcessManager } from '../../process-manager';
 import { AgentDetector } from '../../agent-detector';
 import { logger } from '../../utils/logger';
-import { buildAgentArgs } from '../../utils/agent-args';
+import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../../utils/agent-args';
 import {
   withIpcErrorLogging,
   requireProcessManager,
@@ -119,69 +119,30 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       });
 
       // ========================================================================
-      // Build additional args from agent configuration
-      // Session-level overrides take precedence over agent-level config
-      // ========================================================================
-      if (agent && agent.configOptions) {
-        const agentConfig = agentConfigsStore.get('configs', {})[config.toolType] || {};
-
-        for (const option of agent.configOptions) {
-          if (option.argBuilder) {
-            // For model, prefer session-level config over agent-level
-            let value: any;
-            if (option.key === 'model') {
-              // Session-level model takes precedence
-              value = config.sessionCustomModel ?? agentConfig[option.key] ?? option.default;
-              if (config.sessionCustomModel) {
-                logger.debug(`Using session-level model for ${config.toolType}`, LOG_CONTEXT, { model: config.sessionCustomModel });
-              }
-            } else {
-              // Get config value, fallback to default
-              value = agentConfig[option.key] !== undefined
-                ? agentConfig[option.key]
-                : option.default;
-            }
-
-            // Build args from this config value
-            const additionalArgs = option.argBuilder(value);
-            finalArgs = [...finalArgs, ...additionalArgs];
-          }
-        }
-      }
-
-      // ========================================================================
-      // Append custom CLI arguments from user configuration
+      // Apply agent config options and session overrides
       // Session-level overrides take precedence over agent-level config
       // ========================================================================
       const allConfigs = agentConfigsStore.get('configs', {});
-      // Use session-level custom args if provided, otherwise fall back to agent-level
-      const effectiveCustomArgs = config.sessionCustomArgs ?? allConfigs[config.toolType]?.customArgs;
-      if (effectiveCustomArgs && typeof effectiveCustomArgs === 'string') {
-        // Parse the custom args string - split on whitespace but respect quoted strings
-        const customArgsArray = effectiveCustomArgs.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-        // Remove surrounding quotes from quoted args
-        const cleanedArgs = customArgsArray.map(arg => {
-          if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
-            return arg.slice(1, -1);
-          }
-          return arg;
-        });
-        if (cleanedArgs.length > 0) {
-          const source = config.sessionCustomArgs ? 'session' : 'agent';
-          logger.debug(`Appending custom args for ${config.toolType} (${source}-level)`, LOG_CONTEXT, { customArgs: cleanedArgs });
-          finalArgs = [...finalArgs, ...cleanedArgs];
-        }
+      const agentConfigValues = allConfigs[config.toolType] || {};
+      const configResolution = applyAgentConfigOverrides(agent, finalArgs, {
+        agentConfigValues,
+        sessionCustomModel: config.sessionCustomModel,
+        sessionCustomArgs: config.sessionCustomArgs,
+        sessionCustomEnvVars: config.sessionCustomEnvVars,
+      });
+      finalArgs = configResolution.args;
+
+      if (configResolution.modelSource === 'session' && config.sessionCustomModel) {
+        logger.debug(`Using session-level model for ${config.toolType}`, LOG_CONTEXT, { model: config.sessionCustomModel });
       }
 
-      // ========================================================================
-      // Get custom environment variables from user configuration
-      // Session-level overrides take precedence over agent-level config
-      // ========================================================================
-      // Use session-level env vars if provided, otherwise fall back to agent-level
-      const effectiveCustomEnvVars = config.sessionCustomEnvVars ?? allConfigs[config.toolType]?.customEnvVars as Record<string, string> | undefined;
-      if (effectiveCustomEnvVars && Object.keys(effectiveCustomEnvVars).length > 0) {
-        const source = config.sessionCustomEnvVars ? 'session' : 'agent';
-        logger.debug(`Custom env vars configured for ${config.toolType} (${source}-level)`, LOG_CONTEXT, { keys: Object.keys(effectiveCustomEnvVars) });
+      if (configResolution.customArgsSource !== 'none') {
+        logger.debug(`Appending custom args for ${config.toolType} (${configResolution.customArgsSource}-level)`, LOG_CONTEXT);
+      }
+
+      const effectiveCustomEnvVars = configResolution.effectiveCustomEnvVars;
+      if (configResolution.customEnvSource !== 'none' && effectiveCustomEnvVars) {
+        logger.debug(`Custom env vars configured for ${config.toolType} (${configResolution.customEnvSource}-level)`, LOG_CONTEXT, { keys: Object.keys(effectiveCustomEnvVars) });
       }
 
       // If no shell is specified and this is a terminal session, use the default shell from settings
@@ -229,10 +190,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 
       // Get contextWindow from agent config (for agents like OpenCode/Codex that need user configuration)
       // Falls back to the agent's configOptions default (e.g., 200000 for Codex, 128000 for OpenCode)
-      const agentConfig = agentConfigsStore.get('configs', {})[config.toolType] || {};
-      const contextWindowOption = agent?.configOptions?.find(opt => opt.key === 'contextWindow');
-      const contextWindowDefault = contextWindowOption?.default ?? 0;
-      const contextWindow = typeof agentConfig.contextWindow === 'number' ? agentConfig.contextWindow : contextWindowDefault;
+      const contextWindow = getContextWindowValue(agent, agentConfigValues);
 
       const result = processManager.spawn({
         ...config,

@@ -5750,6 +5750,7 @@ export default function MaestroConsole() {
           theme={theme}
           sessions={sessions}
           groups={groups}
+          groupChats={groupChats}
           onClose={() => setProcessMonitorOpen(false)}
           onNavigateToSession={(sessionId, tabId) => {
             setActiveSessionId(sessionId);
@@ -5759,6 +5760,10 @@ export default function MaestroConsole() {
                 s.id === sessionId ? { ...s, activeTabId: tabId } : s
               ));
             }
+          }}
+          onNavigateToGroupChat={(groupChatId) => {
+            setActiveGroupChatId(groupChatId);
+            setProcessMonitorOpen(false);
           }}
         />
       )}
@@ -6016,6 +6021,8 @@ export default function MaestroConsole() {
             onDeleteGroupChat={(id) => setShowDeleteGroupChatModal(id)}
             groupChatsExpanded={groupChatsExpanded}
             onGroupChatsExpandedChange={setGroupChatsExpanded}
+            groupChatState={groupChatState}
+            participantStates={participantStates}
             sidebarContainerRef={sidebarContainerRef}
           />
         </ErrorBoundary>
@@ -6061,7 +6068,7 @@ export default function MaestroConsole() {
               handlePaste={handlePaste}
               handleDrop={handleDrop}
               onOpenLightbox={handleSetLightboxImage}
-              executionQueue={groupChatExecutionQueue}
+              executionQueue={groupChatExecutionQueue.filter(item => item.tabId === activeGroupChatId)}
               onRemoveQueuedItem={handleRemoveGroupChatQueueItem}
               onReorderQueuedItems={handleReorderGroupChatQueueItems}
               markdownEditMode={markdownEditMode}

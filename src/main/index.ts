@@ -14,7 +14,7 @@ import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
 import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
-import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState } from './group-chat/group-chat-router';
+import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, setGetAgentConfigCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState } from './group-chat/group-chat-router';
 import { updateParticipant, loadGroupChat } from './group-chat/group-chat-storage';
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
@@ -901,10 +901,15 @@ function setupIpcHandlers() {
   initializeSessionStorages({ claudeSessionOriginsStore });
   registerAgentSessionsHandlers({ getMainWindow: () => mainWindow });
 
+  // Helper to get agent config values (custom args/env vars, model, etc.)
+  const getAgentConfigForAgent = (agentId: string): Record<string, any> => {
+    const allConfigs = agentConfigsStore.get('configs', {});
+    return allConfigs[agentId] || {};
+  };
+
   // Helper to get custom env vars for an agent
   const getCustomEnvVarsForAgent = (agentId: string): Record<string, string> | undefined => {
-    const allConfigs = agentConfigsStore.get('configs', {});
-    return allConfigs[agentId]?.customEnvVars as Record<string, string> | undefined;
+    return getAgentConfigForAgent(agentId).customEnvVars as Record<string, string> | undefined;
   };
 
   // Register Group Chat handlers
@@ -913,6 +918,7 @@ function setupIpcHandlers() {
     getProcessManager: () => processManager,
     getAgentDetector: () => agentDetector,
     getCustomEnvVars: getCustomEnvVarsForAgent,
+    getAgentConfig: getAgentConfigForAgent,
   });
 
   // Set up callback for group chat router to lookup sessions for auto-add @mentions
@@ -923,11 +929,15 @@ function setupIpcHandlers() {
       name: s.name,
       toolType: s.toolType,
       cwd: s.cwd || s.fullPath || process.env.HOME || '/tmp',
+      customArgs: s.customArgs,
+      customEnvVars: s.customEnvVars,
+      customModel: s.customModel,
     }));
   });
 
   // Set up callback for group chat router to lookup custom env vars for agents
   setGetCustomEnvVarsCallback(getCustomEnvVarsForAgent);
+  setGetAgentConfigCallback(getAgentConfigForAgent);
 
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(() => mainWindow);

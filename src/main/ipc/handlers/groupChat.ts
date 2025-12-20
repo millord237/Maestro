@@ -132,6 +132,7 @@ export interface GroupChatHandlerDependencies {
   getProcessManager: () => GenericProcessManager | null;
   getAgentDetector: () => AgentDetector | null;
   getCustomEnvVars?: (agentId: string) => Record<string, string> | undefined;
+  getAgentConfig?: (agentId: string) => Record<string, any> | undefined;
 }
 
 /**
@@ -144,11 +145,11 @@ export interface GroupChatHandlerDependencies {
  * - Participants: addParticipant, sendToParticipant, removeParticipant
  */
 export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): void {
-  const { getMainWindow, getProcessManager, getAgentDetector, getCustomEnvVars } = deps;
+  const { getMainWindow, getProcessManager, getAgentDetector, getCustomEnvVars, getAgentConfig } = deps;
 
   // ========== Storage Handlers ==========
 
-  // Create a new group chat
+  // Create a new group chat (also initializes the moderator so it's ready immediately)
   ipcMain.handle(
     'groupChat:create',
     withIpcErrorLogging(handlerOpts('create'), async (
@@ -158,6 +159,21 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
     ): Promise<GroupChat> => {
       logger.info(`Creating group chat: ${name}`, LOG_CONTEXT, { moderatorAgentId, hasConfig: !!moderatorConfig });
       const chat = await createGroupChat(name, moderatorAgentId, moderatorConfig);
+
+      // Initialize the moderator immediately so it's "hot and ready"
+      // This spawns the session ID prefix so the UI doesn't show "pending"
+      const processManager = getProcessManager();
+      if (processManager) {
+        logger.info(`Initializing moderator for group chat: ${chat.id}`, LOG_CONTEXT);
+        await spawnModerator(chat, processManager);
+        // Reload the chat to get the updated moderatorSessionId
+        const updatedChat = await loadGroupChat(chat.id);
+        if (updatedChat) {
+          logger.info(`Created and initialized group chat: ${chat.id}`, LOG_CONTEXT);
+          return updatedChat;
+        }
+      }
+
       logger.info(`Created group chat: ${chat.id}`, LOG_CONTEXT);
       return chat;
     })
@@ -341,6 +357,7 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
 
         const agentDetector = getAgentDetector();
         const customEnvVars = getCustomEnvVars?.(agentId);
+        const agentConfigValues = getAgentConfig?.(agentId) || {};
 
         logger.info(`Adding participant ${name} (${agentId}) to ${id}`, LOG_CONTEXT);
         const participant = await addParticipant(
@@ -350,6 +367,7 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
           processManager,
           cwd || process.env.HOME || '/tmp',
           agentDetector ?? undefined,
+          agentConfigValues,
           customEnvVars
         );
         logger.info(`Added participant: ${name}`, LOG_CONTEXT);

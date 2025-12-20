@@ -5,9 +5,10 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Plus, MessageSquare, ChevronDown, ChevronRight, Edit3, Trash2 } from 'lucide-react';
-import type { Theme, GroupChat } from '../types';
+import { MessageSquare, ChevronDown, ChevronRight, Edit3, Trash2 } from 'lucide-react';
+import type { Theme, GroupChat, GroupChatState } from '../types';
 import { useClickOutside } from '../hooks';
+import { getStatusColor } from '../utils/theme';
 
 // ============================================================================
 // GroupChatContextMenu - Right-click context menu for group chat items
@@ -106,6 +107,10 @@ interface GroupChatListProps {
   isExpanded?: boolean;
   /** Callback when expanded state changes */
   onExpandedChange?: (expanded: boolean) => void;
+  /** Current state of the active group chat (for status indicator) */
+  groupChatState?: GroupChatState;
+  /** Per-participant working states for the active group chat */
+  participantStates?: Map<string, 'idle' | 'working'>;
 }
 
 export function GroupChatList({
@@ -118,6 +123,8 @@ export function GroupChatList({
   onDeleteGroupChat,
   isExpanded: controlledIsExpanded,
   onExpandedChange,
+  groupChatState = 'idle',
+  participantStates,
 }: GroupChatListProps): JSX.Element {
   // Support both controlled and uncontrolled modes
   // If isExpanded prop is provided, use it as controlled state
@@ -203,8 +210,7 @@ export function GroupChatList({
           }}
           title="New Group Chat"
         >
-          <Plus className="w-3 h-3" />
-          <span>New</span>
+          <span>+ New Chat</span>
         </button>
       </div>
 
@@ -222,6 +228,18 @@ export function GroupChatList({
             <div className="flex flex-col border-l ml-4" style={{ borderColor: theme.colors.border }}>
               {sortedGroupChats.map((chat) => {
                 const isActive = activeGroupChatId === chat.id;
+                // Determine status for this group chat
+                // Only the active group chat shows busy state; inactive ones show idle
+                const isBusy = isActive && groupChatState !== 'idle';
+                // Check if any participant is working (for the active chat)
+                const hasWorkingParticipant = isActive && participantStates &&
+                  Array.from(participantStates.values()).some(s => s === 'working');
+                // Show busy indicator if moderator is thinking OR any participant is working
+                const showBusy = isBusy || hasWorkingParticipant;
+                // Map to session state for getStatusColor compatibility
+                const effectiveState = showBusy ? 'busy' : 'idle';
+                const statusColor = getStatusColor(effectiveState, theme);
+
                 return (
                   <div
                     key={chat.id}
@@ -257,6 +275,12 @@ export function GroupChatList({
                         {chat.participants.length}
                       </span>
                     )}
+                    {/* Status indicator circle - on right side to align with session indicators */}
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${showBusy ? 'animate-pulse' : ''}`}
+                      style={{ backgroundColor: statusColor }}
+                      title={showBusy ? 'Thinking...' : 'Idle'}
+                    />
                   </div>
                 );
               })}

@@ -5,7 +5,7 @@ import {
   ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { Session, Group, Theme, Shortcut, AutoRunStats, GroupChat } from '../types';
+import type { Session, Group, Theme, Shortcut, AutoRunStats, GroupChat, GroupChatState } from '../types';
 import { CONDUCTOR_BADGES, getBadgeForTime } from '../constants/conductorBadges';
 import { getStatusColor, getContextColor, formatActiveTime } from '../utils/theme';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
@@ -358,6 +358,10 @@ interface SessionListProps {
   groupChatsExpanded?: boolean;
   /** Callback when group chats expanded state changes */
   onGroupChatsExpandedChange?: (expanded: boolean) => void;
+  /** Current state of the active group chat (for status indicator) */
+  groupChatState?: GroupChatState;
+  /** Per-participant working states for the active group chat */
+  participantStates?: Map<string, 'idle' | 'working'>;
 }
 
 export function SessionList(props: SessionListProps) {
@@ -394,6 +398,8 @@ export function SessionList(props: SessionListProps) {
     onDeleteGroupChat,
     groupChatsExpanded,
     onGroupChatsExpandedChange,
+    groupChatState = 'idle',
+    participantStates,
   } = props;
 
   const [sessionFilter, setSessionFilter] = useState('');
@@ -2004,6 +2010,8 @@ export function SessionList(props: SessionListProps) {
               onDeleteGroupChat={onDeleteGroupChat}
               isExpanded={groupChatsExpanded}
               onExpandedChange={onGroupChatsExpandedChange}
+              groupChatState={groupChatState}
+              participantStates={participantStates}
             />
           )}
         </div>

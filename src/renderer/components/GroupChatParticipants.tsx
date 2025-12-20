@@ -52,10 +52,14 @@ export function GroupChatParticipants({
   }, [participants, theme]);
 
   // Create a synthetic moderator participant for display
+  // The moderator works in batch mode (spawns per-message), so we use the session ID prefix
+  // as the agentSessionId to indicate the moderator is ready (not "pending")
   const moderatorParticipant: GroupChatParticipant = useMemo(() => ({
     name: 'Moderator',
     agentId: moderatorAgentId,
     sessionId: moderatorSessionId,
+    // Use moderatorSessionId as agentSessionId so the card shows "ready" instead of "pending"
+    agentSessionId: moderatorSessionId || undefined,
     addedAt: Date.now(),
     contextUsage: moderatorUsage?.contextUsage,
     tokenCount: moderatorUsage?.tokenCount,

@@ -731,9 +731,9 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     };
   }, [searchQuery, file.content, isMarkdown, isImage, theme.colors.accent]);
 
-  // Count search matches in markdown preview mode (no DOM manipulation to avoid React conflicts)
+  // Search matches in markdown preview mode - use browser's native find to scroll
   useEffect(() => {
-    if (!isMarkdown || markdownEditMode || !searchQuery.trim()) {
+    if (!isMarkdown || markdownEditMode || !searchQuery.trim() || !markdownContainerRef.current) {
       if (isMarkdown && !markdownEditMode) {
         setTotalMatches(0);
         setCurrentMatchIndex(0);
@@ -742,7 +742,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
       return;
     }
 
-    // Count matches in the raw content
+    // Count matches in the raw content for the counter display
     const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedQuery, 'gi');
     const matches = file.content.match(regex);
@@ -752,8 +752,43 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
     if (count > 0 && currentMatchIndex >= count) {
       setCurrentMatchIndex(0);
     }
+
+    // Use CSS.highlights API if available (modern browsers), otherwise use window.find
+    if (count > 0 && markdownContainerRef.current) {
+      // Find text nodes containing the search query and scroll to the nth occurrence
+      const container = markdownContainerRef.current;
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let matchCount = 0;
+      const targetIndex = Math.max(0, Math.min(currentMatchIndex, count - 1));
+
+      let node;
+      while ((node = walker.nextNode())) {
+        const text = node.textContent || '';
+        const nodeMatches = text.match(regex);
+        if (nodeMatches) {
+          for (const _ of nodeMatches) {
+            if (matchCount === targetIndex) {
+              // Found the target match - scroll its parent element into view
+              const parentElement = node.parentElement;
+              if (parentElement) {
+                parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Briefly flash the parent element to indicate the match location
+                const originalBg = parentElement.style.backgroundColor;
+                parentElement.style.backgroundColor = `${theme.colors.accent}40`;
+                setTimeout(() => {
+                  parentElement.style.backgroundColor = originalBg;
+                }, 1500);
+              }
+              return;
+            }
+            matchCount++;
+          }
+        }
+      }
+    }
+
     matchElementsRef.current = [];
-  }, [searchQuery, file.content, isMarkdown, markdownEditMode, currentMatchIndex]);
+  }, [searchQuery, file.content, isMarkdown, markdownEditMode, currentMatchIndex, theme.colors.accent]);
 
   const [copyNotificationMessage, setCopyNotificationMessage] = useState('');
 

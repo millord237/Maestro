@@ -357,7 +357,7 @@ function HistoryDetailView({ entry, onClose, currentIndex, totalCount, onNavigat
         animation: 'slideUp 0.25s ease-out',
       }}
     >
-      {/* Header */}
+      {/* Header - entry info only */}
       <header
         style={{
           display: 'flex',
@@ -372,68 +372,8 @@ function HistoryDetailView({ entry, onClose, currentIndex, totalCount, onNavigat
           gap: '8px',
         }}
       >
-        {/* Left: Navigation arrows */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-          <button
-            onClick={handlePrev}
-            disabled={!canGoPrev}
-            style={{
-              padding: '8px',
-              borderRadius: '8px',
-              backgroundColor: canGoPrev ? colors.bgMain : 'transparent',
-              border: canGoPrev ? `1px solid ${colors.border}` : 'none',
-              color: canGoPrev ? colors.textMain : colors.textDim + '40',
-              cursor: canGoPrev ? 'pointer' : 'default',
-              touchAction: 'manipulation',
-              WebkitTapHighlightColor: 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-label="Previous entry"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={!canGoNext}
-            style={{
-              padding: '8px',
-              borderRadius: '8px',
-              backgroundColor: canGoNext ? colors.bgMain : 'transparent',
-              border: canGoNext ? `1px solid ${colors.border}` : 'none',
-              color: canGoNext ? colors.textMain : colors.textDim + '40',
-              cursor: canGoNext ? 'pointer' : 'default',
-              touchAction: 'manipulation',
-              WebkitTapHighlightColor: 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-label="Next entry"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-          {/* Position indicator */}
-          <span
-            style={{
-              fontSize: '12px',
-              color: colors.textDim,
-              fontFamily: 'monospace',
-              marginLeft: '4px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {currentIndex + 1} / {totalCount}
-          </span>
-        </div>
-
-        {/* Center: Entry info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, justifyContent: 'center' }}>
+        {/* Entry info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
           {/* Success/Failure Indicator for AUTO entries */}
           {entry.type === 'AUTO' && entry.success !== undefined && (
             <span
@@ -615,7 +555,6 @@ function HistoryDetailView({ entry, onClose, currentIndex, totalCount, onNavigat
           overflowY: 'auto',
           overflowX: 'hidden',
           padding: '16px',
-          paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
           transform: `translateX(${offsetX}px)`,
           transition: isSwiping ? 'none' : 'transform 0.2s ease-out',
           touchAction: 'pan-y', // Allow vertical scrolling, capture horizontal swipes
@@ -671,6 +610,88 @@ function HistoryDetailView({ entry, onClose, currentIndex, totalCount, onNavigat
           </svg>
         </div>
       )}
+
+      {/* Bottom navigation bar */}
+      <footer
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+          padding: '12px 16px',
+          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+          borderTop: `1px solid ${colors.border}`,
+          backgroundColor: colors.bgSidebar,
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={handlePrev}
+          disabled={!canGoPrev}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            backgroundColor: canGoPrev ? colors.bgMain : 'transparent',
+            border: canGoPrev ? `1px solid ${colors.border}` : `1px solid ${colors.border}40`,
+            color: canGoPrev ? colors.textMain : colors.textDim + '40',
+            cursor: canGoPrev ? 'pointer' : 'default',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            fontSize: '14px',
+            fontWeight: 500,
+          }}
+          aria-label="Previous entry"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Prev
+        </button>
+
+        {/* Position indicator */}
+        <span
+          style={{
+            fontSize: '13px',
+            color: colors.textDim,
+            fontFamily: 'monospace',
+            minWidth: '70px',
+            textAlign: 'center',
+          }}
+        >
+          {currentIndex + 1} / {totalCount}
+        </span>
+
+        <button
+          onClick={handleNext}
+          disabled={!canGoNext}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            backgroundColor: canGoNext ? colors.bgMain : 'transparent',
+            border: canGoNext ? `1px solid ${colors.border}` : `1px solid ${colors.border}40`,
+            color: canGoNext ? colors.textMain : colors.textDim + '40',
+            cursor: canGoNext ? 'pointer' : 'default',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            fontSize: '14px',
+            fontWeight: 500,
+          }}
+          aria-label="Next entry"
+        >
+          Next
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </footer>
 
       {/* Animation keyframes */}
       <style>{`

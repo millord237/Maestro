@@ -22,7 +22,7 @@ import {
   addParticipant,
 } from './group-chat-agent';
 import { AgentDetector } from '../agent-detector';
-import { buildAgentArgs } from '../utils/agent-args';
+import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../utils/agent-args';
 
 // Import emitters from IPC handlers (will be populated after handlers are registered)
 import { groupChatEmitters } from '../ipc/handlers/groupChat';
@@ -35,6 +35,9 @@ export interface SessionInfo {
   name: string;
   toolType: string;
   cwd: string;
+  customArgs?: string;
+  customEnvVars?: Record<string, string>;
+  customModel?: string;
 }
 
 /**
@@ -46,12 +49,14 @@ export type GetSessionsCallback = () => SessionInfo[];
  * Callback type for getting custom environment variables for an agent.
  */
 export type GetCustomEnvVarsCallback = (agentId: string) => Record<string, string> | undefined;
+export type GetAgentConfigCallback = (agentId: string) => Record<string, any> | undefined;
 
 // Module-level callback for session lookup
 let getSessionsCallback: GetSessionsCallback | null = null;
 
 // Module-level callback for custom env vars lookup
 let getCustomEnvVarsCallback: GetCustomEnvVarsCallback | null = null;
+let getAgentConfigCallback: GetAgentConfigCallback | null = null;
 
 /**
  * Tracks pending participant responses for each group chat.
@@ -126,6 +131,10 @@ export function setGetSessionsCallback(callback: GetSessionsCallback): void {
  */
 export function setGetCustomEnvVarsCallback(callback: GetCustomEnvVarsCallback): void {
   getCustomEnvVarsCallback = callback;
+}
+
+export function setGetAgentConfigCallback(callback: GetAgentConfigCallback): void {
+  getAgentConfigCallback = callback;
 }
 
 /**
@@ -255,6 +264,7 @@ export async function routeUserMessage(
           console.log(`[GroupChatRouter] Auto-adding participant @${participantName} from user mention @${mentionedName} (session ${matchingSession.id})`);
           // Get custom env vars for this agent type
           const customEnvVars = getCustomEnvVarsCallback?.(matchingSession.toolType);
+          const agentConfigValues = getAgentConfigCallback?.(matchingSession.toolType) || {};
           await addParticipant(
             groupChatId,
             participantName,
@@ -262,6 +272,7 @@ export async function routeUserMessage(
             processManager,
             matchingSession.cwd,
             agentDetector,
+            agentConfigValues,
             customEnvVars
           );
           existingParticipantNames.add(participantName);
@@ -366,22 +377,19 @@ ${message}`;
 
       // Get the base args from the agent configuration
       const args = [...agent.args];
-      // Append custom args from moderator config if set
-      if (chat.moderatorConfig?.customArgs) {
-        // Parse custom args string into array (simple space-split, handles quoted strings)
-        const customArgsStr = chat.moderatorConfig.customArgs.trim();
-        if (customArgsStr) {
-          // Match quoted strings or non-space sequences
-          const customArgsArray = customArgsStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-          args.push(...customArgsArray.map(arg => arg.replace(/^["']|["']$/g, '')));
-        }
-      }
-      const finalArgs = buildAgentArgs(agent, {
+      const agentConfigValues = getAgentConfigCallback?.(chat.moderatorAgentId) || {};
+      const baseArgs = buildAgentArgs(agent, {
         baseArgs: args,
         prompt: fullPrompt,
         cwd: process.env.HOME || '/tmp',
         readOnlyMode: true,
       });
+      const configResolution = applyAgentConfigOverrides(agent, baseArgs, {
+        agentConfigValues,
+        sessionCustomArgs: chat.moderatorConfig?.customArgs,
+        sessionCustomEnvVars: chat.moderatorConfig?.customEnvVars,
+      });
+      const finalArgs = configResolution.args;
       console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
 
       console.log(`[GroupChat:Debug] Full prompt length: ${fullPrompt.length} chars`);
@@ -406,7 +414,8 @@ ${message}`;
           args: finalArgs,
           readOnlyMode: true,
           prompt: fullPrompt,
-          customEnvVars: chat.moderatorConfig?.customEnvVars,
+          contextWindow: getContextWindowValue(agent, agentConfigValues),
+          customEnvVars: configResolution.effectiveCustomEnvVars ?? getCustomEnvVarsCallback?.(chat.moderatorAgentId),
         });
 
         console.log(`[GroupChat:Debug] Spawn result: ${JSON.stringify(spawnResult)}`);
@@ -510,6 +519,7 @@ export async function routeModeratorResponse(
           console.log(`[GroupChatRouter] Auto-adding participant @${participantName} from moderator mention @${mentionedName} (session ${matchingSession.id})`);
           // Get custom env vars for this agent type
           const customEnvVars = getCustomEnvVarsCallback?.(matchingSession.toolType);
+          const agentConfigValues = getAgentConfigCallback?.(matchingSession.toolType) || {};
           await addParticipant(
             groupChatId,
             participantName,
@@ -517,6 +527,7 @@ export async function routeModeratorResponse(
             processManager,
             matchingSession.cwd,
             agentDetector,
+            agentConfigValues,
             customEnvVars
           );
           existingParticipantNames.add(participantName);
@@ -614,30 +625,37 @@ Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active
       const sessionId = `group-chat-${groupChatId}-participant-${participantName}-${Date.now()}`;
       console.log(`[GroupChat:Debug] Generated session ID: ${sessionId}`);
 
-      // Get custom env vars for this agent
-      const customEnvVars = getCustomEnvVarsCallback?.(participant.agentId);
+      const agentConfigValues = getAgentConfigCallback?.(participant.agentId) || {};
+      const baseArgs = buildAgentArgs(agent, {
+        baseArgs: [...agent.args],
+        prompt: participantPrompt,
+        cwd,
+        readOnlyMode: readOnly ?? false,
+        modelId: matchingSession?.customModel,
+        agentSessionId: participant.agentSessionId,
+      });
+      const configResolution = applyAgentConfigOverrides(agent, baseArgs, {
+        agentConfigValues,
+        sessionCustomModel: matchingSession?.customModel,
+        sessionCustomArgs: matchingSession?.customArgs,
+        sessionCustomEnvVars: matchingSession?.customEnvVars,
+      });
 
       try {
         // Emit participant state change to show this participant is working
         groupChatEmitters.emitParticipantState?.(groupChatId, participantName, 'working');
         console.log(`[GroupChat:Debug] Emitted participant state: working`);
 
-        const finalArgs = buildAgentArgs(agent, {
-          baseArgs: [...agent.args],
-          prompt: participantPrompt,
-          cwd,
-          readOnlyMode: readOnly ?? false,
-        });
-
         const spawnResult = processManager.spawn({
           sessionId,
           toolType: participant.agentId,
           cwd,
           command: agent.path || agent.command,
-          args: finalArgs,
+          args: configResolution.args,
           readOnlyMode: readOnly ?? false, // Propagate read-only mode from caller
           prompt: participantPrompt,
-          customEnvVars,
+          contextWindow: getContextWindowValue(agent, agentConfigValues),
+          customEnvVars: configResolution.effectiveCustomEnvVars ?? getCustomEnvVarsCallback?.(participant.agentId),
         });
 
         console.log(`[GroupChat:Debug] Spawn result for ${participantName}: ${JSON.stringify(spawnResult)}`);
@@ -830,13 +848,6 @@ export async function spawnModeratorSynthesis(
   console.log(`[GroupChat:Debug] Command: ${command}`);
 
   const args = [...agent.args];
-  if (chat.moderatorConfig?.customArgs) {
-    const customArgsStr = chat.moderatorConfig.customArgs.trim();
-    if (customArgsStr) {
-      const customArgsArray = customArgsStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-      args.push(...customArgsArray.map(arg => arg.replace(/^["']|["']$/g, '')));
-    }
-  }
   // Build the synthesis prompt with recent chat history
   const chatHistory = await readLog(chat.logPath);
   console.log(`[GroupChat:Debug] Chat history entries for synthesis: ${chatHistory.length}`);
@@ -865,12 +876,19 @@ Review the agent responses above. Either:
 1. Synthesize into a final answer for the user (NO @mentions) if the question is fully answered
 2. @mention specific agents for follow-up if you need more information`;
 
-  const finalArgs = buildAgentArgs(agent, {
+  const agentConfigValues = getAgentConfigCallback?.(chat.moderatorAgentId) || {};
+  const baseArgs = buildAgentArgs(agent, {
     baseArgs: args,
     prompt: synthesisPrompt,
     cwd: process.env.HOME || '/tmp',
     readOnlyMode: true,
   });
+  const configResolution = applyAgentConfigOverrides(agent, baseArgs, {
+    agentConfigValues,
+    sessionCustomArgs: chat.moderatorConfig?.customArgs,
+    sessionCustomEnvVars: chat.moderatorConfig?.customEnvVars,
+  });
+  const finalArgs = configResolution.args;
   console.log(`[GroupChat:Debug] Args: ${JSON.stringify(finalArgs)}`);
 
   console.log(`[GroupChat:Debug] Synthesis prompt length: ${synthesisPrompt.length} chars`);
@@ -890,7 +908,8 @@ Review the agent responses above. Either:
       args: finalArgs,
       readOnlyMode: true,
       prompt: synthesisPrompt,
-      customEnvVars: chat.moderatorConfig?.customEnvVars,
+      contextWindow: getContextWindowValue(agent, agentConfigValues),
+      customEnvVars: configResolution.effectiveCustomEnvVars ?? getCustomEnvVarsCallback?.(chat.moderatorAgentId),
     });
 
     console.log(`[GroupChat:Debug] Synthesis spawn result: ${JSON.stringify(spawnResult)}`);
