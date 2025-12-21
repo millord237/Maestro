@@ -66,10 +66,26 @@ const CODEX_SESSION_PARSE_LIMITS = {
 
 /**
  * Codex session metadata structure (first line of JSONL)
+ * Format: { type: 'session_meta', payload: { id, cwd, timestamp, ... } }
  */
 interface CodexSessionMetadata {
-  id: string;
+  type?: string;
   timestamp?: string;
+  payload?: {
+    id: string;
+    cwd?: string;
+    timestamp?: string;
+    originator?: string;
+    cli_version?: string;
+    model_provider?: string;
+    git?: {
+      commit_hash?: string;
+      branch?: string;
+      repository_url?: string;
+    };
+  };
+  // Legacy format (direct fields)
+  id?: string;
   git?: {
     commit_hash?: string;
     branch?: string;
@@ -112,7 +128,7 @@ function extractTextFromContent(content: CodexMessageContent[] | undefined): str
   }
 
   const textParts = content
-    .filter((part) => part.type === 'input_text' || part.type === 'text')
+    .filter((part) => part.type === 'input_text' || part.type === 'text' || part.type === 'output_text')
     .map((part) => part.text || '')
     .filter((text) => text.trim());
 
@@ -197,12 +213,23 @@ async function parseSessionFile(
     // Parse first line as metadata
     let metadata: CodexSessionMetadata | null = null;
     let timestamp = new Date(stats.mtimeMs).toISOString();
+    let sessionProjectPath: string | null = null;
 
     try {
       const firstLine = JSON.parse(lines[0]);
-      if (firstLine.id && firstLine.timestamp) {
+      // New format: { type: 'session_meta', payload: { id, cwd, timestamp, ... } }
+      if (firstLine.type === 'session_meta' && firstLine.payload) {
         metadata = firstLine as CodexSessionMetadata;
-        timestamp = metadata.timestamp || timestamp;
+        timestamp = firstLine.payload.timestamp || firstLine.timestamp || timestamp;
+        // Get project path directly from session_meta
+        if (firstLine.payload.cwd) {
+          sessionProjectPath = firstLine.payload.cwd;
+        }
+      }
+      // Legacy format: { id, timestamp, ... } at top level
+      else if (firstLine.id && firstLine.timestamp) {
+        metadata = firstLine as CodexSessionMetadata;
+        timestamp = firstLine.timestamp || timestamp;
       }
     } catch {
       // First line may not be metadata, continue parsing
@@ -218,7 +245,6 @@ async function parseSessionFile(
     let totalCachedTokens = 0;
     let firstTimestamp = timestamp;
     let lastTimestamp = timestamp;
-    let sessionProjectPath: string | null = null;
 
     for (let i = 0; i < lines.length; i++) {
       try {
@@ -243,7 +269,7 @@ async function parseSessionFile(
           }
         }
 
-        // Handle message entries
+        // Handle message entries (legacy format)
         if (entry.type === 'message') {
           if (entry.role === 'user') {
             userMessageCount++;
@@ -254,6 +280,7 @@ async function parseSessionFile(
                 firstUserMessage = text;
               }
             }
+            // Fallback: extract cwd from message content if not in session_meta
             if (!sessionProjectPath && entry.content) {
               const text = extractTextFromContent(entry.content);
               const cwd = extractCwdFromText(text);
@@ -273,7 +300,7 @@ async function parseSessionFile(
           }
         }
 
-        // Handle response_item entries (newer Codex format)
+        // Handle response_item entries (current Codex format)
         if (entry.type === 'response_item' && entry.payload?.type === 'message') {
           if (entry.payload.role === 'user') {
             userMessageCount++;
@@ -284,6 +311,7 @@ async function parseSessionFile(
                 firstUserMessage = text;
               }
             }
+            // Fallback: extract cwd from message content if not in session_meta
             if (!sessionProjectPath && entry.payload.content) {
               const text = extractTextFromContent(entry.payload.content);
               const cwd = extractCwdFromText(text);
@@ -341,8 +369,11 @@ async function parseSessionFile(
     const endTime = new Date(lastTimestamp).getTime();
     const durationSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
 
+    // Extract session ID from metadata (new format uses payload.id, legacy uses id)
+    const metadataSessionId = metadata?.payload?.id || metadata?.id || sessionId;
+
     return {
-      sessionId: metadata?.id || sessionId,
+      sessionId: metadataSessionId,
       projectPath: sessionProjectPath ? normalizeProjectPath(sessionProjectPath) : '',
       timestamp: firstTimestamp,
       modifiedAt: new Date(stats.mtimeMs).toISOString(),
@@ -591,7 +622,7 @@ export class CodexSessionStorage implements AgentSessionStorage {
             }
           }
 
-          // Handle response_item messages (newer Codex format)
+          // Handle response_item messages (current Codex format)
           if (entry.type === 'response_item' && entry.payload?.type === 'message') {
             if (entry.payload.role === 'user' || entry.payload.role === 'assistant') {
               const textContent = extractTextFromContent(entry.payload.content);
@@ -609,7 +640,43 @@ export class CodexSessionStorage implements AgentSessionStorage {
             }
           }
 
-          // Handle item.completed agent_message events
+          // Handle response_item function_call (current Codex format)
+          if (entry.type === 'response_item' && entry.payload?.type === 'function_call') {
+            let argsStr = '';
+            try {
+              const args = JSON.parse(entry.payload.arguments || '{}');
+              argsStr = JSON.stringify(args, null, 2);
+            } catch {
+              argsStr = entry.payload.arguments || '';
+            }
+            const toolInfo = {
+              tool: entry.payload.name,
+              args: entry.payload.arguments,
+            };
+            messages.push({
+              type: 'assistant',
+              role: 'assistant',
+              content: `Tool: ${entry.payload.name}\n${argsStr}`,
+              timestamp: entry.timestamp || '',
+              uuid: entry.payload.call_id || `codex-msg-${messageIndex}`,
+              toolUse: [toolInfo],
+            });
+            messageIndex++;
+          }
+
+          // Handle response_item function_call_output (current Codex format)
+          if (entry.type === 'response_item' && entry.payload?.type === 'function_call_output') {
+            messages.push({
+              type: 'assistant',
+              role: 'assistant',
+              content: entry.payload.output || '[Tool result]',
+              timestamp: entry.timestamp || '',
+              uuid: entry.payload.call_id || `codex-msg-${messageIndex}`,
+            });
+            messageIndex++;
+          }
+
+          // Handle item.completed agent_message events (legacy format)
           if (entry.type === 'item.completed' && entry.item?.type === 'agent_message') {
             messages.push({
               type: 'assistant',
@@ -621,7 +688,7 @@ export class CodexSessionStorage implements AgentSessionStorage {
             messageIndex++;
           }
 
-          // Handle item.completed tool_call events
+          // Handle item.completed tool_call events (legacy format)
           if (entry.type === 'item.completed' && entry.item?.type === 'tool_call') {
             const toolInfo = {
               tool: entry.item.tool,
@@ -638,7 +705,7 @@ export class CodexSessionStorage implements AgentSessionStorage {
             messageIndex++;
           }
 
-          // Handle item.completed tool_result events
+          // Handle item.completed tool_result events (legacy format)
           if (entry.type === 'item.completed' && entry.item?.type === 'tool_result') {
             let resultContent = '';
             if (entry.item.output) {
