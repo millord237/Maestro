@@ -7,9 +7,22 @@
 
 import type { HistoryEntry } from './types';
 
-// Constants
+/**
+ * Current history file format version. Increment when making breaking changes
+ * to HistoryFileData structure.
+ */
 export const HISTORY_VERSION = 1;
+
+/**
+ * Maximum number of history entries stored per session.
+ * Higher than the previous global limit of 1,000.
+ */
 export const MAX_ENTRIES_PER_SESSION = 5000;
+
+/**
+ * Session ID used for history entries that don't have an associated session.
+ * These entries are stored in a special "_orphaned.json" file.
+ */
 export const ORPHANED_SESSION_ID = '_orphaned';
 
 /**
@@ -54,7 +67,9 @@ export interface PaginatedResult<T> {
 }
 
 /**
- * Default pagination values
+ * Default pagination values.
+ * @internal Used internally by paginateEntries; consumers should pass
+ * their own PaginationOptions if different values are needed.
  */
 export const DEFAULT_PAGINATION: Required<PaginationOptions> = {
   limit: 100,
@@ -62,14 +77,20 @@ export const DEFAULT_PAGINATION: Required<PaginationOptions> = {
 };
 
 /**
- * Sanitize a session ID for safe filesystem usage
+ * Sanitize a session ID for safe filesystem usage.
+ * Replaces any characters that are not alphanumeric, underscore, or hyphen with underscore.
+ * @param sessionId - The raw session ID to sanitize
+ * @returns A filesystem-safe session ID
  */
 export function sanitizeSessionId(sessionId: string): string {
   return sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 /**
- * Apply pagination to an array of entries
+ * Apply pagination to an array of entries.
+ * @param entries - The full array of entries to paginate
+ * @param options - Optional pagination parameters (limit, offset)
+ * @returns A PaginatedResult containing the sliced entries and metadata
  */
 export function paginateEntries<T>(
   entries: T[],
@@ -90,7 +111,10 @@ export function paginateEntries<T>(
 }
 
 /**
- * Sort entries by timestamp (most recent first)
+ * Sort entries by timestamp (most recent first).
+ * Returns a new array, does not mutate the original.
+ * @param entries - The entries to sort
+ * @returns A new array with entries sorted by descending timestamp
  */
 export function sortEntriesByTimestamp(entries: HistoryEntry[]): HistoryEntry[] {
   return [...entries].sort((a, b) => b.timestamp - a.timestamp);
