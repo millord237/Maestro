@@ -10,9 +10,9 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { useGitStatus } from '../contexts/GitStatusContext';
-import { getActiveTab, getBusyTabs } from '../utils/tabHelpers';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
+import { useHoverTooltip } from '../hooks/useHoverTooltip';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -213,12 +213,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
   const isCurrentSessionAutoMode = currentSessionBatchState?.isRunning || false;
   const isCurrentSessionStopping = currentSessionBatchState?.isStopping || false;
 
-  // Context window tooltip hover state
-  const [contextTooltipOpen, setContextTooltipOpen] = useState(false);
-  const contextTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Git pill tooltip hover state
-  const [gitTooltipOpen, setGitTooltipOpen] = useState(false);
-  const gitTooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Hover tooltip state using reusable hook
+  const gitTooltip = useHoverTooltip(150);
+  const contextTooltip = useHoverTooltip(150);
   // Panel width for responsive hiding of widgets
   const [panelWidth, setPanelWidth] = useState(Infinity); // Start with Infinity so widgets show by default
   const headerRef = useRef<HTMLDivElement>(null);
@@ -345,18 +342,6 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     refreshGitInfo: refreshGitStatus
   }), [refreshGitStatus]);
 
-  // Cleanup hover timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (gitTooltipTimeout.current) {
-        clearTimeout(gitTooltipTimeout.current);
-      }
-      if (contextTooltipTimeout.current) {
-        clearTimeout(contextTooltipTimeout.current);
-      }
-    };
-  }, []);
-
   // Handler for input focus - select session in sidebar
   // Memoized to avoid recreating on every render
   const handleInputFocus = useCallback(() => {
@@ -461,21 +446,8 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 {activeSession.name}
                 <div
                   className="relative"
-                  onMouseEnter={() => {
-                    if (!activeSession.isGitRepo) return;
-                    // Clear any pending close timeout
-                    if (gitTooltipTimeout.current) {
-                      clearTimeout(gitTooltipTimeout.current);
-                      gitTooltipTimeout.current = null;
-                    }
-                    setGitTooltipOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    // Delay closing to allow mouse to reach the dropdown
-                    gitTooltipTimeout.current = setTimeout(() => {
-                      setGitTooltipOpen(false);
-                    }, 150);
-                  }}
+                  onMouseEnter={activeSession.isGitRepo ? gitTooltip.triggerHandlers.onMouseEnter : undefined}
+                  onMouseLeave={gitTooltip.triggerHandlers.onMouseLeave}
                 >
                   <span
                     className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border cursor-pointer ${activeSession.isGitRepo ? 'border-orange-500/30 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'border-blue-500/30 text-blue-500 bg-blue-500/10'}`}
@@ -494,34 +466,17 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                       </>
                     ) : 'LOCAL'}
                   </span>
-                  {activeSession.isGitRepo && gitTooltipOpen && gitInfo && (
+                  {activeSession.isGitRepo && gitTooltip.isOpen && gitInfo && (
                     <>
                       {/* Invisible bridge to prevent hover gap */}
                       <div
                         className="absolute left-0 right-0 h-3 pointer-events-auto"
                         style={{ top: '100%' }}
-                        onMouseEnter={() => {
-                          if (gitTooltipTimeout.current) {
-                            clearTimeout(gitTooltipTimeout.current);
-                            gitTooltipTimeout.current = null;
-                          }
-                          setGitTooltipOpen(true);
-                        }}
+                        {...gitTooltip.contentHandlers}
                       />
                       <div
                         className="absolute top-full left-0 pt-2 w-80 z-50 pointer-events-auto"
-                        onMouseEnter={() => {
-                          if (gitTooltipTimeout.current) {
-                            clearTimeout(gitTooltipTimeout.current);
-                            gitTooltipTimeout.current = null;
-                          }
-                          setGitTooltipOpen(true);
-                        }}
-                        onMouseLeave={() => {
-                          gitTooltipTimeout.current = setTimeout(() => {
-                            setGitTooltipOpen(false);
-                          }, 150);
-                        }}
+                        {...gitTooltip.contentHandlers}
                       >
                         <div
                           className="rounded shadow-xl"
@@ -688,20 +643,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               {activeSession.inputMode === 'ai' && (activeTab?.agentSessionId || activeTab?.usageStats) && hasCapability('supportsUsageStats') && activeTabContextWindow > 0 && (
               <div
                 className="flex flex-col items-end mr-2 relative cursor-pointer"
-                onMouseEnter={() => {
-                  // Clear any pending close timeout
-                  if (contextTooltipTimeout.current) {
-                    clearTimeout(contextTooltipTimeout.current);
-                    contextTooltipTimeout.current = null;
-                  }
-                  setContextTooltipOpen(true);
-                }}
-                onMouseLeave={() => {
-                  // Delay closing to allow mouse to reach the dropdown
-                  contextTooltipTimeout.current = setTimeout(() => {
-                    setContextTooltipOpen(false);
-                  }, 150);
-                }}
+                {...contextTooltip.triggerHandlers}
               >
                 <span className="text-[10px] font-bold uppercase" style={{ color: theme.colors.textDim }}>Context Window</span>
                 <div className="w-24 h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: theme.colors.border }}>
@@ -715,34 +657,17 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 </div>
 
                 {/* Context Window Tooltip */}
-                {contextTooltipOpen && activeSession.inputMode === 'ai' && (
+                {contextTooltip.isOpen && activeSession.inputMode === 'ai' && (
                   <>
                     {/* Invisible bridge to prevent hover gap */}
                     <div
                       className="absolute left-0 right-0 h-3 pointer-events-auto"
                       style={{ top: '100%' }}
-                      onMouseEnter={() => {
-                        if (contextTooltipTimeout.current) {
-                          clearTimeout(contextTooltipTimeout.current);
-                          contextTooltipTimeout.current = null;
-                        }
-                        setContextTooltipOpen(true);
-                      }}
+                      {...contextTooltip.contentHandlers}
                     />
                     <div
                       className="absolute top-full right-0 pt-2 w-64 z-50 pointer-events-auto"
-                      onMouseEnter={() => {
-                        if (contextTooltipTimeout.current) {
-                          clearTimeout(contextTooltipTimeout.current);
-                          contextTooltipTimeout.current = null;
-                        }
-                        setContextTooltipOpen(true);
-                      }}
-                      onMouseLeave={() => {
-                        contextTooltipTimeout.current = setTimeout(() => {
-                          setContextTooltipOpen(false);
-                        }, 150);
-                      }}
+                      {...contextTooltip.contentHandlers}
                     >
                       <div
                         className="border rounded-lg p-3 shadow-xl"
