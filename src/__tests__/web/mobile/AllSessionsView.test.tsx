@@ -240,7 +240,7 @@ describe('AllSessionsView', () => {
       });
 
       it('handles windows paths when truncating', () => {
-        const windowsPath = 'C:\\Users\\dev\\project\\src\\components';
+        const windowsPath = 'C:\\Users\\dev\\project\\very-long-folder-name\\src\\components';
         const sessions = [createMockSession({ cwd: windowsPath })];
         render(<AllSessionsView {...createDefaultProps({ sessions })} />);
 

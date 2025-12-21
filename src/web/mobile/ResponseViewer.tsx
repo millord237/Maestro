@@ -176,8 +176,17 @@ function parseTextWithCodeBlocks(text: string): TextSegment[] {
     }
 
     // Add the code block
-    const language = (match[1] || '').trim();
-    const code = match[2] || '';
+    let language = (match[1] || '').trim();
+    let code = match[2] || '';
+
+    if (!code.trim() && language.includes(' ')) {
+      const [languageToken, ...inlineCodeParts] = language.split(/\s+/);
+      const inlineCode = inlineCodeParts.join(' ');
+      if (inlineCode.trim()) {
+        language = languageToken;
+        code = inlineCode;
+      }
+    }
 
     // Only add non-empty code blocks
     if (code.trim()) {
