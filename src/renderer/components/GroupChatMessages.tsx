@@ -11,6 +11,7 @@ import type { GroupChatMessage, GroupChatParticipant, GroupChatState, Theme } fr
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { stripMarkdown } from '../utils/textProcessing';
 import { generateParticipantColor, buildParticipantColorMap } from '../utils/participantColors';
+import { generateTerminalProseStyles } from '../utils/markdownConfig';
 
 interface GroupChatMessagesProps {
   theme: Theme;
@@ -111,41 +112,11 @@ export const GroupChatMessages = forwardRef<GroupChatMessagesHandle, GroupChatMe
     });
   }, []);
 
-  // Memoized prose styles for markdown rendering - same as TerminalOutput
-  const proseStyles = useMemo(() => `
-    .group-chat-messages .prose { line-height: 1.4; overflow: visible; }
-    .group-chat-messages .prose > *:first-child { margin-top: 0 !important; }
-    .group-chat-messages .prose > *:last-child { margin-bottom: 0 !important; }
-    .group-chat-messages .prose * { margin-top: 0; margin-bottom: 0; }
-    .group-chat-messages .prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose h2 { color: ${theme.colors.success}; font-size: 1.75em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose h3 { color: ${theme.colors.warning}; font-size: 1.5em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose h4 { color: ${theme.colors.textMain}; font-size: 1.35em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose h5 { color: ${theme.colors.textMain}; font-size: 1.2em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose h6 { color: ${theme.colors.textDim}; font-size: 1.1em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose p { color: ${theme.colors.textMain}; margin: 0 !important; line-height: 1.4; }
-    .group-chat-messages .prose p + p { margin-top: 0.5em !important; }
-    .group-chat-messages .prose p:empty { display: none; }
-    .group-chat-messages .prose > ul, .group-chat-messages .prose > ol { color: ${theme.colors.textMain}; margin: 0.25em 0 !important; padding-left: 2em; list-style-position: outside; }
-    .group-chat-messages .prose li ul, .group-chat-messages .prose li ol { margin: 0 !important; padding-left: 1.5em; list-style-position: outside; }
-    .group-chat-messages .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-    .group-chat-messages .prose li > p { margin: 0 !important; display: inline; }
-    .group-chat-messages .prose li > p + ul, .group-chat-messages .prose li > p + ol { margin-top: 0 !important; }
-    .group-chat-messages .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
-    .group-chat-messages .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-    .group-chat-messages .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.35em 0 !important; }
-    .group-chat-messages .prose pre code { background: none; padding: 0; }
-    .group-chat-messages .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0.25em 0 !important; color: ${theme.colors.textDim}; }
-    .group-chat-messages .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
-    .group-chat-messages .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.5em 0 !important; }
-    .group-chat-messages .prose table { border-collapse: collapse; width: 100%; margin: 0.35em 0 !important; }
-    .group-chat-messages .prose th, .group-chat-messages .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
-    .group-chat-messages .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
-    .group-chat-messages .prose strong { font-weight: bold; }
-    .group-chat-messages .prose em { font-style: italic; }
-    .group-chat-messages .prose li > strong:first-child, .group-chat-messages .prose li > b:first-child, .group-chat-messages .prose li > em:first-child, .group-chat-messages .prose li > code:first-child, .group-chat-messages .prose li > a:first-child { vertical-align: baseline; line-height: inherit; }
-    .group-chat-messages .prose li::marker { font-weight: normal; }
-  `, [theme.colors]);
+  // Memoized prose styles for markdown rendering - uses shared generator for consistency with TerminalOutput
+  const proseStyles = useMemo(
+    () => generateTerminalProseStyles(theme, '.group-chat-messages'),
+    [theme]
+  );
 
   // Auto-scroll on new messages
   useEffect(() => {

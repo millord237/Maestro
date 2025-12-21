@@ -18,6 +18,7 @@ import {
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { QueuedItemsList } from './QueuedItemsList';
 import { LogFilterControls } from './LogFilterControls';
+import { generateTerminalProseStyles } from '../utils/markdownConfig';
 
 // ============================================================================
 // LogItem - Memoized component for individual log entries
@@ -1296,40 +1297,10 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
   // Memoized prose styles - applied once at container level instead of per-log-item
   // IMPORTANT: Scoped to .terminal-output to avoid CSS conflicts with other prose containers (e.g., AutoRun panel)
-  const proseStyles = useMemo(() => `
-    .terminal-output .prose { line-height: 1.4; overflow: visible; }
-    .terminal-output .prose > *:first-child { margin-top: 0 !important; }
-    .terminal-output .prose > *:last-child { margin-bottom: 0 !important; }
-    .terminal-output .prose * { margin-top: 0; margin-bottom: 0; }
-    .terminal-output .prose h1 { color: ${theme.colors.accent}; font-size: 2em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .terminal-output .prose h2 { color: ${theme.colors.success}; font-size: 1.75em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .terminal-output .prose h3 { color: ${theme.colors.warning}; font-size: 1.5em; font-weight: bold; margin: 0.25em 0 !important; line-height: 1.4; }
-    .terminal-output .prose h4 { color: ${theme.colors.textMain}; font-size: 1.35em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .terminal-output .prose h5 { color: ${theme.colors.textMain}; font-size: 1.2em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .terminal-output .prose h6 { color: ${theme.colors.textDim}; font-size: 1.1em; font-weight: bold; margin: 0.2em 0 !important; line-height: 1.4; }
-    .terminal-output .prose p { color: ${theme.colors.textMain}; margin: 0 !important; line-height: 1.4; }
-    .terminal-output .prose p + p { margin-top: 0.5em !important; }
-    .terminal-output .prose p:empty { display: none; }
-    .terminal-output .prose > ul, .terminal-output .prose > ol { color: ${theme.colors.textMain}; margin: 0.25em 0 !important; padding-left: 2em; list-style-position: outside; }
-    .terminal-output .prose li ul, .terminal-output .prose li ol { margin: 0 !important; padding-left: 1.5em; list-style-position: outside; }
-    .terminal-output .prose li { margin: 0 !important; padding: 0; line-height: 1.4; display: list-item; }
-    .terminal-output .prose li > p { margin: 0 !important; display: inline; }
-    .terminal-output .prose li > p + ul, .terminal-output .prose li > p + ol { margin-top: 0 !important; }
-    .terminal-output .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5em; }
-    .terminal-output .prose code { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
-    .terminal-output .prose pre { background-color: ${theme.colors.bgSidebar}; color: ${theme.colors.textMain}; padding: 0.5em; border-radius: 6px; overflow-x: auto; margin: 0.35em 0 !important; }
-    .terminal-output .prose pre code { background: none; padding: 0; }
-    .terminal-output .prose blockquote { border-left: 3px solid ${theme.colors.border}; padding-left: 0.75em; margin: 0.25em 0 !important; color: ${theme.colors.textDim}; }
-    .terminal-output .prose a { color: ${theme.colors.accent}; text-decoration: underline; }
-    .terminal-output .prose hr { border: none; border-top: 1px solid ${theme.colors.border}; margin: 0.5em 0 !important; }
-    .terminal-output .prose table { border-collapse: collapse; width: 100%; margin: 0.35em 0 !important; }
-    .terminal-output .prose th, .terminal-output .prose td { border: 1px solid ${theme.colors.border}; padding: 0.25em 0.5em; text-align: left; }
-    .terminal-output .prose th { background-color: ${theme.colors.bgSidebar}; font-weight: bold; }
-    .terminal-output .prose strong { font-weight: bold; }
-    .terminal-output .prose em { font-style: italic; }
-    .terminal-output .prose li > strong:first-child, .terminal-output .prose li > b:first-child, .terminal-output .prose li > em:first-child, .terminal-output .prose li > code:first-child, .terminal-output .prose li > a:first-child { vertical-align: baseline; line-height: inherit; }
-    .terminal-output .prose li::marker { font-weight: normal; }
-  `, [theme.colors]);
+  const proseStyles = useMemo(
+    () => generateTerminalProseStyles(theme, '.terminal-output'),
+    [theme]
+  );
 
   return (
     <div
