@@ -301,8 +301,7 @@ export function useAgentExecution(
         // Spawn the agent for batch processing
         // Use effectiveCwd which may be a worktree path for parallel execution
         const commandToUse = agent.path || agent.command;
-        // Batch processing runs in read-only mode (plan mode) to prevent unintended writes
-        // The main process uses agent-specific readOnlyArgs builders for correct CLI args
+        // Batch processing (Auto Run) should NOT use read-only mode - it needs to make changes
         window.maestro.process.spawn({
           sessionId: targetSessionId,
           toolType: session.toolType,
@@ -310,7 +309,7 @@ export function useAgentExecution(
           command: commandToUse,
           args: agent.args || [],
           prompt,
-          readOnlyMode: true, // Batch operations run in read-only/plan mode
+          readOnlyMode: false, // Auto Run needs to make changes, not plan
           // Per-session config overrides (if set)
           sessionCustomPath: session.customPath,
           sessionCustomArgs: session.customArgs,
