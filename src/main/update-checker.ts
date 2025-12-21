@@ -8,6 +8,13 @@ const GITHUB_OWNER = 'pedramamini';
 const GITHUB_REPO = 'Maestro';
 const RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
+export interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+  size: number;
+  content_type: string;
+}
+
 export interface Release {
   tag_name: string;
   name: string;
@@ -16,6 +23,7 @@ export interface Release {
   published_at: string;
   prerelease: boolean;
   draft: boolean;
+  assets: ReleaseAsset[];
 }
 
 export interface UpdateCheckResult {
@@ -25,7 +33,45 @@ export interface UpdateCheckResult {
   versionsBehind: number;
   releases: Release[];
   releasesUrl: string;
+  assetsReady: boolean;
   error?: string;
+}
+
+/**
+ * Check if a release has assets available for the current platform
+ */
+function hasAssetsForPlatform(release: Release): boolean {
+  if (!release.assets || release.assets.length === 0) {
+    return false;
+  }
+
+  const platform = process.platform;
+  const assetNames = release.assets.map(a => a.name.toLowerCase());
+
+  switch (platform) {
+    case 'darwin':
+      // macOS: look for .dmg or .zip (arm64 or x64)
+      return assetNames.some(name =>
+        name.endsWith('.dmg') ||
+        (name.endsWith('.zip') && (name.includes('mac') || name.includes('darwin')))
+      );
+    case 'win32':
+      // Windows: look for .exe or .msi
+      return assetNames.some(name =>
+        name.endsWith('.exe') || name.endsWith('.msi')
+      );
+    case 'linux':
+      // Linux: look for .AppImage, .deb, .rpm, or .tar.gz
+      return assetNames.some(name =>
+        name.endsWith('.appimage') ||
+        name.endsWith('.deb') ||
+        name.endsWith('.rpm') ||
+        (name.endsWith('.tar.gz') && name.includes('linux'))
+      );
+    default:
+      // Unknown platform, assume assets are ready if any exist
+      return release.assets.length > 0;
+  }
 }
 
 /**
@@ -122,6 +168,7 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateChe
         versionsBehind: 0,
         releases: [],
         releasesUrl,
+        assetsReady: false,
       };
     }
 
@@ -130,6 +177,9 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateChe
     const versionsBehind = countVersionsBehind(currentVersion, allReleases);
     const updateAvailable = versionsBehind > 0;
 
+    // Check if the latest release has assets ready for this platform
+    const assetsReady = allReleases.length > 0 && hasAssetsForPlatform(allReleases[0]);
+
     return {
       currentVersion,
       latestVersion,
@@ -137,6 +187,7 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateChe
       versionsBehind,
       releases: newerReleases,
       releasesUrl,
+      assetsReady,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -147,6 +198,7 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateChe
       versionsBehind: 0,
       releases: [],
       releasesUrl,
+      assetsReady: false,
       error: errorMessage,
     };
   }

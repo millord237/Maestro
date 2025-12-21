@@ -20,6 +20,7 @@ interface UpdateCheckResult {
   versionsBehind: number;
   releases: Release[];
   releasesUrl: string;
+  assetsReady: boolean;
   error?: string;
 }
 
@@ -374,6 +375,15 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
                   <RotateCcw className="w-4 h-4" />
                   Restart to Update
                 </button>
+              ) : !result.assetsReady ? (
+                /* Assets not yet available - show building message */
+                <div
+                  className="w-full flex items-center justify-center gap-2 p-3 rounded-lg text-sm"
+                  style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Binaries are still building...
+                </div>
               ) : (
                 <button
                   onClick={handleDownloadUpdate}
@@ -401,7 +411,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
                 className="w-full flex items-center justify-center gap-2 p-2 rounded text-xs transition-colors hover:bg-white/5"
                 style={{ color: theme.colors.textDim }}
               >
-                Or download manually from GitHub
+                {result.assetsReady ? 'Or download manually from GitHub' : 'Check release page for updates'}
                 <ExternalLink className="w-3 h-3" />
               </button>
             </div>
