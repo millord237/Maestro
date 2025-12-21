@@ -209,34 +209,6 @@ export function GroupChatRightPanel({
     return unsubscribe;
   }, [groupChatId]);
 
-  // Refresh history callback
-  const refreshHistory = useCallback(async () => {
-    if (!groupChatId) return;
-    if (typeof window.maestro.groupChat.getHistory !== 'function') return;
-    try {
-      const entries = await window.maestro.groupChat.getHistory(groupChatId);
-      setHistoryEntries(entries);
-    } catch (error) {
-      console.error('Failed to refresh group chat history:', error);
-    }
-  }, [groupChatId]);
-
-  // Delete history entry callback
-  const handleDeleteEntry = useCallback(async (entryId: string) => {
-    if (!groupChatId) return false;
-    if (typeof window.maestro.groupChat.deleteHistoryEntry !== 'function') return false;
-    try {
-      const success = await window.maestro.groupChat.deleteHistoryEntry(groupChatId, entryId);
-      if (success) {
-        setHistoryEntries(prev => prev.filter(e => e.id !== entryId));
-      }
-      return success;
-    } catch (error) {
-      console.error('Failed to delete history entry:', error);
-      return false;
-    }
-  }, [groupChatId]);
-
   if (!isOpen) return null;
 
   return (
@@ -354,8 +326,6 @@ export function GroupChatRightPanel({
           entries={historyEntries}
           isLoading={isLoadingHistory}
           participantColors={participantColors}
-          onRefresh={refreshHistory}
-          onDelete={handleDeleteEntry}
           onJumpToMessage={onJumpToMessage}
         />
       )}

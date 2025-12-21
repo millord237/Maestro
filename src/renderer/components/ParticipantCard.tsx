@@ -9,19 +9,13 @@ import { MessageSquare, Copy, Check, DollarSign } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import type { Theme, GroupChatParticipant, SessionState } from '../types';
 import { getStatusColor } from '../utils/theme';
+import { formatCost } from '../utils/formatters';
 
 interface ParticipantCardProps {
   theme: Theme;
   participant: GroupChatParticipant;
   state: SessionState;
   color?: string;
-}
-
-/**
- * Format cost as a dollar amount (always 2 decimal places).
- */
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
 }
 
 /**

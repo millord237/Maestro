@@ -385,8 +385,6 @@ interface GroupChatHistoryPanelProps {
   entries: GroupChatHistoryEntry[];
   isLoading: boolean;
   participantColors: Record<string, string>;
-  onRefresh: () => void;
-  onDelete: (entryId: string) => Promise<boolean>;
   onJumpToMessage?: (timestamp: number) => void;
 }
 
@@ -396,8 +394,6 @@ export function GroupChatHistoryPanel({
   entries,
   isLoading,
   participantColors,
-  onRefresh: _onRefresh,
-  onDelete: _onDelete,
   onJumpToMessage,
 }: GroupChatHistoryPanelProps): JSX.Element {
   const [lookbackHours, setLookbackHours] = useState<number | null>(24);

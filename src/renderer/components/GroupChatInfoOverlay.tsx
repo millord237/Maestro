@@ -6,7 +6,7 @@
  * an "Open in Finder" button for the chat directory.
  */
 
-import { useRef, useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Copy, FolderOpen, Users, MessageSquare, Bot, Clock, ExternalLink, Download } from 'lucide-react';
 import type { Theme, GroupChat, GroupChatMessage, GroupChatHistoryEntry } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -105,7 +105,6 @@ export function GroupChatInfoOverlay({
   onClose,
   onOpenModeratorSession,
 }: GroupChatInfoOverlayProps): JSX.Element | null {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const copyToClipboard = useCallback((text: string) => {
@@ -181,7 +180,7 @@ export function GroupChatInfoOverlay({
       width={600}
       closeOnBackdropClick
     >
-      <div ref={containerRef} className="space-y-4">
+      <div className="space-y-4">
         {/* Statistics Cards */}
         <div className="grid grid-cols-4 gap-3">
           <StatCard
