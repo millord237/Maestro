@@ -655,8 +655,8 @@ describe('substituteTemplateVariables', () => {
         }),
       });
       const result = substituteTemplateVariables('Name: {{PROJECT_NAME}}', context);
-      // split('/').pop() on '/path/to/project/' gives ''
-      expect(result).toBe('Name: ');
+      // split(/[/\\]/).filter(Boolean).pop() correctly handles trailing slashes
+      expect(result).toBe('Name: project');
     });
 
     it('should handle Windows-style paths', () => {
@@ -666,10 +666,9 @@ describe('substituteTemplateVariables', () => {
           cwd: 'C:\\Users\\dev\\project',
         }),
       });
-      // Windows paths don't split on '/', so PROJECT_NAME would be the full path
+      // Windows paths now split on both / and \ to extract the last segment
       const result = substituteTemplateVariables('{{PROJECT_NAME}}', context);
-      // Since split('/') doesn't work on backslashes, it returns the full path
-      expect(result).toBe('C:\\Users\\dev\\project');
+      expect(result).toBe('project');
     });
 
     it('should handle very long templates efficiently', () => {

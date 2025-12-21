@@ -123,11 +123,11 @@ export function substituteTemplateVariables(
     'CWD': session.cwd,
     'AUTORUN_FOLDER': autoRunFolder || session.autoRunFolderPath || '',
 
-    // Legacy aliases (deprecated - kept for backwards compatibility)
+    // Aliases (not documented in TEMPLATE_VARIABLES but still supported for internal use and backwards compatibility)
     'SESSION_ID': session.id,
     'SESSION_NAME': session.name, // Alias for TAB_NAME
     'PROJECT_PATH': session.fullPath || session.projectRoot || session.cwd,
-    'PROJECT_NAME': (session.fullPath || session.projectRoot || session.cwd).split('/').pop() || '',
+    'PROJECT_NAME': (session.fullPath || session.projectRoot || session.cwd).split(/[/\\]/).filter(Boolean).pop() || '',
 
     // Document variables (for Auto Run)
     'DOCUMENT_NAME': documentName || '',
