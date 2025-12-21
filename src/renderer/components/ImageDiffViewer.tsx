@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ImageIcon, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import type { Theme } from '../types';
 

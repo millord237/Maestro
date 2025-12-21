@@ -90,17 +90,12 @@ function createThinkingSession(overrides: Partial<Session> = {}): Session {
 }
 
 describe('ThinkingStatusPill', () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     vi.useFakeTimers();
-    // Suppress console.log for debug logging in component
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    consoleSpy.mockRestore();
   });
 
   describe('render conditions', () => {
@@ -1329,48 +1324,6 @@ describe('ThinkingStatusPill', () => {
 
       // Should show final state
       expect(screen.getByText('900')).toBeInTheDocument();
-    });
-  });
-
-  describe('debug logging', () => {
-    it('logs state check when busy sessions exist', () => {
-      const session = createThinkingSession();
-      render(
-        <ThinkingStatusPill
-          sessions={[session]}
-          theme={mockTheme}
-        />
-      );
-
-      // Console.log should have been called with state check info
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[ThinkingStatusPill] State check:',
-        expect.objectContaining({
-          thinkingCount: 1,
-          busySessionsCount: 1,
-        })
-      );
-    });
-
-    it('logs when sessions have busy tabs but session not busy', () => {
-      const busyTab = createMockAITab({ state: 'busy' });
-      const session = createMockSession({
-        state: 'idle', // Session is idle
-        aiTabs: [busyTab], // But has busy tab
-      });
-      render(
-        <ThinkingStatusPill
-          sessions={[session]}
-          theme={mockTheme}
-        />
-      );
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[ThinkingStatusPill] State check:',
-        expect.objectContaining({
-          sessionsWithBusyTabsCount: 1,
-        })
-      );
     });
   });
 

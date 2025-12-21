@@ -5,7 +5,7 @@
  *
  * When AutoRun is active, shows a special AutoRun pill with total elapsed time instead.
  */
-import React, { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { GitBranch } from 'lucide-react';
 import type { Session, Theme, AITab, BatchRunState } from '../types';
 import { formatTokensCompact } from '../utils/formatters';
@@ -287,23 +287,6 @@ function ThinkingStatusPillInner({ sessions, theme, onSessionClick, namedSession
   const thinkingSessions = sessions.filter(
     s => s.state === 'busy' && s.busySource === 'ai'
   );
-
-  // DEBUG: Log all sessions' busy state to diagnose thinking pill disappearing
-  const busySessions = sessions.filter(s => s.state === 'busy');
-  const sessionsWithBusyTabs = sessions.filter(s => s.aiTabs?.some(t => t.state === 'busy'));
-  if (busySessions.length > 0 || sessionsWithBusyTabs.length > 0) {
-    console.log('[ThinkingStatusPill] State check:', {
-      thinkingCount: thinkingSessions.length,
-      busySessionsCount: busySessions.length,
-      sessionsWithBusyTabsCount: sessionsWithBusyTabs.length,
-      details: sessions.map(s => ({
-        id: s.id.substring(0, 8),
-        state: s.state,
-        busySource: s.busySource,
-        busyTabs: s.aiTabs?.filter(t => t.state === 'busy').map(t => t.id.substring(0, 8))
-      }))
-    });
-  }
 
   if (thinkingSessions.length === 0) {
     return null;
