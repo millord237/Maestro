@@ -479,7 +479,7 @@ export default function MobileApp() {
   // On mobile browsers, ensure the document is fully loaded before connecting
   // to avoid race conditions with __MAESTRO_CONFIG__ injection
   useEffect(() => {
-    let timeoutId: ReturnType<typeof window.setTimeout> | null = null;
+    let timeoutId: number | null = null;
     let cancelled = false;
 
     const scheduleAttempt = (delay: number) => {
