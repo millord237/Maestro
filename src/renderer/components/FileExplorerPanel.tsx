@@ -39,7 +39,6 @@ interface FileExplorerPanelProps {
   activeRightTab: string;
   previewFile: {name: string; content: string; path: string} | null;
   setActiveFocus: (focus: string) => void;
-  fileTreeContainerRef?: React.RefObject<HTMLDivElement>;
   fileTreeFilterInputRef?: React.RefObject<HTMLInputElement>;
   toggleFolder: (path: string, activeSessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => void;
   handleFileClick: (node: any, path: string, activeSession: Session) => Promise<void>;
@@ -58,7 +57,7 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
   const {
     session, theme, fileTreeFilter, setFileTreeFilter, fileTreeFilterOpen, setFileTreeFilterOpen,
     filteredFileTree, selectedFileIndex, setSelectedFileIndex, activeFocus, activeRightTab,
-    previewFile, setActiveFocus, fileTreeContainerRef, fileTreeFilterInputRef, toggleFolder, handleFileClick, expandAllFolders,
+    previewFile, setActiveFocus, fileTreeFilterInputRef, toggleFolder, handleFileClick, expandAllFolders,
     collapseAllFolders, updateSessionWorkingDirectory, refreshFileTree, setSessions, onAutoRefreshChange, onShowFlash,
     showHiddenFiles, setShowHiddenFiles
   } = props;

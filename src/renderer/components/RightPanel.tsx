@@ -435,7 +435,6 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
               activeRightTab={activeRightTab}
               previewFile={previewFile}
               setActiveFocus={setActiveFocus}
-              fileTreeContainerRef={fileTreeContainerRef}
               fileTreeFilterInputRef={fileTreeFilterInputRef}
               toggleFolder={toggleFolder}
               handleFileClick={handleFileClick}
