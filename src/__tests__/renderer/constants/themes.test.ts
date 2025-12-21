@@ -50,6 +50,14 @@ describe('THEMES constant', () => {
       }
     });
 
+    it('should have exactly 17 themes (sync check with ThemeId type)', () => {
+      // This count should match the number of IDs in ThemeId union type.
+      // If a new theme is added to THEMES without updating ThemeId, TypeScript errors.
+      // If ThemeId is updated without adding to isValidThemeId array, other tests fail.
+      // This test serves as an explicit reminder when themes are added/removed.
+      expect(themeIds.length).toBe(17);
+    });
+
     it('should have theme.id matching its key', () => {
       for (const [key, theme] of Object.entries(THEMES)) {
         expect(theme.id).toBe(key);
