@@ -132,7 +132,7 @@ interface MaestroAPI {
     onRemoteCommand: (callback: (sessionId: string, command: string, inputMode?: 'ai' | 'terminal') => void) => () => void;
     onRemoteSwitchMode: (callback: (sessionId: string, mode: 'ai' | 'terminal') => void) => () => void;
     onRemoteInterrupt: (callback: (sessionId: string) => void) => () => void;
-    onRemoteSelectSession: (callback: (sessionId: string) => void) => () => void;
+    onRemoteSelectSession: (callback: (sessionId: string, tabId?: string) => void) => () => void;
     onRemoteSelectTab: (callback: (sessionId: string, tabId: string) => void) => () => void;
     onRemoteNewTab: (callback: (sessionId: string, responseChannel: string) => void) => () => void;
     sendRemoteNewTabResponse: (responseChannel: string, result: { tabId: string } | null) => void;

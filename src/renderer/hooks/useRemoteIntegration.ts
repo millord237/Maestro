@@ -69,48 +69,33 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
   // Handle remote commands from web interface
   // This allows web commands to go through the exact same code path as desktop commands
   useEffect(() => {
-    console.log('[Remote] Setting up onRemoteCommand listener...');
     const unsubscribeRemote = window.maestro.process.onRemoteCommand((sessionId: string, command: string, inputMode?: 'ai' | 'terminal') => {
       // Verify the session exists
       const targetSession = sessionsRef.current.find(s => s.id === sessionId);
 
-      console.log('[Remote] Received command from web interface:', {
-        maestroSessionId: sessionId,
-        agentSessionId: targetSession?.agentSessionId || 'none',
-        state: targetSession?.state || 'NOT_FOUND',
-        sessionInputMode: targetSession?.inputMode || 'unknown',
-        webInputMode: inputMode || 'not provided',
-        command: command.substring(0, 100)
-      });
-
       if (!targetSession) {
-        console.log('[Remote] ERROR: Session not found:', sessionId);
         return;
       }
 
       // Check if session is busy (should have been checked by web server, but double-check)
       if (targetSession.state === 'busy') {
-        console.log('[Remote] REJECTED: Session is busy:', sessionId);
         return;
       }
 
       // If web provided an inputMode, sync the session state before executing
       // This ensures the renderer uses the same mode the web intended
       if (inputMode && targetSession.inputMode !== inputMode) {
-        console.log('[Remote] Syncing inputMode from web:', inputMode, '(was:', targetSession.inputMode, ')');
         setSessions(prev => prev.map(s =>
           s.id === sessionId ? { ...s, inputMode } : s
         ));
       }
 
       // Switch to the target session (for visual feedback)
-      console.log('[Remote] Switching to target session...');
       setActiveSessionId(sessionId);
 
       // Dispatch event directly - handleRemoteCommand handles all the logic
       // Don't set inputValue - we don't want command text to appear in the input bar
       // Pass the inputMode from web so handleRemoteCommand uses it
-      console.log('[Remote] Dispatching maestro:remoteCommand event');
       window.dispatchEvent(new CustomEvent('maestro:remoteCommand', {
         detail: { sessionId, command, inputMode }
       }));
@@ -125,23 +110,18 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
   // This allows web mode switches to go through the same code path as desktop
   useEffect(() => {
     const unsubscribeSwitchMode = window.maestro.process.onRemoteSwitchMode((sessionId: string, mode: 'ai' | 'terminal') => {
-      console.log('[Remote] Received mode switch from web interface:', { sessionId, mode });
-
       // Find the session and update its mode
       setSessions(prev => {
         const session = prev.find(s => s.id === sessionId);
         if (!session) {
-          console.log('[Remote] Session not found for mode switch:', sessionId);
           return prev;
         }
 
         // Only switch if mode is different
         if (session.inputMode === mode) {
-          console.log('[Remote] Session already in mode:', mode);
           return prev;
         }
 
-        console.log('[Remote] Switching session mode:', sessionId, 'to', mode);
         return prev.map(s => {
           if (s.id !== sessionId) return s;
           return { ...s, inputMode: mode };
@@ -158,12 +138,9 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
   // This allows web interrupts to go through the same code path as desktop (handleInterrupt)
   useEffect(() => {
     const unsubscribeInterrupt = window.maestro.process.onRemoteInterrupt(async (sessionId: string) => {
-      console.log('[Remote] Received interrupt from web interface:', { sessionId });
-
       // Find the session
       const session = sessionsRef.current.find(s => s.id === sessionId);
       if (!session) {
-        console.log('[Remote] Session not found for interrupt:', sessionId);
         return;
       }
 
@@ -185,8 +162,6 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
             thinkingStartTime: undefined
           };
         }));
-
-        console.log('[Remote] Interrupt successful for session:', sessionId);
       } catch (error) {
         console.error('[Remote] Failed to interrupt session:', error);
       }
@@ -202,18 +177,14 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
   // If tabId is provided, also switches to that tab within the session
   useEffect(() => {
     const unsubscribeSelectSession = window.maestro.process.onRemoteSelectSession((sessionId: string, tabId?: string) => {
-      console.log('[Remote] Received session selection from web interface:', { sessionId, tabId });
-
       // Check if session exists
       const session = sessionsRef.current.find(s => s.id === sessionId);
       if (!session) {
-        console.log('[Remote] Session not found for selection:', sessionId);
         return;
       }
 
       // Switch to the session (same as clicking in SessionList)
       setActiveSessionId(sessionId);
-      console.log('[Remote] Switched to session:', sessionId);
 
       // If tabId provided, also switch to that tab
       if (tabId) {
@@ -221,10 +192,8 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
           if (s.id !== sessionId) return s;
           // Check if tab exists
           if (!s.aiTabs.some(t => t.id === tabId)) {
-            console.log('[Remote] Tab not found for selection:', tabId);
             return s;
           }
-          console.log('[Remote] Switched to tab:', tabId);
           return { ...s, activeTabId: tabId };
         }));
       }
@@ -233,12 +202,9 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
     // Handle remote tab selection from web interface
     // This also switches to the session if not already active
     const unsubscribeSelectTab = window.maestro.process.onRemoteSelectTab((sessionId: string, tabId: string) => {
-      console.log('[Remote] Received tab selection from web interface:', { sessionId, tabId });
-
       // First, switch to the session if not already active
       const currentActiveId = activeSessionIdRef.current;
       if (currentActiveId !== sessionId) {
-        console.log('[Remote] Switching to session:', sessionId);
         setActiveSessionId(sessionId);
       }
 
@@ -247,7 +213,6 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
         if (s.id !== sessionId) return s;
         // Check if tab exists
         if (!s.aiTabs.some(t => t.id === tabId)) {
-          console.log('[Remote] Tab not found for selection:', tabId);
           return s;
         }
         return { ...s, activeTabId: tabId };
@@ -256,8 +221,6 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
     // Handle remote new tab from web interface
     const unsubscribeNewTab = window.maestro.process.onRemoteNewTab((sessionId: string, responseChannel: string) => {
-      console.log('[Remote] Received new tab request from web interface:', { sessionId, responseChannel });
-
       let newTabId: string | null = null;
 
       setSessions(prev => prev.map(s => {
@@ -280,8 +243,6 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
     // Handle remote close tab from web interface
     const unsubscribeCloseTab = window.maestro.process.onRemoteCloseTab((sessionId: string, tabId: string) => {
-      console.log('[Remote] Received close tab request from web interface:', { sessionId, tabId });
-
       setSessions(prev => prev.map(s => {
         if (s.id !== sessionId) return s;
 
@@ -293,15 +254,12 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
 
     // Handle remote rename tab from web interface
     const unsubscribeRenameTab = window.maestro.process.onRemoteRenameTab((sessionId: string, tabId: string, newName: string) => {
-      console.log('[Remote] Received rename tab request from web interface:', { sessionId, tabId, newName });
-
       setSessions(prev => prev.map(s => {
         if (s.id !== sessionId) return s;
 
         // Find the tab to get its agentSessionId for persistence
         const tab = s.aiTabs.find(t => t.id === tabId);
         if (!tab) {
-          console.log('[Remote] Tab not found for rename:', tabId);
           return s;
         }
 
