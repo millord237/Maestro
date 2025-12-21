@@ -127,6 +127,7 @@ export function ScreenReaderAnnouncement({
 export function useAnnouncement(debounceMs: number = 100) {
   const [message, setMessage] = useState('');
   const [key, setKey] = useState(0);
+  const [politenessLevel, setPolitenessLevel] = useState<AnnouncementPoliteness>('polite');
   const timeoutRef = useRef<number | null>(null);
 
   const announce = (newMessage: string, politeness: AnnouncementPoliteness = 'polite') => {
@@ -138,6 +139,7 @@ export function useAnnouncement(debounceMs: number = 100) {
     // Debounce to avoid rapid announcements
     timeoutRef.current = window.setTimeout(() => {
       setMessage(newMessage);
+      setPolitenessLevel(politeness);
       setKey((prev) => prev + 1);
     }, debounceMs);
   };
@@ -156,6 +158,7 @@ export function useAnnouncement(debounceMs: number = 100) {
     announcementProps: {
       message,
       announceKey: key,
+      politeness: politenessLevel,
     },
   };
 }

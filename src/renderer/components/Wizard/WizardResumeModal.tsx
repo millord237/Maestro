@@ -119,7 +119,6 @@ export function WizardResumeModal({
   // Register layer on mount
   useEffect(() => {
     const id = registerLayer({
-      id: '',
       type: 'modal',
       priority: MODAL_PRIORITIES.WIZARD_RESUME,
       blocksLowerLayers: true,
