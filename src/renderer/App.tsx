@@ -6583,30 +6583,6 @@ export default function MaestroConsole() {
             return result.session;
           }));
         }}
-        onTabRename={(tabId: string, newName: string) => {
-          if (!activeSession) return;
-          // Update tab state
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            // Find the tab to get its agentSessionId for persistence
-            const tab = s.aiTabs.find(t => t.id === tabId);
-            if (tab?.agentSessionId) {
-              // Persist name to agent session metadata (async, fire and forget)
-              // Use projectRoot (not cwd) for consistent session storage access
-              window.maestro.agentSessions.updateSessionName(
-                s.projectRoot,
-                tab.agentSessionId,
-                newName || ''
-              ).catch(err => console.error('Failed to persist tab name:', err));
-            }
-            return {
-              ...s,
-              aiTabs: s.aiTabs.map(t =>
-                t.id === tabId ? { ...t, name: newName || null } : t
-              )
-            };
-          }));
-        }}
         onRequestTabRename={(tabId: string) => {
           if (!activeSession) return;
           const tab = activeSession.aiTabs?.find(t => t.id === tabId);
@@ -6625,16 +6601,6 @@ export default function MaestroConsole() {
             const [movedTab] = tabs.splice(fromIndex, 1);
             tabs.splice(toIndex, 0, movedTab);
             return { ...s, aiTabs: tabs };
-          }));
-        }}
-        onCloseOtherTabs={(tabId: string) => {
-          if (!activeSession) return;
-          // Use functional setState to compute from fresh state (avoids stale closure issues)
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id || !s.aiTabs) return s;
-            const tabToKeep = s.aiTabs.find(t => t.id === tabId);
-            if (!tabToKeep) return s;
-            return { ...s, aiTabs: [tabToKeep], activeTabId: tabId };
           }));
         }}
         onUpdateTabByClaudeSessionId={(agentSessionId: string, updates: { name?: string | null; starred?: boolean }) => {

@@ -11,10 +11,8 @@ interface TabBarProps {
   onTabSelect: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
   onNewTab: () => void;
-  onTabRename?: (tabId: string, newName: string) => void;
   onRequestRename?: (tabId: string) => void;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
-  onCloseOthers?: (tabId: string) => void;
   onTabStar?: (tabId: string, starred: boolean) => void;
   onTabMarkUnread?: (tabId: string) => void;
   showUnreadOnly?: boolean;
@@ -403,10 +401,8 @@ export function TabBar({
   onTabSelect,
   onTabClose,
   onNewTab,
-  onTabRename,
   onRequestRename,
   onTabReorder,
-  onCloseOthers,
   onTabStar,
   onTabMarkUnread,
   showUnreadOnly: showUnreadOnlyProp,

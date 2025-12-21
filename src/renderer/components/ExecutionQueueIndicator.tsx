@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { ListOrdered, Command, MessageSquare } from 'lucide-react';
-import type { Session, Theme, QueuedItem } from '../types';
+import type { Session, Theme } from '../types';
 
 interface ExecutionQueueIndicatorProps {
   session: Session;
