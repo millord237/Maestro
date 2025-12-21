@@ -24,32 +24,7 @@ import { useWizard } from '../WizardContext';
 import { phaseGenerator, AUTO_RUN_FOLDER_NAME, type CreatedFileInfo } from '../services/phaseGenerator';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 import { getNextAustinFact, parseFactWithLinks, type FactSegment } from '../services/austinFacts';
-
-/**
- * Format file size in human-readable format
- */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/**
- * Format elapsed time in human-readable format (e.g., "1h 10m 12s")
- */
-function formatElapsedTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-
-  return parts.join(' ');
-}
+import { formatSize, formatElapsedTime } from '../../../../shared/formatters';
 
 interface PreparingPlanScreenProps {
   theme: Theme;
@@ -319,7 +294,7 @@ function CreatedFileEntry({
             className="text-xs"
             style={{ color: theme.colors.textDim }}
           >
-            {formatFileSize(file.size)}
+            {formatSize(file.size)}
           </span>
         </div>
       </button>
