@@ -907,6 +907,8 @@ contextBridge.exposeInMainWorld('maestro', {
     ) => ipcRenderer.invoke('playbooks:update', sessionId, playbookId, updates),
     delete: (sessionId: string, playbookId: string) =>
       ipcRenderer.invoke('playbooks:delete', sessionId, playbookId),
+    deleteAll: (sessionId: string) =>
+      ipcRenderer.invoke('playbooks:deleteAll', sessionId),
     export: (sessionId: string, playbookId: string, autoRunFolderPath: string) =>
       ipcRenderer.invoke('playbooks:export', sessionId, playbookId, autoRunFolderPath),
     import: (sessionId: string, autoRunFolderPath: string) =>
@@ -1793,6 +1795,10 @@ export interface MaestroAPI {
       error?: string;
     }>;
     delete: (sessionId: string, playbookId: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    deleteAll: (sessionId: string) => Promise<{
       success: boolean;
       error?: string;
     }>;

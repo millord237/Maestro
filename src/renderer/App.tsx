@@ -3541,6 +3541,13 @@ export default function MaestroConsole() {
           console.error('Failed to kill terminal process:', error);
         }
 
+        // Delete associated playbooks
+        try {
+          await window.maestro.playbooks.deleteAll(id);
+        } catch (error) {
+          console.error('Failed to delete playbooks:', error);
+        }
+
         const newSessions = sessions.filter(s => s.id !== id);
         setSessions(newSessions);
         // Flush immediately for critical operation (session deletion)
