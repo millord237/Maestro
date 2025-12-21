@@ -1,4 +1,3 @@
-import React from 'react';
 import { History, Play, Clock, DollarSign, BarChart2, CheckCircle, Bot, User, Eye, Layers } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
