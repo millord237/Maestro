@@ -28,6 +28,8 @@ export type {
   GroupChatParticipant,
   GroupChatMessage,
   GroupChatState,
+  GroupChatHistoryEntry,
+  GroupChatHistoryEntryType,
   ModeratorConfig,
 } from '../../shared/group-chat-types';
 // Import AgentError for use within this file
