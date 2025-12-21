@@ -1,9 +1,13 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { BatchRunState, BatchRunConfig, BatchDocumentEntry, Session, HistoryEntry, UsageStats, Group, AutoRunStats, AgentError, ToolType } from '../types';
 import { substituteTemplateVariables, TemplateContext } from '../utils/templateVariables';
 import { getBadgeForTime, getNextBadge, formatTimeRemaining } from '../constants/conductorBadges';
 import { autorunSynopsisPrompt } from '../../prompts';
 import { parseSynopsis } from '../../shared/synopsis';
+import { formatElapsedTime } from '../../shared/formatters';
+
+// Debounce delay for batch state updates (Quick Win 1)
+const BATCH_STATE_DEBOUNCE_MS = 200;
 
 // Regex to count unchecked markdown checkboxes: - [ ] task (also * [ ])
 const UNCHECKED_TASK_REGEX = /^[\s]*[-*]\s*\[\s*\]\s*.+$/gm;
@@ -116,20 +120,6 @@ interface ErrorResolutionEntry {
   resolve: (action: ErrorResolutionAction) => void;
 }
 
-/**
- * Format duration in human-readable format for loop summaries
- */
-function formatLoopDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h ${remainingMinutes}m`;
-}
 
 /**
  * Create a loop summary history entry
@@ -170,7 +160,7 @@ function createLoopSummaryEntry(params: LoopSummaryParams): Omit<HistoryEntry, '
     `**${summaryPrefix} Summary**`,
     '',
     `- **Tasks Accomplished:** ${loopTasksCompleted}`,
-    `- **Duration:** ${formatLoopDuration(loopElapsedMs)}`,
+    `- **Duration:** ${formatElapsedTime(loopElapsedMs)}`,
     loopTotalInputTokens > 0 || loopTotalOutputTokens > 0
       ? `- **Tokens:** ${(loopTotalInputTokens + loopTotalOutputTokens).toLocaleString()} (${loopTotalInputTokens.toLocaleString()} in / ${loopTotalOutputTokens.toLocaleString()} out)`
       : '',
@@ -260,6 +250,15 @@ export function useBatchProcessor({
   const accumulatedTimeRefs = useRef<Record<string, number>>({});
   const lastActiveTimestampRefs = useRef<Record<string, number | null>>({});
 
+  // Ref to track latest batchRunStates for visibility handler (Quick Win 2)
+  // This avoids re-registering the visibility listener on every state change
+  const batchRunStatesRef = useRef(batchRunStates);
+  batchRunStatesRef.current = batchRunStates;
+
+  // Debounce timer refs for batch state updates (Quick Win 1)
+  const debounceTimerRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingUpdatesRef = useRef<Record<string, (prev: Record<string, BatchRunState>) => Record<string, BatchRunState>>>({});
+
   // Error resolution promises to pause batch processing until user action (per session)
   const errorResolutionRefs = useRef<Record<string, ErrorResolutionEntry>>({});
 
@@ -302,37 +301,68 @@ export function useBatchProcessor({
   }, []);
 
   /**
-   * Update batch state AND broadcast to web interface immediately.
-   * This wrapper ensures mobile clients receive updates synchronously
-   * rather than waiting for React's useEffect cycle.
+   * Update batch state AND broadcast to web interface with debouncing.
+   * This wrapper batches rapid-fire state updates to reduce React re-renders
+   * during intensive task processing. (Quick Win 1)
    *
-   * We capture the new state in a variable and broadcast after setState
-   * to avoid calling side effects inside the state updater (which React
-   * might call multiple times in Strict Mode).
+   * Critical updates (isRunning changes, errors) are processed immediately,
+   * while progress updates are debounced by BATCH_STATE_DEBOUNCE_MS.
    */
   const updateBatchStateAndBroadcast = useCallback((
     sessionId: string,
-    updater: (prev: Record<string, BatchRunState>) => Record<string, BatchRunState>
+    updater: (prev: Record<string, BatchRunState>) => Record<string, BatchRunState>,
+    immediate: boolean = false
   ) => {
-    let newStateForSession: BatchRunState | null = null;
-    setBatchRunStates(prev => {
-      const newStates = updater(prev);
-      // Capture the new state for this session to broadcast after
-      newStateForSession = newStates[sessionId] || null;
-      return newStates;
-    });
-    // Broadcast immediately after setState call (synchronously, before React's next render)
-    // This ensures mobile clients receive updates without waiting for useEffect
-    broadcastAutoRunState(sessionId, newStateForSession);
+    // For immediate updates (start/stop/error), bypass debouncing
+    if (immediate) {
+      let newStateForSession: BatchRunState | null = null;
+      setBatchRunStates(prev => {
+        const newStates = updater(prev);
+        newStateForSession = newStates[sessionId] || null;
+        return newStates;
+      });
+      broadcastAutoRunState(sessionId, newStateForSession);
+      return;
+    }
+
+    // Compose this update with any pending updates for this session
+    const existingUpdater = pendingUpdatesRef.current[sessionId];
+    if (existingUpdater) {
+      pendingUpdatesRef.current[sessionId] = (prev) => updater(existingUpdater(prev));
+    } else {
+      pendingUpdatesRef.current[sessionId] = updater;
+    }
+
+    // Clear existing timer and set a new one
+    if (debounceTimerRefs.current[sessionId]) {
+      clearTimeout(debounceTimerRefs.current[sessionId]);
+    }
+
+    debounceTimerRefs.current[sessionId] = setTimeout(() => {
+      const composedUpdater = pendingUpdatesRef.current[sessionId];
+      if (composedUpdater) {
+        let newStateForSession: BatchRunState | null = null;
+        setBatchRunStates(prev => {
+          const newStates = composedUpdater(prev);
+          newStateForSession = newStates[sessionId] || null;
+          return newStates;
+        });
+        broadcastAutoRunState(sessionId, newStateForSession);
+        delete pendingUpdatesRef.current[sessionId];
+      }
+      delete debounceTimerRefs.current[sessionId];
+    }, BATCH_STATE_DEBOUNCE_MS);
   }, [broadcastAutoRunState]);
 
-  // Visibility change handler to pause/resume time tracking
+  // Visibility change handler to pause/resume time tracking (Quick Win 2)
+  // Uses ref instead of state to avoid re-registering listener on every state change
   useEffect(() => {
     const handleVisibilityChange = () => {
       const now = Date.now();
 
       // Update time tracking for all running batch sessions
-      Object.entries(batchRunStates).forEach(([sessionId, state]) => {
+      // Use ref to get latest state without causing effect re-registration
+      Object.entries(batchRunStatesRef.current).forEach(([sessionId, state]) => {
         if (!state.isRunning) return;
 
         if (document.hidden) {
@@ -361,7 +391,7 @@ export function useBatchProcessor({
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [batchRunStates]);
+  }, []); // Empty deps - handler uses ref for latest state
 
   /**
    * Helper function to read a document and count its tasks
@@ -584,7 +614,7 @@ ${docList}
         accumulatedElapsedMs: 0,
         lastActiveTimestamp: batchStartTime
       }
-    }));
+    }), true); // immediate: critical state change (isRunning: true)
 
     // AUTORUN LOG: Start
     try {
@@ -1180,7 +1210,7 @@ ${docList}
         `**Loop ${loopIteration + 1} Summary**`,
         '',
         `- **Tasks Accomplished:** ${loopTasksCompleted}`,
-        `- **Duration:** ${formatLoopDuration(loopElapsedMs)}`,
+        `- **Duration:** ${formatElapsedTime(loopElapsedMs)}`,
         loopTotalInputTokens > 0 || loopTotalOutputTokens > 0
           ? `- **Tokens:** ${(loopTotalInputTokens + loopTotalOutputTokens).toLocaleString()} (${loopTotalInputTokens.toLocaleString()} in / ${loopTotalOutputTokens.toLocaleString()} out)`
           : '',
@@ -1343,7 +1373,7 @@ ${docList}
 
     // Build summary with stall info if applicable
     const stalledSuffix = stalledCount > 0 ? ` (${stalledCount} stalled)` : '';
-    const finalSummary = `Auto Run ${statusText}: ${totalCompletedTasks} task${totalCompletedTasks !== 1 ? 's' : ''} in ${formatLoopDuration(totalElapsedMs)}${stalledSuffix}`;
+    const finalSummary = `Auto Run ${statusText}: ${totalCompletedTasks} task${totalCompletedTasks !== 1 ? 's' : ''} in ${formatElapsedTime(totalElapsedMs)}${stalledSuffix}`;
 
     // Build status message with detailed info
     let statusMessage: string;
@@ -1376,7 +1406,7 @@ ${docList}
       '',
       `- **Status:** ${statusMessage}`,
       `- **Tasks Completed:** ${totalCompletedTasks}`,
-      `- **Total Duration:** ${formatLoopDuration(totalElapsedMs)}`,
+      `- **Total Duration:** ${formatElapsedTime(totalElapsedMs)}`,
       loopEnabled ? `- **Loops Completed:** ${loopsCompleted}` : '',
       totalInputTokens > 0 || totalOutputTokens > 0
         ? `- **Total Tokens:** ${(totalInputTokens + totalOutputTokens).toLocaleString()} (${totalInputTokens.toLocaleString()} in / ${totalOutputTokens.toLocaleString()} out)`
@@ -1444,7 +1474,7 @@ ${docList}
         originalContent: '',
         sessionIds: agentSessionIds
       }
-    }));
+    }), true); // immediate: critical state change (isRunning: false)
 
     // Call completion callback if provided
     if (onComplete) {
@@ -1480,7 +1510,7 @@ ${docList}
         ...prev[sessionId],
         isStopping: true
       }
-    }));
+    }), true); // immediate: critical state change (isStopping: true)
   }, [updateBatchStateAndBroadcast]);
 
   /**
@@ -1515,7 +1545,7 @@ ${docList}
           errorTaskDescription: taskDescription
         }
       };
-    });
+    }, true); // immediate: critical state change (error)
 
     if (!errorResolutionRefs.current[sessionId]) {
       let resolvePromise: ((action: ErrorResolutionAction) => void) | undefined;
@@ -1558,7 +1588,7 @@ ${docList}
           errorTaskDescription: undefined
         }
       };
-    });
+    }, true); // immediate: critical state change (clearing error)
 
     const errorResolution = errorResolutionRefs.current[sessionId];
     if (errorResolution) {
@@ -1596,7 +1626,7 @@ ${docList}
           errorTaskDescription: undefined
         }
       };
-    });
+    }, true); // immediate: critical state change (resuming)
 
     const errorResolution = errorResolutionRefs.current[sessionId];
     if (errorResolution) {
@@ -1633,7 +1663,7 @@ ${docList}
         errorDocumentIndex: undefined,
         errorTaskDescription: undefined
       }
-    }));
+    }), true); // immediate: critical state change (aborting)
   }, [updateBatchStateAndBroadcast]);
 
   return {
