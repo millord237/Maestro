@@ -1,10 +1,11 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, Eye, History, File, Folder, GitBranch, Tag, PenLine } from 'lucide-react';
 import type { Session, Theme, BatchRunState } from '../types';
 import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks/useTabCompletion';
 import { ThinkingStatusPill } from './ThinkingStatusPill';
 import { ExecutionQueueIndicator } from './ExecutionQueueIndicator';
 import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
+import { useScrollIntoView } from '../hooks/useScrollIntoView';
 import { getProviderDisplayName } from '../utils/sessionValidation';
 
 interface SlashCommand {
@@ -181,18 +182,22 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     Math.max(0, filteredSlashCommands.length - 1)
   );
 
-  // Refs for slash command items to enable scroll-into-view
-  // Reset refs array length when filtered commands change to avoid stale refs
-  const slashCommandItemRefs = useRef<(HTMLDivElement | null)[]>([]);
-  if (slashCommandItemRefs.current.length !== filteredSlashCommands.length) {
-    slashCommandItemRefs.current = slashCommandItemRefs.current.slice(0, filteredSlashCommands.length);
-  }
-
-  // Refs for tab completion items to enable scroll-into-view
-  const tabCompletionItemRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  // Refs for @ mention items to enable scroll-into-view
-  const atMentionItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Use scroll-into-view hooks for all dropdown lists
+  const slashCommandItemRefs = useScrollIntoView<HTMLDivElement>(
+    slashCommandOpen,
+    safeSelectedIndex,
+    filteredSlashCommands.length
+  );
+  const tabCompletionItemRefs = useScrollIntoView<HTMLDivElement>(
+    tabCompletionOpen,
+    selectedTabCompletionIndex,
+    tabCompletionSuggestions.length
+  );
+  const atMentionItemRefs = useScrollIntoView<HTMLDivElement>(
+    atMentionOpen,
+    selectedAtMentionIndex,
+    atMentionSuggestions.length
+  );
 
   // Memoize command history filtering to avoid expensive Set operations on every keystroke
   const commandHistoryFilterLower = commandHistoryFilter.toLowerCase();
@@ -203,36 +208,6 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
       .reverse()
       .slice(0, 10);
   }, [currentCommandHistory, commandHistoryFilterLower]);
-
-  // Scroll selected slash command into view when index changes
-  useEffect(() => {
-    if (slashCommandOpen && slashCommandItemRefs.current[safeSelectedIndex]) {
-      slashCommandItemRefs.current[safeSelectedIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-    }
-  }, [safeSelectedIndex, slashCommandOpen, selectedSlashCommandIndex]);
-
-  // Scroll selected tab completion item into view when index changes
-  useEffect(() => {
-    if (tabCompletionOpen && tabCompletionItemRefs.current[selectedTabCompletionIndex]) {
-      tabCompletionItemRefs.current[selectedTabCompletionIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-    }
-  }, [selectedTabCompletionIndex, tabCompletionOpen]);
-
-  // Scroll selected @ mention item into view when index changes
-  useEffect(() => {
-    if (atMentionOpen && atMentionItemRefs.current[selectedAtMentionIndex]) {
-      atMentionItemRefs.current[selectedAtMentionIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-    }
-  }, [selectedAtMentionIndex, atMentionOpen]);
 
   // Auto-resize textarea when inputValue changes externally (e.g., tab switch)
   // This ensures the textarea height matches the content when switching between tabs
