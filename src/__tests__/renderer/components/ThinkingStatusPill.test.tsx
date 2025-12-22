@@ -445,12 +445,11 @@ describe('ThinkingStatusPill', () => {
         />
       );
 
-      // The clickable button shows session name (priority: namedSessions > tab name > session name > UUID)
-      const buttons = screen.getAllByText('Click Test Session');
-      // Find the button element (the clickable one with accent color)
-      const clickableButton = buttons.find(el => el.tagName === 'BUTTON');
-      expect(clickableButton).toBeDefined();
-      fireEvent.click(clickableButton!);
+      // The clickable button shows UUID octet (first 8 chars uppercase) when no tab name or custom name
+      // agentSessionId: 'claude-456' -> displayClaudeId: 'CLAUDE-4'
+      const claudeIdButton = screen.getByText('CLAUDE-4');
+      expect(claudeIdButton.tagName).toBe('BUTTON');
+      fireEvent.click(claudeIdButton);
 
       expect(onSessionClick).toHaveBeenCalledWith('session-123', undefined);
     });
@@ -1034,16 +1033,17 @@ describe('ThinkingStatusPill', () => {
     });
 
     it('applies accent color to Claude ID button', () => {
-      const session = createThinkingSession({ name: 'Accent Test', agentSessionId: 'test-id' });
+      const session = createThinkingSession({ name: 'Accent Test', agentSessionId: 'test-id-1234' });
       render(
         <ThinkingStatusPill
           sessions={[session]}
           theme={mockTheme}
         />
       );
-      // Claude ID button shows session name (priority: namedSessions > tab > session name > UUID)
-      const buttons = screen.getAllByText('Accent Test');
-      const claudeButton = buttons.find(el => el.tagName === 'BUTTON');
+      // Claude ID button shows UUID octet when no custom name or tab name
+      // agentSessionId: 'test-id-1234' -> displayClaudeId: 'TEST-ID-'
+      const claudeButton = screen.getByText('TEST-ID-');
+      expect(claudeButton.tagName).toBe('BUTTON');
       expect(claudeButton).toHaveStyle({ color: mockTheme.colors.accent });
     });
   });
@@ -1146,9 +1146,9 @@ describe('ThinkingStatusPill', () => {
       );
 
       // Component should have re-rendered with new theme
-      // Claude button shows session name
-      const buttons = screen.getAllByText('Theme Test');
-      const claudeButton = buttons.find(el => el.tagName === 'BUTTON');
+      // Claude ID button shows UUID octet (ABC12345 from default agentSessionId)
+      const claudeButton = screen.getByText('ABC12345');
+      expect(claudeButton.tagName).toBe('BUTTON');
       expect(claudeButton).toHaveStyle({ color: '#ff0000' });
     });
 

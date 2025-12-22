@@ -317,7 +317,8 @@ describe('BatchRunnerModal', () => {
 
       // Wait for task counts to load
       await waitFor(() => {
-        expect(screen.getByText('5 tasks')).toBeInTheDocument();
+        expect(screen.getByText('5')).toBeInTheDocument();
+        expect(screen.getByText('tasks')).toBeInTheDocument();
       });
 
       // Find and click the reset button
@@ -335,7 +336,8 @@ describe('BatchRunnerModal', () => {
 
       // First enable reset (which shows the duplicate button)
       await waitFor(() => {
-        expect(screen.getByText('5 tasks')).toBeInTheDocument();
+        expect(screen.getByText('5')).toBeInTheDocument();
+        expect(screen.getByText('tasks')).toBeInTheDocument();
       });
 
       const resetButton = screen.getByTitle(/Enable reset/);
@@ -853,181 +855,8 @@ describe('BatchRunnerModal', () => {
     });
   });
 
-  describe('Git Worktree', () => {
-    beforeEach(() => {
-      // Reset git mocks before each test in this suite
-      (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
-      (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main', 'develop'] });
-      (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: true, authenticated: true });
-      (window.maestro.git as Record<string, unknown>).worktreeInfo = vi.fn().mockResolvedValue({ success: true, exists: false, isWorktree: false });
-      (window.maestro.git as Record<string, unknown>).getRepoRoot = vi.fn().mockResolvedValue({ success: true, root: '/path/to/project' });
-    });
-
-    it('shows Git Worktree section for git repos', async () => {
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Git Worktree')).toBeInTheDocument();
-      });
-    });
-
-    it('hides Git Worktree section for non-git repos', async () => {
-      (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(false);
-
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(window.maestro.git.isRepo).toHaveBeenCalled();
-      });
-
-      // Give time for the component to update state
-      await waitFor(() => {
-        expect(screen.queryByText('Git Worktree')).not.toBeInTheDocument();
-      }, { timeout: 1000 });
-    });
-
-    it('shows gh CLI warning when not installed', async () => {
-      (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: false, authenticated: false });
-
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Git Worktree')).toBeInTheDocument();
-      });
-
-      // The warning should be visible when gh CLI is not installed
-      await waitFor(() => {
-        expect(screen.getByText('GitHub CLI')).toBeInTheDocument();
-      });
-    });
-
-    it('enables worktree configuration when checkbox is clicked', async () => {
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      // Wait for git check to complete and show Enable Worktree button
-      await waitFor(() => {
-        expect(screen.getByText('Git Worktree')).toBeInTheDocument();
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('/path/to/worktrees')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('feature-xyz')).toBeInTheDocument();
-      });
-    });
-
-    it('opens folder dialog when Browse is clicked', async () => {
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
-
-      expect(window.maestro.dialog.selectFolder).toHaveBeenCalled();
-    });
-
-    it('shows Create PR checkbox when gh is authenticated', async () => {
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Create PR on completion')).toBeInTheDocument();
-      });
-    });
-
-    it('shows target branch selector', async () => {
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('main')).toBeInTheDocument();
-      });
-    });
-
-    it('shows gh auth warning when not authenticated', async () => {
-      (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: true, authenticated: false });
-
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      await waitFor(() => {
-        expect(screen.getByText(/gh auth login/)).toBeInTheDocument();
-      });
-    });
-
-    it('validates existing worktree path', async () => {
-      (window.maestro.git as Record<string, unknown>).worktreeInfo = vi.fn().mockResolvedValue({
-        success: true,
-        exists: true,
-        isWorktree: true,
-        currentBranch: 'feature-branch',
-        repoRoot: '/path/to/project',
-      });
-
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      const pathInput = screen.getByPlaceholderText('/path/to/worktrees');
-      fireEvent.change(pathInput, { target: { value: '/path/to/worktrees' } });
-      fireEvent.change(screen.getByPlaceholderText('feature-xyz'), { target: { value: 'different-branch' } });
-
-      // Should show validation info after debounce
-      await waitFor(() => {
-        expect(screen.getByText(/Worktree exists with branch/)).toBeInTheDocument();
-      }, { timeout: 1000 });
-    });
-
-    it('shows error for worktree in different repo', async () => {
-      (window.maestro.git as Record<string, unknown>).worktreeInfo = vi.fn().mockResolvedValue({
-        success: true,
-        exists: true,
-        isWorktree: true,
-        currentBranch: 'main',
-        repoRoot: '/different/project',
-      });
-      (window.maestro.git as Record<string, unknown>).getRepoRoot = vi.fn().mockResolvedValue({
-        success: true,
-        root: '/path/to/project',
-      });
-
-      render(<BatchRunnerModal {...createDefaultProps()} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      const pathInput = screen.getByPlaceholderText('/path/to/worktrees');
-      fireEvent.change(pathInput, { target: { value: '/different/worktree' } });
-      // Also set branch name to trigger validation (computedWorktreePath requires both)
-      fireEvent.change(screen.getByPlaceholderText('feature-xyz'), { target: { value: 'my-branch' } });
-
-      await waitFor(() => {
-        expect(screen.getByText(/different repository/)).toBeInTheDocument();
-      }, { timeout: 2000 });
-    });
-  });
+  // NOTE: Git Worktree tests were removed - worktree configuration has moved to WorktreeConfigModal
+  // See src/__tests__/renderer/components/GitWorktreeSection.test.tsx for worktree-specific tests
 
   describe('Go/Run Functionality', () => {
     it('calls onGo with correct config when Go is clicked', async () => {
@@ -1035,7 +864,8 @@ describe('BatchRunnerModal', () => {
       render(<BatchRunnerModal {...props} />);
 
       await waitFor(() => {
-        expect(screen.getByText('5 tasks')).toBeInTheDocument();
+        expect(screen.getByText('5')).toBeInTheDocument();
+        expect(screen.getByText('tasks')).toBeInTheDocument();
       });
 
       fireEvent.click(screen.getByRole('button', { name: /Go/ }));
@@ -1074,43 +904,7 @@ describe('BatchRunnerModal', () => {
       const goButton = screen.getByRole('button', { name: /Go/ });
       expect(goButton).toBeDisabled();
     });
-
-    it('includes worktree config when worktree is enabled', async () => {
-      // Reset git mocks for this test since it's outside the Git Worktree describe block
-      (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
-      (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main', 'develop'] });
-      (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: true, authenticated: true });
-      (window.maestro.git as Record<string, unknown>).worktreeInfo = vi.fn().mockResolvedValue({ success: true, exists: false, isWorktree: false });
-      (window.maestro.git as Record<string, unknown>).getRepoRoot = vi.fn().mockResolvedValue({ success: true, root: '/path/to/project' });
-
-      const props = createDefaultProps();
-      render(<BatchRunnerModal {...props} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Enable Worktree')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Enable Worktree' }));
-
-      fireEvent.change(screen.getByPlaceholderText('/path/to/worktrees'), { target: { value: '/my/worktree' } });
-      fireEvent.change(screen.getByPlaceholderText('feature-xyz'), { target: { value: 'my-branch' } });
-
-      // Wait for validation
-      await waitFor(() => {
-        expect(screen.getByText('5 tasks')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByRole('button', { name: /Go/ }));
-
-      expect(props.onGo).toHaveBeenCalledWith(expect.objectContaining({
-        worktree: expect.objectContaining({
-          enabled: true,
-          path: '/my/worktree/my-branch', // computedWorktreePath = baseDir + '/' + branchName
-          branchName: 'my-branch',
-          createPROnCompletion: false,
-          prTargetBranch: 'main',
-        }),
-      }));
-    });
+    // NOTE: 'includes worktree config when worktree is enabled' test removed - worktree is now in WorktreeConfigModal
   });
 
   describe('Save Functionality', () => {
@@ -1378,8 +1172,8 @@ describe('Loop Mode Additional Controls', () => {
     const slider = screen.getByRole('slider');
     fireEvent.change(slider, { target: { value: '15' } });
 
-    // Wait for task counts to load (multiple documents, each shows 5 tasks)
-    await waitFor(() => expect(screen.getAllByText('5 tasks').length).toBeGreaterThanOrEqual(2));
+    // Wait for task counts to load (total shows combined count: 10 tasks from 2 docs)
+    await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Go/ }));
 
     expect(props.onGo).toHaveBeenCalledWith(expect.objectContaining({
@@ -1401,8 +1195,8 @@ describe('Loop Mode Additional Controls', () => {
     const loopButton = await screen.findByText('Loop');
     fireEvent.click(loopButton);
 
-    // Wait for task counts to load (multiple documents, each shows 5 tasks)
-    await waitFor(() => expect(screen.getAllByText('5 tasks').length).toBeGreaterThanOrEqual(2));
+    // Wait for task counts to load (total shows combined count: 10 tasks from 2 docs)
+    await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Go/ }));
 
     expect(props.onGo).toHaveBeenCalledWith(expect.objectContaining({
@@ -1416,7 +1210,8 @@ describe('Loop Mode Additional Controls', () => {
 // The BatchRunnerModal does handle escape priority for nested modals via the updateLayerHandler
 // but testing this requires complex async timing that causes timeouts in the test environment
 
-describe('Playbook with Worktree Settings', () => {
+// NOTE: Worktree UI has moved to WorktreeConfigModal - these tests no longer apply to BatchRunnerModal
+describe.skip('Playbook with Worktree Settings', () => {
   beforeEach(() => {
     (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main', 'develop'] });
@@ -1929,7 +1724,8 @@ describe('Click Outside Dropdown Handlers', () => {
     });
   });
 
-  it('closes branch dropdown when clicking outside', async () => {
+  // NOTE: Worktree UI has moved to WorktreeConfigModal - this test no longer applies to BatchRunnerModal
+  it.skip('closes branch dropdown when clicking outside', async () => {
     (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main', 'develop', 'feature'] });
     (window.maestro.git as Record<string, unknown>).checkGhCli = vi.fn().mockResolvedValue({ installed: true, authenticated: true });
@@ -2031,7 +1827,8 @@ describe('Save as New Playbook', () => {
   });
 });
 
-describe('Worktree Browse Button', () => {
+// NOTE: Worktree UI has moved to WorktreeConfigModal - these tests no longer apply to BatchRunnerModal
+describe.skip('Worktree Browse Button', () => {
   it('opens folder dialog and sets worktree path', async () => {
     (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main'] });
@@ -2084,7 +1881,8 @@ describe('Worktree Browse Button', () => {
   });
 });
 
-describe('Worktree Validation Edge Cases', () => {
+// NOTE: Worktree UI has moved to WorktreeConfigModal - these tests no longer apply to BatchRunnerModal
+describe.skip('Worktree Validation Edge Cases', () => {
   it('shows uncommitted changes warning when branch mismatch exists', async () => {
     (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main'] });
@@ -2233,12 +2031,14 @@ describe('countUncheckedTasks helper', () => {
     render(<BatchRunnerModal {...props} />);
 
     await waitFor(() => {
-      expect(screen.getByText('5 tasks')).toBeInTheDocument();
+      expect(screen.getByText('5')).toBeInTheDocument();
+      expect(screen.getByText('tasks')).toBeInTheDocument();
     });
   });
 });
 
-describe('GitHub CLI Link', () => {
+// NOTE: GitHub CLI Link tests removed - worktree UI has moved to GitWorktreeSection and WorktreeConfigModal
+describe.skip('GitHub CLI Link', () => {
   it('renders GitHub CLI link and prevents propagation on click', async () => {
     (window.maestro.git as Record<string, unknown>).isRepo = vi.fn().mockResolvedValue(true);
     (window.maestro.git as Record<string, unknown>).branches = vi.fn().mockResolvedValue({ branches: ['main'] });

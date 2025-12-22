@@ -802,21 +802,23 @@ describe('AutoRun', () => {
       });
     });
 
-    it('shows image upload button in edit mode', () => {
+    // NOTE: Image upload button is currently disabled in the component (wrapped in `false &&`)
+    // These tests are skipped until the feature is re-enabled
+    it.skip('shows image upload button in edit mode', () => {
       const props = createDefaultProps({ mode: 'edit' });
       renderWithProvider(<AutoRun {...props} />);
 
       expect(screen.getByTitle('Add image (or paste from clipboard)')).toBeInTheDocument();
     });
 
-    it('hides image upload button in preview mode', () => {
+    it.skip('hides image upload button in preview mode', () => {
       const props = createDefaultProps({ mode: 'preview' });
       renderWithProvider(<AutoRun {...props} />);
 
       expect(screen.queryByTitle('Add image (or paste from clipboard)')).not.toBeInTheDocument();
     });
 
-    it('hides image upload button when locked', () => {
+    it.skip('hides image upload button when locked', () => {
       const batchRunState = createBatchRunState();
       const props = createDefaultProps({ batchRunState });
       renderWithProvider(<AutoRun {...props} />);

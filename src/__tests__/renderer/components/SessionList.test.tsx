@@ -1621,8 +1621,8 @@ describe('SessionList', () => {
       });
       const { container } = render(<SessionList {...props} />);
 
-      // Should show palette indicators
-      const indicators = container.querySelectorAll('.rounded-full.flex-1');
+      // Should show palette indicators (outer containers have rounded-full class)
+      const indicators = container.querySelectorAll('.flex-1.flex.rounded-full');
       expect(indicators.length).toBeGreaterThan(0);
     });
 
@@ -1663,8 +1663,10 @@ describe('SessionList', () => {
       });
       const { container } = render(<SessionList {...props} />);
 
-      // Find and click on indicator
-      const indicator = container.querySelector('.rounded-full.flex-1');
+      // Find the outer pill container (has flex-1 and rounded-full)
+      const pillContainer = container.querySelector('.flex-1.flex.rounded-full');
+      // The click handler is on the inner segment (group/segment div with flex-1)
+      const indicator = pillContainer?.querySelector('.flex-1.h-full');
       fireEvent.click(indicator!);
 
       expect(setActiveSessionId).toHaveBeenCalledWith('s1');
@@ -1695,8 +1697,9 @@ describe('SessionList', () => {
       });
       const { container } = render(<SessionList {...props} />);
 
-      // Find indicator
-      const indicator = container.querySelector('.rounded-full.flex-1');
+      // Find the outer pill container and then the inner segment with the hover handler
+      const pillContainer = container.querySelector('.flex-1.flex.rounded-full');
+      const indicator = pillContainer?.querySelector('.flex-1.h-full');
       fireEvent.mouseEnter(indicator!, { clientX: 100, clientY: 100 });
 
       // Tooltip should contain session info
@@ -2257,8 +2260,9 @@ describe('SessionList', () => {
       // First collapse the ungrouped section
       fireEvent.click(screen.getByText('Ungrouped Agents'));
 
-      // Find the collapsed indicator
-      const indicator = container.querySelector('.rounded-full.flex-1');
+      // Find the collapsed indicator (outer pill has rounded-full, inner segment has the event handlers)
+      const pillContainer = container.querySelector('.flex-1.flex.rounded-full');
+      const indicator = pillContainer?.querySelector('.flex-1.h-full');
       if (indicator) {
         fireEvent.mouseEnter(indicator, { clientX: 150, clientY: 150 });
 
@@ -2286,8 +2290,9 @@ describe('SessionList', () => {
       // First collapse the ungrouped section
       fireEvent.click(screen.getByText('Ungrouped Agents'));
 
-      // Find the collapsed indicator
-      const indicator = container.querySelector('.rounded-full.flex-1');
+      // Find the collapsed indicator (outer pill has rounded-full, inner segment has the event handlers)
+      const pillContainer = container.querySelector('.flex-1.flex.rounded-full');
+      const indicator = pillContainer?.querySelector('.flex-1.h-full');
       if (indicator) {
         // First hover to set tooltip position
         fireEvent.mouseEnter(indicator, { clientX: 150, clientY: 150 });
@@ -2318,8 +2323,9 @@ describe('SessionList', () => {
       // Collapse ungrouped section
       fireEvent.click(screen.getByText('Ungrouped Agents'));
 
-      // Find and click the indicator
-      const indicator = container.querySelector('.rounded-full.flex-1');
+      // Find and click the indicator (outer pill has rounded-full, inner segment has the click handler)
+      const pillContainer = container.querySelector('.flex-1.flex.rounded-full');
+      const indicator = pillContainer?.querySelector('.flex-1.h-full');
       if (indicator) {
         fireEvent.click(indicator);
         expect(setActiveSessionId).toHaveBeenCalledWith('s1');

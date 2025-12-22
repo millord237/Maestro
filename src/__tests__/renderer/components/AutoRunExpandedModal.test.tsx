@@ -197,7 +197,9 @@ describe('AutoRunExpandedModal', () => {
       expect(screen.getByTestId('eye-icon')).toBeInTheDocument();
     });
 
-    it('should render image upload button', () => {
+    // NOTE: Image upload button is currently disabled in the component (wrapped in `false &&`)
+    // This test is skipped until the feature is re-enabled
+    it.skip('should render image upload button', () => {
       const props = createDefaultProps();
       renderWithProvider(<AutoRunExpandedModal {...props} />);
 
@@ -383,7 +385,9 @@ describe('AutoRunExpandedModal', () => {
       expect(editButton).toHaveClass('opacity-50', 'cursor-not-allowed');
     });
 
-    it('should disable image upload button when locked', () => {
+    // NOTE: Image upload button is currently disabled in the component (wrapped in `false &&`)
+    // This test is skipped until the feature is re-enabled
+    it.skip('should disable image upload button when locked', () => {
       const props = createDefaultProps({
         batchRunState: { isRunning: true, isStopping: false } as BatchRunState,
       });
@@ -707,7 +711,9 @@ describe('AutoRunExpandedModal', () => {
     });
   });
 
-  describe('Image Upload Button', () => {
+  // NOTE: Image upload button is currently disabled in the component (wrapped in `false &&`)
+  // These tests are skipped until the feature is re-enabled
+  describe.skip('Image Upload Button', () => {
     it('should be enabled in edit mode', () => {
       const props = createDefaultProps({ mode: 'edit' });
       renderWithProvider(<AutoRunExpandedModal {...props} />);

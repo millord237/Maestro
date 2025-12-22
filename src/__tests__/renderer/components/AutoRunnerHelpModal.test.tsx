@@ -183,7 +183,9 @@ describe('AutoRunnerHelpModal', () => {
       expect(screen.getByText(/While Auto Run is active, the AI interpreter operates in/)).toBeInTheDocument();
     });
 
-    it('should render Git Worktree section', () => {
+    // NOTE: Git Worktree section was removed from the help modal
+    // The worktree UI has moved to WorktreeConfigModal
+    it.skip('should render Git Worktree section', () => {
       expect(screen.getByText('Git Worktree (Parallel Work)')).toBeInTheDocument();
       expect(screen.getByText(/For Git repositories, enable/)).toBeInTheDocument();
     });
