@@ -6369,7 +6369,6 @@ export default function MaestroConsole() {
           onClose={() => setWorktreeConfigModalOpen(false)}
           theme={theme}
           session={activeSession}
-          worktreeChildren={sessions.filter(s => s.parentSessionId === activeSession.id)}
           onSaveConfig={(config) => {
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id
@@ -6380,13 +6379,6 @@ export default function MaestroConsole() {
           onCreateWorktree={async (branchName) => {
             // TODO: Implement worktree creation via git worktree add
             console.log('[WorktreeConfig] Create worktree:', branchName);
-          }}
-          onRemoveWorktree={(sessionId) => {
-            // Remove the worktree session
-            setSessions(prev => prev.filter(s => s.id !== sessionId));
-          }}
-          onSelectWorktree={(sessionId) => {
-            setActiveSessionId(sessionId);
           }}
         />
       )}
@@ -6723,6 +6715,21 @@ export default function MaestroConsole() {
             onEditAgent={(session) => {
               setEditAgentSession(session);
               setEditAgentModalOpen(true);
+            }}
+            onOpenCreatePR={(session) => {
+              setCreatePRSession(session);
+              setCreatePRModalOpen(true);
+            }}
+            onOpenWorktreeConfig={(session) => {
+              // Set the active session to the one we're configuring, then open the modal
+              setActiveSessionId(session.id);
+              setWorktreeConfigModalOpen(true);
+            }}
+            onDeleteWorktree={(session) => {
+              // Show confirmation before deleting the worktree session
+              showConfirmation(`Delete worktree session "${session.name}"? This will remove the sub-agent but not the git worktree directory.`, () => {
+                setSessions(prev => prev.filter(s => s.id !== session.id));
+              });
             }}
             activeBatchSessionIds={activeBatchSessionIds}
             showSessionJumpNumbers={showSessionJumpNumbers}

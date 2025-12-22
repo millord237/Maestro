@@ -25,6 +25,7 @@ interface SessionContextMenuProps {
   theme: Theme;
   session: Session;
   groups: Group[];
+  hasWorktreeChildren: boolean; // Whether this parent has worktree sub-agents
   onRename: () => void;
   onEdit: () => void;
   onToggleBookmark: () => void;
@@ -32,6 +33,8 @@ interface SessionContextMenuProps {
   onDelete: () => void;
   onDismiss: () => void;
   onCreatePR?: () => void; // For worktree child sessions
+  onCreateWorktree?: () => void; // For parent sessions to create new worktree
+  onDeleteWorktree?: () => void; // For worktree child sessions to delete
 }
 
 function SessionContextMenu({
@@ -40,6 +43,7 @@ function SessionContextMenu({
   theme,
   session,
   groups,
+  hasWorktreeChildren,
   onRename,
   onEdit,
   onToggleBookmark,
@@ -47,6 +51,8 @@ function SessionContextMenu({
   onDelete,
   onDismiss,
   onCreatePR,
+  onCreateWorktree,
+  onDeleteWorktree,
 }: SessionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const moveToGroupRef = useRef<HTMLDivElement>(null);
@@ -147,21 +153,54 @@ function SessionContextMenu({
         {session.bookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
       </button>
 
-      {/* Create PR - only for worktree child sessions */}
-      {session.parentSessionId && session.worktreeBranch && onCreatePR && (
+      {/* Worktree section - for parent sessions with worktree children OR worktree child sessions */}
+      {((hasWorktreeChildren || session.isGitRepo) && !session.parentSessionId && onCreateWorktree) && (
         <>
           <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
           <button
             onClick={() => {
-              onCreatePR();
+              onCreateWorktree();
               onDismiss();
             }}
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
             style={{ color: theme.colors.accent }}
           >
-            <GitPullRequest className="w-3.5 h-3.5" />
-            Create Pull Request
+            <GitBranch className="w-3.5 h-3.5" />
+            Create Worktree
           </button>
+        </>
+      )}
+
+      {/* Worktree child session actions */}
+      {session.parentSessionId && session.worktreeBranch && (
+        <>
+          <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+          {onCreatePR && (
+            <button
+              onClick={() => {
+                onCreatePR();
+                onDismiss();
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
+              style={{ color: theme.colors.accent }}
+            >
+              <GitPullRequest className="w-3.5 h-3.5" />
+              Create Pull Request
+            </button>
+          )}
+          {onDeleteWorktree && (
+            <button
+              onClick={() => {
+                onDeleteWorktree();
+                onDismiss();
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
+              style={{ color: theme.colors.error }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Worktree
+            </button>
+          )}
         </>
       )}
 
@@ -603,6 +642,8 @@ interface SessionListProps {
   // Worktree handlers
   onToggleWorktreeExpanded?: (sessionId: string) => void;
   onOpenCreatePR?: (session: Session) => void;
+  onOpenWorktreeConfig?: (session: Session) => void;
+  onDeleteWorktree?: (session: Session) => void;
 
   // Auto mode props
   activeBatchSessionIds?: string[]; // Session IDs that are running in auto mode
@@ -666,6 +707,8 @@ export function SessionList(props: SessionListProps) {
     onEditAgent,
     onToggleWorktreeExpanded,
     onOpenCreatePR,
+    onOpenWorktreeConfig,
+    onDeleteWorktree,
     activeBatchSessionIds = [],
     showSessionJumpNumbers = false,
     visibleSessions = [],
@@ -2076,6 +2119,7 @@ export function SessionList(props: SessionListProps) {
           theme={theme}
           session={contextMenuSession}
           groups={groups}
+          hasWorktreeChildren={sessions.some(s => s.parentSessionId === contextMenuSession.id)}
           onRename={() => {
             setRenameInstanceValue(contextMenuSession.name);
             setRenameInstanceSessionId(contextMenuSession.id);
@@ -2087,6 +2131,8 @@ export function SessionList(props: SessionListProps) {
           onDelete={() => handleDeleteSession(contextMenuSession.id)}
           onDismiss={() => setContextMenu(null)}
           onCreatePR={onOpenCreatePR && contextMenuSession.parentSessionId ? () => onOpenCreatePR(contextMenuSession) : undefined}
+          onCreateWorktree={onOpenWorktreeConfig && !contextMenuSession.parentSessionId ? () => onOpenWorktreeConfig(contextMenuSession) : undefined}
+          onDeleteWorktree={onDeleteWorktree && contextMenuSession.parentSessionId ? () => onDeleteWorktree(contextMenuSession) : undefined}
         />
       )}
     </div>
