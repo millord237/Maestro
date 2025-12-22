@@ -758,6 +758,150 @@ export default function MaestroConsole() {
     }
   }, [settingsLoaded, sessionsLoaded]); // Only run once on startup
 
+  // Scan worktree directories on startup for sessions with worktreeConfig
+  // This restores worktree sub-agents after app restart
+  useEffect(() => {
+    if (!sessionsLoaded) return;
+
+    const scanWorktreeConfigsOnStartup = async () => {
+      // Find sessions that have worktreeConfig with basePath
+      const sessionsWithWorktreeConfig = sessions.filter(s =>
+        s.worktreeConfig?.basePath && !s.parentSessionId // Only parent sessions
+      );
+
+      if (sessionsWithWorktreeConfig.length === 0) return;
+
+      const newWorktreeSessions: Session[] = [];
+
+      for (const parentSession of sessionsWithWorktreeConfig) {
+        try {
+          const scanResult = await window.maestro.git.scanWorktreeDirectory(parentSession.worktreeConfig!.basePath);
+          const { gitSubdirs } = scanResult;
+
+          for (const subdir of gitSubdirs) {
+            // Skip main/master/HEAD branches
+            if (subdir.branch === 'main' || subdir.branch === 'master' || subdir.branch === 'HEAD') {
+              continue;
+            }
+
+            // Check if a session already exists for this worktree
+            const existingSession = sessions.find(s =>
+              (s.parentSessionId === parentSession.id && s.worktreeBranch === subdir.branch) ||
+              s.cwd === subdir.path
+            );
+            if (existingSession) {
+              continue;
+            }
+
+            // Also check in sessions we're about to add
+            if (newWorktreeSessions.some(s => s.cwd === subdir.path)) {
+              continue;
+            }
+
+            const newId = generateId();
+            const initialTabId = generateId();
+            const initialTab: AITab = {
+              id: initialTabId,
+              agentSessionId: null,
+              name: null,
+              starred: false,
+              logs: [],
+              inputValue: '',
+              stagedImages: [],
+              createdAt: Date.now(),
+              state: 'idle',
+              saveToHistory: true
+            };
+
+            // Fetch git info
+            let gitBranches: string[] | undefined;
+            let gitTags: string[] | undefined;
+            let gitRefsCacheTime: number | undefined;
+
+            try {
+              [gitBranches, gitTags] = await Promise.all([
+                gitService.getBranches(subdir.path),
+                gitService.getTags(subdir.path)
+              ]);
+              gitRefsCacheTime = Date.now();
+            } catch {
+              // Ignore errors
+            }
+
+            const worktreeSession: Session = {
+              id: newId,
+              name: subdir.branch || subdir.name,
+              toolType: parentSession.toolType,
+              state: 'idle',
+              cwd: subdir.path,
+              fullPath: subdir.path,
+              projectRoot: subdir.path,
+              isGitRepo: true,
+              gitBranches,
+              gitTags,
+              gitRefsCacheTime,
+              parentSessionId: parentSession.id,
+              worktreeBranch: subdir.branch || undefined,
+              aiLogs: [],
+              shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+              workLog: [],
+              contextUsage: 0,
+              inputMode: parentSession.toolType === 'terminal' ? 'terminal' : 'ai',
+              aiPid: 0,
+              terminalPid: 0,
+              port: 3000 + Math.floor(Math.random() * 100),
+              isLive: false,
+              changedFiles: [],
+              fileTree: [],
+              fileExplorerExpanded: [],
+              fileExplorerScrollPos: 0,
+              fileTreeAutoRefreshInterval: 180,
+              shellCwd: subdir.path,
+              aiCommandHistory: [],
+              shellCommandHistory: [],
+              executionQueue: [],
+              activeTimeMs: 0,
+              aiTabs: [initialTab],
+              activeTabId: initialTabId,
+              closedTabHistory: [],
+              customPath: parentSession.customPath,
+              customArgs: parentSession.customArgs,
+              customEnvVars: parentSession.customEnvVars,
+              customModel: parentSession.customModel,
+              customContextWindow: parentSession.customContextWindow,
+              nudgeMessage: parentSession.nudgeMessage
+            };
+
+            newWorktreeSessions.push(worktreeSession);
+          }
+        } catch (err) {
+          console.error(`[WorktreeStartup] Error scanning ${parentSession.worktreeConfig!.basePath}:`, err);
+        }
+      }
+
+      if (newWorktreeSessions.length > 0) {
+        setSessions(prev => {
+          // Double-check to avoid duplicates
+          const currentPaths = new Set(prev.map(s => s.cwd));
+          const trulyNew = newWorktreeSessions.filter(s => !currentPaths.has(s.cwd));
+          if (trulyNew.length === 0) return prev;
+          return [...prev, ...trulyNew];
+        });
+
+        // Expand worktrees on parent sessions
+        const parentIds = new Set(newWorktreeSessions.map(s => s.parentSessionId));
+        setSessions(prev => prev.map(s =>
+          parentIds.has(s.id) ? { ...s, worktreesExpanded: true } : s
+        ));
+      }
+    };
+
+    // Run once on startup with a small delay to let UI settle
+    const timer = setTimeout(scanWorktreeConfigsOnStartup, 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionsLoaded]); // Only run once when sessions are loaded
+
   // Check for updates on startup if enabled
   useEffect(() => {
     if (settingsLoaded && checkForUpdatesOnStartup) {
@@ -2904,11 +3048,154 @@ export default function MaestroConsole() {
     };
   }, [activeBatchSessionIds.length, updateAutoRunProgress, autoRunStats.longestRunMs]);
 
-  // Periodic scanner for new worktrees in worktree parent directories
-  // Scans every 30 seconds for new git subdirectories in sessions marked as worktree parents
+  // File watcher for worktree directories - provides immediate detection
+  // This is more efficient than polling and gives real-time results
+  useEffect(() => {
+    // Find sessions that have worktreeConfig with watchEnabled
+    const watchableSessions = sessions.filter(s =>
+      s.worktreeConfig?.basePath && s.worktreeConfig?.watchEnabled
+    );
+
+    // Start watchers for each session
+    for (const session of watchableSessions) {
+      window.maestro.git.watchWorktreeDirectory(session.id, session.worktreeConfig!.basePath);
+    }
+
+    // Set up listener for discovered worktrees
+    const cleanup = window.maestro.git.onWorktreeDiscovered(async (data) => {
+      const { sessionId, worktree } = data;
+
+      // Skip main/master/HEAD branches (already filtered by main process, but double-check)
+      if (worktree.branch === 'main' || worktree.branch === 'master' || worktree.branch === 'HEAD') {
+        return;
+      }
+
+      // Get current sessions to check for duplicates
+      const currentSessions = sessionsRef.current;
+
+      // Find the parent session
+      const parentSession = currentSessions.find(s => s.id === sessionId);
+      if (!parentSession) return;
+
+      // Check if session already exists for this worktree
+      const existingSession = currentSessions.find(s =>
+        (s.parentSessionId === sessionId && s.worktreeBranch === worktree.branch) ||
+        s.cwd === worktree.path
+      );
+      if (existingSession) return;
+
+      // Create new worktree session
+      const newId = generateId();
+      const initialTabId = generateId();
+      const initialTab: AITab = {
+        id: initialTabId,
+        agentSessionId: null,
+        name: null,
+        starred: false,
+        logs: [],
+        inputValue: '',
+        stagedImages: [],
+        createdAt: Date.now(),
+        state: 'idle',
+        saveToHistory: defaultSaveToHistory
+      };
+
+      // Fetch git info
+      let gitBranches: string[] | undefined;
+      let gitTags: string[] | undefined;
+      let gitRefsCacheTime: number | undefined;
+
+      try {
+        [gitBranches, gitTags] = await Promise.all([
+          gitService.getBranches(worktree.path),
+          gitService.getTags(worktree.path)
+        ]);
+        gitRefsCacheTime = Date.now();
+      } catch {
+        // Ignore errors
+      }
+
+      const worktreeSession: Session = {
+        id: newId,
+        name: worktree.branch || worktree.name,
+        toolType: parentSession.toolType,
+        state: 'idle',
+        cwd: worktree.path,
+        fullPath: worktree.path,
+        projectRoot: worktree.path,
+        isGitRepo: true,
+        gitBranches,
+        gitTags,
+        gitRefsCacheTime,
+        parentSessionId: sessionId,
+        worktreeBranch: worktree.branch || undefined,
+        aiLogs: [],
+        shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+        workLog: [],
+        contextUsage: 0,
+        inputMode: parentSession.toolType === 'terminal' ? 'terminal' : 'ai',
+        aiPid: 0,
+        terminalPid: 0,
+        port: 3000 + Math.floor(Math.random() * 100),
+        isLive: false,
+        changedFiles: [],
+        fileTree: [],
+        fileExplorerExpanded: [],
+        fileExplorerScrollPos: 0,
+        fileTreeAutoRefreshInterval: 180,
+        shellCwd: worktree.path,
+        aiCommandHistory: [],
+        shellCommandHistory: [],
+        executionQueue: [],
+        activeTimeMs: 0,
+        aiTabs: [initialTab],
+        activeTabId: initialTabId,
+        closedTabHistory: [],
+        customPath: parentSession.customPath,
+        customArgs: parentSession.customArgs,
+        customEnvVars: parentSession.customEnvVars,
+        customModel: parentSession.customModel,
+        customContextWindow: parentSession.customContextWindow,
+        nudgeMessage: parentSession.nudgeMessage
+      };
+
+      setSessions(prev => {
+        // Double-check to avoid duplicates
+        if (prev.some(s => s.cwd === worktree.path)) return prev;
+        return [...prev, worktreeSession];
+      });
+
+      // Expand parent's worktrees
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, worktreesExpanded: true } : s
+      ));
+
+      addToast({
+        type: 'success',
+        title: 'New Worktree Discovered',
+        message: worktree.branch || worktree.name,
+      });
+    });
+
+    // Cleanup: stop watchers and remove listener
+    return () => {
+      cleanup();
+      for (const session of watchableSessions) {
+        window.maestro.git.unwatchWorktreeDirectory(session.id);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    // Re-run when worktreeConfig changes on any session
+    sessions.map(s => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`).join(','),
+    defaultSaveToHistory
+  ]);
+
+  // Legacy: Periodic scanner for sessions using old worktreeParentPath
+  // TODO: Remove after migration to new parent/child model
   useEffect(() => {
     const scanWorktreeParents = async () => {
-      // Find sessions that have worktreeParentPath set
+      // Find sessions that have worktreeParentPath set (legacy model)
       const worktreeParentSessions = sessions.filter(s => s.worktreeParentPath);
       if (worktreeParentSessions.length === 0) return;
 
@@ -6369,16 +6656,257 @@ export default function MaestroConsole() {
           onClose={() => setWorktreeConfigModalOpen(false)}
           theme={theme}
           session={activeSession}
-          onSaveConfig={(config) => {
+          onSaveConfig={async (config) => {
+            // Save the config first
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id
                 ? { ...s, worktreeConfig: config }
                 : s
             ));
+
+            // Scan for worktrees and create sub-agent sessions
+            try {
+              const scanResult = await window.maestro.git.scanWorktreeDirectory(config.basePath);
+              const { gitSubdirs } = scanResult;
+
+              if (gitSubdirs.length > 0) {
+                const newWorktreeSessions: Session[] = [];
+
+                for (const subdir of gitSubdirs) {
+                  // Skip main/master/HEAD branches - they're typically the main repo
+                  if (subdir.branch === 'main' || subdir.branch === 'master' || subdir.branch === 'HEAD') {
+                    continue;
+                  }
+
+                  // Check if a session already exists for this worktree
+                  const existingSession = sessions.find(s =>
+                    s.parentSessionId === activeSession.id &&
+                    s.worktreeBranch === subdir.branch
+                  );
+                  if (existingSession) {
+                    continue;
+                  }
+
+                  // Also check by path
+                  const existingByPath = sessions.find(s => s.cwd === subdir.path);
+                  if (existingByPath) {
+                    continue;
+                  }
+
+                  const newId = generateId();
+                  const initialTabId = generateId();
+                  const initialTab: AITab = {
+                    id: initialTabId,
+                    agentSessionId: null,
+                    name: null,
+                    starred: false,
+                    logs: [],
+                    inputValue: '',
+                    stagedImages: [],
+                    createdAt: Date.now(),
+                    state: 'idle',
+                    saveToHistory: true
+                  };
+
+                  // Fetch git info for this subdirectory
+                  let gitBranches: string[] | undefined;
+                  let gitTags: string[] | undefined;
+                  let gitRefsCacheTime: number | undefined;
+
+                  try {
+                    [gitBranches, gitTags] = await Promise.all([
+                      gitService.getBranches(subdir.path),
+                      gitService.getTags(subdir.path)
+                    ]);
+                    gitRefsCacheTime = Date.now();
+                  } catch {
+                    // Ignore errors fetching git info
+                  }
+
+                  const worktreeSession: Session = {
+                    id: newId,
+                    name: subdir.branch || subdir.name,
+                    toolType: activeSession.toolType,
+                    state: 'idle',
+                    cwd: subdir.path,
+                    fullPath: subdir.path,
+                    projectRoot: subdir.path,
+                    isGitRepo: true,
+                    gitBranches,
+                    gitTags,
+                    gitRefsCacheTime,
+                    parentSessionId: activeSession.id,
+                    worktreeBranch: subdir.branch || undefined,
+                    aiLogs: [],
+                    shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+                    workLog: [],
+                    contextUsage: 0,
+                    inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
+                    aiPid: 0,
+                    terminalPid: 0,
+                    port: 3000 + Math.floor(Math.random() * 100),
+                    isLive: false,
+                    changedFiles: [],
+                    fileTree: [],
+                    fileExplorerExpanded: [],
+                    fileExplorerScrollPos: 0,
+                    fileTreeAutoRefreshInterval: 180,
+                    shellCwd: subdir.path,
+                    aiCommandHistory: [],
+                    shellCommandHistory: [],
+                    executionQueue: [],
+                    activeTimeMs: 0,
+                    aiTabs: [initialTab],
+                    activeTabId: initialTabId,
+                    closedTabHistory: [],
+                    customPath: activeSession.customPath,
+                    customArgs: activeSession.customArgs,
+                    customEnvVars: activeSession.customEnvVars,
+                    customModel: activeSession.customModel,
+                    customContextWindow: activeSession.customContextWindow,
+                    nudgeMessage: activeSession.nudgeMessage
+                  };
+
+                  newWorktreeSessions.push(worktreeSession);
+                }
+
+                if (newWorktreeSessions.length > 0) {
+                  setSessions(prev => [...prev, ...newWorktreeSessions]);
+                  // Expand worktrees on parent
+                  setSessions(prev => prev.map(s =>
+                    s.id === activeSession.id
+                      ? { ...s, worktreesExpanded: true }
+                      : s
+                  ));
+                  addToast({
+                    type: 'success',
+                    title: 'Worktrees Discovered',
+                    message: `Found ${newWorktreeSessions.length} worktree sub-agent${newWorktreeSessions.length > 1 ? 's' : ''}`,
+                  });
+                }
+              }
+            } catch (err) {
+              console.error('Failed to scan for worktrees:', err);
+            }
           }}
-          onCreateWorktree={async (branchName) => {
-            // TODO: Implement worktree creation via git worktree add
-            console.log('[WorktreeConfig] Create worktree:', branchName);
+          onCreateWorktree={async (branchName, basePath) => {
+            if (!basePath) {
+              addToast({ type: 'error', title: 'Error', message: 'No worktree directory configured' });
+              return;
+            }
+
+            const worktreePath = `${basePath}/${branchName}`;
+            console.log('[WorktreeConfig] Create worktree:', branchName, 'at', worktreePath);
+
+            try {
+              // Create the worktree via git
+              const result = await window.maestro.git.worktreeSetup(
+                activeSession.cwd,
+                worktreePath,
+                branchName
+              );
+
+              if (!result.success) {
+                throw new Error(result.error || 'Failed to create worktree');
+              }
+
+              // Create a new session for the worktree, inheriting all config from parent
+              const newId = generateId();
+              const initialTabId = generateId();
+              const initialTab: AITab = {
+                id: initialTabId,
+                agentSessionId: null,
+                name: null,
+                starred: false,
+                logs: [],
+                inputValue: '',
+                stagedImages: [],
+                createdAt: Date.now(),
+                state: 'idle',
+                saveToHistory: defaultSaveToHistory
+              };
+
+              // Fetch git info for the worktree
+              let gitBranches: string[] | undefined;
+              let gitTags: string[] | undefined;
+              let gitRefsCacheTime: number | undefined;
+
+              try {
+                [gitBranches, gitTags] = await Promise.all([
+                  gitService.getBranches(worktreePath),
+                  gitService.getTags(worktreePath)
+                ]);
+                gitRefsCacheTime = Date.now();
+              } catch {
+                // Ignore errors
+              }
+
+              const worktreeSession: Session = {
+                id: newId,
+                name: branchName,
+                toolType: activeSession.toolType,
+                state: 'idle',
+                cwd: worktreePath,
+                fullPath: worktreePath,
+                projectRoot: worktreePath,
+                isGitRepo: true,
+                gitBranches,
+                gitTags,
+                gitRefsCacheTime,
+                parentSessionId: activeSession.id,
+                worktreeBranch: branchName,
+                aiLogs: [],
+                shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+                workLog: [],
+                contextUsage: 0,
+                inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
+                aiPid: 0,
+                terminalPid: 0,
+                port: 3000 + Math.floor(Math.random() * 100),
+                isLive: false,
+                changedFiles: [],
+                fileTree: [],
+                fileExplorerExpanded: [],
+                fileExplorerScrollPos: 0,
+                fileTreeAutoRefreshInterval: 180,
+                shellCwd: worktreePath,
+                aiCommandHistory: [],
+                shellCommandHistory: [],
+                executionQueue: [],
+                activeTimeMs: 0,
+                aiTabs: [initialTab],
+                activeTabId: initialTabId,
+                closedTabHistory: [],
+                // Inherit all agent configuration from parent
+                customPath: activeSession.customPath,
+                customArgs: activeSession.customArgs,
+                customEnvVars: activeSession.customEnvVars,
+                customModel: activeSession.customModel,
+                customContextWindow: activeSession.customContextWindow,
+                nudgeMessage: activeSession.nudgeMessage
+              };
+
+              setSessions(prev => [...prev, worktreeSession]);
+
+              // Expand parent's worktrees
+              setSessions(prev => prev.map(s =>
+                s.id === activeSession.id ? { ...s, worktreesExpanded: true } : s
+              ));
+
+              addToast({
+                type: 'success',
+                title: 'Worktree Created',
+                message: branchName,
+              });
+            } catch (err) {
+              console.error('[WorktreeConfig] Failed to create worktree:', err);
+              addToast({
+                type: 'error',
+                title: 'Failed to Create Worktree',
+                message: err instanceof Error ? err.message : String(err),
+              });
+              throw err; // Re-throw so the modal can show the error
+            }
           }}
         />
       )}
@@ -6730,6 +7258,11 @@ export default function MaestroConsole() {
               showConfirmation(`Delete worktree session "${session.name}"? This will remove the sub-agent but not the git worktree directory.`, () => {
                 setSessions(prev => prev.filter(s => s.id !== session.id));
               });
+            }}
+            onToggleWorktreeExpanded={(sessionId) => {
+              setSessions(prev => prev.map(s =>
+                s.id === sessionId ? { ...s, worktreesExpanded: !(s.worktreesExpanded ?? true) } : s
+              ));
             }}
             activeBatchSessionIds={activeBatchSessionIds}
             showSessionJumpNumbers={showSessionJumpNumbers}

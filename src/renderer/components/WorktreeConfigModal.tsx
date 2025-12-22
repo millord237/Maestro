@@ -11,7 +11,7 @@ interface WorktreeConfigModalProps {
   session: Session;
   // Callbacks
   onSaveConfig: (config: { basePath: string; watchEnabled: boolean }) => void;
-  onCreateWorktree: (branchName: string) => void;
+  onCreateWorktree: (branchName: string, basePath: string) => void;
 }
 
 /**
@@ -96,6 +96,10 @@ export function WorktreeConfigModal({
   };
 
   const handleCreateWorktree = async () => {
+    if (!basePath.trim()) {
+      setError('Please select a worktree directory first');
+      return;
+    }
     if (!newBranchName.trim()) {
       setError('Please enter a branch name');
       return;
@@ -105,7 +109,10 @@ export function WorktreeConfigModal({
     setError(null);
 
     try {
-      await onCreateWorktree(newBranchName.trim());
+      // Save config first to ensure it's persisted
+      onSaveConfig({ basePath: basePath.trim(), watchEnabled });
+      // Then create the worktree, passing the basePath
+      await onCreateWorktree(newBranchName.trim(), basePath.trim());
       setNewBranchName('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create worktree');

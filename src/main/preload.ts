@@ -373,6 +373,23 @@ contextBridge.exposeInMainWorld('maestro', {
           repoRoot: string | null;
         }>;
       }>,
+    // Watch a worktree directory for new worktrees
+    watchWorktreeDirectory: (sessionId: string, worktreePath: string) =>
+      ipcRenderer.invoke('git:watchWorktreeDirectory', sessionId, worktreePath) as Promise<{
+        success: boolean;
+        error?: string;
+      }>,
+    // Stop watching a worktree directory
+    unwatchWorktreeDirectory: (sessionId: string) =>
+      ipcRenderer.invoke('git:unwatchWorktreeDirectory', sessionId) as Promise<{
+        success: boolean;
+      }>,
+    // Listen for discovered worktrees
+    onWorktreeDiscovered: (callback: (data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => callback(data);
+      ipcRenderer.on('worktree:discovered', handler);
+      return () => ipcRenderer.removeListener('worktree:discovered', handler);
+    },
   },
 
   // File System API

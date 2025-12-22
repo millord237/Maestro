@@ -7,6 +7,9 @@ let cloudflaredPathCache: string | null = null;
 
 let ghInstalledCache: boolean | null = null;
 let ghPathCache: string | null = null;
+let ghAuthenticatedCache: boolean | null = null;
+let ghStatusCacheTime: number | null = null;
+const GH_STATUS_CACHE_TTL_MS = 60000; // 1 minute TTL for auth status
 
 /**
  * Build an expanded PATH that includes common binary installation locations.
@@ -146,4 +149,40 @@ export async function resolveGhPath(customPath?: string): Promise<string> {
 export function clearGhCache(): void {
   ghInstalledCache = null;
   ghPathCache = null;
+  ghAuthenticatedCache = null;
+  ghStatusCacheTime = null;
+}
+
+/**
+ * Get cached gh CLI status (installed + authenticated).
+ * Returns null if cache is empty or expired.
+ */
+export function getCachedGhStatus(): { installed: boolean; authenticated: boolean } | null {
+  if (ghInstalledCache === null) {
+    return null;
+  }
+
+  // If not installed, we don't need to check TTL
+  if (!ghInstalledCache) {
+    return { installed: false, authenticated: false };
+  }
+
+  // Check if authenticated cache is valid
+  if (ghAuthenticatedCache !== null && ghStatusCacheTime !== null) {
+    const age = Date.now() - ghStatusCacheTime;
+    if (age < GH_STATUS_CACHE_TTL_MS) {
+      return { installed: true, authenticated: ghAuthenticatedCache };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Set cached gh CLI status.
+ */
+export function setCachedGhStatus(installed: boolean, authenticated: boolean): void {
+  ghInstalledCache = installed;
+  ghAuthenticatedCache = authenticated;
+  ghStatusCacheTime = Date.now();
 }

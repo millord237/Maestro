@@ -300,6 +300,14 @@ interface MaestroAPI {
         repoRoot: string | null;
       }>;
     }>;
+    watchWorktreeDirectory: (sessionId: string, worktreePath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    unwatchWorktreeDirectory: (sessionId: string) => Promise<{
+      success: boolean;
+    }>;
+    onWorktreeDiscovered: (callback: (data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => void) => () => void;
   };
   fs: {
     homeDir: () => Promise<string>;

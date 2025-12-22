@@ -204,95 +204,100 @@ function SessionContextMenu({
         </>
       )}
 
-      {/* Divider */}
-      <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+      {/* Move to Group and Remove Agent - only for non-worktree sessions */}
+      {!session.parentSessionId && (
+        <>
+          {/* Divider */}
+          <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 
-      {/* Move to Group - with submenu */}
-      <div
-        ref={moveToGroupRef}
-        className="relative"
-        onMouseEnter={handleMoveToGroupHover}
-        onMouseLeave={() => setShowMoveSubmenu(false)}
-      >
-        <button
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center justify-between"
-          style={{ color: theme.colors.textMain }}
-        >
-          <span className="flex items-center gap-2">
-            <FolderInput className="w-3.5 h-3.5" />
-            Move to Group
-          </span>
-          <ChevronRight className="w-3 h-3" />
-        </button>
-
-        {/* Submenu */}
-        {showMoveSubmenu && (
+          {/* Move to Group - with submenu */}
           <div
-            className="absolute py-1 rounded-md shadow-xl border"
-            style={{
-              backgroundColor: theme.colors.bgSidebar,
-              borderColor: theme.colors.border,
-              minWidth: '140px',
-              ...(submenuPosition.vertical === 'above' ? { bottom: 0 } : { top: 0 }),
-              ...(submenuPosition.horizontal === 'left' ? { right: '100%', marginRight: 4 } : { left: '100%', marginLeft: 4 })
-            }}
+            ref={moveToGroupRef}
+            className="relative"
+            onMouseEnter={handleMoveToGroupHover}
+            onMouseLeave={() => setShowMoveSubmenu(false)}
           >
-            {/* No Group option */}
             <button
-              onClick={() => {
-                onMoveToGroup('');
-                onDismiss();
-              }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2 ${!session.groupId ? 'opacity-50' : ''}`}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center justify-between"
               style={{ color: theme.colors.textMain }}
-              disabled={!session.groupId}
             >
-              <Folder className="w-3.5 h-3.5" />
-              Ungrouped
-              {!session.groupId && <span className="text-[10px] opacity-50">(current)</span>}
+              <span className="flex items-center gap-2">
+                <FolderInput className="w-3.5 h-3.5" />
+                Move to Group
+              </span>
+              <ChevronRight className="w-3 h-3" />
             </button>
 
-            {/* Divider if there are groups */}
-            {groups.length > 0 && (
-              <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
-            )}
-
-            {/* Group options */}
-            {groups.map(group => (
-              <button
-                key={group.id}
-                onClick={() => {
-                  onMoveToGroup(group.id);
-                  onDismiss();
+            {/* Submenu */}
+            {showMoveSubmenu && (
+              <div
+                className="absolute py-1 rounded-md shadow-xl border"
+                style={{
+                  backgroundColor: theme.colors.bgSidebar,
+                  borderColor: theme.colors.border,
+                  minWidth: '140px',
+                  ...(submenuPosition.vertical === 'above' ? { bottom: 0 } : { top: 0 }),
+                  ...(submenuPosition.horizontal === 'left' ? { right: '100%', marginRight: 4 } : { left: '100%', marginLeft: 4 })
                 }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2 ${session.groupId === group.id ? 'opacity-50' : ''}`}
-                style={{ color: theme.colors.textMain }}
-                disabled={session.groupId === group.id}
               >
-                <span>{group.emoji}</span>
-                <span className="truncate">{group.name}</span>
-                {session.groupId === group.id && <span className="text-[10px] opacity-50">(current)</span>}
-              </button>
-            ))}
+                {/* No Group option */}
+                <button
+                  onClick={() => {
+                    onMoveToGroup('');
+                    onDismiss();
+                  }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2 ${!session.groupId ? 'opacity-50' : ''}`}
+                  style={{ color: theme.colors.textMain }}
+                  disabled={!session.groupId}
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  Ungrouped
+                  {!session.groupId && <span className="text-[10px] opacity-50">(current)</span>}
+                </button>
+
+                {/* Divider if there are groups */}
+                {groups.length > 0 && (
+                  <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+                )}
+
+                {/* Group options */}
+                {groups.map(group => (
+                  <button
+                    key={group.id}
+                    onClick={() => {
+                      onMoveToGroup(group.id);
+                      onDismiss();
+                    }}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2 ${session.groupId === group.id ? 'opacity-50' : ''}`}
+                    style={{ color: theme.colors.textMain }}
+                    disabled={session.groupId === group.id}
+                  >
+                    <span>{group.emoji}</span>
+                    <span className="truncate">{group.name}</span>
+                    {session.groupId === group.id && <span className="text-[10px] opacity-50">(current)</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Divider */}
-      <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+          {/* Divider */}
+          <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 
-      {/* Delete */}
-      <button
-        onClick={() => {
-          onDelete();
-          onDismiss();
-        }}
-        className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
-        style={{ color: theme.colors.error }}
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-        Remove Agent
-      </button>
+          {/* Delete */}
+          <button
+            onClick={() => {
+              onDelete();
+              onDismiss();
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
+            style={{ color: theme.colors.error }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Remove Agent
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -943,25 +948,29 @@ export function SessionList(props: SessionListProps) {
               onToggleBookmark={() => toggleBookmark(session.id)}
             />
           </div>
-          {/* Worktree count badge when collapsed */}
-          {hasWorktrees && !worktreesExpanded && (
-            <div
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold mr-2 shrink-0"
+          {/* Worktree count badge when collapsed - clickable to expand */}
+          {hasWorktrees && !worktreesExpanded && onToggleWorktreeExpanded && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleWorktreeExpanded(session.id);
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold mr-2 shrink-0 hover:opacity-80 transition-opacity"
               style={{
                 backgroundColor: theme.colors.accent + '20',
                 color: theme.colors.accent,
               }}
-              title={`${worktreeChildren.length} worktree${worktreeChildren.length > 1 ? 's' : ''}`}
+              title={`${worktreeChildren.length} worktree${worktreeChildren.length > 1 ? 's' : ''} (click to expand)`}
             >
               <GitBranch className="w-2.5 h-2.5" />
               {worktreeChildren.length}
-            </div>
+            </button>
           )}
         </div>
 
         {/* Worktree children (when expanded) */}
         {hasWorktrees && worktreesExpanded && (
-          <div className="border-l ml-6 pl-2" style={{ borderColor: theme.colors.accent + '40' }}>
+          <div className="border-l ml-3 pl-1.5" style={{ borderColor: theme.colors.accent + '40' }}>
             {worktreeChildren.sort((a, b) => compareSessionNames(a.worktreeBranch || a.name, b.worktreeBranch || b.name)).map(child => {
               const childGlobalIdx = sortedSessions.findIndex(s => s.id === child.id);
               const isChildKeyboardSelected = activeFocus === 'sidebar' && childGlobalIdx === selectedSidebarIndex;

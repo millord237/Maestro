@@ -1,10 +1,11 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
+import chokidar, { FSWatcher } from 'chokidar';
 import { execFileNoThrow } from '../../utils/execFile';
 import { logger } from '../../utils/logger';
 import { withIpcErrorLogging, createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';
-import { resolveGhPath } from '../../utils/cliDetection';
+import { resolveGhPath, getCachedGhStatus, setCachedGhStatus } from '../../utils/cliDetection';
 import {
   parseGitBranches,
   parseGitTags,
@@ -15,6 +16,10 @@ import {
 } from '../../../shared/gitUtils';
 
 const LOG_CONTEXT = '[Git]';
+
+// Worktree directory watchers keyed by session ID
+const worktreeWatchers = new Map<string, FSWatcher>();
+let worktreeWatchDebounceTimers = new Map<string, NodeJS.Timeout>();
 
 /** Helper to create handler options with Git context */
 const handlerOpts = (operation: string, logSuccess = false): CreateHandlerOptions => ({
@@ -523,9 +528,19 @@ export function registerGitHandlers(): void {
 
   // Check if GitHub CLI (gh) is installed and authenticated
   // ghPath parameter allows specifying custom path to gh binary (e.g., /opt/homebrew/bin/gh)
+  // Results are cached for 1 minute to avoid repeated subprocess calls
   ipcMain.handle('git:checkGhCli', withIpcErrorLogging(
     handlerOpts('checkGhCli'),
     async (ghPath?: string) => {
+      // Check cache first (skip if custom path provided)
+      if (!ghPath) {
+        const cached = getCachedGhStatus();
+        if (cached !== null) {
+          logger.debug(`Using cached gh CLI status: installed=${cached.installed}, authenticated=${cached.authenticated}`, LOG_CONTEXT);
+          return cached;
+        }
+      }
+
       // Resolve gh CLI path (uses cached detection or custom path)
       const ghCommand = await resolveGhPath(ghPath);
       logger.debug(`Checking gh CLI at: ${ghCommand}`, LOG_CONTEXT);
@@ -534,7 +549,9 @@ export function registerGitHandlers(): void {
       const versionResult = await execFileNoThrow(ghCommand, ['--version']);
       if (versionResult.exitCode !== 0) {
         logger.warn(`gh CLI not found at ${ghCommand}: exit=${versionResult.exitCode}, stderr=${versionResult.stderr}`, LOG_CONTEXT);
-        return { installed: false, authenticated: false };
+        const result = { installed: false, authenticated: false };
+        if (!ghPath) setCachedGhStatus(false, false);
+        return result;
       }
       logger.debug(`gh CLI found: ${versionResult.stdout.trim().split('\n')[0]}`, LOG_CONTEXT);
 
@@ -542,6 +559,11 @@ export function registerGitHandlers(): void {
       const authResult = await execFileNoThrow(ghCommand, ['auth', 'status']);
       const authenticated = authResult.exitCode === 0;
       logger.debug(`gh auth status: ${authenticated ? 'authenticated' : 'not authenticated'}`, LOG_CONTEXT);
+
+      // Cache the result (only if not using custom path)
+      if (!ghPath) {
+        setCachedGhStatus(true, authenticated);
+      }
 
       return { installed: true, authenticated };
     }
@@ -710,6 +732,121 @@ export function registerGitHandlers(): void {
       }
 
       return { gitSubdirs };
+    }
+  ));
+
+  // Watch a worktree directory for new worktrees
+  ipcMain.handle('git:watchWorktreeDirectory', createIpcHandler(
+    handlerOpts('watchWorktreeDirectory'),
+    async (sessionId: string, worktreePath: string) => {
+      // Stop existing watcher if any
+      const existingWatcher = worktreeWatchers.get(sessionId);
+      if (existingWatcher) {
+        await existingWatcher.close();
+        worktreeWatchers.delete(sessionId);
+      }
+
+      // Clear any pending debounce timer
+      const existingTimer = worktreeWatchDebounceTimers.get(sessionId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        worktreeWatchDebounceTimers.delete(sessionId);
+      }
+
+      try {
+        // Verify directory exists
+        await fs.access(worktreePath);
+
+        // Start watching the directory (only top level, not recursive)
+        const watcher = chokidar.watch(worktreePath, {
+          ignored: /(^|[/\\])\../, // Ignore dotfiles
+          persistent: true,
+          ignoreInitial: true,
+          depth: 0, // Only watch top-level directory changes
+        });
+
+        // Handler for directory additions
+        watcher.on('addDir', async (dirPath: string) => {
+          // Skip the root directory itself
+          if (dirPath === worktreePath) return;
+
+          // Debounce to avoid flooding with events
+          const existingTimer = worktreeWatchDebounceTimers.get(sessionId);
+          if (existingTimer) {
+            clearTimeout(existingTimer);
+          }
+
+          const timer = setTimeout(async () => {
+            worktreeWatchDebounceTimers.delete(sessionId);
+
+            // Check if this new directory is a git worktree
+            const isInsideWorkTree = await execFileNoThrow('git', ['rev-parse', '--is-inside-work-tree'], dirPath);
+            if (isInsideWorkTree.exitCode !== 0) {
+              return; // Not a git repo
+            }
+
+            // Get branch name
+            const branchResult = await execFileNoThrow('git', ['rev-parse', '--abbrev-ref', 'HEAD'], dirPath);
+            const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : null;
+
+            // Skip main/master/HEAD branches
+            if (branch === 'main' || branch === 'master' || branch === 'HEAD') {
+              return;
+            }
+
+            // Emit event to renderer
+            const windows = BrowserWindow.getAllWindows();
+            for (const win of windows) {
+              win.webContents.send('worktree:discovered', {
+                sessionId,
+                worktree: {
+                  path: dirPath,
+                  name: path.basename(dirPath),
+                  branch,
+                }
+              });
+            }
+
+            logger.info(`${LOG_CONTEXT} New worktree discovered: ${dirPath} (branch: ${branch})`);
+          }, 500); // 500ms debounce
+
+          worktreeWatchDebounceTimers.set(sessionId, timer);
+        });
+
+        watcher.on('error', (error) => {
+          logger.error(`${LOG_CONTEXT} Worktree watcher error for session ${sessionId}: ${error}`);
+        });
+
+        worktreeWatchers.set(sessionId, watcher);
+        logger.info(`${LOG_CONTEXT} Started watching worktree directory: ${worktreePath} for session ${sessionId}`);
+
+        return { success: true };
+      } catch (err) {
+        logger.error(`${LOG_CONTEXT} Failed to watch worktree directory ${worktreePath}: ${err}`);
+        return { success: false, error: String(err) };
+      }
+    }
+  ));
+
+  // Stop watching a worktree directory
+  ipcMain.handle('git:unwatchWorktreeDirectory', createIpcHandler(
+    handlerOpts('unwatchWorktreeDirectory'),
+    async (sessionId: string) => {
+      const watcher = worktreeWatchers.get(sessionId);
+      if (watcher) {
+        await watcher.close();
+        worktreeWatchers.delete(sessionId);
+        logger.info(`${LOG_CONTEXT} Stopped watching worktree directory for session ${sessionId}`);
+      }
+
+      // Clear any pending debounce timer
+      const timer = worktreeWatchDebounceTimers.get(sessionId);
+      if (timer) {
+        clearTimeout(timer);
+        worktreeWatchDebounceTimers.delete(sessionId);
+      }
+
+      return { success: true };
     }
   ));
 
