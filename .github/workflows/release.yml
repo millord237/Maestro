@@ -24,6 +24,11 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
+          # ARM64 Linux requires native ARM64 runner for node-pty native module
+          # Cross-compilation from x64 doesn't work: https://github.com/electron-userland/electron-builder/issues/7608
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            arch: arm64
           - os: windows-latest
             platform: win
             arch: x64
@@ -40,13 +45,19 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # Linux: Install build dependencies for native modules and electron-builder
-      # Cross-compilers for ARM64 don't require adding arm64 architecture
-      - name: Install Linux build dependencies
+      # Linux x64: Install build dependencies for native modules and electron-builder
+      - name: Install Linux x64 build dependencies
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y libarchive-tools rpm
+
+      # Linux ARM64: Install build dependencies for native modules and electron-builder
+      - name: Install Linux ARM64 build dependencies
+        if: matrix.platform == 'linux-arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
 
       # Windows: Setup for native module compilation
       - name: Setup Windows build tools
@@ -150,9 +161,16 @@ jobs:
         env:
           DEBUG: electron-builder
 
-      - name: Package for Linux
+      - name: Package for Linux x64
         if: matrix.platform == 'linux'
-        run: npx electron-builder --linux --publish never --config.extraMetadata.version=${{ steps.version.outputs.VERSION }}
+        run: npx electron-builder --linux --x64 --publish never --config.extraMetadata.version=${{ steps.version.outputs.VERSION }}
+        env:
+          DEBUG: electron-builder
+
+      # ARM64 Linux: Build on native ARM64 runner to properly compile node-pty
+      - name: Package for Linux ARM64
+        if: matrix.platform == 'linux-arm64'
+        run: npx electron-builder --linux --arm64 --publish never --config.extraMetadata.version=${{ steps.version.outputs.VERSION }}
         env:
           DEBUG: electron-builder
 
@@ -186,17 +204,31 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-      - name: Upload Linux artifacts
+      - name: Upload Linux x64 artifacts
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-linux
+          name: maestro-linux-x64
           path: |
             release/*.AppImage
             release/*.deb
             release/*.rpm
             release/*.snap
             release/latest-linux.yml
+          if-no-files-found: warn
+          retention-days: 5
+
+      - name: Upload Linux ARM64 artifacts
+        if: matrix.platform == 'linux-arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-linux-arm64
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.snap
+            release/latest-linux-arm64.yml
           if-no-files-found: warn
           retention-days: 5
 
@@ -222,12 +254,19 @@ jobs:
           name: maestro-windows
           path: artifacts/maestro-windows
 
-      - name: Download Linux artifacts
+      - name: Download Linux x64 artifacts
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: maestro-linux
-          path: artifacts/maestro-linux
+          name: maestro-linux-x64
+          path: artifacts/maestro-linux-x64
+
+      - name: Download Linux ARM64 artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: maestro-linux-arm64
+          path: artifacts/maestro-linux-arm64
 
       - name: List downloaded artifacts
         run: |
@@ -253,7 +292,8 @@ jobs:
           files: |
             artifacts/maestro-macos/*
             artifacts/maestro-windows/*
-            artifacts/maestro-linux/*
+            artifacts/maestro-linux-x64/*
+            artifacts/maestro-linux-arm64/*
           fail_on_unmatched_files: false
           draft: false
           prerelease: false
