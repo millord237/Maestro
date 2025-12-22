@@ -216,6 +216,11 @@ export default function MaestroConsole() {
   // --- STATE ---
   const [sessions, setSessions] = useState<Session[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  // Track worktree paths that were manually removed - prevents re-discovery during this session
+  const [removedWorktreePaths, setRemovedWorktreePaths] = useState<Set<string>>(new Set());
+  // Ref to always access current removed paths (avoids stale closure in async scanner)
+  const removedWorktreePathsRef = useRef<Set<string>>(removedWorktreePaths);
+  removedWorktreePathsRef.current = removedWorktreePaths;
 
   // --- GROUP CHAT STATE ---
   const [groupChats, setGroupChats] = useState<GroupChat[]>([]);
@@ -1848,7 +1853,8 @@ export default function MaestroConsole() {
   ), [activeSession]);
 
   // Discover slash commands when a session becomes active and doesn't have them yet
-  // This spawns Claude briefly to get the init message with available commands
+  // Fetches custom Claude commands from .claude/commands/ directories (fast, file system read)
+  // Also spawns Claude briefly to get built-in commands from init message (slower)
   useEffect(() => {
     if (!activeSession) return;
     if (activeSession.toolType !== 'claude-code') return;
@@ -1857,46 +1863,87 @@ export default function MaestroConsole() {
 
     // Capture session ID to prevent race conditions when switching sessions
     const sessionId = activeSession.id;
+    const projectRoot = activeSession.projectRoot;
     let cancelled = false;
 
-    // Discover slash commands in background
-    const discoverCommands = async () => {
-      try {
-        const commands = await window.maestro.agents.discoverSlashCommands(
-          activeSession.toolType,
-          activeSession.cwd,
-          activeSession.customPath
-        );
+    // Helper to merge commands without duplicates
+    const mergeCommands = (
+      existing: { command: string; description: string }[],
+      newCmds: { command: string; description: string }[]
+    ) => {
+      const merged = [...existing];
+      for (const cmd of newCmds) {
+        if (!merged.some(c => c.command === cmd.command)) {
+          merged.push(cmd);
+        }
+      }
+      return merged;
+    };
 
-        // Don't update if effect was cancelled (session switched)
+    // Fetch custom Claude commands immediately (fast - just reads files)
+    const fetchCustomCommands = async () => {
+      try {
+        const customClaudeCommands = await window.maestro.claude.getCommands(projectRoot);
         if (cancelled) return;
 
-        if (commands && commands.length > 0) {
-          // Convert to command objects and store on session
-          const commandObjects = commands.map((cmd: string) => ({
-            command: cmd.startsWith('/') ? cmd : `/${cmd}`,
-            description: getSlashCommandDescription(cmd),
-          }));
+        // Custom Claude commands already have command and description from the handler
+        const customCommandObjects = (customClaudeCommands || []).map(cmd => ({
+          command: cmd.command,
+          description: cmd.description,
+        }));
 
-          setSessions(prev => prev.map(s =>
-            s.id === sessionId
-              ? { ...s, agentCommands: commandObjects }
-              : s
-          ));
+        if (customCommandObjects.length > 0) {
+          setSessions(prev => prev.map(s => {
+            if (s.id !== sessionId) return s;
+            const existingCommands = s.agentCommands || [];
+            return { ...s, agentCommands: mergeCommands(existingCommands, customCommandObjects) };
+          }));
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('[SlashCommandDiscovery] Failed to discover commands:', error);
+          console.error('[SlashCommandDiscovery] Failed to fetch custom commands:', error);
         }
       }
     };
 
-    discoverCommands();
+    // Discover built-in agent slash commands in background (slower - spawns Claude)
+    const discoverAgentCommands = async () => {
+      try {
+        const agentSlashCommands = await window.maestro.agents.discoverSlashCommands(
+          activeSession.toolType,
+          activeSession.cwd,
+          activeSession.customPath
+        );
+        if (cancelled) return;
+
+        // Convert agent slash commands to command objects
+        const agentCommandObjects = (agentSlashCommands || []).map(cmd => ({
+          command: cmd.startsWith('/') ? cmd : `/${cmd}`,
+          description: getSlashCommandDescription(cmd),
+        }));
+
+        if (agentCommandObjects.length > 0) {
+          setSessions(prev => prev.map(s => {
+            if (s.id !== sessionId) return s;
+            const existingCommands = s.agentCommands || [];
+            return { ...s, agentCommands: mergeCommands(existingCommands, agentCommandObjects) };
+          }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[SlashCommandDiscovery] Failed to discover agent commands:', error);
+        }
+      }
+    };
+
+    // Start both in parallel but don't wait for each other
+    fetchCustomCommands();
+    discoverAgentCommands();
 
     return () => {
       cancelled = true;
     };
-  }, [activeSession?.id, activeSession?.toolType, activeSession?.cwd, activeSession?.customPath, activeSession?.agentCommands]);
+  }, [activeSession?.id, activeSession?.toolType, activeSession?.cwd, activeSession?.customPath, activeSession?.agentCommands, activeSession?.projectRoot]);
 
   // File preview navigation history - derived from active session (per-agent history)
   const filePreviewHistory = useMemo(() =>
@@ -2850,6 +2897,160 @@ export default function MaestroConsole() {
     };
   }, [activeBatchSessionIds.length, updateAutoRunProgress, autoRunStats.longestRunMs]);
 
+  // Periodic scanner for new worktrees in worktree parent directories
+  // Scans every 30 seconds for new git subdirectories in sessions marked as worktree parents
+  useEffect(() => {
+    const scanWorktreeParents = async () => {
+      // Find sessions that have worktreeParentPath set
+      const worktreeParentSessions = sessions.filter(s => s.worktreeParentPath);
+      if (worktreeParentSessions.length === 0) return;
+
+      // Collect all new sessions to add in a single batch (avoids stale closure issues)
+      const newSessionsToAdd: Session[] = [];
+      // Track paths we're about to add to avoid duplicates within this scan
+      const pathsBeingAdded = new Set<string>();
+
+      for (const session of worktreeParentSessions) {
+        try {
+          const result = await window.maestro.git.scanWorktreeDirectory(session.worktreeParentPath!);
+          const { gitSubdirs } = result;
+
+          for (const subdir of gitSubdirs) {
+            // Skip if this path was manually removed by the user (use ref for current value)
+            const currentRemovedPaths = removedWorktreePathsRef.current;
+            if (currentRemovedPaths.has(subdir.path)) {
+              continue;
+            }
+
+            // Skip if session already exists (check current sessions)
+            const existingSession = sessions.find(s => s.cwd === subdir.path || s.projectRoot === subdir.path);
+            if (existingSession) {
+              continue;
+            }
+
+            // Skip if we're already adding this path in this scan batch
+            if (pathsBeingAdded.has(subdir.path)) {
+              continue;
+            }
+
+            // Found a new worktree - prepare session creation
+            pathsBeingAdded.add(subdir.path);
+
+            const sessionName = subdir.branch
+              ? `${subdir.name} (${subdir.branch})`
+              : subdir.name;
+
+            const newId = generateId();
+            const initialTabId = generateId();
+            const initialTab: AITab = {
+              id: initialTabId,
+              agentSessionId: null,
+              name: null,
+              starred: false,
+              logs: [],
+              inputValue: '',
+              stagedImages: [],
+              createdAt: Date.now(),
+              state: 'idle',
+              saveToHistory: defaultSaveToHistory
+            };
+
+            // Fetch git info
+            let gitBranches: string[] | undefined;
+            let gitTags: string[] | undefined;
+            let gitRefsCacheTime: number | undefined;
+
+            try {
+              [gitBranches, gitTags] = await Promise.all([
+                gitService.getBranches(subdir.path),
+                gitService.getTags(subdir.path)
+              ]);
+              gitRefsCacheTime = Date.now();
+            } catch {
+              // Ignore errors
+            }
+
+            const newSession: Session = {
+              id: newId,
+              name: sessionName,
+              groupId: session.groupId,
+              toolType: session.toolType,
+              state: 'idle',
+              cwd: subdir.path,
+              fullPath: subdir.path,
+              projectRoot: subdir.path,
+              isGitRepo: true,
+              gitBranches,
+              gitTags,
+              gitRefsCacheTime,
+              worktreeParentPath: session.worktreeParentPath,
+              aiLogs: [],
+              shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
+              workLog: [],
+              contextUsage: 0,
+              inputMode: session.inputMode,
+              aiPid: 0,
+              terminalPid: 0,
+              port: 3000 + Math.floor(Math.random() * 100),
+              isLive: false,
+              changedFiles: [],
+              fileTree: [],
+              fileExplorerExpanded: [],
+              fileExplorerScrollPos: 0,
+              fileTreeAutoRefreshInterval: 180,
+              shellCwd: subdir.path,
+              aiCommandHistory: [],
+              shellCommandHistory: [],
+              executionQueue: [],
+              activeTimeMs: 0,
+              aiTabs: [initialTab],
+              activeTabId: initialTabId,
+              closedTabHistory: [],
+              customPath: session.customPath,
+              customArgs: session.customArgs,
+              customEnvVars: session.customEnvVars,
+              customModel: session.customModel
+            };
+
+            newSessionsToAdd.push(newSession);
+          }
+        } catch (error) {
+          console.error(`[WorktreeScanner] Error scanning ${session.worktreeParentPath}:`, error);
+        }
+      }
+
+      // Add all new sessions in a single update (uses functional update to get fresh state)
+      if (newSessionsToAdd.length > 0) {
+        setSessions(prev => {
+          // Double-check against current state to avoid duplicates
+          const currentPaths = new Set(prev.map(s => s.cwd));
+          const trulyNew = newSessionsToAdd.filter(s => !currentPaths.has(s.cwd));
+          if (trulyNew.length === 0) return prev;
+          return [...prev, ...trulyNew];
+        });
+
+        for (const session of newSessionsToAdd) {
+          addToast({
+            type: 'success',
+            title: 'New Worktree Discovered',
+            message: session.name,
+          });
+        }
+      }
+    };
+
+    // Scan immediately on mount if there are worktree parents
+    scanWorktreeParents();
+
+    // Set up interval to scan every 30 seconds
+    const intervalId = setInterval(scanWorktreeParents, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions.length, defaultSaveToHistory]); // Re-run when session count changes (removedWorktreePaths accessed via ref)
+
   // Handler to open batch runner modal
   const handleOpenBatchRunner = useCallback(() => {
     setBatchRunnerModalOpen(true);
@@ -3548,6 +3749,11 @@ export default function MaestroConsole() {
           console.error('Failed to delete playbooks:', error);
         }
 
+        // If this is a worktree session, track its path to prevent re-discovery
+        if (session.worktreeParentPath && session.cwd) {
+          setRemovedWorktreePaths(prev => new Set([...prev, session.cwd]));
+        }
+
         const newSessions = sessions.filter(s => s.id !== id);
         setSessions(newSessions);
         // Flush immediately for critical operation (session deletion)
@@ -3558,6 +3764,74 @@ export default function MaestroConsole() {
         } else {
           setActiveSessionId('');
         }
+      }
+    );
+  };
+
+  // Delete an entire worktree group and all its agents
+  const deleteWorktreeGroup = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+
+    const groupSessions = sessions.filter(s => s.groupId === groupId);
+    const sessionCount = groupSessions.length;
+
+    showConfirmation(
+      `Are you sure you want to remove the group "${group.name}" and all ${sessionCount} agent${sessionCount !== 1 ? 's' : ''} in it? This action cannot be undone.`,
+      async () => {
+        // Kill processes and delete playbooks for each session
+        for (const session of groupSessions) {
+          try {
+            await window.maestro.process.kill(`${session.id}-ai`);
+          } catch (error) {
+            console.error('Failed to kill AI process:', error);
+          }
+
+          try {
+            await window.maestro.process.kill(`${session.id}-terminal`);
+          } catch (error) {
+            console.error('Failed to kill terminal process:', error);
+          }
+
+          try {
+            await window.maestro.playbooks.deleteAll(session.id);
+          } catch (error) {
+            console.error('Failed to delete playbooks:', error);
+          }
+        }
+
+        // Track all removed paths to prevent re-discovery
+        const pathsToTrack = groupSessions
+          .filter(s => s.worktreeParentPath && s.cwd)
+          .map(s => s.cwd);
+
+        if (pathsToTrack.length > 0) {
+          setRemovedWorktreePaths(prev => new Set([...prev, ...pathsToTrack]));
+        }
+
+        // Remove all sessions in the group
+        const sessionIdsToRemove = new Set(groupSessions.map(s => s.id));
+        const newSessions = sessions.filter(s => !sessionIdsToRemove.has(s.id));
+        setSessions(newSessions);
+
+        // Remove the group
+        setGroups(prev => prev.filter(g => g.id !== groupId));
+
+        // Flush immediately for critical operation
+        setTimeout(() => flushSessionPersistence(), 0);
+
+        // Switch to another session if needed
+        if (sessionIdsToRemove.has(activeSessionId) && newSessions.length > 0) {
+          setActiveSessionId(newSessions[0].id);
+        } else if (newSessions.length === 0) {
+          setActiveSessionId('');
+        }
+
+        addToast({
+          type: 'success',
+          title: 'Group Removed',
+          message: `Removed "${group.name}" and ${sessionCount} agent${sessionCount !== 1 ? 's' : ''}`,
+        });
       }
     );
   };
@@ -3576,20 +3850,6 @@ export default function MaestroConsole() {
     customEnvVars?: Record<string, string>,
     customModel?: string
   ) => {
-    // Validate uniqueness before creating
-    const validation = validateNewSession(name, workingDir, agentId as ToolType, sessions);
-    if (!validation.valid) {
-      console.error(`Session validation failed: ${validation.error}`);
-      addToast({
-        type: 'error',
-        title: 'Session Creation Failed',
-        message: validation.error || 'Cannot create duplicate session',
-      });
-      return;
-    }
-
-    const newId = generateId();
-
     // Get agent definition to get correct command
     const agent = await window.maestro.agents.get(agentId);
     if (!agent) {
@@ -3597,11 +3857,154 @@ export default function MaestroConsole() {
       return;
     }
 
-    // Don't eagerly spawn AI processes on new session creation:
-    // - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
-    // - Terminal uses runCommand (fresh shells per command)
-    // aiPid stays at 0 until user sends their first message
     try {
+      // First, check if this directory contains git-enabled subdirectories (worktrees)
+      // If so, we create sessions for each subdirectory instead of the parent
+      const scanResult = await window.maestro.git.scanWorktreeDirectory(workingDir);
+      const { gitSubdirs } = scanResult;
+
+      if (gitSubdirs.length > 0) {
+        // This is a worktree parent directory - create sessions for subdirectories only
+
+        // Create a group using the user-provided name
+        const groupId = generateId();
+        const worktreeGroup: SessionGroup = {
+          id: groupId,
+          name: name,
+          collapsed: false,
+          emoji: '🌳'
+        };
+        setGroups(prev => [...prev, worktreeGroup]);
+
+        // Create sessions for each git subdirectory
+        const newSessions: Session[] = [];
+        let firstSessionId: string | null = null;
+
+        for (const subdir of gitSubdirs) {
+          // Create session name from directory name and branch
+          const sessionName = subdir.branch
+            ? `${subdir.name} (${subdir.branch})`
+            : subdir.name;
+
+          // Check if session already exists for this path
+          const existingSession = sessions.find(s => s.cwd === subdir.path || s.projectRoot === subdir.path);
+          if (existingSession) {
+            continue;
+          }
+
+          const newId = generateId();
+          if (!firstSessionId) firstSessionId = newId;
+
+          const initialTabId = generateId();
+          const initialTab: AITab = {
+            id: initialTabId,
+            agentSessionId: null,
+            name: null,
+            starred: false,
+            logs: [],
+            inputValue: '',
+            stagedImages: [],
+            createdAt: Date.now(),
+            state: 'idle',
+            saveToHistory: defaultSaveToHistory
+          };
+
+          // Fetch git info for this subdirectory
+          let gitBranches: string[] | undefined;
+          let gitTags: string[] | undefined;
+          let gitRefsCacheTime: number | undefined;
+
+          try {
+            [gitBranches, gitTags] = await Promise.all([
+              gitService.getBranches(subdir.path),
+              gitService.getTags(subdir.path)
+            ]);
+            gitRefsCacheTime = Date.now();
+          } catch {
+            // Ignore errors fetching git info
+          }
+
+          const newSession: Session = {
+            id: newId,
+            name: sessionName,
+            groupId: groupId,
+            toolType: agentId as ToolType,
+            state: 'idle',
+            cwd: subdir.path,
+            fullPath: subdir.path,
+            projectRoot: subdir.path,
+            isGitRepo: true,
+            gitBranches,
+            gitTags,
+            gitRefsCacheTime,
+            worktreeParentPath: workingDir, // Track parent for dynamic scanning
+            aiLogs: [],
+            shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
+            workLog: [],
+            contextUsage: 0,
+            inputMode: agentId === 'terminal' ? 'terminal' : 'ai',
+            aiPid: 0,
+            terminalPid: 0,
+            port: 3000 + Math.floor(Math.random() * 100),
+            isLive: false,
+            changedFiles: [],
+            fileTree: [],
+            fileExplorerExpanded: [],
+            fileExplorerScrollPos: 0,
+            fileTreeAutoRefreshInterval: 180,
+            shellCwd: subdir.path,
+            aiCommandHistory: [],
+            shellCommandHistory: [],
+            executionQueue: [],
+            activeTimeMs: 0,
+            aiTabs: [initialTab],
+            activeTabId: initialTabId,
+            closedTabHistory: [],
+            nudgeMessage,
+            customPath,
+            customArgs,
+            customEnvVars,
+            customModel
+          };
+
+          newSessions.push(newSession);
+        }
+
+        if (newSessions.length > 0) {
+          setSessions(prev => [...prev, ...newSessions]);
+          // Set the first worktree session as active
+          if (firstSessionId) {
+            setActiveSessionId(firstSessionId);
+          }
+          // Track session creation in global stats
+          updateGlobalStats({ totalSessions: newSessions.length });
+          addToast({
+            type: 'success',
+            title: 'Worktree Sessions Created',
+            message: `Created ${newSessions.length} agents for git worktrees`,
+          });
+        }
+
+        // Auto-focus the input
+        setActiveFocus('main');
+        setTimeout(() => inputRef.current?.focus(), 50);
+        return;
+      }
+
+      // No git subdirectories found - create a single session for this directory
+      // Validate uniqueness before creating
+      const validation = validateNewSession(name, workingDir, agentId as ToolType, sessions);
+      if (!validation.valid) {
+        console.error(`Session validation failed: ${validation.error}`);
+        addToast({
+          type: 'error',
+          title: 'Session Creation Failed',
+          message: validation.error || 'Cannot create duplicate session',
+        });
+        return;
+      }
+
+      const newId = generateId();
       const aiPid = 0;
 
       // Check if the working directory is a Git repository
@@ -6223,6 +6626,8 @@ export default function MaestroConsole() {
             setSessions={setSessions}
             createNewGroup={createNewGroup}
             addNewSession={addNewSession}
+            onDeleteSession={deleteSession}
+            onDeleteWorktreeGroup={deleteWorktreeGroup}
             setRenameInstanceModalOpen={setRenameInstanceModalOpen}
             setRenameInstanceValue={setRenameInstanceValue}
             setRenameInstanceSessionId={setRenameInstanceSessionId}
