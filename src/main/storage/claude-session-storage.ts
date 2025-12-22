@@ -405,7 +405,7 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     const validSessions = sessions.filter((s): s is NonNullable<typeof s> => s !== null);
 
     logger.info(
-      `Paginated Claude sessions - returned ${validSessions.length} of ${totalCount} total`,
+      `Paginated Claude sessions - returned ${validSessions.length} of ${totalCount} total (cursor: ${cursor || 'null'}, startIndex: ${startIndex}, hasMore: ${hasMore}, nextCursor: ${nextCursor || 'null'})`,
       LOG_CONTEXT
     );
 
