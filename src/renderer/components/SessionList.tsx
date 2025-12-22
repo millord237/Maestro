@@ -568,6 +568,8 @@ interface SessionListProps {
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
   createNewGroup: () => void;
   addNewSession: () => void;
+  onDeleteSession?: (id: string) => void;
+  onDeleteWorktreeGroup?: (groupId: string) => void;
 
   // Rename modal handlers (for context menu rename)
   setRenameInstanceModalOpen: (open: boolean) => void;
@@ -634,6 +636,7 @@ export function SessionList(props: SessionListProps) {
     handleDragStart, handleDragOver, handleDropOnGroup, handleDropOnUngrouped,
     finishRenamingGroup, finishRenamingSession, startRenamingGroup,
     startRenamingSession, showConfirmation, setGroups, setSessions, createNewGroup, addNewSession,
+    onDeleteSession, onDeleteWorktreeGroup,
     setRenameInstanceModalOpen, setRenameInstanceValue, setRenameInstanceSessionId,
     onEditAgent,
     activeBatchSessionIds = [],
@@ -713,6 +716,12 @@ export function SessionList(props: SessionListProps) {
   };
 
   const handleDeleteSession = (sessionId: string) => {
+    // Use the parent's delete handler if provided (includes proper cleanup)
+    if (onDeleteSession) {
+      onDeleteSession(sessionId);
+      return;
+    }
+    // Fallback to local delete logic
     const session = sessions.find(s => s.id === sessionId);
     if (!session) return;
     showConfirmation(
@@ -1595,6 +1604,7 @@ export function SessionList(props: SessionListProps) {
                       <span onDoubleClick={() => startRenamingGroup(group.id)}>{group.name}</span>
                     )}
                   </div>
+                  {/* Delete button for empty groups */}
                   {groupSessions.length === 0 && (
                     <button
                       onClick={(e) => {
@@ -1611,6 +1621,20 @@ export function SessionList(props: SessionListProps) {
                       title="Delete empty group"
                     >
                       <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  {/* Delete button for worktree groups with agents */}
+                  {group.emoji === '🌳' && groupSessions.length > 0 && onDeleteWorktreeGroup && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteWorktreeGroup(group.id);
+                      }}
+                      className="p-1 rounded hover:bg-red-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ color: theme.colors.error }}
+                      title="Remove group and all agents"
+                    >
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   )}
                 </div>
