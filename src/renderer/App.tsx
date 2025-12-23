@@ -42,6 +42,7 @@ import { CreateWorktreeModal } from './components/CreateWorktreeModal';
 import { CreatePRModal, PRDetails } from './components/CreatePRModal';
 import { DeleteWorktreeModal } from './components/DeleteWorktreeModal';
 import { MergeSessionModal } from './components/MergeSessionModal';
+import { MergeProgressModal } from './components/MergeProgressModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -74,6 +75,7 @@ import { useSortedSessions, compareNamesIgnoringEmojis } from './hooks/useSorted
 import { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './hooks/useInputProcessing';
 import { useAgentErrorRecovery } from './hooks/useAgentErrorRecovery';
 import { useAgentCapabilities } from './hooks/useAgentCapabilities';
+import { useMergeSessionWithSessions } from './hooks/useMergeSession';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -2585,6 +2587,29 @@ export default function MaestroConsole() {
 
   // Get capabilities for the active session's agent type
   const { hasCapability: hasActiveSessionCapability } = useAgentCapabilities(activeSession?.toolType);
+
+  // Merge session hook for context merge operations
+  const {
+    mergeState,
+    progress: mergeProgress,
+    error: mergeError,
+    executeMerge,
+    cancelMerge,
+    reset: resetMerge,
+  } = useMergeSessionWithSessions({
+    sessions,
+    setSessions,
+    onSessionCreated: (sessionId) => {
+      // Navigate to the newly created merged session
+      setActiveSessionId(sessionId);
+      setMergeSessionModalOpen(false);
+      addToast({
+        type: 'success',
+        title: 'Session Merged',
+        message: 'Context merged successfully',
+      });
+    },
+  });
 
   // Combine built-in slash commands with custom AI commands, spec-kit commands, AND agent-specific commands for autocomplete
   const allSlashCommands = useMemo(() => {
@@ -7371,17 +7396,42 @@ export default function MaestroConsole() {
           sourceSession={activeSession}
           sourceTabId={activeSession.activeTabId}
           allSessions={sessions}
-          onClose={() => setMergeSessionModalOpen(false)}
-          onMerge={async (targetSessionId, targetTabId, options) => {
-            // TODO: Implement actual merge logic in Task 6
-            console.log('[MergeSession] Merge requested:', { targetSessionId, targetTabId, options });
+          onClose={() => {
             setMergeSessionModalOpen(false);
-            addToast({
-              type: 'info',
-              title: 'Merge Session',
-              message: 'Context merge functionality coming soon',
-            });
-            return { success: false, error: 'Not yet implemented' };
+            resetMerge();
+          }}
+          onMerge={async (targetSessionId, targetTabId, options) => {
+            // Execute merge using the hook
+            const result = await executeMerge(
+              activeSession,
+              activeSession.activeTabId,
+              targetSessionId,
+              targetTabId,
+              options
+            );
+
+            if (!result.success) {
+              addToast({
+                type: 'error',
+                title: 'Merge Failed',
+                message: result.error || 'Failed to merge contexts',
+              });
+            }
+
+            return result;
+          }}
+        />
+      )}
+
+      {/* --- MERGE PROGRESS MODAL --- */}
+      {mergeState === 'merging' && mergeProgress && (
+        <MergeProgressModal
+          theme={theme}
+          isOpen={mergeState === 'merging'}
+          progress={mergeProgress}
+          onCancel={() => {
+            cancelMerge();
+            setMergeSessionModalOpen(false);
           }}
         />
       )}
