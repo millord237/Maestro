@@ -122,6 +122,9 @@ export const MODAL_PRIORITIES = {
   /** Merge progress modal (appears during merge operation) */
   MERGE_PROGRESS: 684,
 
+  /** Transfer progress modal (appears during cross-agent transfer operation) */
+  TRANSFER_PROGRESS: 683,
+
   /** Agent sessions browser (Cmd+Shift+L) */
   AGENT_SESSIONS: 680,
 

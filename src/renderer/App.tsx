@@ -44,6 +44,7 @@ import { DeleteWorktreeModal } from './components/DeleteWorktreeModal';
 import { MergeSessionModal } from './components/MergeSessionModal';
 import { MergeProgressModal } from './components/MergeProgressModal';
 import { SendToAgentModal } from './components/SendToAgentModal';
+import { TransferProgressModal } from './components/TransferProgressModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -77,6 +78,7 @@ import { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './hooks/useInputP
 import { useAgentErrorRecovery } from './hooks/useAgentErrorRecovery';
 import { useAgentCapabilities } from './hooks/useAgentCapabilities';
 import { useMergeSessionWithSessions } from './hooks/useMergeSession';
+import { useSendToAgentWithSessions } from './hooks/useSendToAgent';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -2621,6 +2623,47 @@ export default function MaestroConsole() {
         'Session Merged',
         `Created "${sessionName}" with merged context`
       );
+    },
+  });
+
+  // Send to Agent hook for cross-agent context transfer operations
+  // Track the source/target agents for the transfer progress modal
+  const [transferSourceAgent, setTransferSourceAgent] = useState<ToolType | null>(null);
+  const [transferTargetAgent, setTransferTargetAgent] = useState<ToolType | null>(null);
+  const {
+    transferState,
+    progress: transferProgress,
+    error: transferError,
+    executeTransfer,
+    cancelTransfer,
+    reset: resetTransfer,
+  } = useSendToAgentWithSessions({
+    sessions,
+    setSessions,
+    onSessionCreated: (sessionId, sessionName) => {
+      // Navigate to the newly created transferred session
+      setActiveSessionId(sessionId);
+      setSendToAgentModalOpen(false);
+
+      // Show toast notification in the UI
+      addToast({
+        type: 'success',
+        title: 'Context Transferred',
+        message: `Created "${sessionName}" with transferred context`,
+      });
+
+      // Show desktop notification for visibility when app is not focused
+      window.maestro.notification.show(
+        'Context Transferred',
+        `Created "${sessionName}" with transferred context`
+      );
+
+      // Reset the transfer state after a short delay to allow progress modal to show "Complete"
+      setTimeout(() => {
+        resetTransfer();
+        setTransferSourceAgent(null);
+        setTransferTargetAgent(null);
+      }, 1500);
     },
   });
 
@@ -7464,6 +7507,30 @@ export default function MaestroConsole() {
         />
       )}
 
+      {/* --- TRANSFER PROGRESS MODAL --- */}
+      {(transferState === 'grooming' || transferState === 'creating' || transferState === 'complete') &&
+        transferProgress &&
+        transferSourceAgent &&
+        transferTargetAgent && (
+        <TransferProgressModal
+          theme={theme}
+          isOpen={true}
+          progress={transferProgress}
+          sourceAgent={transferSourceAgent}
+          targetAgent={transferTargetAgent}
+          onCancel={() => {
+            cancelTransfer();
+            setTransferSourceAgent(null);
+            setTransferTargetAgent(null);
+          }}
+          onComplete={() => {
+            resetTransfer();
+            setTransferSourceAgent(null);
+            setTransferTargetAgent(null);
+          }}
+        />
+      )}
+
       {/* --- SEND TO AGENT MODAL --- */}
       {sendToAgentModalOpen && activeSession && activeSession.activeTabId && (
         <SendToAgentModal
@@ -7475,15 +7542,35 @@ export default function MaestroConsole() {
           allSessions={sessions}
           onClose={() => setSendToAgentModalOpen(false)}
           onSend={async (targetAgentId, options) => {
-            // TODO: Implement transfer logic in Phase 3 Task 7 (Transfer Execution Logic)
-            // For now, just close the modal and show a placeholder toast
+            // Store source and target agents for progress modal display
+            setTransferSourceAgent(activeSession.toolType);
+            setTransferTargetAgent(targetAgentId);
+
+            // Close the selection modal - progress modal will take over
             setSendToAgentModalOpen(false);
-            addToast({
-              type: 'info',
-              title: 'Send to Agent',
-              message: `Transfer to ${targetAgentId} - implementation pending`,
-            });
-            return { success: true };
+
+            // Execute the transfer using the hook
+            const result = await executeTransfer(
+              activeSession,
+              activeSession.activeTabId!,
+              targetAgentId,
+              options
+            );
+
+            // Handle transfer errors
+            if (!result.success) {
+              addToast({
+                type: 'error',
+                title: 'Transfer Failed',
+                message: result.error || 'Failed to transfer context to agent',
+              });
+              // Reset the transfer state on error
+              resetTransfer();
+              setTransferSourceAgent(null);
+              setTransferTargetAgent(null);
+            }
+
+            return result;
           }}
         />
       )}
