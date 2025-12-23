@@ -1823,6 +1823,7 @@ export default function MaestroConsole() {
 
     // Handle thinking/streaming content chunks from AI agents
     // Only appends to logs if the tab has showThinking enabled
+    // THROTTLED: Uses requestAnimationFrame to batch rapid chunk arrivals (Phase 6.4)
     const unsubscribeThinkingChunk = window.maestro.process.onThinkingChunk?.((sessionId: string, content: string) => {
       // Parse sessionId to get actual session ID and tab ID (format: {id}-ai-{tabId})
       const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
@@ -1830,46 +1831,80 @@ export default function MaestroConsole() {
 
       const actualSessionId = aiTabMatch[1];
       const tabId = aiTabMatch[2];
+      const bufferKey = `${actualSessionId}:${tabId}`;
 
-      setSessions(prev => prev.map(s => {
-        if (s.id !== actualSessionId) return s;
+      // Buffer the chunk - accumulate if there's already content for this session+tab
+      const existingContent = thinkingChunkBufferRef.current.get(bufferKey) || '';
+      thinkingChunkBufferRef.current.set(bufferKey, existingContent + content);
 
-        const targetTab = s.aiTabs.find(t => t.id === tabId);
-        if (!targetTab) return s;
+      // Schedule a single RAF callback to process all buffered chunks
+      // This naturally throttles to ~60fps (16.67ms) and batches multiple rapid arrivals
+      if (thinkingChunkRafIdRef.current === null) {
+        thinkingChunkRafIdRef.current = requestAnimationFrame(() => {
+          // Process all buffered chunks in a single setSessions call
+          const buffer = thinkingChunkBufferRef.current;
+          if (buffer.size === 0) {
+            thinkingChunkRafIdRef.current = null;
+            return;
+          }
 
-        // Only append if thinking is enabled for this tab
-        if (!targetTab.showThinking) return s;
+          // Take a snapshot and clear the buffer
+          const chunksToProcess = new Map(buffer);
+          buffer.clear();
+          thinkingChunkRafIdRef.current = null;
 
-        // Find the last log entry - if it's a thinking entry, append to it
-        const lastLog = targetTab.logs[targetTab.logs.length - 1];
-        if (lastLog?.source === 'thinking') {
-          // Append to existing thinking block
-          return {
-            ...s,
-            aiTabs: s.aiTabs.map(tab =>
-              tab.id === tabId
-                ? { ...tab, logs: [...tab.logs.slice(0, -1), { ...lastLog, text: lastLog.text + content }] }
-                : tab
-            )
-          };
-        } else {
-          // Create new thinking block
-          const newLog: LogEntry = {
-            id: generateId(),
-            timestamp: Date.now(),
-            source: 'thinking',
-            text: content
-          };
-          return {
-            ...s,
-            aiTabs: s.aiTabs.map(tab =>
-              tab.id === tabId
-                ? { ...tab, logs: [...tab.logs, newLog] }
-                : tab
-            )
-          };
-        }
-      }));
+          setSessions(prev => prev.map(s => {
+            // Check if any buffered chunks are for this session
+            let hasChanges = false;
+            for (const [key] of chunksToProcess) {
+              if (key.startsWith(s.id + ':')) {
+                hasChanges = true;
+                break;
+              }
+            }
+            if (!hasChanges) return s;
+
+            // Process each chunk for this session
+            let updatedTabs = s.aiTabs;
+            for (const [key, bufferedContent] of chunksToProcess) {
+              const [chunkSessionId, chunkTabId] = key.split(':');
+              if (chunkSessionId !== s.id) continue;
+
+              const targetTab = updatedTabs.find(t => t.id === chunkTabId);
+              if (!targetTab) continue;
+
+              // Only append if thinking is enabled for this tab
+              if (!targetTab.showThinking) continue;
+
+              // Find the last log entry - if it's a thinking entry, append to it
+              const lastLog = targetTab.logs[targetTab.logs.length - 1];
+              if (lastLog?.source === 'thinking') {
+                // Append to existing thinking block
+                updatedTabs = updatedTabs.map(tab =>
+                  tab.id === chunkTabId
+                    ? { ...tab, logs: [...tab.logs.slice(0, -1), { ...lastLog, text: lastLog.text + bufferedContent }] }
+                    : tab
+                );
+              } else {
+                // Create new thinking block
+                const newLog: LogEntry = {
+                  id: generateId(),
+                  timestamp: Date.now(),
+                  source: 'thinking',
+                  text: bufferedContent
+                };
+                updatedTabs = updatedTabs.map(tab =>
+                  tab.id === chunkTabId
+                    ? { ...tab, logs: [...tab.logs, newLog] }
+                    : tab
+                );
+              }
+            }
+
+            return updatedTabs === s.aiTabs ? s : { ...s, aiTabs: updatedTabs };
+          }));
+        });
+      }
     });
 
     // Cleanup listeners on unmount
@@ -1883,6 +1918,12 @@ export default function MaestroConsole() {
       unsubscribeUsage();
       unsubscribeAgentError();
       unsubscribeThinkingChunk?.();
+      // Cancel any pending thinking chunk RAF and clear buffer (Phase 6.4)
+      if (thinkingChunkRafIdRef.current !== null) {
+        cancelAnimationFrame(thinkingChunkRafIdRef.current);
+        thinkingChunkRafIdRef.current = null;
+      }
+      thinkingChunkBufferRef.current.clear();
     };
   }, []);
 
@@ -2028,6 +2069,11 @@ export default function MaestroConsole() {
   // These are populated after useBatchProcessor is called and used in the agent error handler
   const pauseBatchOnErrorRef = useRef<((sessionId: string, error: AgentError, documentIndex: number, taskDescription?: string) => void) | null>(null);
   const getBatchStateRef = useRef<((sessionId: string) => BatchRunState) | null>(null);
+
+  // Refs for throttled thinking chunk updates (Phase 6.4)
+  // Buffer chunks per session+tab and use requestAnimationFrame to batch UI updates
+  const thinkingChunkBufferRef = useRef<Map<string, string>>(new Map()); // Key: "sessionId:tabId", Value: accumulated content
+  const thinkingChunkRafIdRef = useRef<number | null>(null);
 
   // Expose addToast to window for debugging/testing
   useEffect(() => {
