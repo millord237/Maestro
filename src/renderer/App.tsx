@@ -40,6 +40,7 @@ import { AgentErrorModal } from './components/AgentErrorModal';
 import { WorktreeConfigModal } from './components/WorktreeConfigModal';
 import { CreateWorktreeModal } from './components/CreateWorktreeModal';
 import { CreatePRModal, PRDetails } from './components/CreatePRModal';
+import { DeleteWorktreeModal } from './components/DeleteWorktreeModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -404,6 +405,8 @@ export default function MaestroConsole() {
   const [createWorktreeSession, setCreateWorktreeSession] = useState<Session | null>(null);
   const [createPRModalOpen, setCreatePRModalOpen] = useState(false);
   const [createPRSession, setCreatePRSession] = useState<Session | null>(null);
+  const [deleteWorktreeModalOpen, setDeleteWorktreeModalOpen] = useState(false);
+  const [deleteWorktreeSession, setDeleteWorktreeSession] = useState<Session | null>(null);
 
   // Tab Switcher Modal State
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
@@ -7335,6 +7338,30 @@ export default function MaestroConsole() {
         />
       )}
 
+      {/* --- DELETE WORKTREE MODAL --- */}
+      {deleteWorktreeModalOpen && deleteWorktreeSession && (
+        <DeleteWorktreeModal
+          theme={theme}
+          session={deleteWorktreeSession}
+          onClose={() => {
+            setDeleteWorktreeModalOpen(false);
+            setDeleteWorktreeSession(null);
+          }}
+          onConfirm={() => {
+            // Remove the session but keep the worktree on disk
+            setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
+          }}
+          onConfirmAndDelete={async () => {
+            // Remove the session AND delete the worktree from disk
+            const result = await window.maestro.git.removeWorktree(deleteWorktreeSession.cwd, true);
+            if (!result.success) {
+              throw new Error(result.error || 'Failed to remove worktree');
+            }
+            setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
+          }}
+        />
+      )}
+
       {/* --- FIRST RUN CELEBRATION OVERLAY --- */}
       {firstRunCelebrationData && (
         <FirstRunCelebration
@@ -7659,10 +7686,9 @@ export default function MaestroConsole() {
               setWorktreeConfigModalOpen(true);
             }}
             onDeleteWorktree={(session) => {
-              // Show confirmation before deleting the worktree session
-              showConfirmation(`Delete worktree session "${session.name}"? This will remove the sub-agent but not the git worktree directory.`, () => {
-                setSessions(prev => prev.filter(s => s.id !== session.id));
-              });
+              // Show delete worktree modal with options
+              setDeleteWorktreeSession(session);
+              setDeleteWorktreeModalOpen(true);
             }}
             onToggleWorktreeExpanded={(sessionId) => {
               setSessions(prev => prev.map(s =>

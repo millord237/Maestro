@@ -397,6 +397,13 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('git:unwatchWorktreeDirectory', sessionId) as Promise<{
         success: boolean;
       }>,
+    // Remove a worktree directory from disk
+    removeWorktree: (worktreePath: string, force?: boolean) =>
+      ipcRenderer.invoke('git:removeWorktree', worktreePath, force) as Promise<{
+        success: boolean;
+        error?: string;
+        hasUncommittedChanges?: boolean;
+      }>,
     // Listen for discovered worktrees
     onWorktreeDiscovered: (callback: (data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => callback(data);

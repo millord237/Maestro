@@ -309,6 +309,11 @@ interface MaestroAPI {
     unwatchWorktreeDirectory: (sessionId: string) => Promise<{
       success: boolean;
     }>;
+    removeWorktree: (worktreePath: string, force?: boolean) => Promise<{
+      success: boolean;
+      error?: string;
+      hasUncommittedChanges?: boolean;
+    }>;
     onWorktreeDiscovered: (callback: (data: { sessionId: string; worktree: { path: string; name: string; branch: string | null } }) => void) => () => void;
   };
   fs: {
