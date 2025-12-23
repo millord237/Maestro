@@ -1076,4 +1076,347 @@ not valid json at all
       expect(result2.hasMore).toBe(false);
     });
   });
+
+  describe('claude:searchSessions', () => {
+    it('should return empty array for empty query', async () => {
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', '', 'all');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array for whitespace-only query', async () => {
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', '   ', 'all');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when project directory does not exist', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockRejectedValue(new Error('ENOENT: no such file or directory'));
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/nonexistent/project', 'search term', 'all');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should find sessions matching search term in user messages', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-match.jsonl',
+        'session-nomatch.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // Mock different content for each session
+      vi.mocked(fs.default.readFile).mockImplementation(async (filePath) => {
+        const filename = String(filePath).split('/').pop() || '';
+        if (filename === 'session-match.jsonl') {
+          return `{"type":"user","message":{"role":"user","content":"I need help with authentication"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"I can help with that."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`;
+        } else {
+          return `{"type":"user","message":{"role":"user","content":"How do I configure the database?"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":"Here's how to set it up."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-4"}`;
+        }
+      });
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'authentication', 'user');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        sessionId: 'session-match',
+        matchType: 'user',
+        matchCount: 1,
+      });
+      expect(result[0].matchPreview).toContain('authentication');
+    });
+
+    it('should perform case-insensitive search', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-case.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"Help me with AUTHENTICATION please"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+
+      // Search with lowercase should match uppercase content
+      const result1 = await handler!({} as any, '/test/project', 'authentication', 'all');
+      expect(result1).toHaveLength(1);
+
+      // Search with uppercase should match lowercase content
+      const result2 = await handler!({} as any, '/test/project', 'HELP', 'all');
+      expect(result2).toHaveLength(1);
+
+      // Search with mixed case should work
+      const result3 = await handler!({} as any, '/test/project', 'AuThEnTiCaTiOn', 'all');
+      expect(result3).toHaveLength(1);
+    });
+
+    it('should search only in user messages when mode is user', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-target.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // "keyword" appears in assistant message only
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"What is a variable?"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"A variable stores a keyword value."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+
+      // Should not find when searching user messages only
+      const result = await handler!({} as any, '/test/project', 'keyword', 'user');
+      expect(result).toHaveLength(0);
+    });
+
+    it('should search only in assistant messages when mode is assistant', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-assistant.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // "secret" appears in user message only
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"What is the secret of success?"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"Hard work and persistence."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+
+      // Should not find when searching assistant messages only
+      const result = await handler!({} as any, '/test/project', 'secret', 'assistant');
+      expect(result).toHaveLength(0);
+
+      // But should find in user mode
+      const result2 = await handler!({} as any, '/test/project', 'secret', 'user');
+      expect(result2).toHaveLength(1);
+    });
+
+    it('should search in both user and assistant messages when mode is all', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-user-has.jsonl',
+        'session-assistant-has.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      vi.mocked(fs.default.readFile).mockImplementation(async (filePath) => {
+        const filename = String(filePath).split('/').pop() || '';
+        if (filename === 'session-user-has.jsonl') {
+          return `{"type":"user","message":{"role":"user","content":"Tell me about microservices"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"They are a design pattern."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`;
+        } else {
+          return `{"type":"user","message":{"role":"user","content":"What is this architecture?"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":"This is microservices architecture."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-4"}`;
+        }
+      });
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'microservices', 'all');
+
+      // Should find both sessions
+      expect(result).toHaveLength(2);
+    });
+
+    it('should return matched context snippets with ellipsis', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-context.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // Long message where the match is in the middle
+      const longMessage = 'This is a long prefix text that comes before the match. ' +
+        'And here is a really long sentence with the keyword TARGET_WORD_HERE right in the middle of it all. ' +
+        'This is a long suffix text that comes after the match to demonstrate context truncation.';
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"${longMessage}"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'TARGET_WORD_HERE', 'user');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].matchPreview).toContain('TARGET_WORD_HERE');
+      // Should have ellipsis since match is not at start/end
+      expect(result[0].matchPreview).toMatch(/^\.\.\./);
+      expect(result[0].matchPreview).toMatch(/\.\.\.$/);
+    });
+
+    it('should count multiple matches in matchCount', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-multi.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // Multiple occurrences of "error" across messages
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"I got an error"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"What error did you see?"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}
+{"type":"user","message":{"role":"user","content":"The error says file not found"},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":"This error is common."},"timestamp":"2024-01-15T09:03:00Z","uuid":"uuid-4"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'error', 'all');
+
+      expect(result).toHaveLength(1);
+      // 2 user matches + 2 assistant matches = 4 total
+      expect(result[0].matchCount).toBe(4);
+    });
+
+    it('should handle title search mode correctly', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-title.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // First user message contains the search term (title match)
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":"Help me with React hooks"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"React hooks are useful."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}
+{"type":"user","message":{"role":"user","content":"More about React please"},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-3"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'React', 'title');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].matchType).toBe('title');
+      // Title match counts as 1, regardless of how many times term appears
+      expect(result[0].matchCount).toBe(1);
+    });
+
+    it('should handle array content with text blocks in search', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-array.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // Content with array-style text blocks
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Describe this"},{"type":"image","source":"..."}]},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"This shows the SEARCHTERM in context"}]},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'SEARCHTERM', 'all');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].matchPreview).toContain('SEARCHTERM');
+    });
+
+    it('should skip malformed JSON lines gracefully during search', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-corrupt.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      // Some malformed lines mixed with valid ones
+      vi.mocked(fs.default.readFile).mockResolvedValue(
+        `not valid json
+{"type":"user","message":{"role":"user","content":"Find this UNIQUETERM please"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{broken json here
+{"type":"assistant","message":{"role":"assistant","content":"I found it!"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`
+      );
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'UNIQUETERM', 'user');
+
+      // Should still find the match in the valid lines
+      expect(result).toHaveLength(1);
+      expect(result[0].matchPreview).toContain('UNIQUETERM');
+    });
+
+    it('should skip files that cannot be read', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-readable.jsonl',
+        'session-unreadable.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      vi.mocked(fs.default.readFile).mockImplementation(async (filePath) => {
+        const filename = String(filePath).split('/').pop() || '';
+        if (filename === 'session-unreadable.jsonl') {
+          throw new Error('Permission denied');
+        }
+        return `{"type":"user","message":{"role":"user","content":"Searchable content"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}`;
+      });
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'Searchable', 'all');
+
+      // Should only return the readable session
+      expect(result).toHaveLength(1);
+      expect(result[0].sessionId).toBe('session-readable');
+    });
+
+    it('should return sessions with correct matchType based on where match is found', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.access).mockResolvedValue(undefined);
+      vi.mocked(fs.default.readdir).mockResolvedValue([
+        'session-user-match.jsonl',
+        'session-assistant-match.jsonl',
+      ] as unknown as Awaited<ReturnType<typeof fs.default.readdir>>);
+
+      vi.mocked(fs.default.readFile).mockImplementation(async (filePath) => {
+        const filename = String(filePath).split('/').pop() || '';
+        if (filename === 'session-user-match.jsonl') {
+          // Match in user message - gets reported as 'title' since first user match is considered title
+          // Note: The handler considers the first matching user message as the "title",
+          // so any user match will report matchType as 'title' in 'all' mode
+          return `{"type":"user","message":{"role":"user","content":"Tell me about FINDME please"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"Sure, I can help."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}`;
+        } else {
+          // Match only in assistant message - no user match
+          return `{"type":"user","message":{"role":"user","content":"Hello world"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":"The answer includes FINDME."},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-4"}`;
+        }
+      });
+
+      const handler = handlers.get('claude:searchSessions');
+      const result = await handler!({} as any, '/test/project', 'FINDME', 'all');
+
+      expect(result).toHaveLength(2);
+
+      // In 'all' mode, matchType prioritizes: title (any user match) > assistant
+      const userMatch = result.find(s => s.sessionId === 'session-user-match');
+      const assistantMatch = result.find(s => s.sessionId === 'session-assistant-match');
+
+      // User match gets reported as 'title' because the handler treats any user match as title
+      expect(userMatch?.matchType).toBe('title');
+      expect(assistantMatch?.matchType).toBe('assistant');
+    });
+  });
 });
