@@ -2160,4 +2160,284 @@ export function Component() {
       });
     });
   });
+
+  describe('git:worktreeCheckout', () => {
+    it('should switch branch successfully in worktree', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch exists)
+          stdout: 'abc123456789',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git checkout branchName
+          stdout: "Switched to branch 'feature-branch'",
+          stderr: '',
+          exitCode: 0,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'feature-branch', false);
+
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['status', '--porcelain'],
+        '/worktree/path'
+      );
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['rev-parse', '--verify', 'feature-branch'],
+        '/worktree/path'
+      );
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['checkout', 'feature-branch'],
+        '/worktree/path'
+      );
+      expect(result).toEqual({
+        success: true,
+        hasUncommittedChanges: false,
+      });
+    });
+
+    it('should fail when worktree has uncommitted changes', async () => {
+      vi.mocked(execFile.execFileNoThrow).mockResolvedValueOnce({
+        // git status --porcelain (has uncommitted changes)
+        stdout: 'M  modified.ts\nA  added.ts\n?? untracked.ts\n',
+        stderr: '',
+        exitCode: 0,
+      });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'feature-branch', false);
+
+      expect(execFile.execFileNoThrow).toHaveBeenCalledTimes(1);
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['status', '--porcelain'],
+        '/worktree/path'
+      );
+      expect(result).toEqual({
+        success: false,
+        hasUncommittedChanges: true,
+        error: 'Worktree has uncommitted changes. Please commit or stash them first.',
+      });
+    });
+
+    it('should fail when branch does not exist and createIfMissing is false', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch doesn't exist)
+          stdout: '',
+          stderr: "fatal: Needed a single revision",
+          exitCode: 128,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'nonexistent-branch', false);
+
+      expect(execFile.execFileNoThrow).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        success: false,
+        hasUncommittedChanges: false,
+        error: "Branch 'nonexistent-branch' does not exist",
+      });
+    });
+
+    it('should create branch when it does not exist and createIfMissing is true', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch doesn't exist)
+          stdout: '',
+          stderr: "fatal: Needed a single revision",
+          exitCode: 128,
+        })
+        .mockResolvedValueOnce({
+          // git checkout -b branchName
+          stdout: "Switched to a new branch 'new-feature'",
+          stderr: '',
+          exitCode: 0,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'new-feature', true);
+
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['checkout', '-b', 'new-feature'],
+        '/worktree/path'
+      );
+      expect(result).toEqual({
+        success: true,
+        hasUncommittedChanges: false,
+      });
+    });
+
+    it('should fail when git status command fails', async () => {
+      vi.mocked(execFile.execFileNoThrow).mockResolvedValueOnce({
+        // git status --porcelain (command fails)
+        stdout: '',
+        stderr: 'fatal: not a git repository',
+        exitCode: 128,
+      });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/not/a/worktree', 'feature-branch', false);
+
+      expect(result).toEqual({
+        success: false,
+        hasUncommittedChanges: false,
+        error: 'Failed to check git status',
+      });
+    });
+
+    it('should fail when checkout command fails', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch exists)
+          stdout: 'abc123',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git checkout fails
+          stdout: '',
+          stderr: "error: pathspec 'feature-branch' did not match any file(s) known to git",
+          exitCode: 1,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'feature-branch', false);
+
+      expect(result).toEqual({
+        success: false,
+        hasUncommittedChanges: false,
+        error: "error: pathspec 'feature-branch' did not match any file(s) known to git",
+      });
+    });
+
+    it('should return fallback error when checkout fails without stderr', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch exists)
+          stdout: 'abc123',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git checkout fails without stderr
+          stdout: '',
+          stderr: '',
+          exitCode: 1,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'feature-branch', false);
+
+      expect(result).toEqual({
+        success: false,
+        hasUncommittedChanges: false,
+        error: 'Checkout failed',
+      });
+    });
+
+    it('should handle branch names with slashes', async () => {
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (no uncommitted changes)
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch exists)
+          stdout: 'abc123',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git checkout
+          stdout: "Switched to branch 'feature/my-awesome-feature'",
+          stderr: '',
+          exitCode: 0,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'feature/my-awesome-feature', false);
+
+      expect(execFile.execFileNoThrow).toHaveBeenCalledWith(
+        'git',
+        ['checkout', 'feature/my-awesome-feature'],
+        '/worktree/path'
+      );
+      expect(result).toEqual({
+        success: true,
+        hasUncommittedChanges: false,
+      });
+    });
+
+    it('should detect only whitespace in status as no uncommitted changes', async () => {
+      // Edge case: status with only whitespace should be treated as clean
+      vi.mocked(execFile.execFileNoThrow)
+        .mockResolvedValueOnce({
+          // git status --porcelain (only whitespace/newlines)
+          stdout: '   \n  \n',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git rev-parse --verify branchName (branch exists)
+          stdout: 'abc123',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          // git checkout
+          stdout: "Switched to branch 'main'",
+          stderr: '',
+          exitCode: 0,
+        });
+
+      const handler = handlers.get('git:worktreeCheckout');
+      const result = await handler!({} as any, '/worktree/path', 'main', false);
+
+      // The handler checks statusResult.stdout.trim().length > 0
+      // "   \n  \n".trim() = "" which has length 0, so no uncommitted changes
+      expect(result).toEqual({
+        success: true,
+        hasUncommittedChanges: false,
+      });
+    });
+  });
 });
