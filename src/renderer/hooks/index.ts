@@ -40,6 +40,7 @@ export { useScrollPosition } from './useScrollPosition';
 export { useAgentCapabilities, clearCapabilitiesCache, setCapabilitiesCache, DEFAULT_CAPABILITIES } from './useAgentCapabilities';
 export { useAgentErrorRecovery } from './useAgentErrorRecovery';
 export { useMergeSession, useMergeSessionWithSessions } from './useMergeSession';
+export { useAvailableAgents, useAvailableAgentsForCapability } from './useAvailableAgents';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseActivityTrackerReturn } from './useActivityTracker';
@@ -133,3 +134,8 @@ export type {
   UseMergeSessionWithSessionsDeps,
   UseMergeSessionWithSessionsResult,
 } from './useMergeSession';
+export type {
+  AgentStatus,
+  AvailableAgent,
+  UseAvailableAgentsReturn,
+} from './useAvailableAgents';
