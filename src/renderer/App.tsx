@@ -39,7 +39,7 @@ import { EmptyStateView } from './components/EmptyStateView';
 import { AgentErrorModal } from './components/AgentErrorModal';
 import { WorktreeConfigModal } from './components/WorktreeConfigModal';
 import { CreateWorktreeModal } from './components/CreateWorktreeModal';
-import { CreatePRModal } from './components/CreatePRModal';
+import { CreatePRModal, PRDetails } from './components/CreatePRModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -7080,12 +7080,33 @@ export default function MaestroConsole() {
           worktreePath={(createPRSession || activeSession)!.cwd}
           worktreeBranch={(createPRSession || activeSession)!.worktreeBranch || (createPRSession || activeSession)!.gitBranches?.[0] || 'main'}
           availableBranches={(createPRSession || activeSession)!.gitBranches || ['main', 'master']}
-          onPRCreated={(prUrl) => {
+          onPRCreated={async (prDetails: PRDetails) => {
+            const session = createPRSession || activeSession;
             addToast({
               type: 'success',
               title: 'Pull Request Created',
-              message: prUrl,
+              message: prDetails.title,
+              actionUrl: prDetails.url,
+              actionLabel: prDetails.url,
             });
+            // Add history entry with PR details
+            if (session) {
+              await window.maestro.history.add({
+                id: generateId(),
+                type: 'USER',
+                timestamp: Date.now(),
+                summary: `Created PR: ${prDetails.title}`,
+                fullResponse: [
+                  `**Pull Request:** [${prDetails.title}](${prDetails.url})`,
+                  `**Branch:** ${prDetails.sourceBranch} → ${prDetails.targetBranch}`,
+                  prDetails.description ? `**Description:** ${prDetails.description}` : '',
+                ].filter(Boolean).join('\n\n'),
+                projectPath: session.projectRoot || session.cwd,
+                sessionId: session.id,
+                sessionName: session.name,
+              });
+              rightPanelRef.current?.refreshHistoryPanel();
+            }
             setCreatePRSession(null);
           }}
         />

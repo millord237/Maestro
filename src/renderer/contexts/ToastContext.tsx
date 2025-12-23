@@ -15,6 +15,9 @@ export interface Toast {
   // Session navigation - allows clicking toast to jump to session
   sessionId?: string; // Maestro session ID for navigation
   tabId?: string; // Tab ID within the session for navigation
+  // Action link - clickable URL shown below message (e.g., PR URL)
+  actionUrl?: string; // URL to open when clicked
+  actionLabel?: string; // Label for the action link (defaults to URL)
 }
 
 interface ToastContextType {

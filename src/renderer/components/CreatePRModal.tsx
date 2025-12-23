@@ -4,6 +4,14 @@ import type { Theme, GhCliStatus } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 
+export interface PRDetails {
+  url: string;
+  title: string;
+  description: string;
+  sourceBranch: string;
+  targetBranch: string;
+}
+
 interface CreatePRModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -14,7 +22,7 @@ interface CreatePRModalProps {
   // Available branches for target selection
   availableBranches: string[];
   // Callback when PR is created
-  onPRCreated?: (prUrl: string) => void;
+  onPRCreated?: (details: PRDetails) => void;
 }
 
 /**
@@ -115,7 +123,13 @@ export function CreatePRModal({
       );
 
       if (result.success && result.prUrl) {
-        onPRCreated?.(result.prUrl);
+        onPRCreated?.({
+          url: result.prUrl,
+          title,
+          description,
+          sourceBranch: worktreeBranch,
+          targetBranch,
+        });
         onClose();
       } else {
         setError(result.error || 'Failed to create PR');
