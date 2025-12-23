@@ -408,6 +408,23 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
             };
           }));
         }
+        if (ctx.isTabShortcut(e, 'toggleShowThinking')) {
+          e.preventDefault();
+          ctx.setSessions((prev: Session[]) => prev.map((s: Session) => {
+            if (s.id !== ctx.activeSession!.id) return s;
+            return {
+              ...s,
+              aiTabs: s.aiTabs.map((tab: AITab) => {
+                if (tab.id !== s.activeTabId) return tab;
+                // When turning OFF, also clear any existing thinking logs
+                if (tab.showThinking) {
+                  return { ...tab, showThinking: false, logs: tab.logs.filter(l => l.source !== 'thinking') };
+                }
+                return { ...tab, showThinking: true };
+              })
+            };
+          }));
+        }
         if (ctx.isTabShortcut(e, 'filterUnreadTabs')) {
           e.preventDefault();
           ctx.toggleUnreadFilter();
