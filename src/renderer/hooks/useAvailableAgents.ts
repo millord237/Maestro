@@ -13,15 +13,9 @@ import type { ToolType, Session } from '../types';
 import type { AgentCapabilities } from './useAgentCapabilities';
 import { DEFAULT_CAPABILITIES } from './useAgentCapabilities';
 
-// Define AgentConfig locally since the types/index.ts version is incomplete
-// This matches what window.maestro.agents.detect() returns
-interface AgentConfigDetected {
-  id: string;
-  name: string;
-  available: boolean;
-  hidden?: boolean;
-  capabilities?: AgentCapabilities;
-}
+// Use AgentConfig from types - it has optional capabilities fields
+// The detect API may not return all capability fields
+import type { AgentConfig } from '../types';
 
 /**
  * Agent availability status for display in selection UIs
@@ -119,7 +113,7 @@ export function useAvailableAgents(
   currentAgentId: ToolType | null | undefined,
   sessions: Session[] = []
 ): UseAvailableAgentsReturn {
-  const [rawAgents, setRawAgents] = useState<AgentConfigDetected[]>([]);
+  const [rawAgents, setRawAgents] = useState<AgentConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,7 +184,7 @@ export function useAvailableAgents(
           status,
           activeSessions: sessionCountsByAgent[agent.id] || 0,
           available: agent.available,
-          capabilities: agent.capabilities || { ...DEFAULT_CAPABILITIES },
+          capabilities: { ...DEFAULT_CAPABILITIES, ...agent.capabilities },
         };
       });
   }, [rawAgents, currentAgentId, busyAgents, sessionCountsByAgent]);
