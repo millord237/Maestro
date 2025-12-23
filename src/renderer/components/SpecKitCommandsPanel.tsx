@@ -216,7 +216,7 @@ export function SpecKitCommandsPanel({ theme }: SpecKitCommandsPanelProps) {
           <div
             key={cmd.id}
             className="rounded-lg border overflow-hidden"
-            style={{ backgroundColor: theme.colors.bgMain, borderColor: cmd.isCustom ? theme.colors.accent : theme.colors.border }}
+            style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
           >
             {editingCommand?.id === cmd.id ? (
               // Editing mode
