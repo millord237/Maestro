@@ -98,6 +98,12 @@ import type {
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
+import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue, createMergedSession } from './utils/tabHelpers';
+import { TAB_SHORTCUTS } from './constants/shortcuts';
+import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
+import type { FileNode } from './types/fileTree';
+import { substituteTemplateVariables } from './utils/templateVariables';
+import { validateNewSession } from './utils/sessionValidation';
 
 /**
  * Known Claude Code tool names - used to detect concatenated tool name patterns
@@ -152,11 +158,6 @@ function isLikelyConcatenatedToolNames(text: string): boolean {
   // If we matched 3+ consecutive tool names with no other content, it's likely malformed
   return matchCount >= 3;
 }
-import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue } from './utils/tabHelpers';
-import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
-import type { FileNode } from './types/fileTree';
-import { substituteTemplateVariables } from './utils/templateVariables';
-import { validateNewSession } from './utils/sessionValidation';
 
 // Get description for Claude Code slash commands
 // Built-in commands have known descriptions, custom ones use a generic description
@@ -4733,6 +4734,100 @@ export default function MaestroConsole() {
     setTourOpen,
     setActiveFocus,
     startBatchRun,
+  ]);
+
+  /**
+   * Initialize a merged session with context from groomed logs.
+   * Spawns the agent process and optionally sends an initial context prompt.
+   *
+   * This is the second step after createMergedSession() - it integrates the
+   * session into app state and spawns the AI process.
+   *
+   * @param session - The pre-created session from createMergedSession()
+   * @param contextSummary - Optional initial prompt to send to establish context
+   *                         (e.g., "Here's a summary of our previous conversations...")
+   * @returns Promise that resolves when the session is initialized
+   */
+  const initializeMergedSession = useCallback(async (
+    session: Session,
+    contextSummary?: string
+  ) => {
+    // Add session to app state
+    setSessions(prev => [...prev, session]);
+    setActiveSessionId(session.id);
+
+    // Track session creation in global stats
+    updateGlobalStats({ totalSessions: 1 });
+
+    // Check if this is a git repo and update git info
+    const isGitRepo = await gitService.isRepo(session.projectRoot);
+    if (isGitRepo) {
+      try {
+        const [gitBranches, gitTags] = await Promise.all([
+          gitService.getBranches(session.projectRoot),
+          gitService.getTags(session.projectRoot)
+        ]);
+
+        setSessions(prev => prev.map(s => {
+          if (s.id !== session.id) return s;
+          return {
+            ...s,
+            isGitRepo: true,
+            gitBranches,
+            gitTags,
+            gitRefsCacheTime: Date.now()
+          };
+        }));
+      } catch {
+        // Ignore git info fetch errors
+      }
+    }
+
+    // If a context summary is provided, queue it as the first message
+    // This will be sent when the agent spawns on first user input
+    if (contextSummary && contextSummary.trim()) {
+      const activeTab = getActiveTab(session);
+      if (activeTab) {
+        // Add context as a system log entry so it appears in conversation history
+        const contextLogEntry: LogEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          source: 'system',
+          text: `[Merged Context]\n\n${contextSummary}`
+        };
+
+        setSessions(prev => prev.map(s => {
+          if (s.id !== session.id) return s;
+          return {
+            ...s,
+            aiTabs: s.aiTabs.map(tab => {
+              if (tab.id !== activeTab.id) return tab;
+              return {
+                ...tab,
+                logs: [...tab.logs, contextLogEntry]
+              };
+            })
+          };
+        }));
+      }
+    }
+
+    // Focus the input for immediate user interaction
+    setActiveFocus('main');
+    setTimeout(() => inputRef.current?.focus(), 50);
+
+    // Show success notification
+    addToast({
+      type: 'success',
+      title: 'Session Created',
+      message: `Merged context session "${session.name}" is ready`,
+    });
+  }, [
+    setSessions,
+    setActiveSessionId,
+    updateGlobalStats,
+    setActiveFocus,
+    addToast
   ]);
 
   const toggleInputMode = () => {
