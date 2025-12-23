@@ -3,6 +3,13 @@ import { GripVertical, Plus, Repeat, RotateCcw, X, AlertTriangle, RefreshCw, Che
 import type { Theme, BatchDocumentEntry } from '../types';
 import { generateId } from '../utils/ids';
 
+// Platform detection helper (userAgentData is newer but not in all TS types yet)
+const isMacPlatform = (): boolean => {
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return nav.userAgentData?.platform?.toLowerCase().includes('mac')
+    ?? navigator.platform.toLowerCase().includes('mac');
+};
+
 // Tree node type for folder structure
 export interface DocTreeNode {
   name: string;
@@ -637,7 +644,8 @@ export function DocumentsPanel({
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     // Only clear if leaving the entire documents container (not just moving between items)
-    if (e.currentTarget === e.target) {
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
       setDropTargetIndex(null);
     }
   }, []);
@@ -765,7 +773,7 @@ export function DocumentsPanel({
             <p className="text-xs mt-1">Click "+ Add Docs" to select documents to run</p>
           </div>
         ) : (
-          <div onDragLeave={handleDragLeave}>
+          <div className="divide-y" style={{ borderColor: theme.colors.border }} onDragLeave={handleDragLeave}>
             {documents.map((doc, index) => {
               const docTaskCount = taskCounts[doc.filename] ?? 0;
               const isBeingDragged = draggedId === doc.id;
@@ -777,7 +785,7 @@ export function DocumentsPanel({
                   {/* Drop Indicator Line - Before */}
                   {showDropIndicatorBefore && (
                     <div
-                      className="absolute left-0 right-0 top-0 h-0.5 z-10 pointer-events-none"
+                      className="absolute left-0 right-0 top-0 h-0.5 z-20 pointer-events-none"
                       style={{ backgroundColor: isCopyDrag ? theme.colors.success : theme.colors.accent }}
                     >
                       {/* Left circle */}
@@ -856,6 +864,7 @@ export function DocumentsPanel({
                     const hasDuplicates = documents.filter(d => d.filename === doc.filename).length > 1;
                     const canDisableReset = !hasDuplicates;
 
+                    const modifierKey = isMacPlatform() ? '⌘' : 'Ctrl';
                     let tooltipText: string;
                     if (doc.resetOnCompletion) {
                       if (canDisableReset) {
@@ -864,7 +873,7 @@ export function DocumentsPanel({
                         tooltipText = 'Reset enabled: uncompleted tasks will be re-checked when done. Remove duplicates to disable.';
                       }
                     } else {
-                      tooltipText = 'Enable reset: uncompleted tasks will be re-checked when this document completes';
+                      tooltipText = `Enable reset, or ${modifierKey}+drag to copy`;
                     }
 
                     return (
@@ -925,7 +934,7 @@ export function DocumentsPanel({
                   {/* Drop Indicator Line - After (only for last item) */}
                   {showDropIndicatorAfter && (
                     <div
-                      className="absolute left-0 right-0 bottom-0 h-0.5 z-10 pointer-events-none"
+                      className="absolute left-0 right-0 bottom-0 h-0.5 z-20 pointer-events-none"
                       style={{ backgroundColor: isCopyDrag ? theme.colors.success : theme.colors.accent }}
                     >
                       {/* Left circle */}
@@ -1104,7 +1113,7 @@ export function DocumentsPanel({
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}
         >
-          <Plus className="w-4 h-4 stroke-[3]" style={{ color: theme.colors.bgMain }} />
+          <Plus className="w-4 h-4 stroke-2" style={{ color: theme.colors.bgMain }} />
         </div>
       )}
     </div>

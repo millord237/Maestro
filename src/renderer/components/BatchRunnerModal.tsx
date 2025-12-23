@@ -12,6 +12,13 @@ import { usePlaybookManagement } from '../hooks';
 import { autorunDefaultPrompt } from '../../prompts';
 import { generateId } from '../utils/ids';
 
+// Platform detection helper (userAgentData is newer but not in all TS types yet)
+const isMacPlatform = (): boolean => {
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return nav.userAgentData?.platform?.toLowerCase().includes('mac')
+    ?? navigator.platform.toLowerCase().includes('mac');
+};
+
 // Default batch processing prompt
 export const DEFAULT_BATCH_PROMPT = autorunDefaultPrompt;
 
@@ -617,7 +624,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
           {/* Left side: Hint */}
           <div className="flex items-center gap-2 text-xs" style={{ color: theme.colors.textDim }}>
             <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}>
-              {(navigator.userAgentData?.platform?.toLowerCase().includes('mac') || navigator.platform.toLowerCase().includes('mac')) ? '⌘' : 'Ctrl'} + Drag
+              {isMacPlatform() ? '⌘' : 'Ctrl'} + Drag
             </span>
             <span>to copy document</span>
           </div>
