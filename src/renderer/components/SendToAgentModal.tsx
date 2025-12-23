@@ -22,6 +22,7 @@ import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatTokensCompact } from '../utils/formatters';
 import { getAgentIcon } from '../constants/agentIcons';
+import { ScreenReaderAnnouncement, useAnnouncement } from './Wizard/ScreenReaderAnnouncement';
 
 /**
  * Agent availability status for display in the selection grid
@@ -137,6 +138,9 @@ export function SendToAgentModal({
 
   // Sending state
   const [isSending, setIsSending] = useState(false);
+
+  // Screen reader announcements
+  const { announce, announcementProps } = useAnnouncement();
 
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -281,6 +285,41 @@ export function SendToAgentModal({
   useEffect(() => {
     setSelectedIndex(0);
   }, [searchQuery]);
+
+  // Announce search results to screen readers
+  useEffect(() => {
+    if (isOpen) {
+      const availableCount = filteredAgents.filter(
+        a => a.status !== 'current' && a.status !== 'unavailable'
+      ).length;
+      if (searchQuery) {
+        announce(
+          `Found ${availableCount} available agent${availableCount !== 1 ? 's' : ''} matching "${searchQuery}"`
+        );
+      } else if (filteredAgents.length > 0) {
+        announce(
+          `${availableCount} agent${availableCount !== 1 ? 's' : ''} available for transfer`
+        );
+      }
+    }
+  }, [filteredAgents, searchQuery, isOpen, announce]);
+
+  // Announce agent selection
+  useEffect(() => {
+    if (selectedAgentId) {
+      const agent = agents.find(a => a.id === selectedAgentId);
+      if (agent) {
+        announce(`Selected: ${agent.name}`);
+      }
+    }
+  }, [selectedAgentId, agents, announce]);
+
+  // Announce sending status
+  useEffect(() => {
+    if (isSending) {
+      announce('Sending context to agent, please wait...', 'assertive');
+    }
+  }, [isSending, announce]);
 
   // Handle agent selection
   const handleSelectAgent = useCallback((agentId: ToolType) => {
@@ -427,10 +466,14 @@ export function SendToAgentModal({
       className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999] animate-in"
       role="dialog"
       aria-modal="true"
-      aria-label="Send Context to Agent"
+      aria-labelledby="send-to-agent-title"
+      aria-describedby="send-to-agent-description"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
+      {/* Screen reader announcements */}
+      <ScreenReaderAnnouncement {...announcementProps} />
+
       <div
         className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col animate-slide-up"
         style={{
@@ -446,8 +489,9 @@ export function SendToAgentModal({
           style={{ borderColor: theme.colors.border }}
         >
           <div className="flex items-center gap-2">
-            <ArrowRight className="w-5 h-5" style={{ color: theme.colors.accent }} />
+            <ArrowRight className="w-5 h-5" style={{ color: theme.colors.accent }} aria-hidden="true" />
             <h2
+              id="send-to-agent-title"
               className="text-sm font-bold"
               style={{ color: theme.colors.textMain }}
             >
@@ -459,11 +503,16 @@ export function SendToAgentModal({
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 transition-colors"
             style={{ color: theme.colors.textDim }}
-            aria-label="Close modal"
+            aria-label="Close dialog"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
+
+        {/* Description for screen readers */}
+        <p id="send-to-agent-description" className="sr-only">
+          Select an AI agent to transfer your current context to. Use arrow keys to navigate the grid and Enter or Space to select.
+        </p>
 
         {/* Content Area */}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
@@ -473,13 +522,19 @@ export function SendToAgentModal({
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
                 style={{ color: theme.colors.textDim }}
+                aria-hidden="true"
               />
+              <label htmlFor="search-agents-input" className="sr-only">
+                Search agents
+              </label>
               <input
+                id="search-agents-input"
                 ref={inputRef}
                 type="text"
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-controls="agent-grid"
                 className="w-full pl-9 pr-3 py-2 rounded-lg border text-sm outline-none"
                 style={{
                   backgroundColor: theme.colors.bgMain,
@@ -491,16 +546,22 @@ export function SendToAgentModal({
           </div>
 
           {/* Agent Grid */}
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div
+            id="agent-grid"
+            className="flex-1 overflow-y-auto px-4 pb-4"
+            role="listbox"
+            aria-label="Available agents"
+          >
             {filteredAgents.length === 0 ? (
               <div
                 className="p-4 text-center text-sm"
                 style={{ color: theme.colors.textDim }}
+                role="status"
               >
                 {searchQuery ? 'No matching agents found' : 'No agents available'}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2" role="presentation">
                 {filteredAgents.map((agent, index) => {
                   const isHighlighted = index === selectedIndex;
                   const isSelected = selectedAgentId === agent.id;
@@ -512,6 +573,10 @@ export function SendToAgentModal({
                       ref={isHighlighted ? selectedItemRef : undefined}
                       onClick={() => !isDisabled && handleSelectAgent(agent.id)}
                       disabled={isDisabled}
+                      role="option"
+                      aria-selected={isSelected}
+                      aria-disabled={isDisabled}
+                      aria-label={`${agent.name}, ${getStatusLabel(agent.status)}${index < 9 ? `, press ${index + 1} to select` : ''}`}
                       className={`p-3 rounded-lg border text-center transition-all duration-150 disabled:cursor-not-allowed ${isSelected ? 'animate-highlight-pulse' : ''}`}
                       style={{
                         backgroundColor: isSelected
@@ -529,7 +594,7 @@ export function SendToAgentModal({
                       } as React.CSSProperties}
                     >
                       {/* Agent Icon */}
-                      <div className="text-2xl mb-1">
+                      <div className="text-2xl mb-1" aria-hidden="true">
                         {getAgentIcon(agent.id)}
                       </div>
 
@@ -557,6 +622,7 @@ export function SendToAgentModal({
                                 ? theme.colors.warning
                                 : theme.colors.textDim,
                         }}
+                        aria-hidden="true"
                       >
                         {agent.status === 'ready' && <Check className="w-3 h-3" />}
                         {agent.status === 'busy' && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -569,6 +635,7 @@ export function SendToAgentModal({
                         <div
                           className="text-[10px] mt-1 opacity-50"
                           style={{ color: isSelected ? theme.colors.accentForeground : theme.colors.textDim }}
+                          aria-hidden="true"
                         >
                           Press {index + 1}
                         </div>
@@ -585,11 +652,16 @@ export function SendToAgentModal({
         <div
           className="p-4 border-t space-y-3"
           style={{ borderColor: theme.colors.border }}
+          role="region"
+          aria-label="Transfer preview and options"
         >
           {/* Token Preview */}
           <div
             className="p-3 rounded-lg text-xs space-y-1"
             style={{ backgroundColor: theme.colors.bgMain }}
+            role="status"
+            aria-live="polite"
+            aria-label="Token estimate"
           >
             <div className="flex justify-between">
               <span style={{ color: theme.colors.textDim }}>
@@ -609,7 +681,7 @@ export function SendToAgentModal({
                   className="flex items-center gap-1"
                   style={{ color: theme.colors.textMain }}
                 >
-                  <ArrowRight className="w-3 h-3" />
+                  <ArrowRight className="w-3 h-3" aria-hidden="true" />
                   New session
                 </span>
               </div>
@@ -628,7 +700,8 @@ export function SendToAgentModal({
           </div>
 
           {/* Options */}
-          <div className="space-y-2">
+          <fieldset className="space-y-2">
+            <legend className="sr-only">Transfer options</legend>
             <label
               className="flex items-center gap-2 cursor-pointer"
               style={{ color: theme.colors.textMain }}
@@ -638,8 +711,9 @@ export function SendToAgentModal({
                 checked={options.groomContext}
                 onChange={(e) => setOptions(prev => ({ ...prev, groomContext: e.target.checked }))}
                 className="rounded"
+                aria-describedby="groom-context-send-desc"
               />
-              <span className="text-xs">
+              <span className="text-xs" id="groom-context-send-desc">
                 Groom context for target agent
               </span>
             </label>
@@ -653,12 +727,13 @@ export function SendToAgentModal({
                 checked={options.createNewSession}
                 onChange={(e) => setOptions(prev => ({ ...prev, createNewSession: e.target.checked }))}
                 className="rounded"
+                aria-describedby="create-new-session-send-desc"
               />
-              <span className="text-xs">
+              <span className="text-xs" id="create-new-session-send-desc">
                 Create new session
               </span>
             </label>
-          </div>
+          </fieldset>
         </div>
 
         {/* Footer */}
@@ -681,6 +756,7 @@ export function SendToAgentModal({
             type="button"
             onClick={handleSend}
             disabled={!canSend}
+            aria-busy={isSending}
             className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             style={{
               backgroundColor: theme.colors.accent,
@@ -689,12 +765,12 @@ export function SendToAgentModal({
           >
             {isSending ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                 Sending...
               </>
             ) : (
               <>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 Send to Agent
               </>
             )}

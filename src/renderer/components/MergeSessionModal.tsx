@@ -23,6 +23,7 @@ import { useLayerStack } from '../contexts/LayerStackContext';
 import { useListNavigation } from '../hooks/useListNavigation';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatTokensCompact } from '../utils/formatters';
+import { ScreenReaderAnnouncement, useAnnouncement } from './Wizard/ScreenReaderAnnouncement';
 
 /**
  * View modes for the modal
@@ -183,6 +184,9 @@ export function MergeSessionModal({
 
   // Merge state
   const [isMerging, setIsMerging] = useState(false);
+
+  // Screen reader announcements
+  const { announce, announcementProps } = useAnnouncement();
 
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -371,6 +375,39 @@ export function MergeSessionModal({
     setSelectedIndex(0);
   }, [searchQuery, viewMode, setSelectedIndex]);
 
+  // Announce search results to screen readers
+  useEffect(() => {
+    if (viewMode === 'search' && isOpen) {
+      const sessionCount = groupedItems.size;
+      const tabCount = filteredItems.length;
+      if (searchQuery) {
+        announce(
+          `Found ${tabCount} tab${tabCount !== 1 ? 's' : ''} across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}`
+        );
+      } else if (tabCount > 0) {
+        announce(
+          `${tabCount} tab${tabCount !== 1 ? 's' : ''} available across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}`
+        );
+      }
+    }
+  }, [viewMode, filteredItems.length, groupedItems.size, searchQuery, isOpen, announce]);
+
+  // Announce target selection
+  useEffect(() => {
+    if (selectedTarget) {
+      announce(
+        `Selected: ${selectedTarget.sessionName} - ${selectedTarget.tabName}, approximately ${formatTokensCompact(selectedTarget.estimatedTokens)} tokens`
+      );
+    }
+  }, [selectedTarget, announce]);
+
+  // Announce merge status
+  useEffect(() => {
+    if (isMerging) {
+      announce('Merging contexts, please wait...', 'assertive');
+    }
+  }, [isMerging, announce]);
+
   // Toggle session expansion
   const toggleSession = useCallback((sessionId: string) => {
     setExpandedSessions(prev => {
@@ -496,10 +533,14 @@ export function MergeSessionModal({
       className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999] animate-in"
       role="dialog"
       aria-modal="true"
-      aria-label="Merge Session Contexts"
+      aria-labelledby="merge-modal-title"
+      aria-describedby="merge-modal-description"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
+      {/* Screen reader announcements */}
+      <ScreenReaderAnnouncement {...announcementProps} />
+
       <div
         className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col animate-slide-up"
         style={{
@@ -515,8 +556,9 @@ export function MergeSessionModal({
           style={{ borderColor: theme.colors.border }}
         >
           <div className="flex items-center gap-2">
-            <GitMerge className="w-5 h-5" style={{ color: theme.colors.accent }} />
+            <GitMerge className="w-5 h-5" style={{ color: theme.colors.accent }} aria-hidden="true" />
             <h2
+              id="merge-modal-title"
               className="text-sm font-bold"
               style={{ color: theme.colors.textMain }}
             >
@@ -528,16 +570,23 @@ export function MergeSessionModal({
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 transition-colors"
             style={{ color: theme.colors.textDim }}
-            aria-label="Close modal"
+            aria-label="Close merge dialog"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
+
+        {/* Description for screen readers */}
+        <p id="merge-modal-description" className="sr-only">
+          Select a session or tab to merge with the current context. Use Tab to switch between Paste ID, Search Sessions, and Recent modes. Use arrow keys to navigate the list.
+        </p>
 
         {/* View Mode Tabs */}
         <div
           className="px-4 pt-3 pb-2 border-b flex gap-1"
           style={{ borderColor: theme.colors.border }}
+          role="tablist"
+          aria-label="Selection mode"
         >
           {[
             { mode: 'paste' as ViewMode, label: 'Paste ID', icon: Clipboard },
@@ -546,6 +595,9 @@ export function MergeSessionModal({
           ].map(({ mode, label, icon: Icon }) => (
             <button
               key={mode}
+              role="tab"
+              aria-selected={viewMode === mode}
+              aria-controls={`merge-tabpanel-${mode}`}
               onClick={() => setViewMode(mode)}
               className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors"
               style={{
@@ -553,7 +605,7 @@ export function MergeSessionModal({
                 color: viewMode === mode ? theme.colors.accentForeground : theme.colors.textDim,
               }}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
               {label}
             </button>
           ))}
@@ -563,14 +615,25 @@ export function MergeSessionModal({
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {/* Paste ID View */}
           {viewMode === 'paste' && (
-            <div className="p-4 space-y-3">
+            <div
+              id="merge-tabpanel-paste"
+              role="tabpanel"
+              aria-labelledby="merge-tab-paste"
+              className="p-4 space-y-3"
+            >
               <div className="relative">
+                <label htmlFor="paste-id-input" className="sr-only">
+                  Session or tab ID
+                </label>
                 <input
+                  id="paste-id-input"
                   ref={inputRef}
                   type="text"
                   placeholder="Paste session or tab ID..."
                   value={pastedId}
                   onChange={(e) => setPastedId(e.target.value)}
+                  aria-invalid={pastedIdValid === false}
+                  aria-describedby={pastedIdValid === false ? "paste-id-error" : undefined}
                   className="w-full px-3 py-2 rounded-lg border text-sm outline-none transition-colors"
                   style={{
                     backgroundColor: theme.colors.bgMain,
@@ -583,7 +646,7 @@ export function MergeSessionModal({
                   }}
                 />
                 {pastedIdValid !== null && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2" aria-hidden="true">
                     {pastedIdValid ? (
                       <Check className="w-4 h-4" style={{ color: theme.colors.success }} />
                     ) : (
@@ -601,6 +664,8 @@ export function MergeSessionModal({
                     backgroundColor: theme.colors.bgMain,
                     borderColor: theme.colors.success,
                   }}
+                  role="status"
+                  aria-live="polite"
                 >
                   <div className="flex items-center gap-2">
                     <div
@@ -611,7 +676,7 @@ export function MergeSessionModal({
                     </div>
                     {pastedIdMatch.tabName && (
                       <>
-                        <ChevronRight className="w-3 h-3" style={{ color: theme.colors.textDim }} />
+                        <ChevronRight className="w-3 h-3" style={{ color: theme.colors.textDim }} aria-hidden="true" />
                         <div
                           className="text-sm"
                           style={{ color: theme.colors.textDim }}
@@ -632,8 +697,10 @@ export function MergeSessionModal({
 
               {pastedIdValid === false && pastedId.trim() && (
                 <div
+                  id="paste-id-error"
                   className="text-xs"
                   style={{ color: theme.colors.error }}
+                  role="alert"
                 >
                   No matching session or tab found for this ID
                 </div>
@@ -643,20 +710,31 @@ export function MergeSessionModal({
 
           {/* Search Sessions View */}
           {viewMode === 'search' && (
-            <div className="flex flex-col min-h-0">
+            <div
+              id="merge-tabpanel-search"
+              role="tabpanel"
+              aria-labelledby="merge-tab-search"
+              className="flex flex-col min-h-0"
+            >
               {/* Search Input */}
               <div className="p-4 pb-2">
                 <div className="relative">
                   <Search
                     className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
                     style={{ color: theme.colors.textDim }}
+                    aria-hidden="true"
                   />
+                  <label htmlFor="search-sessions-input" className="sr-only">
+                    Search sessions and tabs
+                  </label>
                   <input
+                    id="search-sessions-input"
                     ref={inputRef}
                     type="text"
                     placeholder="Search sessions and tabs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-controls="session-list"
                     className="w-full pl-9 pr-3 py-2 rounded-lg border text-sm outline-none"
                     style={{
                       backgroundColor: theme.colors.bgMain,
@@ -669,13 +747,17 @@ export function MergeSessionModal({
 
               {/* Session/Tab List */}
               <div
+                id="session-list"
                 ref={scrollContainerRef}
                 className="flex-1 overflow-y-auto px-2 pb-2"
+                role="listbox"
+                aria-label="Available sessions and tabs"
               >
                 {filteredItems.length === 0 ? (
                   <div
                     className="p-4 text-center text-sm"
                     style={{ color: theme.colors.textDim }}
+                    role="status"
                   >
                     {searchQuery ? 'No matching sessions found' : 'No other sessions available'}
                   </div>
@@ -685,16 +767,18 @@ export function MergeSessionModal({
                     const sessionName = items[0].sessionName;
 
                     return (
-                      <div key={sessionId} className="mb-1">
+                      <div key={sessionId} className="mb-1" role="group" aria-label={`Session: ${sessionName}`}>
                         {/* Session Header */}
                         <button
                           onClick={() => toggleSession(sessionId)}
                           className="w-full px-2 py-1.5 flex items-center gap-2 rounded hover:bg-white/5 transition-colors"
+                          aria-expanded={isExpanded}
+                          aria-controls={`session-tabs-${sessionId}`}
                         >
                           {isExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                            <ChevronDown className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} aria-hidden="true" />
                           ) : (
-                            <ChevronRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                            <ChevronRight className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} aria-hidden="true" />
                           )}
                           <span
                             className="text-sm font-medium truncate"
@@ -712,7 +796,12 @@ export function MergeSessionModal({
 
                         {/* Tabs */}
                         {isExpanded && (
-                          <div className="ml-4 border-l pl-2" style={{ borderColor: theme.colors.border }}>
+                          <div
+                            id={`session-tabs-${sessionId}`}
+                            className="ml-4 border-l pl-2"
+                            style={{ borderColor: theme.colors.border }}
+                            role="group"
+                          >
                             {items.map((item, itemIndex) => {
                               const flatIndex = filteredItems.indexOf(item);
                               const isSelected = flatIndex === selectedIndex;
@@ -723,6 +812,8 @@ export function MergeSessionModal({
                                   key={item.tabId}
                                   ref={isSelected ? selectedItemRef : undefined}
                                   onClick={() => handleSelectItem(item)}
+                                  role="option"
+                                  aria-selected={isTarget}
                                   className={`w-full px-2 py-2 flex items-center gap-2 rounded text-left transition-all duration-150 ${isTarget ? 'animate-highlight-pulse' : ''}`}
                                   style={{
                                     backgroundColor: isTarget
@@ -739,7 +830,7 @@ export function MergeSessionModal({
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       {isTarget && (
-                                        <Check className="w-3.5 h-3.5 shrink-0 animate-check-pop" />
+                                        <Check className="w-3.5 h-3.5 shrink-0 animate-check-pop" aria-hidden="true" />
                                       )}
                                       <span className="text-sm truncate">
                                         {item.tabName}
@@ -755,6 +846,7 @@ export function MergeSessionModal({
                                               ? theme.colors.accentForeground
                                               : theme.colors.textDim,
                                           }}
+                                          aria-label={`Session ID: ${item.agentSessionId}`}
                                         >
                                           {item.agentSessionId.split('-')[0].toUpperCase()}
                                         </span>
@@ -768,6 +860,7 @@ export function MergeSessionModal({
                                         ? theme.colors.accentForeground
                                         : theme.colors.textDim,
                                     }}
+                                    aria-label={`approximately ${formatTokensCompact(item.estimatedTokens)} tokens`}
                                   >
                                     ~{formatTokensCompact(item.estimatedTokens)}
                                   </span>
@@ -786,78 +879,90 @@ export function MergeSessionModal({
 
           {/* Recent View */}
           {viewMode === 'recent' && (
-            <div className="flex-1 overflow-y-auto p-2">
+            <div
+              id="merge-tabpanel-recent"
+              role="tabpanel"
+              aria-labelledby="merge-tab-recent"
+              className="flex-1 overflow-y-auto p-2"
+            >
               {filteredItems.length === 0 ? (
                 <div
                   className="p-4 text-center text-sm"
                   style={{ color: theme.colors.textDim }}
+                  role="status"
                 >
                   No recent sessions
                 </div>
               ) : (
-                filteredItems.map((item, index) => {
-                  const isSelected = index === selectedIndex;
-                  const isTarget = selectedTarget?.tabId === item.tabId;
+                <div role="listbox" aria-label="Recent sessions">
+                  {filteredItems.map((item, index) => {
+                    const isSelected = index === selectedIndex;
+                    const isTarget = selectedTarget?.tabId === item.tabId;
 
-                  return (
-                    <button
-                      key={`${item.sessionId}-${item.tabId}`}
-                      ref={isSelected ? selectedItemRef : undefined}
-                      onClick={() => handleSelectItem(item)}
-                      className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-lg text-left transition-all duration-150 mb-1 ${isTarget ? 'animate-highlight-pulse' : ''}`}
-                      style={{
-                        backgroundColor: isTarget
-                          ? theme.colors.accent
-                          : isSelected
-                            ? `${theme.colors.accent}40`
-                            : 'transparent',
-                        color: isTarget
-                          ? theme.colors.accentForeground
-                          : theme.colors.textMain,
-                        '--pulse-color': `${theme.colors.accent}40`,
-                      } as React.CSSProperties}
-                    >
-                      {isTarget && (
-                        <Check className="w-4 h-4 shrink-0 animate-check-pop" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium truncate">
-                            {item.sessionName}
-                          </span>
-                          <ChevronRight
-                            className="w-3 h-3 shrink-0"
-                            style={{
-                              color: isTarget
-                                ? theme.colors.accentForeground
-                                : theme.colors.textDim,
-                            }}
-                          />
-                          <span
-                            className="text-sm truncate"
-                            style={{
-                              color: isTarget
-                                ? theme.colors.accentForeground
-                                : theme.colors.textDim,
-                            }}
-                          >
-                            {item.tabName}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className="text-xs shrink-0"
+                    return (
+                      <button
+                        key={`${item.sessionId}-${item.tabId}`}
+                        ref={isSelected ? selectedItemRef : undefined}
+                        onClick={() => handleSelectItem(item)}
+                        role="option"
+                        aria-selected={isTarget}
+                        className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-lg text-left transition-all duration-150 mb-1 ${isTarget ? 'animate-highlight-pulse' : ''}`}
                         style={{
+                          backgroundColor: isTarget
+                            ? theme.colors.accent
+                            : isSelected
+                              ? `${theme.colors.accent}40`
+                              : 'transparent',
                           color: isTarget
                             ? theme.colors.accentForeground
-                            : theme.colors.textDim,
-                        }}
+                            : theme.colors.textMain,
+                          '--pulse-color': `${theme.colors.accent}40`,
+                        } as React.CSSProperties}
                       >
-                        ~{formatTokensCompact(item.estimatedTokens)}
-                      </span>
-                    </button>
-                  );
-                })
+                        {isTarget && (
+                          <Check className="w-4 h-4 shrink-0 animate-check-pop" aria-hidden="true" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">
+                              {item.sessionName}
+                            </span>
+                            <ChevronRight
+                              className="w-3 h-3 shrink-0"
+                              style={{
+                                color: isTarget
+                                  ? theme.colors.accentForeground
+                                  : theme.colors.textDim,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <span
+                              className="text-sm truncate"
+                              style={{
+                                color: isTarget
+                                  ? theme.colors.accentForeground
+                                  : theme.colors.textDim,
+                              }}
+                            >
+                              {item.tabName}
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className="text-xs shrink-0"
+                          style={{
+                            color: isTarget
+                              ? theme.colors.accentForeground
+                              : theme.colors.textDim,
+                          }}
+                          aria-label={`approximately ${formatTokensCompact(item.estimatedTokens)} tokens`}
+                        >
+                          ~{formatTokensCompact(item.estimatedTokens)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
@@ -867,11 +972,16 @@ export function MergeSessionModal({
         <div
           className="p-4 border-t space-y-3"
           style={{ borderColor: theme.colors.border }}
+          role="region"
+          aria-label="Merge preview and options"
         >
           {/* Token Preview */}
           <div
             className="p-3 rounded-lg text-xs space-y-1"
             style={{ backgroundColor: theme.colors.bgMain }}
+            role="status"
+            aria-live="polite"
+            aria-label="Token estimate"
           >
             <div className="flex justify-between">
               <span style={{ color: theme.colors.textDim }}>
@@ -922,7 +1032,8 @@ export function MergeSessionModal({
           </div>
 
           {/* Options */}
-          <div className="space-y-2">
+          <fieldset className="space-y-2">
+            <legend className="sr-only">Merge options</legend>
             <label
               className="flex items-center gap-2 cursor-pointer"
               style={{ color: theme.colors.textMain }}
@@ -932,8 +1043,9 @@ export function MergeSessionModal({
                 checked={options.groomContext}
                 onChange={(e) => setOptions(prev => ({ ...prev, groomContext: e.target.checked }))}
                 className="rounded"
+                aria-describedby="groom-context-desc"
               />
-              <span className="text-xs">
+              <span className="text-xs" id="groom-context-desc">
                 Groom context with AI (removes duplicates)
               </span>
             </label>
@@ -947,12 +1059,13 @@ export function MergeSessionModal({
                 checked={options.createNewSession}
                 onChange={(e) => setOptions(prev => ({ ...prev, createNewSession: e.target.checked }))}
                 className="rounded"
+                aria-describedby="create-new-session-desc"
               />
-              <span className="text-xs">
+              <span className="text-xs" id="create-new-session-desc">
                 Create new session (vs. merge into current)
               </span>
             </label>
-          </div>
+          </fieldset>
         </div>
 
         {/* Footer */}

@@ -261,7 +261,8 @@ describe('SendToAgentModal', () => {
 
       const dialog = screen.getByRole('dialog');
       expect(dialog).toHaveAttribute('aria-modal', 'true');
-      expect(dialog).toHaveAttribute('aria-label', 'Send Context to Agent');
+      expect(dialog).toHaveAttribute('aria-labelledby', 'send-to-agent-title');
+      expect(dialog).toHaveAttribute('aria-describedby', 'send-to-agent-description');
     });
   });
 
@@ -417,7 +418,7 @@ describe('SendToAgentModal', () => {
         />
       );
 
-      const closeButton = screen.getByLabelText('Close modal');
+      const closeButton = screen.getByLabelText('Close dialog');
       fireEvent.click(closeButton);
       expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
@@ -682,6 +683,14 @@ describe('SendToAgentModal', () => {
       // Navigate to second item (first is Claude Code which is current)
       fireEvent.keyDown(dialog, { key: 'ArrowRight' });
 
+      // Wait for state to update after navigation
+      await waitFor(() => {
+        // The second option (OpenCode) should now be highlighted
+        const options = screen.getAllByRole('option');
+        // Check that we have navigated (just verify options exist)
+        expect(options.length).toBeGreaterThan(1);
+      });
+
       // Press Space to select
       fireEvent.keyDown(dialog, { key: ' ' });
 
@@ -751,7 +760,7 @@ describe('SendToAgentModal', () => {
       expect(screen.getByRole('dialog')).toHaveAttribute('tabIndex', '-1');
     });
 
-    it('has semantic button elements for agents', () => {
+    it('has semantic elements for agents and action buttons', () => {
       renderWithLayerStack(
         <SendToAgentModal
           theme={testTheme}
@@ -764,9 +773,13 @@ describe('SendToAgentModal', () => {
         />
       );
 
-      // Should have buttons for each visible agent + Cancel + Send + Close
+      // Should have action buttons (Cancel, Send, Close)
       const buttons = screen.getAllByRole('button');
-      expect(buttons.length).toBeGreaterThanOrEqual(7); // 4 agents + 3 action buttons
+      expect(buttons.length).toBeGreaterThanOrEqual(3);
+
+      // Agent options should be rendered as options in a listbox
+      const options = screen.getAllByRole('option');
+      expect(options.length).toBe(4); // 4 agents
     });
   });
 });
