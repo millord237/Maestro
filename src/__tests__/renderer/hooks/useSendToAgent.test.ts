@@ -824,7 +824,9 @@ describe('transfer edge cases', () => {
       });
     });
 
-    expect(transferResult.success).toBe(true);
+    // Transfer should fail for empty context
+    expect(transferResult.success).toBe(false);
+    expect(transferResult.error).toContain('Cannot transfer empty context');
   });
 
   it('handles session with long session name', async () => {

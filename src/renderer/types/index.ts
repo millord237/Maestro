@@ -477,10 +477,14 @@ export interface AgentCapabilities {
   supportsCostTracking: boolean;
   supportsUsageStats: boolean;
   supportsBatchMode: boolean;
+  requiresPromptToStart: boolean;
   supportsStreaming: boolean;
   supportsResultMessages: boolean;
   supportsModelSelection?: boolean;
+  supportsStreamJsonInput?: boolean;
   supportsThinkingDisplay?: boolean;
+  supportsContextMerge?: boolean;
+  supportsContextExport?: boolean;
 }
 
 export interface AgentConfig {
@@ -600,4 +604,13 @@ export interface LeaderboardSubmitResponse {
     cumulative: LeaderboardRankingInfo;
     longestRun: LeaderboardRankingInfo | null;  // null if no longestRunMs submitted
   };
+}
+
+// Context management settings for merge and transfer operations
+export interface ContextManagementSettings {
+  autoGroomContexts: boolean;              // Automatically groom contexts during transfer (default: true)
+  maxContextTokens: number;                // Maximum tokens for context operations (default: 100000)
+  showMergePreview: boolean;               // Show preview before merge (default: true)
+  groomingTimeout: number;                 // Timeout for grooming operations in ms (default: 60000)
+  preferredGroomingAgent: ToolType | 'fastest';  // Which agent to use for grooming (default: 'fastest')
 }
