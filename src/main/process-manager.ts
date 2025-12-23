@@ -763,6 +763,18 @@ export class ProcessManager extends EventEmitter {
                       });
                     }
 
+                    // Handle tool_use blocks embedded in text events (Claude Code mixed content)
+                    // Claude Code returns text with toolUseBlocks array attached
+                    if (event.toolUseBlocks?.length) {
+                      for (const tool of event.toolUseBlocks) {
+                        this.emit('tool-execution', sessionId, {
+                          toolName: tool.name,
+                          state: { status: 'running', input: tool.input },
+                          timestamp: Date.now(),
+                        });
+                      }
+                    }
+
                     // Skip processing error events further - they're handled by agent-error emission
                     if (event.type === 'error') {
                       continue;

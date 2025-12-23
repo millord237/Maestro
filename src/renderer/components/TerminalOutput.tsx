@@ -424,7 +424,34 @@ const LogItemComponent = memo(({
             <div className="whitespace-pre-wrap">{log.text}</div>
           </div>
         )}
-        {log.source !== 'error' && log.source !== 'thinking' && (hasNoMatches ? (
+        {/* Special rendering for tool execution events (shown alongside thinking) */}
+        {log.source === 'tool' && (
+          <div
+            className="px-4 py-1.5 text-xs font-mono flex items-center gap-2"
+            style={{
+              color: theme.colors.textDim,
+              backgroundColor: `${theme.colors.warning}08`,
+            }}
+          >
+            <span
+              className="px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: `${theme.colors.warning}20`,
+                color: theme.colors.warning,
+              }}
+            >
+              tool
+            </span>
+            <span style={{ color: theme.colors.textMain }}>{log.text}</span>
+            {log.metadata?.toolState?.status === 'running' && (
+              <span className="animate-pulse" style={{ color: theme.colors.warning }}>●</span>
+            )}
+            {log.metadata?.toolState?.status === 'completed' && (
+              <span style={{ color: theme.colors.success }}>✓</span>
+            )}
+          </div>
+        )}
+        {log.source !== 'error' && log.source !== 'thinking' && log.source !== 'tool' && (hasNoMatches ? (
           <div className="flex items-center justify-center py-8 text-sm" style={{ color: theme.colors.textDim }}>
             <span>No matches found for filter</span>
           </div>

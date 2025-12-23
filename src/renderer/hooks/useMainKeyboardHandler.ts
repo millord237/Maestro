@@ -416,9 +416,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
               ...s,
               aiTabs: s.aiTabs.map((tab: AITab) => {
                 if (tab.id !== s.activeTabId) return tab;
-                // When turning OFF, also clear any existing thinking logs
+                // When turning OFF, also clear any existing thinking/tool logs
                 if (tab.showThinking) {
-                  return { ...tab, showThinking: false, logs: tab.logs.filter(l => l.source !== 'thinking') };
+                  return { ...tab, showThinking: false, logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool') };
                 }
                 return { ...tab, showThinking: true };
               })

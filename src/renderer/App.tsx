@@ -1908,6 +1908,43 @@ export default function MaestroConsole() {
       }
     });
 
+    // Handle tool execution events from AI agents
+    // Only appends to logs if the tab has showThinking enabled (tools shown alongside thinking)
+    const unsubscribeToolExecution = window.maestro.process.onToolExecution?.((sessionId: string, toolEvent: { toolName: string; state?: unknown; timestamp: number }) => {
+      // Parse sessionId to get actual session ID and tab ID (format: {id}-ai-{tabId})
+      const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
+      if (!aiTabMatch) return; // Only handle AI tab messages
+
+      const actualSessionId = aiTabMatch[1];
+      const tabId = aiTabMatch[2];
+
+      setSessions(prev => prev.map(s => {
+        if (s.id !== actualSessionId) return s;
+
+        const targetTab = s.aiTabs.find(t => t.id === tabId);
+        if (!targetTab?.showThinking) return s; // Only show if thinking enabled
+
+        const toolLog: LogEntry = {
+          id: `tool-${Date.now()}-${toolEvent.toolName}`,
+          timestamp: toolEvent.timestamp,
+          source: 'tool',
+          text: toolEvent.toolName,
+          metadata: {
+            toolState: toolEvent.state as NonNullable<LogEntry['metadata']>['toolState'],
+          }
+        };
+
+        return {
+          ...s,
+          aiTabs: s.aiTabs.map(tab =>
+            tab.id === tabId
+              ? { ...tab, logs: [...tab.logs, toolLog] }
+              : tab
+          )
+        };
+      }));
+    });
+
     // Cleanup listeners on unmount
     return () => {
       unsubscribeData();
@@ -1919,6 +1956,7 @@ export default function MaestroConsole() {
       unsubscribeUsage();
       unsubscribeAgentError();
       unsubscribeThinkingChunk?.();
+      unsubscribeToolExecution?.();
       // Cancel any pending thinking chunk RAF and clear buffer (Phase 6.4)
       if (thinkingChunkRafIdRef.current !== null) {
         cancelAnimationFrame(thinkingChunkRafIdRef.current);
@@ -5550,10 +5588,10 @@ export default function MaestroConsole() {
               return { ...tab, state: 'busy' as const, thinkingStartTime: Date.now() };
             }
             // Set any other busy tabs to idle (they were interrupted) and add canceled log
-            // Also clear any thinking logs since the process was interrupted
+            // Also clear any thinking/tool logs since the process was interrupted
             if (tab.state === 'busy') {
-              const logsWithoutThinking = tab.logs.filter(log => log.source !== 'thinking');
-              const updatedLogs = canceledLog ? [...logsWithoutThinking, canceledLog] : logsWithoutThinking;
+              const logsWithoutThinkingOrTools = tab.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+              const updatedLogs = canceledLog ? [...logsWithoutThinkingOrTools, canceledLog] : logsWithoutThinkingOrTools;
               return { ...tab, state: 'idle' as const, thinkingStartTime: undefined, logs: updatedLogs };
             }
             return tab;
@@ -5588,20 +5626,20 @@ export default function MaestroConsole() {
         }
 
         // No queued items, just go to idle and add canceled log to the active tab
-        // Also clear any thinking logs since the process was interrupted
+        // Also clear any thinking/tool logs since the process was interrupted
         const activeTabForCancel = getActiveTab(s);
         const updatedAiTabsForIdle = canceledLog && activeTabForCancel
           ? s.aiTabs.map(tab => {
               if (tab.id === activeTabForCancel.id) {
-                const logsWithoutThinking = tab.logs.filter(log => log.source !== 'thinking');
-                return { ...tab, logs: [...logsWithoutThinking, canceledLog], state: 'idle' as const, thinkingStartTime: undefined };
+                const logsWithoutThinkingOrTools = tab.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                return { ...tab, logs: [...logsWithoutThinkingOrTools, canceledLog], state: 'idle' as const, thinkingStartTime: undefined };
               }
               return tab;
             })
           : s.aiTabs.map(tab => {
               if (tab.state === 'busy') {
-                const logsWithoutThinking = tab.logs.filter(log => log.source !== 'thinking');
-                return { ...tab, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinking };
+                const logsWithoutThinkingOrTools = tab.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                return { ...tab, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinkingOrTools };
               }
               return tab;
             });
@@ -5655,15 +5693,15 @@ export default function MaestroConsole() {
           setSessions(prev => prev.map(s => {
             if (s.id !== activeSession.id) return s;
 
-            // Add kill log to the appropriate place and clear thinking logs
+            // Add kill log to the appropriate place and clear thinking/tool logs
             let updatedSession = { ...s };
             if (currentMode === 'ai') {
               const tab = getActiveTab(s);
               if (tab) {
                 updatedSession.aiTabs = s.aiTabs.map(t => {
                   if (t.id === tab.id) {
-                    const logsWithoutThinking = t.logs.filter(log => log.source !== 'thinking');
-                    return { ...t, logs: [...logsWithoutThinking, killLog] };
+                    const logsWithoutThinkingOrTools = t.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                    return { ...t, logs: [...logsWithoutThinkingOrTools, killLog] };
                   }
                   return t;
                 });
@@ -5689,14 +5727,14 @@ export default function MaestroConsole() {
                 };
               }
 
-              // Set tabs appropriately and clear thinking logs from interrupted tabs
+              // Set tabs appropriately and clear thinking/tool logs from interrupted tabs
               let updatedAiTabs = updatedSession.aiTabs.map(tab => {
                 if (tab.id === targetTab.id) {
                   return { ...tab, state: 'busy' as const, thinkingStartTime: Date.now() };
                 }
                 if (tab.state === 'busy') {
-                  const logsWithoutThinking = tab.logs.filter(log => log.source !== 'thinking');
-                  return { ...tab, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinking };
+                  const logsWithoutThinkingOrTools = tab.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                  return { ...tab, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinkingOrTools };
                 }
                 return tab;
               });
@@ -5740,8 +5778,8 @@ export default function MaestroConsole() {
                 thinkingStartTime: undefined,
                 aiTabs: updatedSession.aiTabs.map(t => {
                   if (t.id === tab.id) {
-                    const logsWithoutThinking = t.logs.filter(log => log.source !== 'thinking');
-                    return { ...t, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinking };
+                    const logsWithoutThinkingOrTools = t.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                    return { ...t, state: 'idle' as const, thinkingStartTime: undefined, logs: logsWithoutThinkingOrTools };
                   }
                   return t;
                 })
@@ -5777,9 +5815,9 @@ export default function MaestroConsole() {
                 thinkingStartTime: undefined,
                 aiTabs: s.aiTabs.map(t => {
                   if (t.id === tab.id) {
-                    // Clear thinking logs even on error
-                    const logsWithoutThinking = t.logs.filter(log => log.source !== 'thinking');
-                    return { ...t, state: 'idle' as const, thinkingStartTime: undefined, logs: [...logsWithoutThinking, errorLog] };
+                    // Clear thinking/tool logs even on error
+                    const logsWithoutThinkingOrTools = t.logs.filter(log => log.source !== 'thinking' && log.source !== 'tool');
+                    return { ...t, state: 'idle' as const, thinkingStartTime: undefined, logs: [...logsWithoutThinkingOrTools, errorLog] };
                   }
                   return t;
                 })
@@ -6606,12 +6644,12 @@ export default function MaestroConsole() {
                   ...s,
                   aiTabs: s.aiTabs.map(tab => {
                     if (tab.id !== s.activeTabId) return tab;
-                    // When turning OFF, clear any thinking logs
+                    // When turning OFF, clear any thinking/tool logs
                     if (tab.showThinking) {
                       return {
                         ...tab,
                         showThinking: false,
-                        logs: tab.logs.filter(l => l.source !== 'thinking')
+                        logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
                       };
                     }
                     return { ...tab, showThinking: true };
@@ -8082,12 +8120,12 @@ export default function MaestroConsole() {
               ...s,
               aiTabs: s.aiTabs.map(tab => {
                 if (tab.id !== activeTab.id) return tab;
-                // When turning OFF, clear any thinking logs
+                // When turning OFF, clear any thinking/tool logs
                 if (tab.showThinking) {
                   return {
                     ...tab,
                     showThinking: false,
-                    logs: tab.logs.filter(l => l.source !== 'thinking')
+                    logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
                   };
                 }
                 return { ...tab, showThinking: true };
