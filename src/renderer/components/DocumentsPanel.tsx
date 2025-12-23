@@ -617,7 +617,7 @@ export function DocumentsPanel({
     setIsCopyDrag(isCopy);
     e.dataTransfer.dropEffect = isCopy ? 'copy' : 'move';
     
-    if (draggedId && draggedId !== id) {
+    if (draggedId && (isCopy || draggedId !== id)) {
       // Get the element's bounding rect to determine if cursor is in top or bottom half
       const rect = e.currentTarget.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
@@ -633,7 +633,14 @@ export function DocumentsPanel({
         setDropTargetIndex(dropIndex);
       }
     }
-  }, [draggedId, documents, isCopyDrag]);
+  }, [draggedId, documents]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving the entire documents container (not just moving between items)
+    if (e.currentTarget === e.target) {
+      setDropTargetIndex(null);
+    }
+  }, []);
 
   const handleDragEnd = useCallback(() => {
     if (draggedId && dropTargetIndex !== null) {
@@ -758,7 +765,7 @@ export function DocumentsPanel({
             <p className="text-xs mt-1">Click "+ Add Docs" to select documents to run</p>
           </div>
         ) : (
-          <div>
+          <div onDragLeave={handleDragLeave}>
             {documents.map((doc, index) => {
               const docTaskCount = taskCounts[doc.filename] ?? 0;
               const isBeingDragged = draggedId === doc.id;

@@ -617,7 +617,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
           {/* Left side: Hint */}
           <div className="flex items-center gap-2 text-xs" style={{ color: theme.colors.textDim }}>
             <span className="px-1.5 py-0.5 rounded border text-[10px] font-mono" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}>
-              {navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl'} + Drag
+              {(navigator.userAgentData?.platform?.toLowerCase().includes('mac') || navigator.platform.toLowerCase().includes('mac')) ? '⌘' : 'Ctrl'} + Drag
             </span>
             <span>to copy document</span>
           </div>
