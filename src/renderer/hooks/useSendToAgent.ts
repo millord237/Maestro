@@ -1,0 +1,520 @@
+/**
+ * useSendToAgent Hook
+ *
+ * Manages the complete workflow for transferring session context to another agent:
+ * 1. Extract context from source session/tab
+ * 2. Groom context using AI to remove agent-specific artifacts
+ * 3. Create a new session with the target agent
+ * 4. Initialize the new session with the groomed context
+ *
+ * This hook coordinates between:
+ * - ContextGroomingService for AI-powered context preparation
+ * - buildContextTransferPrompt for agent-specific grooming
+ * - tabHelpers for creating the new session
+ */
+
+import { useState, useCallback, useRef } from 'react';
+import type { Session, AITab, LogEntry, ToolType } from '../types';
+import type {
+  MergeResult,
+  GroomingProgress,
+  ContextSource,
+  MergeRequest,
+} from '../types/contextMerge';
+import type { SendToAgentOptions } from '../components/SendToAgentModal';
+import {
+  ContextGroomingService,
+  contextGroomingService,
+  buildContextTransferPrompt,
+  getAgentDisplayName,
+} from '../services/contextGroomer';
+import { extractTabContext } from '../utils/contextExtractor';
+import { createMergedSession, getActiveTab } from '../utils/tabHelpers';
+
+/**
+ * State of the transfer operation
+ */
+export type TransferState = 'idle' | 'grooming' | 'creating' | 'complete' | 'error';
+
+/**
+ * Request to transfer context to another agent
+ */
+export interface TransferRequest {
+  /** Source session containing context to transfer */
+  sourceSession: Session;
+  /** Tab ID within source session */
+  sourceTabId: string;
+  /** Target agent type to transfer to */
+  targetAgent: ToolType;
+  /** Transfer options from the modal */
+  options: SendToAgentOptions;
+}
+
+/**
+ * Result returned by the useSendToAgent hook
+ */
+export interface UseSendToAgentResult {
+  /** Current state of the transfer operation */
+  transferState: TransferState;
+  /** Progress information during transfer */
+  progress: GroomingProgress | null;
+  /** Error message if transfer failed */
+  error: string | null;
+  /** Start a transfer operation */
+  startTransfer: (request: TransferRequest) => Promise<MergeResult>;
+  /** Cancel an in-progress transfer operation */
+  cancelTransfer: () => void;
+  /** Reset the hook state back to idle */
+  reset: () => void;
+}
+
+/**
+ * Default progress state at start of transfer
+ */
+const INITIAL_PROGRESS: GroomingProgress = {
+  stage: 'collecting',
+  progress: 0,
+  message: 'Preparing to transfer context...',
+};
+
+/**
+ * Get the display name for a session
+ */
+function getSessionDisplayName(session: Session): string {
+  return session.name || session.projectRoot.split('/').pop() || 'Unnamed Session';
+}
+
+/**
+ * Get the display name for a tab
+ */
+function getTabDisplayName(tab: AITab): string {
+  if (tab.name) return tab.name;
+  if (tab.agentSessionId) {
+    return tab.agentSessionId.split('-')[0].toUpperCase();
+  }
+  return 'New Tab';
+}
+
+/**
+ * Generate a name for the transferred session
+ */
+function generateTransferredSessionName(
+  sourceSession: Session,
+  sourceTab: AITab,
+  targetAgent: ToolType
+): string {
+  const sourceName = getSessionDisplayName(sourceSession);
+  const targetName = getAgentDisplayName(targetAgent);
+
+  return `${sourceName} → ${targetName}`;
+}
+
+/**
+ * Hook for managing cross-agent context transfer operations.
+ *
+ * Provides complete workflow management for transferring context from one agent
+ * to another, including AI-powered context grooming to remove agent-specific artifacts.
+ *
+ * @example
+ * const {
+ *   transferState,
+ *   progress,
+ *   error,
+ *   startTransfer,
+ *   cancelTransfer,
+ * } = useSendToAgent();
+ *
+ * // Start a transfer
+ * const result = await startTransfer({
+ *   sourceSession,
+ *   sourceTabId: activeTabId,
+ *   targetAgent: 'gemini-cli',
+ *   options: { groomContext: true, createNewSession: true },
+ * });
+ *
+ * if (result.success) {
+ *   // Navigate to new session
+ *   setActiveSessionId(result.newSessionId);
+ * }
+ */
+export function useSendToAgent(): UseSendToAgentResult {
+  // State
+  const [transferState, setTransferState] = useState<TransferState>('idle');
+  const [progress, setProgress] = useState<GroomingProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Refs for cancellation
+  const cancelledRef = useRef(false);
+  const groomingServiceRef = useRef<ContextGroomingService>(contextGroomingService);
+
+  /**
+   * Reset the hook state to idle
+   */
+  const reset = useCallback(() => {
+    setTransferState('idle');
+    setProgress(null);
+    setError(null);
+    cancelledRef.current = false;
+  }, []);
+
+  /**
+   * Cancel an in-progress transfer operation
+   */
+  const cancelTransfer = useCallback(() => {
+    cancelledRef.current = true;
+
+    // Cancel any active grooming operation
+    groomingServiceRef.current.cancelGrooming();
+
+    // Update state
+    setTransferState('idle');
+    setProgress(null);
+    setError('Transfer cancelled by user');
+  }, []);
+
+  /**
+   * Execute the transfer workflow
+   */
+  const startTransfer = useCallback(async (request: TransferRequest): Promise<MergeResult> => {
+    const { sourceSession, sourceTabId, targetAgent, options } = request;
+
+    // Reset state
+    cancelledRef.current = false;
+    setError(null);
+    setTransferState('grooming');
+    setProgress(INITIAL_PROGRESS);
+
+    try {
+      // Step 1: Validate inputs and get source tab
+      const sourceTab = sourceSession.aiTabs.find(t => t.id === sourceTabId);
+      if (!sourceTab) {
+        throw new Error('Source tab not found');
+      }
+
+      // Check for cancellation
+      if (cancelledRef.current) {
+        return { success: false, error: 'Transfer cancelled' };
+      }
+
+      // Step 2: Extract context from source tab
+      setProgress({
+        stage: 'collecting',
+        progress: 10,
+        message: 'Extracting source context...',
+      });
+
+      const sourceContext = extractTabContext(
+        sourceTab,
+        getSessionDisplayName(sourceSession),
+        sourceSession
+      );
+
+      // Check for cancellation
+      if (cancelledRef.current) {
+        return { success: false, error: 'Transfer cancelled' };
+      }
+
+      // Step 3: Groom context if enabled
+      let contextLogs: LogEntry[];
+      let tokensSaved = 0;
+
+      if (options.groomContext) {
+        // Use AI grooming to prepare context for target agent
+        setProgress({
+          stage: 'grooming',
+          progress: 20,
+          message: `Grooming context for ${getAgentDisplayName(targetAgent)}...`,
+        });
+
+        // Build agent-specific transfer prompt
+        const transferPrompt = buildContextTransferPrompt(
+          sourceSession.toolType,
+          targetAgent
+        );
+
+        const groomingRequest: MergeRequest = {
+          sources: [sourceContext],
+          targetAgent,
+          targetProjectRoot: sourceSession.projectRoot,
+          groomingPrompt: transferPrompt,
+        };
+
+        const groomingResult = await groomingServiceRef.current.groomContexts(
+          groomingRequest,
+          (groomProgress) => {
+            // Transform progress to our format with agent-specific messaging
+            setProgress({
+              ...groomProgress,
+              message: groomProgress.stage === 'grooming'
+                ? `Grooming for ${getAgentDisplayName(targetAgent)}: ${groomProgress.message}`
+                : groomProgress.message,
+            });
+          }
+        );
+
+        // Check for cancellation
+        if (cancelledRef.current) {
+          return { success: false, error: 'Transfer cancelled' };
+        }
+
+        if (!groomingResult.success) {
+          throw new Error(groomingResult.error || 'Context grooming failed');
+        }
+
+        contextLogs = groomingResult.groomedLogs;
+        tokensSaved = groomingResult.tokensSaved;
+      } else {
+        // Use raw logs without grooming
+        setProgress({
+          stage: 'grooming',
+          progress: 50,
+          message: 'Preparing context without grooming...',
+        });
+
+        contextLogs = [...sourceContext.logs];
+      }
+
+      // Check for cancellation
+      if (cancelledRef.current) {
+        return { success: false, error: 'Transfer cancelled' };
+      }
+
+      // Step 4: Create new session with target agent
+      setTransferState('creating');
+      setProgress({
+        stage: 'creating',
+        progress: 80,
+        message: `Creating ${getAgentDisplayName(targetAgent)} session...`,
+      });
+
+      // Generate name for the transferred session
+      const sessionName = generateTransferredSessionName(
+        sourceSession,
+        sourceTab,
+        targetAgent
+      );
+
+      // Create the new session structure
+      const { session: newSession, tabId: newTabId } = createMergedSession({
+        name: sessionName,
+        projectRoot: sourceSession.projectRoot,
+        toolType: targetAgent,
+        mergedLogs: contextLogs,
+        groupId: sourceSession.groupId,
+        saveToHistory: true,
+      });
+
+      // Add a system message indicating this is a transferred context
+      const transferNotice: LogEntry = {
+        id: `transfer-notice-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'system',
+        text: `Context transferred from ${getAgentDisplayName(sourceSession.toolType)}. ${
+          options.groomContext
+            ? `Groomed and optimized for ${getAgentDisplayName(targetAgent)}.`
+            : 'Original context preserved.'
+        }`,
+      };
+
+      // Prepend the transfer notice to the new session's logs
+      const activeTab = newSession.aiTabs.find(t => t.id === newTabId);
+      if (activeTab) {
+        activeTab.logs = [transferNotice, ...activeTab.logs];
+      }
+
+      // Step 5: Complete!
+      setProgress({
+        stage: 'complete',
+        progress: 100,
+        message: `Transfer complete! ${tokensSaved > 0 ? `Saved ~${tokensSaved} tokens` : ''}`,
+      });
+      setTransferState('complete');
+
+      return {
+        success: true,
+        newSessionId: newSession.id,
+        newTabId,
+        tokensSaved,
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error during transfer';
+
+      setError(errorMessage);
+      setTransferState('error');
+      setProgress({
+        stage: 'complete',
+        progress: 100,
+        message: `Transfer failed: ${errorMessage}`,
+      });
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }, []);
+
+  return {
+    transferState,
+    progress,
+    error,
+    startTransfer,
+    cancelTransfer,
+    reset,
+  };
+}
+
+/**
+ * Dependencies for the useSendToAgentWithSessions hook variant
+ */
+export interface UseSendToAgentWithSessionsDeps {
+  /** All sessions in the app */
+  sessions: Session[];
+  /** Session setter for updating app state */
+  setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
+  /** Callback after transfer creates a new session. Receives session ID and name for notification purposes. */
+  onSessionCreated?: (sessionId: string, sessionName: string) => void;
+  /** Callback to switch to the new session after transfer */
+  onNavigateToSession?: (sessionId: string) => void;
+}
+
+/**
+ * Extended result type with session management
+ */
+export interface UseSendToAgentWithSessionsResult extends UseSendToAgentResult {
+  /** Execute transfer and update sessions state */
+  executeTransfer: (
+    sourceSession: Session,
+    sourceTabId: string,
+    targetAgent: ToolType,
+    options: SendToAgentOptions
+  ) => Promise<MergeResult>;
+}
+
+/**
+ * Extended version of useSendToAgent that integrates with app session state.
+ *
+ * This variant handles:
+ * - Adding newly created sessions to app state
+ * - Calling callbacks when sessions are created
+ * - Optionally navigating to the new session
+ *
+ * @param deps - Dependencies including sessions state and setter
+ * @returns Extended send-to-agent hook result
+ *
+ * @example
+ * const {
+ *   transferState,
+ *   progress,
+ *   executeTransfer,
+ *   cancelTransfer,
+ * } = useSendToAgentWithSessions({
+ *   sessions,
+ *   setSessions,
+ *   onSessionCreated: (id, name) => toast(`Created ${name}`),
+ *   onNavigateToSession: (id) => setActiveSessionId(id),
+ * });
+ */
+export function useSendToAgentWithSessions(
+  deps: UseSendToAgentWithSessionsDeps
+): UseSendToAgentWithSessionsResult {
+  const { sessions, setSessions, onSessionCreated, onNavigateToSession } = deps;
+  const baseHook = useSendToAgent();
+
+  /**
+   * Execute transfer with session state management
+   */
+  const executeTransfer = useCallback(async (
+    sourceSession: Session,
+    sourceTabId: string,
+    targetAgent: ToolType,
+    options: SendToAgentOptions
+  ): Promise<MergeResult> => {
+    // Get source tab for name generation
+    const sourceTab = sourceSession.aiTabs.find(t => t.id === sourceTabId);
+    if (!sourceTab) {
+      return {
+        success: false,
+        error: 'Source tab not found',
+      };
+    }
+
+    // Execute the transfer
+    const result = await baseHook.startTransfer({
+      sourceSession,
+      sourceTabId,
+      targetAgent,
+      options,
+    });
+
+    if (result.success && options.createNewSession && result.newSessionId) {
+      // Create the session structure again to add to state
+      // (The hook only creates the structure, we need to add it to app state)
+      const sessionName = generateTransferredSessionName(
+        sourceSession,
+        sourceTab,
+        targetAgent
+      );
+
+      const sourceContext = extractTabContext(
+        sourceTab,
+        getSessionDisplayName(sourceSession),
+        sourceSession
+      );
+
+      const { session: newSession } = createMergedSession({
+        name: sessionName,
+        projectRoot: sourceSession.projectRoot,
+        toolType: targetAgent,
+        mergedLogs: sourceContext.logs, // Will be groomed if option was set
+        groupId: sourceSession.groupId,
+      });
+
+      // Add transfer notice
+      const transferNotice: LogEntry = {
+        id: `transfer-notice-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'system',
+        text: `Context transferred from ${getAgentDisplayName(sourceSession.toolType)}. ${
+          options.groomContext
+            ? `Groomed and optimized for ${getAgentDisplayName(targetAgent)}.`
+            : 'Original context preserved.'
+        }`,
+      };
+
+      const activeTab = newSession.aiTabs[0];
+      if (activeTab) {
+        activeTab.logs = [transferNotice, ...activeTab.logs];
+      }
+
+      // Add new session to state
+      setSessions(prev => [...prev, newSession]);
+
+      // Notify caller with session ID and name
+      if (onSessionCreated) {
+        onSessionCreated(newSession.id, sessionName);
+      }
+
+      // Navigate to the new session if callback provided
+      if (onNavigateToSession) {
+        onNavigateToSession(newSession.id);
+      }
+
+      // Return result with the actual new session ID
+      return {
+        ...result,
+        newSessionId: newSession.id,
+        newTabId: newSession.activeTabId,
+      };
+    }
+
+    return result;
+  }, [sessions, setSessions, onSessionCreated, onNavigateToSession, baseHook]);
+
+  return {
+    ...baseHook,
+    executeTransfer,
+  };
+}
+
+export default useSendToAgent;

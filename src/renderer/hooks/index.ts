@@ -41,6 +41,7 @@ export { useAgentCapabilities, clearCapabilitiesCache, setCapabilitiesCache, DEF
 export { useAgentErrorRecovery } from './useAgentErrorRecovery';
 export { useMergeSession, useMergeSessionWithSessions } from './useMergeSession';
 export { useAvailableAgents, useAvailableAgentsForCapability } from './useAvailableAgents';
+export { useSendToAgent, useSendToAgentWithSessions } from './useSendToAgent';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseActivityTrackerReturn } from './useActivityTracker';
@@ -139,3 +140,10 @@ export type {
   AvailableAgent,
   UseAvailableAgentsReturn,
 } from './useAvailableAgents';
+export type {
+  TransferState,
+  TransferRequest,
+  UseSendToAgentResult,
+  UseSendToAgentWithSessionsDeps,
+  UseSendToAgentWithSessionsResult,
+} from './useSendToAgent';
