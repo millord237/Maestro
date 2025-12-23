@@ -28,6 +28,10 @@ describe('agent-detector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock fs.promises.access to always fail, simulating no direct path probing results.
+    // This ensures tests rely on 'which'/'where' command mocking instead of actual filesystem.
+    // The probeUnixPaths/probeWindowsPaths methods check paths directly before falling back to 'which'.
+    vi.spyOn(fs.promises, 'access').mockRejectedValue(new Error('ENOENT: no such file or directory'));
     detector = new AgentDetector();
     // Default: no binaries found
     mockExecFileNoThrow.mockResolvedValue({ stdout: '', stderr: '', exitCode: 1 });
@@ -441,6 +445,8 @@ describe('agent-detector', () => {
       vi.spyOn(fs.promises, 'stat').mockResolvedValue({
         isFile: () => false, // Directory
       } as fs.Stats);
+      // Ensure access mock is still active for path probing fallback
+      vi.spyOn(fs.promises, 'access').mockRejectedValue(new Error('ENOENT'));
 
       detector.setCustomPaths({ 'claude-code': '/custom/claude-dir' });
       const agents = await detector.detectAgents();
@@ -507,6 +513,8 @@ describe('agent-detector', () => {
 
     it('should fall back to PATH when custom path is invalid', async () => {
       vi.spyOn(fs.promises, 'stat').mockRejectedValue(new Error('ENOENT'));
+      // Ensure access mock is active for path probing fallback to use 'which' instead of finding real binary
+      vi.spyOn(fs.promises, 'access').mockRejectedValue(new Error('ENOENT'));
       mockExecFileNoThrow.mockImplementation(async (cmd, args) => {
         if (args[0] === 'claude') {
           return { stdout: '/usr/bin/claude\n', stderr: '', exitCode: 0 };
