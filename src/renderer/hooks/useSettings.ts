@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { LLMProvider, ThemeId, ThemeColors, Shortcut, CustomAICommand, GlobalStats, AutoRunStats, OnboardingStats, LeaderboardRegistration } from '../types';
 import { DEFAULT_CUSTOM_THEME_COLORS } from '../constants/themes';
-import { DEFAULT_SHORTCUTS } from '../constants/shortcuts';
+import { DEFAULT_SHORTCUTS, TAB_SHORTCUTS } from '../constants/shortcuts';
 import { commitCommandPrompt } from '../../prompts';
 
 // Default global stats
@@ -167,6 +167,8 @@ export interface UseSettingsReturn {
   // Shortcuts
   shortcuts: Record<string, Shortcut>;
   setShortcuts: (value: Record<string, Shortcut>) => void;
+  tabShortcuts: Record<string, Shortcut>;
+  setTabShortcuts: (value: Record<string, Shortcut>) => void;
 
   // Custom AI Commands
   customAICommands: CustomAICommand[];
@@ -286,6 +288,7 @@ export function useSettings(): UseSettingsReturn {
 
   // Shortcuts
   const [shortcuts, setShortcutsState] = useState<Record<string, Shortcut>>(DEFAULT_SHORTCUTS);
+  const [tabShortcuts, setTabShortcutsState] = useState<Record<string, Shortcut>>(TAB_SHORTCUTS);
 
   // Custom AI Commands
   const [customAICommands, setCustomAICommandsState] = useState<CustomAICommand[]>(DEFAULT_AI_COMMANDS);
@@ -424,6 +427,11 @@ export function useSettings(): UseSettingsReturn {
   const setShortcuts = useCallback((value: Record<string, Shortcut>) => {
     setShortcutsState(value);
     window.maestro.settings.set('shortcuts', value);
+  }, []);
+
+  const setTabShortcuts = useCallback((value: Record<string, Shortcut>) => {
+    setTabShortcutsState(value);
+    window.maestro.settings.set('tabShortcuts', value);
   }, []);
 
   const setTerminalWidth = useCallback((value: number) => {
@@ -892,6 +900,7 @@ export function useSettings(): UseSettingsReturn {
       const savedMarkdownEditMode = await window.maestro.settings.get('markdownEditMode');
       const savedShowHiddenFiles = await window.maestro.settings.get('showHiddenFiles');
       const savedShortcuts = await window.maestro.settings.get('shortcuts');
+      const savedTabShortcuts = await window.maestro.settings.get('tabShortcuts');
       const savedActiveThemeId = await window.maestro.settings.get('activeThemeId');
       const savedCustomThemeColors = await window.maestro.settings.get('customThemeColors');
       const savedCustomThemeBaseId = await window.maestro.settings.get('customThemeBaseId');
@@ -1010,6 +1019,46 @@ export function useSettings(): UseSettingsReturn {
           };
         }
         setShortcutsState(mergedShortcuts);
+      }
+
+      // Merge saved tab shortcuts with defaults (in case new shortcuts were added)
+      if (savedTabShortcuts !== undefined) {
+        // Apply same macOS Alt+key migration
+        const macAltCharMap: Record<string, string> = {
+          '¬': 'l', 'π': 'p', '†': 't', '∫': 'b', '∂': 'd', 'ƒ': 'f',
+          '©': 'g', '˙': 'h', 'ˆ': 'i', '∆': 'j', '˚': 'k', '¯': 'm',
+          '˜': 'n', 'ø': 'o', '®': 'r', 'ß': 's', '√': 'v', '∑': 'w',
+          '≈': 'x', '¥': 'y', 'Ω': 'z',
+        };
+
+        const migratedTabShortcuts: Record<string, Shortcut> = {};
+        let needsTabMigration = false;
+
+        for (const [id, shortcut] of Object.entries(savedTabShortcuts as Record<string, Shortcut>)) {
+          const migratedKeys = shortcut.keys.map(key => {
+            if (macAltCharMap[key]) {
+              needsTabMigration = true;
+              return macAltCharMap[key];
+            }
+            return key;
+          });
+          migratedTabShortcuts[id] = { ...shortcut, keys: migratedKeys };
+        }
+
+        if (needsTabMigration) {
+          window.maestro.settings.set('tabShortcuts', migratedTabShortcuts);
+        }
+
+        // Merge: use default labels but preserve user's custom keys
+        const mergedTabShortcuts: Record<string, Shortcut> = {};
+        for (const [id, defaultShortcut] of Object.entries(TAB_SHORTCUTS)) {
+          const savedShortcut = migratedTabShortcuts[id];
+          mergedTabShortcuts[id] = {
+            ...defaultShortcut,
+            keys: savedShortcut?.keys ?? defaultShortcut.keys,
+          };
+        }
+        setTabShortcutsState(mergedTabShortcuts);
       }
 
       // Merge saved AI commands with defaults (ensure built-in commands always exist)
@@ -1163,6 +1212,8 @@ export function useSettings(): UseSettingsReturn {
     setLogViewerSelectedLevels,
     shortcuts,
     setShortcuts,
+    tabShortcuts,
+    setTabShortcuts,
     customAICommands,
     setCustomAICommands,
     globalStats,
@@ -1233,6 +1284,7 @@ export function useSettings(): UseSettingsReturn {
     crashReportingEnabled,
     logViewerSelectedLevels,
     shortcuts,
+    tabShortcuts,
     customAICommands,
     globalStats,
     autoRunStats,
@@ -1274,6 +1326,7 @@ export function useSettings(): UseSettingsReturn {
     setCrashReportingEnabled,
     setLogViewerSelectedLevels,
     setShortcuts,
+    setTabShortcuts,
     setCustomAICommands,
     setGlobalStats,
     updateGlobalStats,

@@ -587,6 +587,280 @@ describe.skipIf(SKIP_INTEGRATION)('Provider Integration Tests', () => {
         expect(hasInputFormatWithoutImages, `${provider.name} should not include --input-format without images`).toBe(false);
       });
 
+      it('should separate thinking/streaming content from final response', async () => {
+        // This test verifies that streaming text events (which may contain thinking/reasoning)
+        // are properly separated from the final response text.
+        //
+        // For thinking models (Claude 3.7+, OpenAI o-series, OpenCode with reasoning):
+        // - Streaming text events with isPartial=true contain reasoning/thinking
+        // - Final result message contains the clean response
+        //
+        // This validates the fix in process-manager.ts that stopped emitting partial
+        // text to 'data' channel (which was showing thinking in main output).
+
+        if (!providerAvailable) {
+          console.log(`Skipping: ${provider.name} not available`);
+          return;
+        }
+
+        // Use a prompt that might trigger reasoning/thinking
+        const prompt = 'What is 17 * 23? Show only the final answer as a number.';
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🧠 Testing thinking/streaming separation for ${provider.name}`);
+        console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
+
+        const result = await runProvider(provider, args);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+
+        // Parse all the different event types from the output
+        const events = {
+          textPartial: [] as string[],  // Streaming text chunks
+          textFinal: [] as string[],    // Final text/result
+          thinking: [] as string[],     // Explicit thinking blocks
+          result: [] as string[],       // Result messages
+        };
+
+        for (const line of result.stdout.split('\n')) {
+          try {
+            const json = JSON.parse(line);
+
+            // Claude Code events
+            if (json.type === 'assistant' && json.message?.content) {
+              const content = json.message.content;
+              if (Array.isArray(content)) {
+                for (const block of content) {
+                  if (block.type === 'thinking' && block.thinking) {
+                    events.thinking.push(block.thinking);
+                  }
+                  if (block.type === 'text' && block.text) {
+                    events.textFinal.push(block.text);
+                  }
+                }
+              }
+            }
+            if (json.type === 'result' && json.result) {
+              events.result.push(json.result);
+            }
+
+            // OpenCode events
+            if (json.type === 'text' && json.part?.text) {
+              events.textPartial.push(json.part.text);
+            }
+            if (json.type === 'step_finish' && json.part?.reason === 'stop') {
+              // OpenCode final - accumulated text becomes result
+              events.result.push('step_finish:stop');
+            }
+
+            // Codex events
+            if (json.type === 'item.completed' && json.item?.type === 'agent_message') {
+              if (json.item.text) {
+                events.textFinal.push(json.item.text);
+              }
+            }
+          } catch { /* ignore non-JSON lines */ }
+        }
+
+        console.log(`📊 Event counts:`);
+        console.log(`   - textPartial (streaming): ${events.textPartial.length}`);
+        console.log(`   - textFinal: ${events.textFinal.length}`);
+        console.log(`   - thinking blocks: ${events.thinking.length}`);
+        console.log(`   - result messages: ${events.result.length}`);
+
+        // Verify we got a response
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} should complete successfully`
+        ).toBe(true);
+
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Parsed response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // The response should contain the answer (391)
+        expect(
+          response?.includes('391'),
+          `${provider.name} should calculate 17 * 23 = 391. Got: "${response}"`
+        ).toBe(true);
+
+        // If there are thinking blocks, verify they're not mixed into the final response
+        if (events.thinking.length > 0) {
+          console.log(`🧠 Found ${events.thinking.length} thinking blocks`);
+          // Thinking content should NOT appear in the final result
+          for (const thinkingText of events.thinking) {
+            const thinkingPreview = thinkingText.substring(0, 100);
+            // Final response should not literally contain the thinking text
+            // (unless it's a very short common phrase)
+            if (thinkingText.length > 50) {
+              expect(
+                !response?.includes(thinkingText),
+                `Final response should not contain thinking block verbatim: "${thinkingPreview}..."`
+              ).toBe(true);
+            }
+          }
+        }
+      }, PROVIDER_TIMEOUT);
+
+      it('should generate valid synopsis for history', async () => {
+        // This test verifies that synopsis generation works correctly for history entries.
+        // It tests the flow: task completion → synopsis request → parseable response
+        //
+        // This validates:
+        // 1. Session resume works for synopsis requests
+        // 2. Response format matches expected **Summary:**/**Details:** structure
+        // 3. parseSynopsis correctly extracts summary (no template placeholders)
+
+        if (!providerAvailable) {
+          console.log(`Skipping: ${provider.name} not available`);
+          return;
+        }
+
+        // First, do a task that we can summarize
+        const taskPrompt = 'Create a simple function called "add" that adds two numbers. Just describe it, don\'t write code.';
+        const taskArgs = provider.buildInitialArgs(taskPrompt);
+
+        console.log(`\n📝 Testing synopsis generation for ${provider.name}`);
+        console.log(`🚀 Task: ${provider.command} ${taskArgs.join(' ')}`);
+
+        const taskResult = await runProvider(provider, taskArgs);
+
+        expect(
+          provider.isSuccessful(taskResult.stdout, taskResult.exitCode),
+          `${provider.name} task should succeed`
+        ).toBe(true);
+
+        const sessionId = provider.parseSessionId(taskResult.stdout);
+        console.log(`📋 Session ID: ${sessionId}`);
+        expect(sessionId, `${provider.name} should return session ID`).toBeTruthy();
+
+        // Now request a synopsis (this is what happens when a task completes)
+        const synopsisPrompt = `Provide a brief synopsis of what you just accomplished in this task using this exact format:
+
+**Summary:** [1-2 sentences describing the key outcome]
+
+**Details:** [A paragraph with more specifics about what was done]
+
+Rules:
+- Be specific about what was actually accomplished.
+- Focus only on meaningful work that was done.`;
+
+        const synopsisArgs = provider.buildResumeArgs(sessionId!, synopsisPrompt);
+
+        console.log(`🔄 Synopsis: ${provider.command} ${synopsisArgs.join(' ')}`);
+
+        const synopsisResult = await runProvider(provider, synopsisArgs);
+
+        console.log(`📤 Exit code: ${synopsisResult.exitCode}`);
+
+        expect(
+          provider.isSuccessful(synopsisResult.stdout, synopsisResult.exitCode),
+          `${provider.name} synopsis should succeed`
+        ).toBe(true);
+
+        const synopsisResponse = provider.parseResponse(synopsisResult.stdout);
+        console.log(`💬 Synopsis response:\n${synopsisResponse?.substring(0, 500)}`);
+        expect(synopsisResponse, `${provider.name} should return synopsis`).toBeTruthy();
+
+        // Import and use the actual parseSynopsis function
+        const { parseSynopsis } = await import('../../../shared/synopsis');
+        const parsed = parseSynopsis(synopsisResponse!);
+
+        console.log(`📊 Parsed synopsis:`);
+        console.log(`   - shortSummary: ${parsed.shortSummary.substring(0, 100)}`);
+        console.log(`   - fullSynopsis length: ${parsed.fullSynopsis.length}`);
+
+        // Verify the summary is NOT a template placeholder
+        const templatePlaceholders = [
+          '[1-2 sentences',
+          '[A paragraph',
+          '... (1-2 sentences)',
+          '... then blank line',
+        ];
+
+        for (const placeholder of templatePlaceholders) {
+          expect(
+            !parsed.shortSummary.includes(placeholder),
+            `${provider.name} summary should not contain template placeholder "${placeholder}". Got: "${parsed.shortSummary}"`
+          ).toBe(true);
+        }
+
+        // Summary should be meaningful (not just default fallback)
+        expect(
+          parsed.shortSummary !== 'Task completed',
+          `${provider.name} should generate actual summary, not just fallback "Task completed"`
+        ).toBe(true);
+
+        // Summary should mention something related to the task
+        const summaryLower = parsed.shortSummary.toLowerCase();
+        const hasRelevantContent =
+          summaryLower.includes('add') ||
+          summaryLower.includes('function') ||
+          summaryLower.includes('number') ||
+          summaryLower.includes('describ');
+
+        expect(
+          hasRelevantContent,
+          `${provider.name} summary should be relevant to the task. Got: "${parsed.shortSummary}"`
+        ).toBe(true);
+      }, PROVIDER_TIMEOUT * 2);
+
+      it('should respect read-only mode flag', async () => {
+        // This test verifies that read-only mode is properly supported.
+        // Read-only mode should prevent the agent from making changes.
+        //
+        // For agents that support read-only:
+        // - Claude Code: uses --plan flag
+        // - Other agents may not support this yet
+
+        if (!providerAvailable) {
+          console.log(`Skipping: ${provider.name} not available`);
+          return;
+        }
+
+        const capabilities = getAgentCapabilities(provider.agentId);
+        if (!capabilities.supportsReadOnlyMode) {
+          console.log(`Skipping: ${provider.name} does not support read-only mode`);
+          return;
+        }
+
+        // Build args with read-only flag
+        // This mirrors how agent-detector.ts builds readOnlyArgs
+        let readOnlyArgs: string[];
+        if (provider.agentId === 'claude-code') {
+          readOnlyArgs = [
+            '--print',
+            '--verbose',
+            '--output-format', 'stream-json',
+            '--dangerously-skip-permissions',
+            '--plan',  // Read-only flag for Claude Code
+            '--',
+            'What files are in this directory? Just list them briefly.',
+          ];
+        } else {
+          // Other providers would have their own read-only args
+          console.log(`⚠️  Read-only args not configured for ${provider.name}`);
+          return;
+        }
+
+        console.log(`\n🔒 Testing read-only mode for ${provider.name}`);
+        console.log(`🚀 Running: ${provider.command} ${readOnlyArgs.join(' ')}`);
+
+        const result = await runProvider(provider, readOnlyArgs);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+        console.log(`📤 Stdout (first 500 chars): ${result.stdout.substring(0, 500)}`);
+
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} read-only mode should succeed`
+        ).toBe(true);
+
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} should return a response in read-only mode`).toBeTruthy();
+      }, PROVIDER_TIMEOUT);
+
       it('should process image and identify text content', async () => {
         // This test verifies that images are properly passed to the provider and processed.
         // It uses a test image containing the word "Maestro" and asks the provider to

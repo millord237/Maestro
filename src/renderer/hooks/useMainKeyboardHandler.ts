@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session, AITab } from '../types';
-import { TAB_SHORTCUTS } from '../constants/shortcuts';
 import { getInitialRenameValue } from '../utils/tabHelpers';
 
 /**
@@ -454,7 +453,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         // Cmd+1 through Cmd+9: Jump to specific tab by index (disabled in unread-only mode)
         if (!ctx.showUnreadOnly) {
           for (let i = 1; i <= 9; i++) {
-            if (ctx.isTabShortcut(e, `goToTab${i}` as keyof typeof TAB_SHORTCUTS)) {
+            if (ctx.isTabShortcut(e, `goToTab${i}`)) {
               e.preventDefault();
               const result = ctx.navigateToTabByIndex(ctx.activeSession, i - 1);
               if (result) {

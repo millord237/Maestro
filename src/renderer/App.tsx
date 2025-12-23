@@ -99,7 +99,6 @@ import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
 import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue } from './utils/tabHelpers';
-import { TAB_SHORTCUTS } from './constants/shortcuts';
 import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import type { FileNode } from './types/fileTree';
 import { substituteTemplateVariables } from './utils/templateVariables';
@@ -207,6 +206,7 @@ export default function MaestroConsole() {
     checkForUpdatesOnStartup, setCheckForUpdatesOnStartup,
     crashReportingEnabled, setCrashReportingEnabled,
     shortcuts, setShortcuts,
+    tabShortcuts, setTabShortcuts,
     customAICommands, setCustomAICommands,
     globalStats, updateGlobalStats,
     autoRunStats, recordAutoRunComplete, updateAutoRunProgress, acknowledgeBadge, getUnacknowledgedBadgeLevel,
@@ -218,7 +218,7 @@ export default function MaestroConsole() {
   } = settings;
 
   // --- KEYBOARD SHORTCUT HELPERS ---
-  const { isShortcut, isTabShortcut } = useKeyboardShortcutHelpers({ shortcuts });
+  const { isShortcut, isTabShortcut } = useKeyboardShortcutHelpers({ shortcuts, tabShortcuts });
 
   // --- STATE ---
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -6654,7 +6654,7 @@ export default function MaestroConsole() {
           setGitDiffPreview={setGitDiffPreview}
           setGitLogOpen={setGitLogOpen}
           isAiMode={activeSession?.inputMode === 'ai'}
-          tabShortcuts={TAB_SHORTCUTS}
+          tabShortcuts={tabShortcuts}
           onRenameTab={() => {
             if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
               const activeTab = activeSession.aiTabs?.find(t => t.id === activeSession.activeTabId);
@@ -6822,6 +6822,7 @@ export default function MaestroConsole() {
         <ShortcutsHelpModal
           theme={theme}
           shortcuts={shortcuts}
+          tabShortcuts={tabShortcuts}
           onClose={() => setShortcutsHelpOpen(false)}
           hasNoAgents={hasNoAgents}
         />
@@ -8468,7 +8469,7 @@ export default function MaestroConsole() {
           activeTabId={activeSession.activeTabId}
           projectRoot={activeSession.projectRoot}
           agentId={activeSession.toolType}
-          shortcut={TAB_SHORTCUTS.tabSwitcher}
+          shortcut={tabShortcuts.tabSwitcher}
           onTabSelect={(tabId) => {
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
@@ -8665,6 +8666,8 @@ export default function MaestroConsole() {
         setApiKey={setApiKey}
         shortcuts={shortcuts}
         setShortcuts={setShortcuts}
+        tabShortcuts={tabShortcuts}
+        setTabShortcuts={setTabShortcuts}
         defaultShell={defaultShell}
         setDefaultShell={setDefaultShell}
         customShellPath={customShellPath}
