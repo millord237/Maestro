@@ -4,16 +4,21 @@ export interface SessionValidationResult {
   valid: boolean;
   error?: string;
   errorField?: 'name' | 'directory';
+  /** Warning about directory conflict (user can acknowledge and proceed) */
+  warning?: string;
+  warningField?: 'directory';
+  /** Names of conflicting agents for display */
+  conflictingAgents?: string[];
 }
 
 /**
  * Validates that a new session can be created with the given parameters.
  *
  * Rules:
- * 1. Session names must be unique across all sessions
- * 2. Home directories (projectRoot) must be unique per provider (toolType)
- *    - Different providers (e.g., claude-code vs codex) CAN share the same directory
- *    - Same provider cannot have multiple sessions in the same directory
+ * 1. Session names must be unique across all sessions (hard error)
+ * 2. Home directories (projectRoot) shared with any existing agent produce a warning
+ *    - Users can acknowledge the risk and proceed
+ *    - Multiple agents in the same directory may clobber each other's work
  */
 export function validateNewSession(
   name: string,
@@ -24,7 +29,7 @@ export function validateNewSession(
   const trimmedName = name.trim();
   const normalizedDir = normalizeDirectory(directory);
 
-  // Check for duplicate name
+  // Check for duplicate name (hard error - cannot proceed)
   const duplicateName = existingSessions.find(
     session => session.name.toLowerCase() === trimmedName.toLowerCase()
   );
@@ -36,16 +41,22 @@ export function validateNewSession(
     };
   }
 
-  // Check for duplicate directory within the same provider
-  const duplicateDirectory = existingSessions.find(session => {
+  // Check for duplicate directory with ANY existing agent (warning - user can acknowledge)
+  const conflictingAgents = existingSessions.filter(session => {
     const sessionDir = normalizeDirectory(session.projectRoot || session.cwd);
-    return sessionDir === normalizedDir && session.toolType === toolType;
+    return sessionDir === normalizedDir;
   });
-  if (duplicateDirectory) {
+
+  if (conflictingAgents.length > 0) {
+    const agentNames = conflictingAgents.map(s => s.name);
+    const agentList = agentNames.length === 1
+      ? `"${agentNames[0]}"`
+      : agentNames.map(n => `"${n}"`).join(', ');
     return {
-      valid: false,
-      error: `A ${getProviderDisplayName(toolType)} agent already exists for this directory: "${duplicateDirectory.name}"`,
-      errorField: 'directory'
+      valid: true, // User can proceed after acknowledgment
+      warning: `This directory is already used by ${agentList}. Running multiple agents in the same directory may cause them to clobber each other's work.`,
+      warningField: 'directory',
+      conflictingAgents: agentNames
     };
   }
 

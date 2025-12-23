@@ -98,6 +98,60 @@ import type {
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
+
+/**
+ * Known Claude Code tool names - used to detect concatenated tool name patterns
+ * that shouldn't appear in thinking content
+ */
+const KNOWN_TOOL_NAMES = [
+  // Core Claude Code tools
+  'Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write',
+  'NotebookEdit', 'WebFetch', 'TodoWrite', 'WebSearch', 'KillShell',
+  'AskUserQuestion', 'Skill', 'EnterPlanMode', 'ExitPlanMode', 'LSP'
+];
+
+/**
+ * Check if a string looks like concatenated tool names (e.g., "TaskGrepGrepReadReadRead")
+ * This can happen if malformed content is emitted as thinking chunks
+ */
+function isLikelyConcatenatedToolNames(text: string): boolean {
+  // Pattern: 3+ tool names concatenated without spaces
+  let matchCount = 0;
+  let remaining = text.trim();
+
+  // Also handle MCP tools with pattern mcp__<provider>__<tool>
+  const mcpPattern = /^mcp__[a-zA-Z0-9_]+__[a-zA-Z0-9_]+/;
+
+  while (remaining.length > 0) {
+    let foundMatch = false;
+
+    // Check for MCP tool pattern first
+    const mcpMatch = remaining.match(mcpPattern);
+    if (mcpMatch) {
+      matchCount++;
+      remaining = remaining.substring(mcpMatch[0].length);
+      foundMatch = true;
+    } else {
+      // Check for known tool names
+      for (const toolName of KNOWN_TOOL_NAMES) {
+        if (remaining.startsWith(toolName)) {
+          matchCount++;
+          remaining = remaining.substring(toolName.length);
+          foundMatch = true;
+          break;
+        }
+      }
+    }
+
+    if (!foundMatch) {
+      // Found non-tool-name content, this is probably real text
+      return false;
+    }
+  }
+
+  // If we matched 3+ consecutive tool names with no other content, it's likely malformed
+  return matchCount >= 3;
+}
 import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue } from './utils/tabHelpers';
 import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
 import type { FileNode } from './types/fileTree';
@@ -1922,15 +1976,34 @@ export default function MaestroConsole() {
               // Only append if thinking is enabled for this tab
               if (!targetTab.showThinking) continue;
 
+              // Skip malformed content that looks like concatenated tool names
+              // This can happen if the stream parser receives malformed output
+              if (isLikelyConcatenatedToolNames(bufferedContent)) {
+                console.warn('[App] Skipping malformed thinking chunk (concatenated tool names):', bufferedContent.substring(0, 100));
+                continue;
+              }
+
               // Find the last log entry - if it's a thinking entry, append to it
               const lastLog = targetTab.logs[targetTab.logs.length - 1];
               if (lastLog?.source === 'thinking') {
-                // Append to existing thinking block
-                updatedTabs = updatedTabs.map(tab =>
-                  tab.id === chunkTabId
-                    ? { ...tab, logs: [...tab.logs.slice(0, -1), { ...lastLog, text: lastLog.text + bufferedContent }] }
-                    : tab
-                );
+                // Check if appending would create concatenated tool names
+                const combinedText = lastLog.text + bufferedContent;
+                if (isLikelyConcatenatedToolNames(combinedText)) {
+                  console.warn('[App] Detected malformed thinking content, replacing instead of appending');
+                  // Replace with just the new content (likely the start of real text)
+                  updatedTabs = updatedTabs.map(tab =>
+                    tab.id === chunkTabId
+                      ? { ...tab, logs: [...tab.logs.slice(0, -1), { ...lastLog, text: bufferedContent }] }
+                      : tab
+                  );
+                } else {
+                  // Normal append to existing thinking block
+                  updatedTabs = updatedTabs.map(tab =>
+                    tab.id === chunkTabId
+                      ? { ...tab, logs: [...tab.logs.slice(0, -1), { ...lastLog, text: combinedText }] }
+                      : tab
+                  );
+                }
               } else {
                 // Create new thinking block
                 const newLog: LogEntry = {

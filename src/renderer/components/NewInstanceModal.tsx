@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Folder, RefreshCw, ChevronRight } from 'lucide-react';
+import { Folder, RefreshCw, ChevronRight, AlertTriangle } from 'lucide-react';
 import type { AgentConfig, Session, ToolType } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { validateNewSession, validateEditSession } from '../utils/sessionValidation';
@@ -77,6 +77,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   const [agentConfigs, setAgentConfigs] = useState<Record<string, Record<string, any>>>({});
   const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
+  const [directoryWarningAcknowledged, setDirectoryWarningAcknowledged] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +103,11 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     }
     return validateNewSession(name, expandedDir, selectedAgent as ToolType, existingSessions);
   }, [instanceName, workingDir, selectedAgent, existingSessions, homeDir]);
+
+  // Reset warning acknowledgment when directory changes
+  useEffect(() => {
+    setDirectoryWarningAcknowledged(false);
+  }, [workingDir]);
 
   // Define handlers first before they're used in effects
   const loadAgents = async () => {
@@ -223,12 +229,14 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
 
   // Check if form is valid for submission
   const isFormValid = useMemo(() => {
+    const hasWarningThatNeedsAck = validation.warning && !directoryWarningAcknowledged;
     return selectedAgent &&
            agents.find(a => a.id === selectedAgent)?.available &&
            workingDir.trim() &&
            instanceName.trim() &&
-           validation.valid;
-  }, [selectedAgent, agents, workingDir, instanceName, validation.valid]);
+           validation.valid &&
+           !hasWarningThatNeedsAck;
+  }, [selectedAgent, agents, workingDir, instanceName, validation.valid, validation.warning, directoryWarningAcknowledged]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -264,6 +272,8 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       loadAgents();
       // Keep all agents collapsed by default
       setExpandedAgent(null);
+      // Reset warning acknowledgment when modal opens
+      setDirectoryWarningAcknowledged(false);
     }
   }, [isOpen]);
 
@@ -594,6 +604,44 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
               </button>
             }
           />
+
+          {/* Directory Warning with Acknowledgment */}
+          {validation.warning && validation.warningField === 'directory' && (
+            <div
+              className="p-3 rounded border"
+              style={{
+                backgroundColor: theme.colors.warning + '15',
+                borderColor: theme.colors.warning + '50',
+              }}
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className="w-4 h-4 flex-shrink-0 mt-0.5"
+                  style={{ color: theme.colors.warning }}
+                />
+                <div className="flex-1">
+                  <p className="text-sm" style={{ color: theme.colors.textMain }}>
+                    {validation.warning}
+                  </p>
+                  <p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
+                    We recommend using a unique directory for each managed agent.
+                  </p>
+                  <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={directoryWarningAcknowledged}
+                      onChange={(e) => setDirectoryWarningAcknowledged(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                      style={{ accentColor: theme.colors.warning }}
+                    />
+                    <span className="text-sm" style={{ color: theme.colors.textMain }}>
+                      I understand the risk and want to proceed
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Nudge Message */}
           <div>

@@ -23,6 +23,7 @@ import {
 } from './group-chat-agent';
 import { AgentDetector } from '../agent-detector';
 import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../utils/agent-args';
+import { groupChatParticipantRequestPrompt } from '../prompts';
 
 // Import emitters from IPC handlers (will be populated after handlers are registered)
 import { groupChatEmitters } from '../ipc/handlers/groupChat';
@@ -637,24 +638,23 @@ export async function routeModeratorResponse(
       }
 
       // Build the prompt with context for this participant
+      // Uses template from src/prompts/group-chat-participant-request.md
       const readOnlyNote = readOnly
         ? '\n\n**READ-ONLY MODE:** Do not make any file changes. Only analyze, review, or provide information.'
         : '';
-      const participantPrompt = `You are "${participantName}" in a group chat named "${updatedChat.name}".
+      const readOnlyLabel = readOnly ? ' (READ-ONLY MODE)' : '';
+      const readOnlyInstruction = readOnly
+        ? ' Remember: READ-ONLY mode is active, do not modify any files.'
+        : ' If you need to perform any actions, do so and report your findings.';
 
-## Your Role
-Respond to the moderator's request below. Your response will be shared with the moderator and other participants.${readOnlyNote}
-
-**IMPORTANT RESPONSE FORMAT:**
-Your response MUST begin with a single-sentence summary of what you accomplished or are reporting. This first sentence will be extracted for the group chat history. Keep it concise and action-oriented.
-
-## Recent Chat History:
-${historyContext}
-
-## Moderator's Request${readOnly ? ' (READ-ONLY MODE)' : ''}:
-${message}
-
-Please respond to this request.${readOnly ? ' Remember: READ-ONLY mode is active, do not modify any files.' : ' If you need to perform any actions, do so and report your findings.'}`;
+      const participantPrompt = groupChatParticipantRequestPrompt
+        .replace(/\{\{PARTICIPANT_NAME\}\}/g, participantName)
+        .replace(/\{\{GROUP_CHAT_NAME\}\}/g, updatedChat.name)
+        .replace(/\{\{READ_ONLY_NOTE\}\}/g, readOnlyNote)
+        .replace(/\{\{HISTORY_CONTEXT\}\}/g, historyContext)
+        .replace(/\{\{READ_ONLY_LABEL\}\}/g, readOnlyLabel)
+        .replace(/\{\{MESSAGE\}\}/g, message)
+        .replace(/\{\{READ_ONLY_INSTRUCTION\}\}/g, readOnlyInstruction);
 
       // Create a unique session ID for this batch process
       const sessionId = `group-chat-${groupChatId}-participant-${participantName}-${Date.now()}`;

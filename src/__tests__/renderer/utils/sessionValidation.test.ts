@@ -104,16 +104,17 @@ describe('sessionValidation', () => {
       });
     });
 
-    describe('directory uniqueness per provider', () => {
+    describe('directory warnings (user can acknowledge and proceed)', () => {
       it('returns valid when directory is unique', () => {
         const existingSessions = [
           createMockSession({ projectRoot: '/Users/test/project-a' }),
         ];
         const result = validateNewSession('New Session', '/Users/test/project-b', 'claude-code', existingSessions);
         expect(result.valid).toBe(true);
+        expect(result.warning).toBeUndefined();
       });
 
-      it('returns error when directory already exists for same provider', () => {
+      it('returns warning when directory already exists for same provider', () => {
         const existingSessions = [
           createMockSession({
             name: 'Existing Agent',
@@ -122,13 +123,16 @@ describe('sessionValidation', () => {
           }),
         ];
         const result = validateNewSession('New Session', '/Users/test/project', 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
-        expect(result.error).toContain('Claude Code');
-        expect(result.error).toContain('Existing Agent');
+        // Warning, not error - user can proceed after acknowledgment
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
+        expect(result.warning).toContain('Existing Agent');
+        expect(result.warning).toContain('clobber');
+        expect(result.conflictingAgents).toEqual(['Existing Agent']);
       });
 
-      it('allows same directory with different provider', () => {
+      it('returns warning when directory already exists for different provider', () => {
         const existingSessions = [
           createMockSession({
             name: 'Claude Agent',
@@ -136,58 +140,90 @@ describe('sessionValidation', () => {
             toolType: 'claude-code'
           }),
         ];
-        // Different provider (aider) can use same directory
+        // Different provider (aider) also gets a warning now
         const result = validateNewSession('Aider Agent', '/Users/test/project', 'aider', existingSessions);
         expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
+        expect(result.conflictingAgents).toEqual(['Claude Agent']);
       });
 
       it('handles directory comparison case-insensitively', () => {
         const existingSessions = [
           createMockSession({
+            name: 'Existing',
             projectRoot: '/Users/Test/Project',
             toolType: 'claude-code'
           }),
         ];
         const result = validateNewSession('New Session', '/users/test/project', 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
       });
 
       it('normalizes trailing slashes in directory comparison', () => {
         const existingSessions = [
           createMockSession({
+            name: 'Existing',
             projectRoot: '/Users/test/project/',
             toolType: 'claude-code'
           }),
         ];
         const result = validateNewSession('New Session', '/Users/test/project', 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
       });
 
       it('normalizes multiple trailing slashes', () => {
         const existingSessions = [
           createMockSession({
+            name: 'Existing',
             projectRoot: '/Users/test/project///',
             toolType: 'claude-code'
           }),
         ];
         const result = validateNewSession('New Session', '/Users/test/project', 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
       });
 
       it('uses cwd as fallback when projectRoot is not set', () => {
         const existingSessions = [
           createMockSession({
+            name: 'Existing',
             cwd: '/Users/test/project',
             projectRoot: undefined as unknown as string,
             toolType: 'claude-code'
           }),
         ];
         const result = validateNewSession('New Session', '/Users/test/project', 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
+      });
+
+      it('lists multiple conflicting agents in warning', () => {
+        const existingSessions = [
+          createMockSession({
+            name: 'Agent 1',
+            projectRoot: '/Users/test/project',
+            toolType: 'claude-code'
+          }),
+          createMockSession({
+            name: 'Agent 2',
+            projectRoot: '/Users/test/project',
+            toolType: 'aider'
+          }),
+        ];
+        const result = validateNewSession('New Agent', '/Users/test/project', 'codex', existingSessions);
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warning).toContain('Agent 1');
+        expect(result.warning).toContain('Agent 2');
+        expect(result.conflictingAgents).toEqual(['Agent 1', 'Agent 2']);
       });
     });
 
@@ -199,32 +235,39 @@ describe('sessionValidation', () => {
           createMockSession({ name: 'Session 3', projectRoot: '/path/three', toolType: 'aider' }),
         ];
 
-        // Unique name and directory
-        expect(validateNewSession('Session 4', '/path/four', 'claude-code', existingSessions).valid).toBe(true);
+        // Unique name and directory - no warning
+        const uniqueResult = validateNewSession('Session 4', '/path/four', 'claude-code', existingSessions);
+        expect(uniqueResult.valid).toBe(true);
+        expect(uniqueResult.warning).toBeUndefined();
 
-        // Duplicate name
+        // Duplicate name - hard error
         expect(validateNewSession('Session 2', '/path/four', 'claude-code', existingSessions).valid).toBe(false);
 
-        // Duplicate directory for same provider
-        expect(validateNewSession('Session 4', '/path/two', 'claude-code', existingSessions).valid).toBe(false);
+        // Duplicate directory for same provider - warning, still valid
+        const sameDirResult = validateNewSession('Session 4', '/path/two', 'claude-code', existingSessions);
+        expect(sameDirResult.valid).toBe(true);
+        expect(sameDirResult.warning).toBeDefined();
 
-        // Same directory but different provider is OK
-        expect(validateNewSession('Session 4', '/path/two', 'aider', existingSessions).valid).toBe(true);
+        // Same directory but different provider - also warning now
+        const diffProviderResult = validateNewSession('Session 4', '/path/two', 'aider', existingSessions);
+        expect(diffProviderResult.valid).toBe(true);
+        expect(diffProviderResult.warning).toBeDefined();
       });
 
       it('name check takes priority over directory check', () => {
         const existingSessions = [
           createMockSession({ name: 'My Agent', projectRoot: '/path/one', toolType: 'claude-code' }),
         ];
-        // Both name and directory match - should get name error
+        // Both name and directory match - should get name error (not warning)
         const result = validateNewSession('My Agent', '/path/one', 'claude-code', existingSessions);
         expect(result.valid).toBe(false);
         expect(result.errorField).toBe('name');
+        expect(result.warning).toBeUndefined(); // Error takes precedence
       });
     });
 
-    describe('provider display names', () => {
-      it('shows correct display name for claude-code', () => {
+    describe('warning messages', () => {
+      it('includes conflicting agent name in warning', () => {
         const existingSessions = [
           createMockSession({
             name: 'Existing',
@@ -233,10 +276,10 @@ describe('sessionValidation', () => {
           }),
         ];
         const result = validateNewSession('New', '/path', 'claude-code', existingSessions);
-        expect(result.error).toContain('Claude Code');
+        expect(result.warning).toContain('Existing');
       });
 
-      it('shows correct display name for aider', () => {
+      it('warns regardless of provider type', () => {
         const existingSessions = [
           createMockSession({
             name: 'Existing',
@@ -245,10 +288,12 @@ describe('sessionValidation', () => {
           }),
         ];
         const result = validateNewSession('New', '/path', 'aider', existingSessions);
-        expect(result.error).toContain('Aider');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warning).toContain('Existing');
       });
 
-      it('shows correct display name for terminal', () => {
+      it('warns for terminal sessions too', () => {
         const existingSessions = [
           createMockSession({
             name: 'Existing',
@@ -257,7 +302,9 @@ describe('sessionValidation', () => {
           }),
         ];
         const result = validateNewSession('New', '/path', 'terminal', existingSessions);
-        expect(result.error).toContain('Terminal');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warning).toContain('Existing');
       });
     });
 
@@ -275,29 +322,32 @@ describe('sessionValidation', () => {
             toolType: undefined as unknown as ToolType
           }),
         ];
-        // Should not crash, and should allow the new session since toolTypes don't match
+        // Should not crash, warning because same directory
         const result = validateNewSession('New', '/path', 'claude-code', existingSessions);
         expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined(); // Gets warning for same directory
       });
 
       it('handles very long paths', () => {
         const longPath = '/Users/test/' + 'a'.repeat(500) + '/project';
         const existingSessions = [
-          createMockSession({ projectRoot: longPath, toolType: 'claude-code' }),
+          createMockSession({ name: 'Existing', projectRoot: longPath, toolType: 'claude-code' }),
         ];
         const result = validateNewSession('New Session', longPath, 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
       });
 
       it('handles paths with special characters', () => {
         const specialPath = '/Users/test/my project (2024)/code-base';
         const existingSessions = [
-          createMockSession({ projectRoot: specialPath, toolType: 'claude-code' }),
+          createMockSession({ name: 'Existing', projectRoot: specialPath, toolType: 'claude-code' }),
         ];
         const result = validateNewSession('New Session', specialPath, 'claude-code', existingSessions);
-        expect(result.valid).toBe(false);
-        expect(result.errorField).toBe('directory');
+        expect(result.valid).toBe(true);
+        expect(result.warning).toBeDefined();
+        expect(result.warningField).toBe('directory');
       });
 
       it('handles unicode in session names', () => {

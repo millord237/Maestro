@@ -20,6 +20,7 @@ import { appendToLog } from './group-chat-log';
 import { IProcessManager, isModeratorActive } from './group-chat-moderator';
 import type { AgentDetector } from '../agent-detector';
 import { buildAgentArgs, applyAgentConfigOverrides, getContextWindowValue } from '../utils/agent-args';
+import { groupChatParticipantPrompt } from '../prompts';
 
 /**
  * In-memory store for active participant sessions.
@@ -36,53 +37,17 @@ function getParticipantKey(groupChatId: string, participantName: string): string
 
 /**
  * Generate the system prompt for a participant.
+ * Uses template from src/prompts/group-chat-participant.md
  */
 export function getParticipantSystemPrompt(
   participantName: string,
   groupChatName: string,
   logPath: string
 ): string {
-  return `You are participating in a group chat named "${groupChatName}".
-
-Your Role: ${participantName}
-
-You will receive instructions from the moderator. When you complete a task or need to communicate:
-
-**CRITICAL RESPONSE FORMAT:**
-After completing your work, you MUST respond with a single cohesive message structured as follows:
-
-1. **Overview (REQUIRED):** Start with a 1-3 sentence plain-text overview of what you accomplished. This overview:
-   - Must be plain text with NO markdown formatting (no bold, italics, code blocks, or links)
-   - Will be extracted for the group chat history
-   - Should be concise and action-oriented
-   - Examples:
-     - "Implemented the user authentication endpoint with JWT tokens and added input validation."
-     - "Fixed the null pointer exception in the data parser by adding proper null checks."
-     - "Refactored the database connection pool to support connection timeouts and retry logic."
-
-2. **Blank Line:** After your overview, include a blank line to separate it from the details.
-
-3. **Details (OPTIONAL):** After the blank line, provide any additional details, code snippets, or explanations. Markdown formatting is encouraged here for beautiful, readable responses.
-
-Example response structure:
----
-Created the new API endpoint for user profile updates with validation and error handling. The endpoint now supports partial updates and returns appropriate HTTP status codes.
-
-## Implementation Details
-
-\`\`\`typescript
-// Your code here
-\`\`\`
-
-The changes include...
----
-
-Additional guidelines:
-1. Reference the chat log at "${logPath}" for context on what others have said
-2. Focus on your assigned role and tasks
-3. Be collaborative and professional
-
-Your responses will be shared with the moderator and other participants.`;
+  return groupChatParticipantPrompt
+    .replace(/\{\{GROUP_CHAT_NAME\}\}/g, groupChatName)
+    .replace(/\{\{PARTICIPANT_NAME\}\}/g, participantName)
+    .replace(/\{\{LOG_PATH\}\}/g, logPath);
 }
 
 /**

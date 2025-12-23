@@ -86,6 +86,7 @@ export class ClaudeOutputParser implements AgentOutputParser {
       return this.transformMessage(msg);
     } catch {
       // Not valid JSON - return as raw text event
+      // Note: This doesn't set isPartial, so it won't be emitted as thinking content
       return {
         type: 'text',
         text: line,
