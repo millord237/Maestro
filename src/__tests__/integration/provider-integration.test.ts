@@ -379,13 +379,13 @@ const PROVIDERS: ProviderConfig[] = [
      * Build args with image file path for OpenCode.
      * Mirrors agent-detector.ts: imageArgs: (imagePath) => ['-f', imagePath]
      *
-     * Uses qwen3-vl model via ollama for image tests since it supports vision.
-     * The default model may not support image input.
+     * Uses vision-capable model. Defaults to ollama/qwen3-vl but can be overridden
+     * with OPENCODE_VISION_MODEL env var.
      */
     buildImageArgs: (prompt: string, imagePath: string) => [
       'run',
       '--format', 'json',
-      '--model', 'ollama/qwen3-vl',
+      '--model', process.env.OPENCODE_VISION_MODEL || 'ollama/qwen3-vl',
       '-f', imagePath,
       '--',
       prompt,
@@ -1083,6 +1083,12 @@ Rules:
           result = await runProvider(provider, args, TEST_CWD, stdinContent);
         } else if (provider.buildImageArgs) {
           // Codex/OpenCode: Use file-based image args
+          // Skip if no vision model is configured for OpenCode
+          if (provider.name === 'OpenCode' && !process.env.OPENCODE_VISION_MODEL) {
+            console.log(`⚠️  OPENCODE_VISION_MODEL not set, skipping image test`);
+            return;
+          }
+
           const args = provider.buildImageArgs(prompt, TEST_IMAGE_PATH);
 
           console.log(`🚀 Running: ${provider.command} ${args.join(' ')}`);
