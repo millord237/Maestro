@@ -712,9 +712,9 @@ export function DocumentsPanel({
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     // Only clean up if drop didn't happen (e.g., user cancelled with Escape or dropped outside)
     // When drop succeeds, handleDrop clears the state
-    const dropEffect = e.dataTransfer.dropEffect;
-    if (dropEffect === 'none') {
-      // Drop was cancelled - clean up
+    const dropEffect = e.dataTransfer?.dropEffect;
+    if (dropEffect === 'none' || dropEffect === undefined) {
+      // Drop was cancelled or dataTransfer unavailable - clean up
       setDraggedId(null);
       setDropTargetIndex(null);
       setIsCopyDrag(false);

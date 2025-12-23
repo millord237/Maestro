@@ -346,6 +346,11 @@ describe('persistence IPC handlers', () => {
         state: 'idle',
         inputMode: 'ai',
         cwd: '/test',
+        groupId: null,
+        groupName: null,
+        groupEmoji: null,
+        parentSessionId: null,
+        worktreeBranch: null,
       });
     });
 
