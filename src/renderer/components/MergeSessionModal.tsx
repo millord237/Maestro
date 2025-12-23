@@ -14,7 +14,7 @@
  * - Keyboard navigation with arrow keys, Enter, Tab
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { Search, ChevronRight, ChevronDown, GitMerge, Clipboard, Clock, Check, X } from 'lucide-react';
 import type { Theme, Session, AITab } from '../types';
 import type { MergeResult } from '../types/contextMerge';
@@ -84,6 +84,47 @@ function estimateTokens(logs: { text: string }[]): number {
   const totalChars = logs.reduce((sum, log) => sum + (log.text?.length || 0), 0);
   return Math.round(totalChars / 4);
 }
+
+/**
+ * Animated token display component that highlights when value changes
+ */
+const AnimatedTokenCount = memo(({
+  tokens,
+  accentColor,
+  textColor,
+  prefix = '~',
+}: {
+  tokens: number;
+  accentColor: string;
+  textColor: string;
+  prefix?: string;
+}) => {
+  const [animating, setAnimating] = useState(false);
+  const prevTokensRef = useRef(tokens);
+
+  useEffect(() => {
+    if (prevTokensRef.current !== tokens && prevTokensRef.current !== 0) {
+      setAnimating(true);
+      const timer = setTimeout(() => setAnimating(false), 400);
+      prevTokensRef.current = tokens;
+      return () => clearTimeout(timer);
+    }
+    prevTokensRef.current = tokens;
+  }, [tokens]);
+
+  return (
+    <span
+      className={animating ? 'animate-token-update' : ''}
+      style={{
+        color: textColor,
+        '--token-highlight': accentColor,
+        display: 'inline-block',
+      } as React.CSSProperties}
+    >
+      {prefix}{formatTokensCompact(tokens)} tokens
+    </span>
+  );
+});
 
 /**
  * Get display name for a session
@@ -452,7 +493,7 @@ export function MergeSessionModal({
 
   return (
     <div
-      className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999]"
+      className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999] animate-in"
       role="dialog"
       aria-modal="true"
       aria-label="Merge Session Contexts"
@@ -460,7 +501,7 @@ export function MergeSessionModal({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col"
+        className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col animate-slide-up"
         style={{
           backgroundColor: theme.colors.bgSidebar,
           borderColor: theme.colors.border,
@@ -682,7 +723,7 @@ export function MergeSessionModal({
                                   key={item.tabId}
                                   ref={isSelected ? selectedItemRef : undefined}
                                   onClick={() => handleSelectItem(item)}
-                                  className="w-full px-2 py-2 flex items-center gap-2 rounded text-left transition-colors"
+                                  className={`w-full px-2 py-2 flex items-center gap-2 rounded text-left transition-all duration-150 ${isTarget ? 'animate-highlight-pulse' : ''}`}
                                   style={{
                                     backgroundColor: isTarget
                                       ? theme.colors.accent
@@ -692,12 +733,13 @@ export function MergeSessionModal({
                                     color: isTarget
                                       ? theme.colors.accentForeground
                                       : theme.colors.textMain,
-                                  }}
+                                    '--pulse-color': `${theme.colors.accent}40`,
+                                  } as React.CSSProperties}
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       {isTarget && (
-                                        <Check className="w-3.5 h-3.5 shrink-0" />
+                                        <Check className="w-3.5 h-3.5 shrink-0 animate-check-pop" />
                                       )}
                                       <span className="text-sm truncate">
                                         {item.tabName}
@@ -762,7 +804,7 @@ export function MergeSessionModal({
                       key={`${item.sessionId}-${item.tabId}`}
                       ref={isSelected ? selectedItemRef : undefined}
                       onClick={() => handleSelectItem(item)}
-                      className="w-full px-3 py-2.5 flex items-center gap-3 rounded-lg text-left transition-colors mb-1"
+                      className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-lg text-left transition-all duration-150 mb-1 ${isTarget ? 'animate-highlight-pulse' : ''}`}
                       style={{
                         backgroundColor: isTarget
                           ? theme.colors.accent
@@ -772,10 +814,11 @@ export function MergeSessionModal({
                         color: isTarget
                           ? theme.colors.accentForeground
                           : theme.colors.textMain,
-                      }}
+                        '--pulse-color': `${theme.colors.accent}40`,
+                      } as React.CSSProperties}
                     >
                       {isTarget && (
-                        <Check className="w-4 h-4 shrink-0" />
+                        <Check className="w-4 h-4 shrink-0 animate-check-pop" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -857,9 +900,11 @@ export function MergeSessionModal({
                   <span style={{ color: theme.colors.textMain }} className="font-medium">
                     Estimated merged size:
                   </span>
-                  <span style={{ color: theme.colors.textMain }}>
-                    ~{formatTokensCompact(estimatedMergedTokens)} tokens
-                  </span>
+                  <AnimatedTokenCount
+                    tokens={estimatedMergedTokens}
+                    accentColor={theme.colors.accent}
+                    textColor={theme.colors.textMain}
+                  />
                 </div>
 
                 {options.groomContext && (

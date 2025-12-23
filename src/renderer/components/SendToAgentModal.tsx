@@ -13,7 +13,7 @@
  * - Keyboard navigation with arrow keys, Enter, Escape
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { Search, ArrowRight, Check, X, AlertCircle, Loader2 } from 'lucide-react';
 import type { Theme, Session, AITab, ToolType, AgentConfig } from '../types';
 import type { MergeResult } from '../types/contextMerge';
@@ -21,6 +21,7 @@ import { fuzzyMatchWithScore } from '../utils/search';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatTokensCompact } from '../utils/formatters';
+import { getAgentIcon } from '../constants/agentIcons';
 
 /**
  * Agent availability status for display in the selection grid
@@ -66,29 +67,6 @@ export interface SendToAgentModalProps {
     targetAgentId: ToolType,
     options: SendToAgentOptions
   ) => Promise<MergeResult>;
-}
-
-/**
- * Get display icon for an agent
- */
-function getAgentIcon(agentId: string): string {
-  switch (agentId) {
-    case 'claude-code':
-    case 'claude':
-      return '🤖';
-    case 'codex':
-      return '◇';
-    case 'gemini-cli':
-      return '🔷';
-    case 'qwen3-coder':
-      return '⬡';
-    case 'opencode':
-      return '📟';
-    case 'aider':
-      return '🛠️';
-    default:
-      return '🔧';
-  }
 }
 
 /**
@@ -446,7 +424,7 @@ export function SendToAgentModal({
 
   return (
     <div
-      className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999]"
+      className="fixed inset-0 modal-overlay flex items-start justify-center pt-16 z-[9999] animate-in"
       role="dialog"
       aria-modal="true"
       aria-label="Send Context to Agent"
@@ -454,7 +432,7 @@ export function SendToAgentModal({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col"
+        className="w-[600px] rounded-xl shadow-2xl border outline-none flex flex-col animate-slide-up"
         style={{
           backgroundColor: theme.colors.bgSidebar,
           borderColor: theme.colors.border,
@@ -534,7 +512,7 @@ export function SendToAgentModal({
                       ref={isHighlighted ? selectedItemRef : undefined}
                       onClick={() => !isDisabled && handleSelectAgent(agent.id)}
                       disabled={isDisabled}
-                      className="p-3 rounded-lg border text-center transition-all disabled:cursor-not-allowed"
+                      className={`p-3 rounded-lg border text-center transition-all duration-150 disabled:cursor-not-allowed ${isSelected ? 'animate-highlight-pulse' : ''}`}
                       style={{
                         backgroundColor: isSelected
                           ? theme.colors.accent
@@ -547,7 +525,8 @@ export function SendToAgentModal({
                             ? theme.colors.accent
                             : theme.colors.border,
                         opacity: isDisabled ? 0.5 : 1,
-                      }}
+                        '--pulse-color': `${theme.colors.accent}40`,
+                      } as React.CSSProperties}
                     >
                       {/* Agent Icon */}
                       <div className="text-2xl mb-1">
