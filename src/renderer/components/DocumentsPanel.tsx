@@ -650,21 +650,27 @@ export function DocumentsPanel({
     }
   }, []);
 
-  const handleDragEnd = useCallback(() => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent double-firing from row bubbling to container
+
+    console.log('[handleDrop] draggedId:', draggedId, 'dropTargetIndex:', dropTargetIndex, 'isCopyDrag:', isCopyDrag);
+
     if (draggedId && dropTargetIndex !== null) {
       const draggedIndex = documents.findIndex(d => d.id === draggedId);
-      
+
       if (draggedIndex !== -1) {
+        // Use tracked isCopyDrag state - more reliable than event.metaKey at drop time
         setDocuments(prev => {
           const items = [...prev];
-          
+
           if (isCopyDrag) {
-            // Copy mode: duplicate the document at the drop position
+            // Copy mode: duplicate the document at the drop position with reset enabled
             const original = items[draggedIndex];
             const duplicate: BatchDocumentEntry = {
               id: generateId(),
               filename: original.filename,
-              resetOnCompletion: original.resetOnCompletion,
+              resetOnCompletion: true, // Copies always have reset enabled
               isDuplicate: true
             };
             items.splice(dropTargetIndex, 0, duplicate);
@@ -684,7 +690,16 @@ export function DocumentsPanel({
     setDropTargetIndex(null);
     setIsCopyDrag(false);
     setCursorPosition(null);
-  }, [draggedId, dropTargetIndex, documents, isCopyDrag, setDocuments]);
+  }, [draggedId, dropTargetIndex, documents, setDocuments, isCopyDrag]);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    // Clean up drag state (actual drop logic is in handleDrop)
+    console.log('[handleDragEnd] dropEffect:', e.dataTransfer.dropEffect);
+    setDraggedId(null);
+    setDropTargetIndex(null);
+    setIsCopyDrag(false);
+    setCursorPosition(null);
+  }, []);
 
   // Sync showMaxLoopsSlider when maxLoops prop changes externally
   useEffect(() => {
@@ -773,7 +788,7 @@ export function DocumentsPanel({
             <p className="text-xs mt-1">Click "+ Add Docs" to select documents to run</p>
           </div>
         ) : (
-          <div className="divide-y" style={{ borderColor: theme.colors.border }} onDragLeave={handleDragLeave}>
+          <div onDragLeave={handleDragLeave} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
             {documents.map((doc, index) => {
               const docTaskCount = taskCounts[doc.filename] ?? 0;
               const isBeingDragged = draggedId === doc.id;
@@ -781,7 +796,7 @@ export function DocumentsPanel({
               const showDropIndicatorAfter = dropTargetIndex === index + 1 && index === documents.length - 1 && draggedId !== null;
 
               return (
-                <div key={doc.id} className="relative">
+                <div key={doc.id} className="relative" style={index > 0 ? { borderTop: `1px solid ${theme.colors.border}22` } : undefined}>
                   {/* Drop Indicator Line - Before */}
                   {showDropIndicatorBefore && (
                     <div
@@ -806,6 +821,7 @@ export function DocumentsPanel({
                     onDragStart={(e) => !doc.isMissing && handleDragStart(e, doc.id)}
                     onDrag={handleDrag}
                     onDragOver={(e) => handleDragOver(e, doc.id, index)}
+                    onDrop={handleDrop}
                     onDragEnd={handleDragEnd}
                     className={`flex items-center gap-3 px-3 py-2 transition-all ${
                       isBeingDragged ? 'opacity-50' : ''

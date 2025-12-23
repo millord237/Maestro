@@ -18,11 +18,19 @@ import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 
 /**
  * Content block in Claude assistant messages
- * Can be either text or tool_use blocks
+ * Can be text, tool_use, thinking, or redacted_thinking blocks
+ *
+ * Extended thinking (Claude 3.7 Sonnet, Claude 4+) produces:
+ * - thinking: Internal reasoning content (may be encrypted in signature)
+ * - redacted_thinking: Encrypted thinking content (for safety-flagged reasoning)
+ * - text: The final user-facing response
  */
 interface ClaudeContentBlock {
   type: string;
   text?: string;
+  // Extended thinking fields (Claude 3.7+, Claude 4+)
+  thinking?: string;
+  signature?: string;
   // Tool use fields
   name?: string;
   id?: string;
@@ -190,6 +198,14 @@ export class ClaudeOutputParser implements AgentOutputParser {
 
   /**
    * Extract text content from a Claude assistant message
+   *
+   * Only extracts 'text' type blocks - explicitly excludes:
+   * - 'thinking' blocks (extended thinking reasoning content)
+   * - 'redacted_thinking' blocks (safety-encrypted thinking)
+   * - 'tool_use' blocks (handled separately by extractToolUseBlocks)
+   *
+   * Extended thinking content is emitted separately via thinking-chunk events
+   * and controlled by the tab's showThinking setting in the renderer.
    */
   private extractTextFromMessage(msg: ClaudeRawMessage): string {
     if (!msg.message?.content) {
@@ -201,7 +217,8 @@ export class ClaudeOutputParser implements AgentOutputParser {
       return msg.message.content;
     }
 
-    // Array of content blocks - extract text from text blocks
+    // Array of content blocks - extract ONLY text blocks
+    // Thinking blocks (type: 'thinking', 'redacted_thinking') are intentionally excluded
     return msg.message.content
       .filter((block) => block.type === 'text' && block.text)
       .map((block) => block.text!)

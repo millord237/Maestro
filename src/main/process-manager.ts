@@ -756,16 +756,17 @@ export class ProcessManager extends EventEmitter {
                     }
 
                     // Handle streaming text events (OpenCode, Codex reasoning)
-                    // Emit partial text immediately for real-time streaming UX
-                    // Also accumulate for final result assembly if needed
+                    // Emit partial text to thinking-chunk for real-time display when showThinking is enabled
+                    // Accumulate for final result assembly - the result message will contain the complete response
+                    // NOTE: We do NOT emit partial text to 'data' because it causes streaming content
+                    // to appear in the main output even when thinking is disabled. The final 'result'
+                    // message contains the properly formatted complete response.
                     if (event.type === 'text' && event.isPartial && event.text) {
-                      // Emit thinking chunk for real-time display (let renderer decide to display based on tab setting)
+                      // Emit thinking chunk for real-time display (renderer shows only if tab.showThinking is true)
                       this.emit('thinking-chunk', sessionId, event.text);
 
-                      // Existing: accumulate for result fallback
+                      // Accumulate for result fallback (in case result message doesn't have text)
                       managedProcess.streamedText = (managedProcess.streamedText || '') + event.text;
-                      // Emit streaming text immediately for real-time display
-                      this.emit('data', sessionId, event.text);
                     }
 
                     // Handle tool execution events (OpenCode, Codex)

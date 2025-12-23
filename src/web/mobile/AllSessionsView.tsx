@@ -193,17 +193,96 @@ function MobileSessionCard({ session, isActive, onSelect, displayName }: MobileS
 }
 
 /**
+ * Find the parent session for a worktree child by looking at path patterns.
+ * This handles legacy worktree sessions that don't have parentSessionId set.
+ *
+ * Worktree paths typically follow patterns like:
+ * - /path/to/Project-WorkTrees/branch-name
+ * - /path/to/ProjectWorkTrees/branch-name
+ *
+ * The parent would be at /path/to/Project
+ */
+function findParentSession(
+  session: Session,
+  sessions: Session[]
+): Session | null {
+  // If parentSessionId is set, use it directly
+  if (session.parentSessionId) {
+    const parent = sessions.find(s => s.id === session.parentSessionId) || null;
+    console.log(`[findParentSession] ${session.name}: parentSessionId=${session.parentSessionId}, found=${parent?.name || 'null'}`);
+    return parent;
+  }
+
+  // Try to infer parent from path patterns
+  const cwd = session.cwd;
+
+  // Check for worktree path patterns: ProjectName-WorkTrees/branch or ProjectNameWorkTrees/branch
+  const worktreeMatch = cwd.match(/^(.+?)[-]?WorkTrees[\/\\]([^\/\\]+)/i);
+  console.log(`[findParentSession] ${session.name}: cwd=${cwd}, worktreeMatch=${JSON.stringify(worktreeMatch)}`);
+
+  if (worktreeMatch) {
+    const basePath = worktreeMatch[1];
+    console.log(`[findParentSession] ${session.name}: basePath=${basePath}`);
+
+    // Log all potential parents
+    const potentialParents = sessions.filter(s => s.id !== session.id && !s.parentSessionId);
+    console.log(`[findParentSession] ${session.name}: potential parents:`, potentialParents.map(s => ({ name: s.name, cwd: s.cwd })));
+
+    // Find a session whose cwd matches the base path
+    const parent = sessions.find(s =>
+      s.id !== session.id &&
+      !s.parentSessionId && // Not itself a worktree child
+      (s.cwd === basePath || s.cwd.startsWith(basePath + '/') || s.cwd.startsWith(basePath + '\\'))
+    );
+    if (parent) {
+      console.log(`[findParentSession] ${session.name}: FOUND parent=${parent.name}`);
+      return parent;
+    }
+    console.log(`[findParentSession] ${session.name}: NO parent found for basePath=${basePath}`);
+  }
+
+  return null;
+}
+
+/**
  * Compute display name for a session
  * For worktree children, prefixes with parent name: "ParentName: branch-name"
  */
-function getSessionDisplayName(session: Session, sessionNameMap: Map<string, string>): string {
-  if (session.parentSessionId && session.worktreeBranch) {
-    const parentName = sessionNameMap.get(session.parentSessionId);
-    if (parentName) {
-      return `${parentName}: ${session.worktreeBranch}`;
-    }
+function getSessionDisplayName(
+  session: Session,
+  sessions: Session[]
+): string {
+  const parent = findParentSession(session, sessions);
+  if (parent) {
+    // Use worktreeBranch if available, otherwise use session name (which is typically the branch)
+    const branchName = session.worktreeBranch || session.name;
+    return `${parent.name}: ${branchName}`;
   }
   return session.name;
+}
+
+/**
+ * Get the effective group for a session
+ * Worktree children inherit their parent's group
+ */
+function getSessionEffectiveGroup(
+  session: Session,
+  sessions: Session[]
+): { groupId: string | null; groupName: string | null; groupEmoji: string | null } {
+  const parent = findParentSession(session, sessions);
+  if (parent) {
+    return {
+      groupId: parent.groupId || null,
+      groupName: parent.groupName || null,
+      groupEmoji: parent.groupEmoji || null,
+    };
+  }
+  // Use session's own group
+  return {
+    groupId: session.groupId || null,
+    groupName: session.groupName || null,
+    groupEmoji: session.groupEmoji || null,
+  };
 }
 
 /**
@@ -218,8 +297,8 @@ interface GroupSectionProps {
   onSelectSession: (sessionId: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: (groupId: string) => void;
-  /** Map of session IDs to names for looking up parent names */
-  sessionNameMap: Map<string, string>;
+  /** All sessions for parent lookup */
+  allSessions: Session[];
 }
 
 function GroupSection({
@@ -231,7 +310,7 @@ function GroupSection({
   onSelectSession,
   isCollapsed,
   onToggleCollapse,
-  sessionNameMap,
+  allSessions,
 }: GroupSectionProps) {
   const colors = useThemeColors();
 
@@ -318,7 +397,7 @@ function GroupSection({
               session={session}
               isActive={session.id === activeSessionId}
               onSelect={onSelectSession}
-              displayName={getSessionDisplayName(session, sessionNameMap)}
+              displayName={getSessionDisplayName(session, allSessions)}
             />
           ))}
         </div>
@@ -361,22 +440,12 @@ export function AllSessionsView({
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Create a map of session IDs to names for worktree display name lookup
-  // Must be created before filtering so worktree children can be searched by display name
-  const sessionNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const session of sessions) {
-      map.set(session.id, session.name);
-    }
-    return map;
-  }, [sessions]);
-
   // Filter sessions by search query (including worktree display names)
   const filteredSessions = useMemo(() => {
     if (!localSearchQuery.trim()) return sessions;
     const query = localSearchQuery.toLowerCase();
     return sessions.filter((session) => {
-      const displayName = getSessionDisplayName(session, sessionNameMap);
+      const displayName = getSessionDisplayName(session, sessions);
       return (
         displayName.toLowerCase().includes(query) ||
         session.name.toLowerCase().includes(query) ||
@@ -385,9 +454,10 @@ export function AllSessionsView({
         (session.worktreeBranch && session.worktreeBranch.toLowerCase().includes(query))
       );
     });
-  }, [sessions, localSearchQuery, sessionNameMap]);
+  }, [sessions, localSearchQuery]);
 
   // Organize sessions by group, including a special "bookmarks" group
+  // Worktree children inherit their parent's group
   const sessionsByGroup = useMemo((): Record<string, GroupInfo> => {
     const groups: Record<string, GroupInfo> = {};
 
@@ -402,15 +472,17 @@ export function AllSessionsView({
       };
     }
 
-    // Organize remaining sessions by their actual groups
+    // Organize remaining sessions by their actual groups (or inherited group for worktree children)
     for (const session of filteredSessions) {
-      const groupKey = session.groupId || 'ungrouped';
+      // Get effective group (worktree children inherit from parent)
+      const effectiveGroup = getSessionEffectiveGroup(session, sessions);
+      const groupKey = effectiveGroup.groupId || 'ungrouped';
 
       if (!groups[groupKey]) {
         groups[groupKey] = {
-          id: session.groupId || null,
-          name: session.groupName || 'Ungrouped',
-          emoji: session.groupEmoji || null,
+          id: effectiveGroup.groupId,
+          name: effectiveGroup.groupName || 'Ungrouped',
+          emoji: effectiveGroup.groupEmoji,
           sessions: [],
         };
       }
@@ -418,7 +490,7 @@ export function AllSessionsView({
     }
 
     return groups;
-  }, [filteredSessions]);
+  }, [filteredSessions, sessions]);
 
   // Get sorted group keys (bookmarks first, ungrouped last)
   const sortedGroupKeys = useMemo(() => {
@@ -654,7 +726,7 @@ export function AllSessionsView({
                 session={session}
                 isActive={session.id === activeSessionId}
                 onSelect={handleSelectSession}
-                displayName={getSessionDisplayName(session, sessionNameMap)}
+                displayName={getSessionDisplayName(session, sessions)}
               />
             ))}
           </div>
@@ -673,7 +745,7 @@ export function AllSessionsView({
                 onSelectSession={handleSelectSession}
                 isCollapsed={collapsedGroups?.has(groupKey) ?? true}
                 onToggleCollapse={handleToggleCollapse}
-                sessionNameMap={sessionNameMap}
+                allSessions={sessions}
               />
             );
           })
