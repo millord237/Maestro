@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle } from 'lucide-react';
+import { useSettings } from '../hooks/useSettings';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -223,6 +224,10 @@ interface SettingsModalProps {
 
 export const SettingsModal = memo(function SettingsModal(props: SettingsModalProps) {
   const { isOpen, onClose, theme, themes, initialTab } = props;
+
+  // Context management settings from useSettings hook
+  const { contextManagementSettings, updateContextManagementSettings } = useSettings();
+
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands'>('general');
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [customFonts, setCustomFonts] = useState<string[]>([]);
@@ -1143,6 +1148,144 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 onChange={props.setCrashReportingEnabled}
                 theme={theme}
               />
+
+              {/* Context Window Warnings */}
+              <div
+                className="flex items-start gap-3 p-4 rounded-xl border"
+                style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
+              >
+                <div
+                  className="p-2 rounded-lg flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)' }}
+                >
+                  <AlertTriangle className="w-5 h-5" style={{ color: '#eab308' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase font-bold opacity-50 mb-1">Context Management</p>
+                  <p className="font-semibold mb-1">Context Window Warnings</p>
+                  <p className="text-xs opacity-60 mb-3">
+                    Show warning banners when context window usage reaches configurable thresholds. Helps you avoid running out of context mid-conversation.
+                  </p>
+
+                  {/* Enable/Disable Toggle */}
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="text-sm" style={{ color: theme.colors.textMain }}>
+                      Enable context consumption warnings
+                    </label>
+                    <button
+                      onClick={() => updateContextManagementSettings({
+                        contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                      })}
+                      className="relative w-11 h-6 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: contextManagementSettings.contextWarningsEnabled
+                          ? theme.colors.accent
+                          : theme.colors.bgActivity,
+                      }}
+                    >
+                      <div
+                        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                        style={{
+                          transform: contextManagementSettings.contextWarningsEnabled
+                            ? 'translateX(22px)'
+                            : 'translateX(4px)',
+                        }}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Threshold Sliders (only shown when enabled) */}
+                  {contextManagementSettings.contextWarningsEnabled && (
+                    <div className="space-y-4 pt-2 border-t" style={{ borderColor: theme.colors.border }}>
+                      {/* Yellow Warning Threshold */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-medium flex items-center gap-2" style={{ color: theme.colors.textMain }}>
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                            Yellow warning threshold
+                          </label>
+                          <span
+                            className="text-xs font-mono px-2 py-0.5 rounded"
+                            style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#fde047' }}
+                          >
+                            {contextManagementSettings.contextWarningYellowThreshold}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={30}
+                          max={90}
+                          step={5}
+                          value={contextManagementSettings.contextWarningYellowThreshold}
+                          onChange={(e) => {
+                            const newYellow = Number(e.target.value);
+                            // Validation: ensure yellow < red by at least 10%
+                            if (newYellow >= contextManagementSettings.contextWarningRedThreshold) {
+                              // Bump red threshold up
+                              updateContextManagementSettings({
+                                contextWarningYellowThreshold: newYellow,
+                                contextWarningRedThreshold: Math.min(95, newYellow + 10),
+                              });
+                            } else {
+                              updateContextManagementSettings({ contextWarningYellowThreshold: newYellow });
+                            }
+                          }}
+                          className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, #eab308 0%, #eab308 ${((contextManagementSettings.contextWarningYellowThreshold - 30) / 60) * 100}%, ${theme.colors.bgActivity} ${((contextManagementSettings.contextWarningYellowThreshold - 30) / 60) * 100}%, ${theme.colors.bgActivity} 100%)`,
+                          }}
+                        />
+                        <p className="text-xs opacity-40 mt-1">
+                          Show yellow warning when context reaches this percentage (30-90%)
+                        </p>
+                      </div>
+
+                      {/* Red Warning Threshold */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-medium flex items-center gap-2" style={{ color: theme.colors.textMain }}>
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                            Red warning threshold
+                          </label>
+                          <span
+                            className="text-xs font-mono px-2 py-0.5 rounded"
+                            style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5' }}
+                          >
+                            {contextManagementSettings.contextWarningRedThreshold}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={50}
+                          max={95}
+                          step={5}
+                          value={contextManagementSettings.contextWarningRedThreshold}
+                          onChange={(e) => {
+                            const newRed = Number(e.target.value);
+                            // Validation: ensure red > yellow by at least 10%
+                            if (newRed <= contextManagementSettings.contextWarningYellowThreshold) {
+                              // Bump yellow threshold down
+                              updateContextManagementSettings({
+                                contextWarningRedThreshold: newRed,
+                                contextWarningYellowThreshold: Math.max(30, newRed - 10),
+                              });
+                            } else {
+                              updateContextManagementSettings({ contextWarningRedThreshold: newRed });
+                            }
+                          }}
+                          className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} 100%)`,
+                          }}
+                        />
+                        <p className="text-xs opacity-40 mt-1">
+                          Show red warning when context reaches this percentage (50-95%)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Settings Storage Location */}
               <div
