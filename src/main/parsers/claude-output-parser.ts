@@ -17,6 +17,19 @@ import { aggregateModelUsage, type ModelStats } from './usage-aggregator';
 import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 
 /**
+ * Content block in Claude assistant messages
+ * Can be either text or tool_use blocks
+ */
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  // Tool use fields
+  name?: string;
+  id?: string;
+  input?: unknown;
+}
+
+/**
  * Raw message structure from Claude Code stream-json output
  */
 interface ClaudeRawMessage {
@@ -26,7 +39,7 @@ interface ClaudeRawMessage {
   result?: string;
   message?: {
     role?: string;
-    content?: string | Array<{ type: string; text?: string }>;
+    content?: string | ClaudeContentBlock[];
   };
   slash_commands?: string[];
   modelUsage?: Record<string, ModelStats>;
