@@ -2638,6 +2638,10 @@ export default function MaestroConsole() {
     },
   });
 
+  // Track the source/target names for the merge progress modal
+  const [mergeSourceName, setMergeSourceName] = useState<string | null>(null);
+  const [mergeTargetName, setMergeTargetName] = useState<string | null>(null);
+
   // Send to Agent hook for cross-agent context transfer operations
   // Track the source/target agents for the transfer progress modal
   const [transferSourceAgent, setTransferSourceAgent] = useState<ToolType | null>(null);
@@ -7534,6 +7538,21 @@ export default function MaestroConsole() {
             resetMerge();
           }}
           onMerge={async (targetSessionId, targetTabId, options) => {
+            // Get source tab name for display
+            const sourceTab = activeSession.aiTabs.find(t => t.id === activeSession.activeTabId);
+            const sourceDisplayName = sourceTab?.name || activeSession.name || 'Source';
+
+            // Get target session/tab name for display
+            const targetSession = sessions.find(s => s.id === targetSessionId);
+            const targetTab = targetTabId
+              ? targetSession?.aiTabs.find(t => t.id === targetTabId)
+              : targetSession?.aiTabs.find(t => t.id === targetSession?.activeTabId);
+            const targetDisplayName = targetTab?.name || targetSession?.name || 'Target';
+
+            // Set names for progress modal
+            setMergeSourceName(sourceDisplayName);
+            setMergeTargetName(targetDisplayName);
+
             // Execute merge using the hook
             const result = await executeMerge(
               activeSession,
@@ -7562,6 +7581,8 @@ export default function MaestroConsole() {
           theme={theme}
           isOpen={mergeState === 'merging'}
           progress={mergeProgress}
+          sourceName={mergeSourceName || undefined}
+          targetName={mergeTargetName || undefined}
           onCancel={() => {
             cancelMerge();
             setMergeSessionModalOpen(false);

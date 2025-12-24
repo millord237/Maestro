@@ -618,8 +618,31 @@ export function useMergeSessionWithSessions(
             newTabId: newSession.activeTabId,
           };
         }
-      } else if (result.mergedLogs && result.targetSessionId && result.targetTabId) {
-        // Merge into existing tab - apply the merged logs to the target tab
+      } else if (result.targetSessionId && result.targetTabId) {
+        // Merge into existing tab - keep target logs unchanged, inject source context
+        // Format the source context as a string to inject into the AI conversation
+        const sourceTab = sourceSession.aiTabs.find(t => t.id === sourceTabId);
+        const sourceContext = sourceTab?.logs
+          .filter(log => log.text && log.text.trim())
+          .map(log => {
+            const role = log.source === 'user' ? 'User' : 'Assistant';
+            return `${role}: ${log.text}`;
+          })
+          .join('\n\n');
+
+        const sourceName = getSessionDisplayName(sourceSession);
+        const formattedMergedContext = sourceContext
+          ? `Additional context from another agent (${sourceName}):\n\n${sourceContext}`
+          : undefined;
+
+        // Create a log entry to show the context was merged
+        const mergeLogEntry: LogEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          source: 'system',
+          text: `Context transferred from "${sourceName}"${options.groomContext ? ' (cleaned to reduce size)' : ''}. This context will be included with your next message to the AI.`,
+        };
+
         setSessions(prev => prev.map(session => {
           if (session.id !== result.targetSessionId) return session;
 
@@ -628,10 +651,11 @@ export function useMergeSessionWithSessions(
             aiTabs: session.aiTabs.map(tab => {
               if (tab.id !== result.targetTabId) return tab;
 
-              // Prepend source logs to target tab's logs
+              // Add a visible log entry and set pendingMergedContext to inject into the next AI message
               return {
                 ...tab,
-                logs: result.mergedLogs!,
+                logs: [...tab.logs, mergeLogEntry],
+                pendingMergedContext: formattedMergedContext,
               };
             }),
           };
@@ -657,10 +681,10 @@ export function useMergeSessionWithSessions(
           console.warn('Failed to log merge operation to history:', historyError);
         }
 
-        console.log('[MergeSession] Merged logs into target tab:', {
+        console.log('[MergeSession] Injected context into target tab:', {
           targetSessionId: result.targetSessionId,
           targetTabId: result.targetTabId,
-          mergedLogCount: result.mergedLogs.length,
+          sourceSession: getSessionDisplayName(sourceSession),
         });
       }
     }

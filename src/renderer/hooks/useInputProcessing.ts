@@ -567,6 +567,34 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
           let effectivePrompt =
             hasImages && hasNoText ? DEFAULT_IMAGE_ONLY_PROMPT : capturedInputValue;
 
+          // Check for pending merged context that needs to be injected
+          // This happens when a user merged context from another tab/session
+          const pendingMergedContext = freshActiveTab?.pendingMergedContext;
+          if (pendingMergedContext) {
+            // Prepend the merged context to the user's message
+            effectivePrompt = `${pendingMergedContext}\n\n---\n\n${effectivePrompt}`;
+
+            // Clear the pending merged context from the tab
+            setSessions((prev) =>
+              prev.map((s) => {
+                if (s.id !== activeSessionId) return s;
+                return {
+                  ...s,
+                  aiTabs: s.aiTabs.map((tab) =>
+                    tab.id === freshActiveTab.id
+                      ? { ...tab, pendingMergedContext: undefined }
+                      : tab
+                  ),
+                };
+              })
+            );
+
+            console.log('[InputProcessing] Injected merged context into message:', {
+              contextLength: pendingMergedContext.length,
+              promptLength: effectivePrompt.length,
+            });
+          }
+
           // For NEW sessions (no agentSessionId), prepend Maestro system prompt
           // This introduces Maestro and sets directory restrictions for the agent
           const isNewSession = !tabAgentSessionId;

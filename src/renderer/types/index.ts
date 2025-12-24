@@ -299,6 +299,7 @@ export interface AITab {
   scrollTop?: number;              // Saved scroll position for this tab's output view
   hasUnread?: boolean;             // True when tab has new messages user hasn't seen
   isAtBottom?: boolean;            // True when user is scrolled to bottom of output
+  pendingMergedContext?: string;   // Context from merge that needs to be sent with next message
 }
 
 // Closed tab entry for undo functionality (Cmd+Shift+T)

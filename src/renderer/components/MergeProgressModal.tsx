@@ -37,7 +37,7 @@ interface ProgressStage {
 const STAGES: ProgressStage[] = [
   { id: 'collecting', label: 'Collect contexts', activeLabel: 'Collecting contexts...' },
   { id: 'grooming', label: 'Groom with AI', activeLabel: 'Grooming with AI...' },
-  { id: 'creating', label: 'Create new session', activeLabel: 'Creating new session...' },
+  { id: 'creating', label: 'Add to session', activeLabel: 'Adding to session...' },
   { id: 'complete', label: 'Complete', activeLabel: 'Complete' },
 ];
 
@@ -45,6 +45,10 @@ export interface MergeProgressModalProps {
   theme: Theme;
   isOpen: boolean;
   progress: GroomingProgress;
+  /** Name of the source session/tab being merged from */
+  sourceName?: string;
+  /** Name of the target session being merged into */
+  targetName?: string;
   onCancel: () => void;
 }
 
@@ -181,6 +185,8 @@ export function MergeProgressModal({
   theme,
   isOpen,
   progress,
+  sourceName,
+  targetName,
   onCancel,
 }: MergeProgressModalProps) {
   // Track start time for elapsed time display
@@ -298,7 +304,11 @@ export function MergeProgressModal({
             className="text-sm font-bold"
             style={{ color: theme.colors.textMain }}
           >
-            {isComplete ? 'Merge Complete' : 'Merging Contexts...'}
+            {isComplete
+              ? 'Merge Complete'
+              : sourceName
+                ? `Merging "${sourceName}" into "${targetName || 'session'}"...`
+                : 'Merging Contexts...'}
           </h2>
           {isComplete && (
             <button
