@@ -1,8 +1,47 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, GitPullRequest, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import type { Theme, GhCliStatus } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
+
+/**
+ * Renders error text with URLs converted to clickable links
+ */
+function renderErrorWithLinks(error: string, theme: Theme): React.ReactNode {
+  // Match URLs in the error text
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = error.split(urlRegex);
+
+  if (parts.length === 1) {
+    // No URLs found
+    return error;
+  }
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      // Reset lastIndex since we're reusing the regex
+      urlRegex.lastIndex = 0;
+      // Extract PR number or use shortened URL
+      const prMatch = part.match(/\/pull\/(\d+)/);
+      const displayText = prMatch ? `PR #${prMatch[1]}` : 'View PR';
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 underline hover:opacity-80"
+          style={{ color: theme.colors.error }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {displayText}
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 export interface PRDetails {
   url: string;
@@ -362,14 +401,16 @@ export function CreatePRModal({
               {/* Error message */}
               {error && (
                 <div
-                  className="flex items-start gap-2 p-3 rounded border"
+                  className="flex items-start gap-2 p-3 rounded border overflow-hidden"
                   style={{
                     backgroundColor: theme.colors.error + '10',
                     borderColor: theme.colors.error,
                   }}
                 >
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: theme.colors.error }} />
-                  <p className="text-sm" style={{ color: theme.colors.error }}>{error}</p>
+                  <p className="text-sm break-words min-w-0" style={{ color: theme.colors.error }}>
+                    {renderErrorWithLinks(error, theme)}
+                  </p>
                 </div>
               )}
             </>
