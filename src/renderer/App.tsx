@@ -7103,6 +7103,7 @@ export default function MaestroConsole() {
           tabShortcuts={tabShortcuts}
           onClose={() => setShortcutsHelpOpen(false)}
           hasNoAgents={hasNoAgents}
+          keyboardMasteryStats={keyboardMasteryStats}
         />
       )}
 
