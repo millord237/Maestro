@@ -700,8 +700,8 @@ export function useMergeSessionWithSessions(
 
 export default useMergeSession;
 
-// Testing utility to reset global state
-// This should ONLY be used in tests
-export function __resetMergeInProgress(): void {
-  globalMergeInProgress = false;
-}
+// Testing utility to reset global state - only available in test environment
+// istanbul ignore next
+export const __resetMergeInProgress = process.env.NODE_ENV === 'test'
+  ? (): void => { globalMergeInProgress = false; }
+  : undefined;

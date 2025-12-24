@@ -159,7 +159,7 @@ describe('useMergeSession', () => {
   afterEach(() => {
     cleanup();
     // Reset global merge flag between tests
-    __resetMergeInProgress();
+    __resetMergeInProgress?.();
   });
 
   describe('initial state', () => {

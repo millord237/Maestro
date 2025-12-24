@@ -113,7 +113,7 @@ export const MODAL_PRIORITIES = {
   /** Fuzzy file search modal (Cmd+G) */
   FUZZY_FILE_SEARCH: 690,
 
-  /** Merge session contexts modal (Cmd+Shift+M) */
+  /** Merge session contexts modal (via Command Palette or right-click menu) */
   MERGE_SESSION: 685,
 
   /** Send to agent modal (cross-agent context transfer) */

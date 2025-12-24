@@ -8,14 +8,7 @@
 import type { AITab, LogEntry, Session } from '../types';
 import type { ContextSource, DuplicateDetectionResult, DuplicateInfo } from '../types/contextMerge';
 import type { ToolType } from '../../shared/types';
-
-/**
- * Average characters per token estimate.
- * This is a rough heuristic based on typical English text tokenization.
- * Different models may have different tokenization, but this provides
- * a reasonable approximation for context size estimation.
- */
-const CHARS_PER_TOKEN = 4;
+import { countTokens, estimateTokens } from './tokenCounter';
 
 /**
  * Extract context from an AI tab's conversation logs.
@@ -318,8 +311,9 @@ function mapHeaderToSource(header: string): LogEntry['source'] {
 }
 
 /**
- * Estimate the token count for a context source.
- * Uses a character-based heuristic since we don't have access to the actual tokenizer.
+ * Estimate the token count for a context source (synchronous).
+ * Uses a character-based heuristic for quick estimates.
+ * For accurate counts, use countContextTokens() instead.
  *
  * @param context - The context source to estimate
  * @returns Estimated token count
@@ -336,30 +330,61 @@ export function estimateTokenCount(context: ContextSource): number {
   }
 
   // Otherwise, estimate from log content
-  let totalChars = 0;
+  let totalTokens = 0;
 
   for (const log of context.logs) {
-    totalChars += log.text.length;
+    totalTokens += estimateTokens(log.text);
 
     // Add overhead for images if present
     if (log.images && log.images.length > 0) {
       // Rough estimate: images add significant token overhead
       // A typical image might use 1000-2000 tokens
-      totalChars += log.images.length * 1500 * CHARS_PER_TOKEN;
+      totalTokens += log.images.length * 1500;
     }
   }
 
-  return Math.ceil(totalChars / CHARS_PER_TOKEN);
+  return totalTokens;
 }
 
 /**
- * Estimate token count from raw text.
+ * Count tokens accurately for a context source using tiktoken.
+ * This is async and more accurate than estimateTokenCount().
+ *
+ * @param context - The context source to count tokens for
+ * @returns Promise resolving to accurate token count
+ */
+export async function countContextTokens(context: ContextSource): Promise<number> {
+  // If we have usage stats, use the actual token counts
+  if (context.usageStats) {
+    const { inputTokens = 0, outputTokens = 0 } = context.usageStats;
+    return inputTokens + outputTokens;
+  }
+
+  // Count tokens for all log content
+  let totalTokens = 0;
+
+  for (const log of context.logs) {
+    totalTokens += await countTokens(log.text);
+
+    // Add overhead for images if present
+    if (log.images && log.images.length > 0) {
+      // Rough estimate: images add significant token overhead
+      totalTokens += log.images.length * 1500;
+    }
+  }
+
+  return totalTokens;
+}
+
+/**
+ * Estimate token count from raw text (synchronous).
+ * For accurate counts, use countTokens() from tokenCounter.ts.
  *
  * @param text - The text to estimate
  * @returns Estimated token count
  */
 export function estimateTextTokenCount(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  return estimateTokens(text);
 }
 
 /**
@@ -404,7 +429,7 @@ export function findDuplicateContent(contexts: ContextSource[]): DuplicateDetect
         });
 
         // Estimate tokens saved by removing this duplicate
-        estimatedSavings += Math.ceil(log.text.length / CHARS_PER_TOKEN);
+        estimatedSavings += estimateTokens(log.text);
       } else {
         // First occurrence - record it
         seenContent.set(normalizedText, {
@@ -470,7 +495,7 @@ function findPartialDuplicates(contexts: ContextSource[]): {
             sourceIndex,
             content: `[Code block: ${truncateForDisplay(block, 50)}]`,
           });
-          savings += Math.ceil(block.length / CHARS_PER_TOKEN);
+          savings += estimateTokens(block);
         } else {
           seenCodeBlocks.set(normalized, sourceIndex);
         }
