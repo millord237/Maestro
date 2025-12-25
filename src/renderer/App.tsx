@@ -6621,7 +6621,7 @@ export default function MaestroConsole() {
 
   // Recursive File Tree Renderer
 
-  const handleFileClick = async (node: any, path: string) => {
+  const handleFileClick = useCallback(async (node: any, path: string) => {
     if (node.type === 'file') {
       try {
         // Construct full file path
@@ -6662,7 +6662,7 @@ export default function MaestroConsole() {
         console.error('Failed to read file:', error);
       }
     }
-  };
+  }, [activeSession.fullPath, filePreviewHistory, filePreviewHistoryIndex, setConfirmModalMessage, setConfirmModalOnConfirm, setConfirmModalOpen, setFilePreviewHistory, setFilePreviewHistoryIndex, setPreviewFile, setActiveFocus]);
 
 
   const updateSessionWorkingDirectory = async () => {
@@ -6681,7 +6681,7 @@ export default function MaestroConsole() {
     }));
   };
 
-  const toggleFolder = (path: string, sessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
+  const toggleFolder = useCallback((path: string, sessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
     setSessions(prev => prev.map(s => {
       if (s.id !== sessionId) return s;
       if (!s.fileExplorerExpanded) return s;
@@ -6693,7 +6693,7 @@ export default function MaestroConsole() {
       }
       return { ...s, fileExplorerExpanded: Array.from(expanded) };
     }));
-  };
+  }, []);
 
   // Expand all folders in file tree
   const expandAllFolders = (sessionId: string, session: Session, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
