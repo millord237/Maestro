@@ -1429,6 +1429,388 @@ describe('TerminalOutput', () => {
 
       expect(setMarkdownEditMode).toHaveBeenCalledWith(true);
     });
+
+    it('shows "Show formatted" tooltip when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\nParagraph', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.getByTitle(/Show formatted/)).toBeInTheDocument();
+    });
+
+    it('toggles from formatted mode to plain text mode when clicked', async () => {
+      const setMarkdownEditMode = vi.fn();
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+        setMarkdownEditMode,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      await act(async () => {
+        fireEvent.click(toggleButton);
+      });
+
+      // When markdownEditMode is true, clicking should set it to false
+      expect(setMarkdownEditMode).toHaveBeenCalledWith(false);
+    });
+
+    it('does not show markdown toggle button for user messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message with **markdown**', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Show plain text/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Show formatted/)).not.toBeInTheDocument();
+    });
+
+    it('does not show markdown toggle button in terminal mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Terminal output', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Show plain text/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Show formatted/)).not.toBeInTheDocument();
+    });
+
+    it('uses MarkdownRenderer when markdownEditMode is false (formatted mode)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\n**Bold text**', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // MarkdownRenderer is mocked as react-markdown, which renders with data-testid
+      expect(screen.getByTestId('react-markdown')).toBeInTheDocument();
+    });
+
+    it('strips markdown when markdownEditMode is true (plain text mode)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\n**Bold text**', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // In plain text mode, markdown should be stripped
+      // Heading symbol (#) should be removed
+      // Bold markers (**) should be removed
+      expect(screen.getByText(/Heading/)).toBeInTheDocument();
+      expect(screen.getByText(/Bold text/)).toBeInTheDocument();
+      // Should not render via MarkdownRenderer
+      expect(screen.queryByTestId('react-markdown')).not.toBeInTheDocument();
+    });
+
+    it('toggle button has accent color when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      // In markdownEditMode=true, button color should be accent color
+      expect(toggleButton).toHaveStyle({ color: defaultTheme.colors.accent });
+    });
+
+    it('toggle button has dim color when markdownEditMode is false', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      // In markdownEditMode=false, button color should be textDim
+      expect(toggleButton).toHaveStyle({ color: defaultTheme.colors.textDim });
+    });
+
+    it('preserves code block content when stripping markdown', () => {
+      const codeBlockText = '```javascript\nconst x = 1;\nconst y = 2;\n```';
+      const logs: LogEntry[] = [
+        createLogEntry({ text: codeBlockText, source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Code content should be preserved without fences
+      expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+      expect(screen.getByText(/const y = 2/)).toBeInTheDocument();
+    });
+
+    it('renders inline code without backticks when stripping markdown', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Use the `console.log` function', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Should show the code without backticks
+      expect(screen.getByText(/Use the console.log function/)).toBeInTheDocument();
+    });
+
+    it('shows markdown toggle button for stderr messages in AI mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Error: Something went wrong', source: 'stderr' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // All non-user messages in AI mode show the markdown toggle
+      expect(screen.getByTitle(/Show plain text/)).toBeInTheDocument();
+    });
+
+    it('maintains markdown mode state across multiple AI responses', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'ai-1', text: '# First Response', source: 'stdout' }),
+        createLogEntry({ id: 'user-1', text: 'Follow up question', source: 'user' }),
+        createLogEntry({ id: 'ai-2', text: '# Second Response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Both AI responses should be affected by the same markdown mode
+      // In plain text mode, we should see stripped markdown for both
+      expect(screen.getByText(/First Response/)).toBeInTheDocument();
+      expect(screen.getByText(/Second Response/)).toBeInTheDocument();
+    });
+
+    it('shows Eye icon when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Eye icon should be present (lucide renders an svg with specific path)
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      const svg = toggleButton.querySelector('svg');
+      expect(svg).toBeInTheDocument();
+    });
+
+    it('shows FileText icon when markdownEditMode is false', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // FileText icon should be present
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      const svg = toggleButton.querySelector('svg');
+      expect(svg).toBeInTheDocument();
+    });
+
+    it('toggle button appears on hover (has opacity-0 group-hover:opacity-50 classes)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      // Verify the hover behavior classes are present
+      expect(toggleButton).toHaveClass('opacity-0');
+      expect(toggleButton).toHaveClass('group-hover:opacity-50');
+    });
+
+    it('removes links from markdown when in plain text mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Check out [this link](https://example.com)', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Link text should be shown, but not as a link
+      expect(screen.getByText(/Check out this link/)).toBeInTheDocument();
+    });
+
+    it('removes list markers from markdown when in plain text mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '* Item one\n* Item two\n* Item three', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // List items should be shown (stripMarkdown converts * to - for list markers)
+      expect(screen.getByText(/Item one/)).toBeInTheDocument();
+    });
   });
 
   describe('local filter functionality', () => {
