@@ -2,8 +2,9 @@ import React, { useEffect, useMemo } from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, Eye, History, File, Folder, GitBranch, Tag, PenLine, Brain } from 'lucide-react';
 import type { Session, Theme, BatchRunState } from '../types';
 import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks/useTabCompletion';
-import type { SummarizeProgress, SummarizeResult } from '../types/contextMerge';
+import type { SummarizeProgress, SummarizeResult, GroomingProgress, MergeResult } from '../types/contextMerge';
 import { ThinkingStatusPill } from './ThinkingStatusPill';
+import { MergeProgressOverlay } from './MergeProgressOverlay';
 import { ExecutionQueueIndicator } from './ExecutionQueueIndicator';
 import { ContextWarningSash } from './ContextWarningSash';
 import { SummarizeProgressOverlay } from './SummarizeProgressOverlay';
@@ -102,6 +103,14 @@ interface InputAreaProps {
   summarizeStartTime?: number;
   isSummarizing?: boolean;
   onCancelSummarize?: () => void;
+  // Merge progress props (non-blocking, per-tab)
+  mergeProgress?: GroomingProgress | null;
+  mergeResult?: MergeResult | null;
+  mergeStartTime?: number;
+  isMerging?: boolean;
+  mergeSourceName?: string;
+  mergeTargetName?: string;
+  onCancelMerge?: () => void;
 }
 
 export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
@@ -142,7 +151,15 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     summarizeResult,
     summarizeStartTime = 0,
     isSummarizing = false,
-    onCancelSummarize
+    onCancelSummarize,
+    // Merge progress props
+    mergeProgress,
+    mergeResult,
+    mergeStartTime = 0,
+    isMerging = false,
+    mergeSourceName,
+    mergeTargetName,
+    onCancelMerge
   } = props;
 
   // Get agent capabilities for conditional feature rendering
@@ -259,6 +276,21 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
         result={summarizeResult || null}
         onCancel={onCancelSummarize}
         startTime={summarizeStartTime}
+      />
+    );
+  }
+
+  // Show merge progress overlay when active for this tab
+  if (isMerging && session.inputMode === 'ai' && onCancelMerge) {
+    return (
+      <MergeProgressOverlay
+        theme={theme}
+        progress={mergeProgress || null}
+        result={mergeResult || null}
+        sourceName={mergeSourceName}
+        targetName={mergeTargetName}
+        onCancel={onCancelMerge}
+        startTime={mergeStartTime}
       />
     );
   }

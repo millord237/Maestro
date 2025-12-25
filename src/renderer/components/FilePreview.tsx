@@ -1001,6 +1001,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
       e.preventDefault();
       e.stopPropagation();
       copyPathToClipboard();
+      onShortcutUsed?.('copyFilePath');
     } else if (isMarkdown && isShortcut(e, 'toggleMarkdownMode')) {
       e.preventDefault();
       e.stopPropagation();

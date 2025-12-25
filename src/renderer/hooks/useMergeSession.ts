@@ -11,10 +11,15 @@
  * This hook coordinates between:
  * - ContextGroomingService for AI-powered context consolidation
  * - tabHelpers for creating merged sessions
- * - MergeProgressModal for UI feedback
+ * - Per-tab state tracking for non-blocking UI feedback
+ *
+ * Features:
+ * - Per-tab state tracking (allows other tabs to remain interactive during merge)
+ * - Non-blocking overlay replaces input area instead of modal
+ * - Toast notifications with click-to-navigate on completion
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import type { Session, AITab, LogEntry, ToolType } from '../types';
 import type {
   MergeResult,
@@ -59,6 +64,22 @@ let globalMergeInProgress = false;
 export type MergeState = 'idle' | 'merging' | 'complete' | 'error';
 
 /**
+ * Per-tab merge state for non-blocking UI
+ * Tracks merge operations initiated FROM a specific source tab
+ */
+export interface TabMergeState {
+  state: MergeState;
+  progress: GroomingProgress | null;
+  result: MergeResult | null;
+  error: string | null;
+  startTime: number;
+  /** Display name of the source tab/session */
+  sourceName?: string;
+  /** Display name of the target tab/session */
+  targetName?: string;
+}
+
+/**
  * Request to merge two sessions/tabs
  */
 export interface MergeSessionRequest {
@@ -78,18 +99,32 @@ export interface MergeSessionRequest {
  * Result returned by the useMergeSession hook
  */
 export interface UseMergeSessionResult {
-  /** Current state of the merge operation */
+  /** Current state of the merge operation (for the active tab) */
   mergeState: MergeState;
-  /** Progress information during merge */
+  /** Progress information during merge (for the active tab) */
   progress: GroomingProgress | null;
-  /** Error message if merge failed */
+  /** Error message if merge failed (for the active tab) */
   error: string | null;
   /** Whether a merge is currently in progress globally */
   isMergeInProgress: boolean;
+  /** Start time for elapsed time display */
+  startTime: number;
+  /** Source display name for the active tab's merge */
+  sourceName: string | undefined;
+  /** Target display name for the active tab's merge */
+  targetName: string | undefined;
+  /** Get merge state for a specific source tab */
+  getTabMergeState: (tabId: string) => TabMergeState | null;
+  /** Check if any tab is currently merging */
+  isAnyMerging: boolean;
   /** Start a merge operation */
   startMerge: (request: MergeSessionRequest) => Promise<MergeResult>;
-  /** Cancel an in-progress merge operation */
+  /** Cancel the merge operation for a specific source tab */
+  cancelTab: (tabId: string) => void;
+  /** Cancel an in-progress merge operation (all tabs) */
   cancelMerge: () => void;
+  /** Clear the state for a specific source tab (call after handling completion) */
+  clearTabState: (tabId: string) => void;
   /** Reset the hook state back to idle */
   reset: () => void;
 }
@@ -147,6 +182,10 @@ function generateMergedSessionName(
  *
  * Provides complete workflow management for merging two sessions/tabs,
  * including optional AI-powered context grooming to remove duplicates.
+ * Tracks per-tab state to allow non-blocking operations.
+ *
+ * @param activeTabId - The currently active tab ID (for backwards compatibility)
+ * @returns Object with merge state and control functions
  *
  * @example
  * const {
@@ -154,8 +193,9 @@ function generateMergedSessionName(
  *   progress,
  *   error,
  *   startMerge,
- *   cancelMerge,
- * } = useMergeSession();
+ *   cancelTab,
+ *   getTabMergeState,
+ * } = useMergeSession(activeSession?.activeTabId);
  *
  * // Start a merge
  * const result = await startMerge({
@@ -166,44 +206,98 @@ function generateMergedSessionName(
  *   options: { groomContext: true, createNewSession: true, preserveTimestamps: true },
  * });
  *
- * if (result.success) {
- *   // Navigate to new session
- *   setActiveSessionId(result.newSessionId);
- * }
+ * // Check if current tab is merging
+ * const tabState = getTabMergeState(activeTabId);
+ * const isTabMerging = tabState?.state === 'merging';
  */
-export function useMergeSession(): UseMergeSessionResult {
-  // State
-  const [mergeState, setMergeState] = useState<MergeState>('idle');
-  const [progress, setProgress] = useState<GroomingProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Refs for cancellation
-  const cancelledRef = useRef(false);
+export function useMergeSession(activeTabId?: string): UseMergeSessionResult {
+  // Per-tab state tracking: Map<sourceTabId, TabMergeState>
+  const [tabStates, setTabStates] = useState<Map<string, TabMergeState>>(new Map());
+  const cancelRefs = useRef<Map<string, boolean>>(new Map());
   const groomingServiceRef = useRef<ContextGroomingService>(contextGroomingService);
+
+  // Get state for the active tab (for backwards compatibility)
+  const activeTabState = activeTabId ? tabStates.get(activeTabId) : null;
+
+  /**
+   * Get merge state for a specific source tab
+   */
+  const getTabMergeState = useCallback((tabId: string): TabMergeState | null => {
+    return tabStates.get(tabId) || null;
+  }, [tabStates]);
+
+  /**
+   * Check if any tab is currently merging
+   */
+  const isAnyMerging = useMemo(() => {
+    for (const state of tabStates.values()) {
+      if (state.state === 'merging') return true;
+    }
+    return false;
+  }, [tabStates]);
 
   /**
    * Reset the hook state to idle
    */
   const reset = useCallback(() => {
-    setMergeState('idle');
-    setProgress(null);
-    setError(null);
-    cancelledRef.current = false;
+    setTabStates(new Map());
+    cancelRefs.current = new Map();
+    globalMergeInProgress = false;
   }, []);
 
   /**
-   * Cancel an in-progress merge operation
+   * Clear the state for a specific source tab (call after handling completion)
+   */
+  const clearTabState = useCallback((tabId: string) => {
+    setTabStates(prev => {
+      const next = new Map(prev);
+      next.delete(tabId);
+      return next;
+    });
+    cancelRefs.current.delete(tabId);
+  }, []);
+
+  /**
+   * Cancel the merge operation for a specific source tab
+   */
+  const cancelTab = useCallback((tabId: string) => {
+    cancelRefs.current.set(tabId, true);
+    groomingServiceRef.current.cancelGrooming();
+    setTabStates(prev => {
+      const next = new Map(prev);
+      next.delete(tabId);
+      return next;
+    });
+    globalMergeInProgress = false;
+  }, []);
+
+  /**
+   * Cancel all in-progress merge operations
    */
   const cancelMerge = useCallback(() => {
-    cancelledRef.current = true;
-
-    // Cancel any active grooming operation
+    for (const tabId of tabStates.keys()) {
+      cancelRefs.current.set(tabId, true);
+    }
     groomingServiceRef.current.cancelGrooming();
+    setTabStates(new Map());
+    globalMergeInProgress = false;
+  }, [tabStates]);
 
-    // Update state
-    setMergeState('idle');
-    setProgress(null);
-    setError('Merge cancelled by user');
+  /**
+   * Helper to update tab state
+   */
+  const updateTabState = useCallback((
+    tabId: string,
+    updates: Partial<TabMergeState>
+  ) => {
+    setTabStates(prev => {
+      const next = new Map(prev);
+      const existing = next.get(tabId);
+      if (existing) {
+        next.set(tabId, { ...existing, ...updates });
+      }
+      return next;
+    });
   }, []);
 
   /**
@@ -220,14 +314,36 @@ export function useMergeSession(): UseMergeSessionResult {
       };
     }
 
+    // Check if this source tab is already merging
+    const existingState = tabStates.get(sourceTabId);
+    if (existingState?.state === 'merging') {
+      return {
+        success: false,
+        error: 'This tab is already being merged.',
+      };
+    }
+
     // Set global merge flag
     globalMergeInProgress = true;
 
-    // Reset state
-    cancelledRef.current = false;
-    setError(null);
-    setMergeState('merging');
-    setProgress(INITIAL_PROGRESS);
+    const startTime = Date.now();
+    const sourceDisplayName = getSessionDisplayName(sourceSession);
+
+    // Initialize tab state
+    cancelRefs.current.set(sourceTabId, false);
+    setTabStates(prev => {
+      const next = new Map(prev);
+      next.set(sourceTabId, {
+        state: 'merging',
+        progress: INITIAL_PROGRESS,
+        result: null,
+        error: null,
+        startTime,
+        sourceName: sourceDisplayName,
+        targetName: undefined, // Will be set after we resolve the target tab
+      });
+      return next;
+    });
 
     try {
       // Step 1: Validate inputs and get tabs
@@ -244,6 +360,10 @@ export function useMergeSession(): UseMergeSessionResult {
         throw new Error('Target tab not found');
       }
 
+      // Update tab state with target name
+      const targetDisplayName = getSessionDisplayName(targetSession);
+      updateTabState(sourceTabId, { targetName: targetDisplayName });
+
       // Edge case: Check for self-merge attempt
       if (sourceSession.id === targetSession.id && sourceTabId === targetTab.id) {
         throw new Error('Cannot merge a tab with itself');
@@ -256,8 +376,6 @@ export function useMergeSession(): UseMergeSessionResult {
 
       // Edge case: Check for empty target context (just a warning, allow it)
       if (targetTab.logs.length === 0 && sourceTab.logs.length > 0) {
-        // This is allowed - we're essentially just copying context to a new session
-        // No need to throw, but we could log it
         console.info('Merging into empty target tab - will copy source context');
       }
 
@@ -267,7 +385,6 @@ export function useMergeSession(): UseMergeSessionResult {
       const estimatedMergedTokens = sourceTokens + targetTokens;
 
       if (estimatedMergedTokens > MAX_CONTEXT_TOKENS_WARNING) {
-        // Log a warning but continue - the modal should have already warned the user
         console.warn(
           `Large context merge: ~${estimatedMergedTokens.toLocaleString()} tokens. ` +
           `This may exceed some agents' context windows.`
@@ -275,37 +392,41 @@ export function useMergeSession(): UseMergeSessionResult {
       }
 
       // Check for cancellation
-      if (cancelledRef.current) {
+      if (cancelRefs.current.get(sourceTabId)) {
         return { success: false, error: 'Merge cancelled' };
       }
 
       // Step 2: Extract contexts from both tabs
-      setProgress({
-        stage: 'collecting',
-        progress: 10,
-        message: 'Extracting source context...',
+      updateTabState(sourceTabId, {
+        progress: {
+          stage: 'collecting',
+          progress: 10,
+          message: 'Extracting source context...',
+        },
       });
 
       const sourceContext = extractTabContext(
         sourceTab,
-        getSessionDisplayName(sourceSession),
+        sourceDisplayName,
         sourceSession
       );
 
-      setProgress({
-        stage: 'collecting',
-        progress: 20,
-        message: 'Extracting target context...',
+      updateTabState(sourceTabId, {
+        progress: {
+          stage: 'collecting',
+          progress: 20,
+          message: 'Extracting target context...',
+        },
       });
 
       const targetContext = extractTabContext(
         targetTab,
-        getSessionDisplayName(targetSession),
+        targetDisplayName,
         targetSession
       );
 
       // Check for cancellation
-      if (cancelledRef.current) {
+      if (cancelRefs.current.get(sourceTabId)) {
         return { success: false, error: 'Merge cancelled' };
       }
 
@@ -315,10 +436,12 @@ export function useMergeSession(): UseMergeSessionResult {
 
       if (options.groomContext) {
         // Use AI grooming to consolidate and deduplicate
-        setProgress({
-          stage: 'grooming',
-          progress: 30,
-          message: 'Starting AI grooming...',
+        updateTabState(sourceTabId, {
+          progress: {
+            stage: 'grooming',
+            progress: 30,
+            message: 'Starting AI grooming...',
+          },
         });
 
         const groomingRequest: MergeRequest = {
@@ -330,13 +453,14 @@ export function useMergeSession(): UseMergeSessionResult {
         const groomingResult = await groomingServiceRef.current.groomContexts(
           groomingRequest,
           (groomProgress) => {
-            // Forward progress to our state
-            setProgress(groomProgress);
+            if (!cancelRefs.current.get(sourceTabId)) {
+              updateTabState(sourceTabId, { progress: groomProgress });
+            }
           }
         );
 
         // Check for cancellation
-        if (cancelledRef.current) {
+        if (cancelRefs.current.get(sourceTabId)) {
           return { success: false, error: 'Merge cancelled' };
         }
 
@@ -348,10 +472,12 @@ export function useMergeSession(): UseMergeSessionResult {
         tokensSaved = groomingResult.tokensSaved;
       } else {
         // Simply concatenate logs without grooming
-        setProgress({
-          stage: 'creating',
-          progress: 60,
-          message: 'Combining contexts...',
+        updateTabState(sourceTabId, {
+          progress: {
+            stage: 'creating',
+            progress: 60,
+            message: 'Combining contexts...',
+          },
         });
 
         // Merge logs maintaining chronological order
@@ -361,15 +487,17 @@ export function useMergeSession(): UseMergeSessionResult {
       }
 
       // Check for cancellation
-      if (cancelledRef.current) {
+      if (cancelRefs.current.get(sourceTabId)) {
         return { success: false, error: 'Merge cancelled' };
       }
 
       // Step 4: Create the merged result
-      setProgress({
-        stage: 'creating',
-        progress: 90,
-        message: 'Creating merged session...',
+      updateTabState(sourceTabId, {
+        progress: {
+          stage: 'creating',
+          progress: 90,
+          message: 'Creating merged session...',
+        },
       });
 
       // Generate merged session name
@@ -379,10 +507,6 @@ export function useMergeSession(): UseMergeSessionResult {
         targetSession,
         targetTab
       );
-
-      // If createNewSession is false, we'll return the merged logs
-      // for the caller to apply to the existing session.
-      // If true, we create a new session structure.
 
       let result: MergeResult;
 
@@ -408,31 +532,40 @@ export function useMergeSession(): UseMergeSessionResult {
         result = {
           success: true,
           tokensSaved,
-          mergedLogs, // Include merged logs for the caller to apply
+          mergedLogs,
           targetSessionId: targetSession.id,
           targetTabId: targetTab.id,
         };
       }
 
       // Complete!
-      setProgress({
-        stage: 'complete',
-        progress: 100,
-        message: `Merge complete! Saved ~${tokensSaved} tokens`,
+      updateTabState(sourceTabId, {
+        state: 'complete',
+        progress: {
+          stage: 'complete',
+          progress: 100,
+          message: `Merge complete!${tokensSaved > 0 ? ` Saved ~${tokensSaved} tokens` : ''}`,
+        },
+        result,
       });
-      setMergeState('complete');
 
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error during merge';
 
-      setError(errorMessage);
-      setMergeState('error');
-      setProgress({
-        stage: 'complete',
-        progress: 100,
-        message: `Merge failed: ${errorMessage}`,
-      });
+      if (!cancelRefs.current.get(sourceTabId)) {
+        const errorResult: MergeResult = {
+          success: false,
+          error: errorMessage,
+        };
+
+        updateTabState(sourceTabId, {
+          state: 'error',
+          progress: null,
+          result: errorResult,
+          error: errorMessage,
+        });
+      }
 
       return {
         success: false,
@@ -442,15 +575,25 @@ export function useMergeSession(): UseMergeSessionResult {
       // Always clear the global merge flag when done
       globalMergeInProgress = false;
     }
-  }, []);
+  }, [tabStates, updateTabState]);
 
   return {
-    mergeState,
-    progress,
-    error,
+    // Active tab state (backwards compatibility)
+    mergeState: activeTabState?.state || 'idle',
+    progress: activeTabState?.progress || null,
+    error: activeTabState?.error || null,
     isMergeInProgress: globalMergeInProgress,
+    startTime: activeTabState?.startTime || 0,
+    sourceName: activeTabState?.sourceName,
+    targetName: activeTabState?.targetName,
+    // Per-tab state access
+    getTabMergeState,
+    isAnyMerging,
+    // Actions
     startMerge,
+    cancelTab,
     cancelMerge,
+    clearTabState,
     reset,
   };
 }
@@ -463,8 +606,12 @@ export interface UseMergeSessionWithSessionsDeps {
   sessions: Session[];
   /** Session setter for updating app state */
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
+  /** Active tab ID for per-tab state tracking */
+  activeTabId?: string;
   /** Callback after merge creates a new session. Receives session ID and name for notification purposes. */
   onSessionCreated?: (sessionId: string, sessionName: string) => void;
+  /** Callback after merge completes successfully (for any merge type). Receives source tab ID for state cleanup. */
+  onMergeComplete?: (sourceTabId: string) => void;
 }
 
 /**
@@ -507,8 +654,8 @@ export interface UseMergeSessionWithSessionsResult extends UseMergeSessionResult
 export function useMergeSessionWithSessions(
   deps: UseMergeSessionWithSessionsDeps
 ): UseMergeSessionWithSessionsResult {
-  const { sessions, setSessions, onSessionCreated } = deps;
-  const baseHook = useMergeSession();
+  const { sessions, setSessions, activeTabId, onSessionCreated, onMergeComplete } = deps;
+  const baseHook = useMergeSession(activeTabId);
 
   /**
    * Execute merge with session state management
@@ -619,11 +766,17 @@ export function useMergeSessionWithSessions(
           };
         }
       } else if (result.targetSessionId && result.targetTabId) {
-        // Merge into existing tab - keep target logs unchanged, inject source context
+        // Merge into existing tab - inject SOURCE context only (not target's own logs)
         // Format the source context as a string to inject into the AI conversation
         // Filter out system messages (including system prompts) - only include user/assistant messages
+
+        // Always use the SOURCE tab's logs for injection - we're transferring source context to target
+        // The result.mergedLogs contains both source AND target logs (for createNewSession=true case)
+        // but when injecting into existing tab, we only want the source context
         const sourceTab = sourceSession.aiTabs.find(t => t.id === sourceTabId);
-        const sourceContext = sourceTab?.logs
+        const logsToInject = sourceTab?.logs ?? [];
+
+        const sourceContext = logsToInject
           .filter(log => log.text && log.text.trim() && log.source !== 'system')
           .map(log => {
             const role = log.source === 'user' ? 'User' : 'Assistant';
@@ -687,11 +840,16 @@ export function useMergeSessionWithSessions(
           targetTabId: result.targetTabId,
           sourceSession: getSessionDisplayName(sourceSession),
         });
+
+        // Notify caller that merge completed (for state cleanup)
+        if (onMergeComplete) {
+          onMergeComplete(sourceTabId);
+        }
       }
     }
 
     return result;
-  }, [sessions, setSessions, onSessionCreated, baseHook]);
+  }, [sessions, setSessions, onSessionCreated, onMergeComplete, baseHook]);
 
   return {
     ...baseHook,

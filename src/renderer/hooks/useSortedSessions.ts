@@ -96,19 +96,24 @@ export function useSortedSessions(deps: UseSortedSessionsDeps): UseSortedSession
   // Create visible sessions array for session jump shortcuts (Opt+Cmd+NUMBER)
   // Order: Bookmarked sessions first (if bookmarks folder expanded), then groups/ungrouped
   // Note: A session can appear twice if it's both bookmarked and in an expanded group
+  // Note: Worktree children are excluded - they don't display jump numbers and shouldn't consume slots
   const visibleSessions = useMemo(() => {
     const result: Session[] = [];
 
     // Add bookmarked sessions first (if bookmarks folder is expanded)
+    // Exclude worktree children (they don't show jump numbers)
     if (!bookmarksCollapsed) {
       const bookmarkedSessions = sessions
-        .filter(s => s.bookmarked)
+        .filter(s => s.bookmarked && !s.parentSessionId)
         .sort((a, b) => compareNamesIgnoringEmojis(a.name, b.name));
       result.push(...bookmarkedSessions);
     }
 
     // Add sessions from expanded groups and ungrouped sessions
+    // Exclude worktree children (they don't show jump numbers)
     const groupAndUngrouped = sortedSessions.filter(session => {
+      // Exclude worktree children - they're nested under parent and don't show jump badges
+      if (session.parentSessionId) return false;
       if (!session.groupId) return true; // Ungrouped sessions always visible
       const group = groups.find(g => g.id === session.groupId);
       return group && !group.collapsed; // Only show if group is expanded

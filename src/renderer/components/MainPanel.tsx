@@ -207,6 +207,15 @@ interface MainPanelProps {
   isSummarizing?: boolean;
   onCancelSummarize?: () => void;
 
+  // Merge progress props (non-blocking, per-tab)
+  mergeProgress?: import('../types/contextMerge').GroomingProgress | null;
+  mergeResult?: import('../types/contextMerge').MergeResult | null;
+  mergeStartTime?: number;
+  isMerging?: boolean;
+  mergeSourceName?: string;
+  mergeTargetName?: string;
+  onCancelMerge?: () => void;
+
   // Keyboard mastery tracking
   onShortcutUsed?: (shortcutId: string) => void;
 }
@@ -248,6 +257,14 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     summarizeStartTime = 0,
     isSummarizing = false,
     onCancelSummarize,
+    // Merge progress props
+    mergeProgress,
+    mergeResult,
+    mergeStartTime = 0,
+    isMerging = false,
+    mergeSourceName,
+    mergeTargetName,
+    onCancelMerge,
   } = props;
 
   // isCurrentSessionAutoMode: THIS session has active batch run (for all UI indicators)
@@ -1086,6 +1103,14 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 summarizeStartTime={summarizeStartTime}
                 isSummarizing={isSummarizing}
                 onCancelSummarize={onCancelSummarize}
+                // Merge progress props
+                mergeProgress={mergeProgress}
+                mergeResult={mergeResult}
+                mergeStartTime={mergeStartTime}
+                isMerging={isMerging}
+                mergeSourceName={mergeSourceName}
+                mergeTargetName={mergeTargetName}
+                onCancelMerge={onCancelMerge}
               />
               </div>
               )}

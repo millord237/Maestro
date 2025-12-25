@@ -43,7 +43,6 @@ import { CreateWorktreeModal } from './components/CreateWorktreeModal';
 import { CreatePRModal, PRDetails } from './components/CreatePRModal';
 import { DeleteWorktreeModal } from './components/DeleteWorktreeModal';
 import { MergeSessionModal } from './components/MergeSessionModal';
-import { MergeProgressModal } from './components/MergeProgressModal';
 import { SendToAgentModal } from './components/SendToAgentModal';
 import { TransferProgressModal } from './components/TransferProgressModal';
 
@@ -2639,40 +2638,68 @@ export default function MaestroConsole() {
   // Get capabilities for the active session's agent type
   const { hasCapability: hasActiveSessionCapability } = useAgentCapabilities(activeSession?.toolType);
 
-  // Merge session hook for context merge operations
+  // Merge session hook for context merge operations (non-blocking, per-tab)
   const {
     mergeState,
     progress: mergeProgress,
     error: mergeError,
+    startTime: mergeStartTime,
+    sourceName: mergeSourceName,
+    targetName: mergeTargetName,
     executeMerge,
+    cancelTab: cancelMergeTab,
     cancelMerge,
+    clearTabState: clearMergeTabState,
     reset: resetMerge,
   } = useMergeSessionWithSessions({
     sessions,
     setSessions,
+    activeTabId: activeSession?.activeTabId,
     onSessionCreated: (sessionId, sessionName) => {
       // Navigate to the newly created merged session
       setActiveSessionId(sessionId);
       setMergeSessionModalOpen(false);
 
-      // Show toast notification in the UI
+      // Show toast notification with click-to-navigate
       addToast({
         type: 'success',
         title: 'Session Merged',
-        message: `Created "${sessionName}" with merged context`,
+        message: `Created "${sessionName}" with merged context. Click to view.`,
+        sessionId,
+        project: sessionName,
       });
 
-      // Show desktop notification for visibility when app is not focused
-      window.maestro.notification.show(
-        'Session Merged',
-        `Created "${sessionName}" with merged context`
-      );
+      // Clear the merge state for the source tab after a short delay
+      if (activeSession?.activeTabId) {
+        setTimeout(() => {
+          clearMergeTabState(activeSession.activeTabId);
+        }, 1000);
+      }
+    },
+    onMergeComplete: (sourceTabId) => {
+      // For merge into existing tab, show toast and clear state
+      if (activeSession) {
+        const targetSession = sessions.find(s =>
+          s.aiTabs.some(t => t.pendingMergedContext)
+        );
+        const targetName = targetSession?.name || 'target session';
+
+        addToast({
+          type: 'success',
+          title: 'Context Merged',
+          message: `Context transferred to "${targetName}". It will be included with your next message.`,
+          sessionId: targetSession?.id,
+          tabId: targetSession?.activeTabId,
+          project: targetName,
+        });
+
+        // Clear the merge state for the source tab
+        setTimeout(() => {
+          clearMergeTabState(sourceTabId);
+        }, 1000);
+      }
     },
   });
-
-  // Track the source/target names for the merge progress modal
-  const [mergeSourceName, setMergeSourceName] = useState<string | null>(null);
-  const [mergeTargetName, setMergeTargetName] = useState<string | null>(null);
 
   // Send to Agent hook for cross-agent context transfer operations
   // Track the source/target agents for the transfer progress modal
@@ -5649,8 +5676,9 @@ export default function MaestroConsole() {
         });
       } else if (item.type === 'command' && item.command) {
         // Process a slash command - find the matching custom AI command or speckit command
-        const matchingCommand = customAICommands.find(cmd => cmd.command === item.command)
-          || speckitCommands.find(cmd => cmd.command === item.command);
+        // Use refs to get latest values and avoid stale closure
+        const matchingCommand = customAICommandsRef.current.find(cmd => cmd.command === item.command)
+          || speckitCommandsRef.current.find(cmd => cmd.command === item.command);
         if (matchingCommand) {
           // Substitute template variables
           let gitBranch: string | undefined;
@@ -7619,22 +7647,10 @@ export default function MaestroConsole() {
             resetMerge();
           }}
           onMerge={async (targetSessionId, targetTabId, options) => {
-            // Get source tab name for display
-            const sourceTab = activeSession.aiTabs.find(t => t.id === activeSession.activeTabId);
-            const sourceDisplayName = sourceTab?.name || activeSession.name || 'Source';
+            // Close the modal - merge will show in the input area overlay
+            setMergeSessionModalOpen(false);
 
-            // Get target session/tab name for display
-            const targetSession = sessions.find(s => s.id === targetSessionId);
-            const targetTab = targetTabId
-              ? targetSession?.aiTabs.find(t => t.id === targetTabId)
-              : targetSession?.aiTabs.find(t => t.id === targetSession?.activeTabId);
-            const targetDisplayName = targetTab?.name || targetSession?.name || 'Target';
-
-            // Set names for progress modal
-            setMergeSourceName(sourceDisplayName);
-            setMergeTargetName(targetDisplayName);
-
-            // Execute merge using the hook
+            // Execute merge using the hook (names are tracked in the hook now)
             const result = await executeMerge(
               activeSession,
               activeSession.activeTabId,
@@ -7652,21 +7668,6 @@ export default function MaestroConsole() {
             }
 
             return result;
-          }}
-        />
-      )}
-
-      {/* --- MERGE PROGRESS MODAL --- */}
-      {mergeState === 'merging' && mergeProgress && (
-        <MergeProgressModal
-          theme={theme}
-          isOpen={mergeState === 'merging'}
-          progress={mergeProgress}
-          sourceName={mergeSourceName || undefined}
-          targetName={mergeTargetName || undefined}
-          onCancel={() => {
-            cancelMerge();
-            setMergeSessionModalOpen(false);
           }}
         />
       )}
@@ -8226,6 +8227,12 @@ export default function MaestroConsole() {
             logLevel={logLevel}
             savedSelectedLevels={logViewerSelectedLevels}
             onSelectedLevelsChange={setLogViewerSelectedLevels}
+            onShortcutUsed={(shortcutId: string) => {
+              const result = recordShortcutUsage(shortcutId);
+              if (result.newLevel !== null) {
+                onKeyboardMasteryLevelUp(result.newLevel);
+              }
+            }}
           />
         </div>
       )}
@@ -8881,6 +8888,18 @@ export default function MaestroConsole() {
         onCancelSummarize={() => {
           if (activeSession?.activeTabId) {
             cancelTab(activeSession.activeTabId);
+          }
+        }}
+        // Merge progress props (non-blocking, per-tab)
+        mergeProgress={mergeProgress}
+        mergeResult={null}
+        mergeStartTime={mergeStartTime}
+        isMerging={mergeState === 'merging'}
+        mergeSourceName={mergeSourceName}
+        mergeTargetName={mergeTargetName}
+        onCancelMerge={() => {
+          if (activeSession?.activeTabId) {
+            cancelMergeTab(activeSession.activeTabId);
           }
         }}
         onShortcutUsed={(shortcutId: string) => {
