@@ -841,9 +841,13 @@ export function useMergeSessionWithSessions(
           sourceSession: getSessionDisplayName(sourceSession),
         });
 
-        // Notify caller that merge completed (for state cleanup)
+        // Notify caller that merge completed (for state cleanup and toast)
         if (onMergeComplete) {
-          onMergeComplete(sourceTabId);
+          onMergeComplete(sourceTabId, {
+            sessionId: result.targetSessionId,
+            sessionName: getSessionDisplayName(targetSession),
+            tabId: result.targetTabId,
+          });
         }
       }
     }

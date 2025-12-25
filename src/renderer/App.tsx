@@ -2676,21 +2676,16 @@ export default function MaestroConsole() {
         }, 1000);
       }
     },
-    onMergeComplete: (sourceTabId) => {
+    onMergeComplete: (sourceTabId, targetInfo) => {
       // For merge into existing tab, show toast and clear state
-      if (activeSession) {
-        const targetSession = sessions.find(s =>
-          s.aiTabs.some(t => t.pendingMergedContext)
-        );
-        const targetName = targetSession?.name || 'target session';
-
+      if (activeSession && targetInfo) {
         addToast({
           type: 'success',
           title: 'Context Merged',
-          message: `Context transferred to "${targetName}". It will be included with your next message.`,
-          sessionId: targetSession?.id,
-          tabId: targetSession?.activeTabId,
-          project: targetName,
+          message: `Context transferred to "${targetInfo.sessionName}". It will be included with your next message.`,
+          sessionId: targetInfo.sessionId,
+          tabId: targetInfo.tabId,
+          project: targetInfo.sessionName,
         });
 
         // Clear the merge state for the source tab
