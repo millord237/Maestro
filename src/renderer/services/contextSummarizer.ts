@@ -155,9 +155,9 @@ export class ContextSummarizationService {
         originalTokens,
         compactedTokens,
       };
-    } catch (error) {
-      // The groomContext API handles its own cleanup
-      throw error;
+    } catch {
+      // The groomContext API handles its own cleanup - rethrow
+      throw new Error('Context summarization failed');
     }
   }
 

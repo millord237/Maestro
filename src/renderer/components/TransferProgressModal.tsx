@@ -284,7 +284,11 @@ export function TransferProgressModal({
   // Handle escape key - show confirmation or close if complete
   const handleEscape = useCallback(() => {
     if (progress.stage === 'complete') {
-      onCompleteRef.current?.() || onCancelRef.current();
+      if (onCompleteRef.current) {
+        onCompleteRef.current();
+      } else {
+        onCancelRef.current();
+      }
     } else {
       setShowCancelConfirm(true);
     }
@@ -336,7 +340,11 @@ export function TransferProgressModal({
   // Handle primary button click
   const handlePrimaryClick = useCallback(() => {
     if (progress.stage === 'complete') {
-      onComplete?.() || onCancel();
+      if (onComplete) {
+        onComplete();
+      } else {
+        onCancel();
+      }
     } else {
       setShowCancelConfirm(true);
     }

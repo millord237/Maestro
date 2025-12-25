@@ -425,17 +425,17 @@ const LogItemComponent = memo(({
         {/* Special rendering for tool execution events (shown alongside thinking) */}
         {log.source === 'tool' && (
           <div
-            className="px-4 py-1.5 text-xs font-mono flex items-center gap-2"
+            className="px-4 py-1.5 text-xs font-mono flex items-center gap-2 border-l-2"
             style={{
               color: theme.colors.textDim,
-              backgroundColor: `${theme.colors.warning}08`,
+              borderColor: theme.colors.accent,
             }}
           >
             <span
               className="px-1.5 py-0.5 rounded"
               style={{
-                backgroundColor: `${theme.colors.warning}20`,
-                color: theme.colors.warning,
+                backgroundColor: `${theme.colors.accent}30`,
+                color: theme.colors.accent,
               }}
             >
               tool
@@ -1115,6 +1115,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
   // In AI mode, collapse consecutive non-user entries into single response blocks
   // This provides a cleaner view where each user message gets one response
+  // Tool and thinking entries are kept separate (not collapsed)
   const collapsedLogs = useMemo(() => {
     // Only collapse in AI mode
     if (session.inputMode !== 'ai') return activeLogs;
@@ -1122,19 +1123,28 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     const result: LogEntry[] = [];
     let currentResponseGroup: LogEntry[] = [];
 
+    // Helper to flush accumulated response group
+    const flushResponseGroup = () => {
+      if (currentResponseGroup.length > 0) {
+        // Combine all response entries into one
+        const combinedText = currentResponseGroup.map(l => l.text).join('');
+        result.push({
+          ...currentResponseGroup[0],
+          text: combinedText,
+          // Keep the first entry's timestamp and id
+        });
+        currentResponseGroup = [];
+      }
+    };
+
     for (const log of activeLogs) {
       if (log.source === 'user') {
-        // Flush any accumulated response group
-        if (currentResponseGroup.length > 0) {
-          // Combine all response entries into one
-          const combinedText = currentResponseGroup.map(l => l.text).join('');
-          result.push({
-            ...currentResponseGroup[0],
-            text: combinedText,
-            // Keep the first entry's timestamp and id
-          });
-          currentResponseGroup = [];
-        }
+        // Flush any accumulated response group before user message
+        flushResponseGroup();
+        result.push(log);
+      } else if (log.source === 'tool' || log.source === 'thinking') {
+        // Flush response group before tool/thinking, then add tool/thinking separately
+        flushResponseGroup();
         result.push(log);
       } else {
         // Accumulate non-user entries (AI responses)
@@ -1143,13 +1153,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     }
 
     // Flush final response group
-    if (currentResponseGroup.length > 0) {
-      const combinedText = currentResponseGroup.map(l => l.text).join('');
-      result.push({
-        ...currentResponseGroup[0],
-        text: combinedText,
-      });
-    }
+    flushResponseGroup();
 
     return result;
   }, [activeLogs, session.inputMode]);
