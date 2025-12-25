@@ -19,3 +19,7 @@ export type {
   UpdateProgressPayload,
   SetErrorPayload,
 } from './batchReducer';
+
+// Visibility-aware time tracking hook
+export { useTimeTracking } from './useTimeTracking';
+export type { UseTimeTrackingOptions, UseTimeTrackingReturn } from './useTimeTracking';
