@@ -1104,6 +1104,7 @@ interface MaestroAPI {
       githubUsername?: string;
       twitterHandle?: string;
       linkedinHandle?: string;
+      discordUsername?: string;
       badgeLevel: number;
       badgeName: string;
       cumulativeTimeMs: number;

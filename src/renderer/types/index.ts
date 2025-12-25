@@ -577,6 +577,7 @@ export interface LeaderboardRegistration {
   twitterHandle?: string;        // X/Twitter handle
   githubUsername?: string;       // GitHub username
   linkedinHandle?: string;       // LinkedIn handle
+  discordUsername?: string;      // Discord username (for @mentions in Discord posts)
   // Registration state
   registeredAt: number;          // Timestamp when registered
   emailConfirmed: boolean;       // Whether email has been confirmed

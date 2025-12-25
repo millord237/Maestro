@@ -25,18 +25,19 @@ function renderErrorWithLinks(error: string, theme: Theme): React.ReactNode {
       const prMatch = part.match(/\/pull\/(\d+)/);
       const displayText = prMatch ? `PR #${prMatch[1]}` : 'View PR';
       return (
-        <a
+        <button
           key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
+          type="button"
           className="inline-flex items-center gap-1 underline hover:opacity-80"
           style={{ color: theme.colors.error }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.maestro.shell.openExternal(part);
+          }}
         >
           {displayText}
           <ExternalLink className="w-3 h-3" />
-        </a>
+        </button>
       );
     }
     return part;
