@@ -182,7 +182,8 @@ describe('useMergeSession', () => {
 
   describe('merging two tabs from same session', () => {
     it('successfully merges two tabs from the same session', async () => {
-      const { result } = renderHook(() => useMergeSession());
+      // Pass activeTabId to track per-tab state
+      const { result } = renderHook(() => useMergeSession('tab-1'));
 
       // Create a session with two tabs
       const tab1 = createMockTab('tab-1', [
@@ -244,7 +245,8 @@ describe('useMergeSession', () => {
 
   describe('merging tabs from different sessions', () => {
     it('successfully merges tabs from different sessions', async () => {
-      const { result } = renderHook(() => useMergeSession());
+      // Pass activeTabId to track per-tab state
+      const { result } = renderHook(() => useMergeSession('tab-1'));
 
       const sourceSession = createMockSession('source-1', 'claude-code');
       sourceSession.name = 'Source Project';
@@ -302,7 +304,8 @@ describe('useMergeSession', () => {
       // with estimateTokensFromLogs which uses tab.logs directly
       // Since our mock abstracts this, we just verify the merge completes
 
-      const { result } = renderHook(() => useMergeSession());
+      // Pass activeTabId to track per-tab state
+      const { result } = renderHook(() => useMergeSession('tab-1'));
 
       // Create tabs with significant content
       const sourceTab = createMockTab('tab-1', [
@@ -334,7 +337,8 @@ describe('useMergeSession', () => {
   describe('edge cases', () => {
     describe('self-merge attempt', () => {
       it('rejects merging a tab with itself', async () => {
-        const { result } = renderHook(() => useMergeSession());
+        // Pass activeTabId to track per-tab state
+        const { result } = renderHook(() => useMergeSession('tab-1'));
 
         const session = createMockSession('session-1');
 
@@ -357,7 +361,8 @@ describe('useMergeSession', () => {
 
     describe('empty context source', () => {
       it('rejects merging when source tab has no logs', async () => {
-        const { result } = renderHook(() => useMergeSession());
+        // Pass activeTabId to track per-tab state
+        const { result } = renderHook(() => useMergeSession('empty-tab'));
 
         const emptyTab = createMockTab('empty-tab', []); // No logs
         const sourceSession = createMockSession('source', 'claude-code', 'idle', [emptyTab]);
@@ -546,7 +551,8 @@ describe('useMergeSession', () => {
         error: 'Grooming timeout',
       });
 
-      const { result } = renderHook(() => useMergeSession());
+      // Pass activeTabId to track per-tab state
+      const { result } = renderHook(() => useMergeSession('tab-1'));
 
       const sourceSession = createMockSession('source');
       const targetSession = createMockSession('target');
@@ -579,7 +585,8 @@ describe('useMergeSession', () => {
         }), 1000))
       );
 
-      const { result } = renderHook(() => useMergeSession());
+      // Pass activeTabId to track per-tab state
+      const { result } = renderHook(() => useMergeSession('tab-1'));
 
       const sourceSession = createMockSession('source');
       const targetSession = createMockSession('target');
@@ -593,13 +600,14 @@ describe('useMergeSession', () => {
         options: { groomContext: true, createNewSession: true, preserveTimestamps: true },
       });
 
-      // Cancel immediately
+      // Cancel immediately - clears all state back to idle
       act(() => {
         result.current.cancelMerge();
       });
 
+      // Cancellation clears state entirely (no error shown - just returns to idle)
       expect(result.current.mergeState).toBe('idle');
-      expect(result.current.error).toBe('Merge cancelled by user');
+      expect(result.current.error).toBeNull();
       expect(contextGroomer.contextGroomingService.cancelGrooming).toHaveBeenCalled();
     });
   });
