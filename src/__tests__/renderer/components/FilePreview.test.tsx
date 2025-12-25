@@ -2525,3 +2525,827 @@ describe('navigation disabled in edit mode', () => {
     expect(onNavigateForward).toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// FILE PREVIEW NAVIGATION - COMPREHENSIVE TESTS FOR REGRESSION CHECKLIST
+// =============================================================================
+
+describe('file preview navigation - back/forward buttons', () => {
+  const testFile = {
+    name: 'current.ts',
+    content: 'const x = 1;',
+    path: '/project/current.ts',
+  };
+
+  it('renders back button when canGoBack is true', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    expect(backBtn).toBeInTheDocument();
+  });
+
+  it('renders forward button when canGoForward is true', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    expect(forwardBtn).toBeInTheDocument();
+  });
+
+  it('does not render back button when canGoBack is false', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={false}
+        onNavigateBack={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle('Go back (⌘←)')).not.toBeInTheDocument();
+  });
+
+  it('does not render forward button when canGoForward is false', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={false}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle('Go forward (⌘→)')).not.toBeInTheDocument();
+  });
+
+  it('calls onNavigateBack when back button is clicked', () => {
+    const onNavigateBack = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={onNavigateBack}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    fireEvent.click(backBtn);
+
+    expect(onNavigateBack).toHaveBeenCalled();
+  });
+
+  it('calls onNavigateForward when forward button is clicked', () => {
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    fireEvent.click(forwardBtn);
+
+    expect(onNavigateForward).toHaveBeenCalled();
+  });
+
+  it('does not call onNavigateBack with Cmd+Left when canGoBack is false', () => {
+    const onNavigateBack = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={false}
+        onNavigateBack={onNavigateBack}
+      />
+    );
+
+    const container = screen.getByText('current.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', metaKey: true });
+
+    expect(onNavigateBack).not.toHaveBeenCalled();
+  });
+
+  it('does not call onNavigateForward with Cmd+Right when canGoForward is false', () => {
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={false}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const container = screen.getByText('current.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowRight', metaKey: true });
+
+    expect(onNavigateForward).not.toHaveBeenCalled();
+  });
+
+  it('does not call onNavigateBack with Ctrl+Left when canGoBack is false', () => {
+    const onNavigateBack = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={false}
+        onNavigateBack={onNavigateBack}
+      />
+    );
+
+    const container = screen.getByText('current.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', ctrlKey: true });
+
+    expect(onNavigateBack).not.toHaveBeenCalled();
+  });
+
+  it('navigates back with Ctrl+Left keyboard shortcut', () => {
+    const onNavigateBack = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={onNavigateBack}
+      />
+    );
+
+    const container = screen.getByText('current.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', ctrlKey: true });
+
+    expect(onNavigateBack).toHaveBeenCalled();
+  });
+
+  it('navigates forward with Ctrl+Right keyboard shortcut', () => {
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const container = screen.getByText('current.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowRight', ctrlKey: true });
+
+    expect(onNavigateForward).toHaveBeenCalled();
+  });
+});
+
+describe('file preview navigation - history popup', () => {
+  const testFile = {
+    name: 'current.ts',
+    content: 'const x = 1;',
+    path: '/project/current.ts',
+  };
+
+  const backHistory = [
+    { name: 'first.ts', content: 'const a = 1;', path: '/project/first.ts' },
+    { name: 'second.ts', content: 'const b = 2;', path: '/project/second.ts' },
+  ];
+
+  const forwardHistory = [
+    { name: 'future1.ts', content: 'const c = 3;', path: '/project/future1.ts' },
+    { name: 'future2.ts', content: 'const d = 4;', path: '/project/future2.ts' },
+  ];
+
+  it('shows back history popup on hover', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={backHistory}
+        currentHistoryIndex={2}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    fireEvent.mouseEnter(backBtn);
+
+    await waitFor(() => {
+      // Should show the back history items
+      expect(screen.getByText('second.ts')).toBeInTheDocument();
+      expect(screen.getByText('first.ts')).toBeInTheDocument();
+    });
+  });
+
+  it('shows forward history popup on hover', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={vi.fn()}
+        forwardHistory={forwardHistory}
+        currentHistoryIndex={0}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    fireEvent.mouseEnter(forwardBtn);
+
+    await waitFor(() => {
+      // Should show the forward history items
+      expect(screen.getByText('future1.ts')).toBeInTheDocument();
+      expect(screen.getByText('future2.ts')).toBeInTheDocument();
+    });
+  });
+
+  it('hides back history popup on mouse leave', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={backHistory}
+        currentHistoryIndex={2}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+
+    // Show popup
+    fireEvent.mouseEnter(backBtn);
+    await waitFor(() => {
+      expect(screen.getByText('second.ts')).toBeInTheDocument();
+    });
+
+    // Hide popup
+    fireEvent.mouseLeave(backBtn);
+    await waitFor(() => {
+      expect(screen.queryByText('second.ts')).not.toBeInTheDocument();
+    });
+  });
+
+  it('calls onNavigateToIndex when clicking a back history item', async () => {
+    const onNavigateToIndex = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={backHistory}
+        currentHistoryIndex={2}
+        onNavigateToIndex={onNavigateToIndex}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    fireEvent.mouseEnter(backBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('first.ts')).toBeInTheDocument();
+    });
+
+    // Click the first item (index 0 in original history)
+    const firstItem = screen.getByText('first.ts');
+    fireEvent.click(firstItem);
+
+    expect(onNavigateToIndex).toHaveBeenCalledWith(0);
+  });
+
+  it('calls onNavigateToIndex when clicking a forward history item', async () => {
+    const onNavigateToIndex = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={vi.fn()}
+        forwardHistory={forwardHistory}
+        currentHistoryIndex={0}
+        onNavigateToIndex={onNavigateToIndex}
+      />
+    );
+
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    fireEvent.mouseEnter(forwardBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('future1.ts')).toBeInTheDocument();
+    });
+
+    // Click the first forward item (index 1 in original history, since current is at 0)
+    const future1Item = screen.getByText('future1.ts');
+    fireEvent.click(future1Item);
+
+    expect(onNavigateToIndex).toHaveBeenCalledWith(1);
+  });
+
+  it('shows numbered entries in back history popup', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={backHistory}
+        currentHistoryIndex={2}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    fireEvent.mouseEnter(backBtn);
+
+    await waitFor(() => {
+      // History items should be shown with numbering
+      // The back history is shown in reverse order (newest first)
+      // With 2 items, actualIndex for first displayed = length - 1 - 0 = 1, so shows "2."
+      // actualIndex for second displayed = length - 1 - 1 = 0, so shows "1."
+      expect(screen.getByText('2.')).toBeInTheDocument();
+      expect(screen.getByText('1.')).toBeInTheDocument();
+    });
+  });
+
+  it('shows numbered entries in forward history popup', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={vi.fn()}
+        forwardHistory={forwardHistory}
+        currentHistoryIndex={0}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    fireEvent.mouseEnter(forwardBtn);
+
+    await waitFor(() => {
+      // Forward history numbering: actualIndex = currentHistoryIndex + 1 + idx
+      // For idx=0: actualIndex = 0 + 1 + 0 = 1, shows "2."
+      // For idx=1: actualIndex = 0 + 1 + 1 = 2, shows "3."
+      expect(screen.getByText('2.')).toBeInTheDocument();
+      expect(screen.getByText('3.')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('file preview navigation - both buttons together', () => {
+  const testFile = {
+    name: 'middle.ts',
+    content: 'const x = 1;',
+    path: '/project/middle.ts',
+  };
+
+  it('renders both back and forward buttons when both are available', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    expect(backBtn).toBeInTheDocument();
+    expect(forwardBtn).toBeInTheDocument();
+    expect(backBtn).not.toBeDisabled();
+    expect(forwardBtn).not.toBeDisabled();
+  });
+
+  it('disables forward button when only back is available', () => {
+    // Both buttons render but forward is disabled
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={false}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    expect(backBtn).not.toBeDisabled();
+    expect(forwardBtn).toBeDisabled();
+  });
+
+  it('disables back button when only forward is available', () => {
+    // Both buttons render but back is disabled
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={false}
+        canGoForward={true}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    const forwardBtn = screen.getByTitle('Go forward (⌘→)');
+    expect(backBtn).toBeDisabled();
+    expect(forwardBtn).not.toBeDisabled();
+  });
+
+  it('renders neither button when neither is available', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={false}
+        canGoForward={false}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    // When both are false, the navigation container doesn't render at all
+    expect(screen.queryByTitle('Go back (⌘←)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Go forward (⌘→)')).not.toBeInTheDocument();
+  });
+});
+
+describe('file preview navigation - non-markdown files', () => {
+  const tsFile = {
+    name: 'code.ts',
+    content: 'const x = 1;',
+    path: '/project/code.ts',
+  };
+
+  it('shows navigation buttons for TypeScript files', () => {
+    render(
+      <FilePreview
+        file={tsFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle('Go back (⌘←)')).toBeInTheDocument();
+    expect(screen.getByTitle('Go forward (⌘→)')).toBeInTheDocument();
+  });
+
+  it('navigates back with keyboard in TypeScript file', () => {
+    const onNavigateBack = vi.fn();
+
+    render(
+      <FilePreview
+        file={tsFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={onNavigateBack}
+      />
+    );
+
+    const container = screen.getByText('code.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', metaKey: true });
+
+    expect(onNavigateBack).toHaveBeenCalled();
+  });
+
+  it('navigates forward with keyboard in TypeScript file', () => {
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={tsFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoForward={true}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const container = screen.getByText('code.ts').closest('[tabindex="0"]');
+    fireEvent.keyDown(container!, { key: 'ArrowRight', metaKey: true });
+
+    expect(onNavigateForward).toHaveBeenCalled();
+  });
+});
+
+describe('file preview navigation - image files', () => {
+  const imageFile = {
+    name: 'logo.png',
+    content: 'data:image/png;base64,abc123',
+    path: '/project/assets/logo.png',
+  };
+
+  it('shows navigation buttons for image files', () => {
+    render(
+      <FilePreview
+        file={imageFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle('Go back (⌘←)')).toBeInTheDocument();
+    expect(screen.getByTitle('Go forward (⌘→)')).toBeInTheDocument();
+  });
+
+  it('navigates with keyboard from image preview', () => {
+    const onNavigateBack = vi.fn();
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={imageFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const container = screen.getByText('logo.png').closest('[tabindex="0"]');
+
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', metaKey: true });
+    expect(onNavigateBack).toHaveBeenCalled();
+
+    fireEvent.keyDown(container!, { key: 'ArrowRight', metaKey: true });
+    expect(onNavigateForward).toHaveBeenCalled();
+  });
+});
+
+describe('file preview navigation - edge cases', () => {
+  const testFile = {
+    name: 'test.ts',
+    content: 'const x = 1;',
+    path: '/project/test.ts',
+  };
+
+  it('does not crash when navigation callbacks are undefined', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        // Navigation callbacks intentionally undefined
+      />
+    );
+
+    // Should render without crashing
+    expect(screen.getByText('test.ts')).toBeInTheDocument();
+
+    // Buttons might not appear without callbacks, or might be non-functional
+    // The important thing is no crash
+  });
+
+  it('handles empty history arrays', async () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={[]}
+        currentHistoryIndex={0}
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    const backBtn = screen.getByTitle('Go back (⌘←)');
+    fireEvent.mouseEnter(backBtn);
+
+    // Should not crash, popup might be empty or not show
+    await waitFor(() => {
+      expect(screen.getByText('test.ts')).toBeInTheDocument();
+    });
+  });
+
+  it('handles missing currentHistoryIndex gracefully', async () => {
+    const backHistory = [
+      { name: 'first.ts', content: 'const a = 1;', path: '/project/first.ts' },
+    ];
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        onNavigateBack={vi.fn()}
+        backHistory={backHistory}
+        // currentHistoryIndex intentionally missing
+        onNavigateToIndex={vi.fn()}
+      />
+    );
+
+    // Should render without crashing
+    expect(screen.getByText('test.ts')).toBeInTheDocument();
+  });
+
+  it('handles navigation correctly when props are provided', () => {
+    const onNavigateBack = vi.fn();
+    const onNavigateForward = vi.fn();
+
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        canGoBack={true}
+        canGoForward={true}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+      />
+    );
+
+    const container = screen.getByText('test.ts').closest('[tabindex="0"]');
+
+    // Back navigation
+    fireEvent.keyDown(container!, { key: 'ArrowLeft', metaKey: true });
+    expect(onNavigateBack).toHaveBeenCalledTimes(1);
+
+    // Forward navigation
+    fireEvent.keyDown(container!, { key: 'ArrowRight', metaKey: true });
+    expect(onNavigateForward).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles single file with no history gracefully', () => {
+    render(
+      <FilePreview
+        file={testFile}
+        onClose={vi.fn()}
+        theme={createMockTheme()}
+        markdownEditMode={false}
+        setMarkdownEditMode={vi.fn()}
+        shortcuts={createMockShortcuts()}
+        // No navigation props at all
+      />
+    );
+
+    // Should render without crashing
+    expect(screen.getByText('test.ts')).toBeInTheDocument();
+
+    // No navigation buttons should appear
+    expect(screen.queryByTitle('Go back (⌘←)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Go forward (⌘→)')).not.toBeInTheDocument();
+  });
+});
