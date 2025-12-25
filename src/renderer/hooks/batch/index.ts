@@ -9,3 +9,13 @@ export { countUnfinishedTasks, countCheckedTasks, uncheckAllTasks } from './batc
 // Debounce hook for per-session state updates
 export { useSessionDebounce } from './useSessionDebounce';
 export type { UseSessionDebounceOptions, UseSessionDebounceReturn } from './useSessionDebounce';
+
+// Batch state reducer and types
+export { batchReducer, DEFAULT_BATCH_STATE } from './batchReducer';
+export type {
+  BatchState,
+  BatchAction,
+  StartBatchPayload,
+  UpdateProgressPayload,
+  SetErrorPayload,
+} from './batchReducer';
