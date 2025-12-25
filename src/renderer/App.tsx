@@ -1123,6 +1123,9 @@ export default function MaestroConsole() {
 
   // Set up process event listeners for real-time output
   useEffect(() => {
+    // Copy ref value to local variable for cleanup (React ESLint rule)
+    const thinkingChunkBuffer = thinkingChunkBufferRef.current;
+
     // Handle process output data (BATCHED for performance)
     // sessionId will be in format: "{id}-ai-{tabId}", "{id}-terminal", "{id}-batch-{timestamp}", etc.
     const unsubscribeData = window.maestro.process.onData((sessionId: string, data: string) => {
@@ -2210,7 +2213,7 @@ export default function MaestroConsole() {
         cancelAnimationFrame(thinkingChunkRafIdRef.current);
         thinkingChunkRafIdRef.current = null;
       }
-      thinkingChunkBufferRef.current.clear();
+      thinkingChunkBuffer.clear();
     };
   }, []);
 
