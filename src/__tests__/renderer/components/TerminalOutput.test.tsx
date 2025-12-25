@@ -49,11 +49,16 @@ vi.mock('ansi-to-html', () => ({
   },
 }));
 
+// Track layer stack mock functions
+const mockRegisterLayer = vi.fn().mockReturnValue('layer-1');
+const mockUnregisterLayer = vi.fn();
+const mockUpdateLayerHandler = vi.fn();
+
 vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
   useLayerStack: () => ({
-    registerLayer: vi.fn().mockReturnValue('layer-1'),
-    unregisterLayer: vi.fn(),
-    updateLayerHandler: vi.fn(),
+    registerLayer: mockRegisterLayer,
+    unregisterLayer: mockUnregisterLayer,
+    updateLayerHandler: mockUpdateLayerHandler,
   }),
 }));
 
@@ -341,6 +346,166 @@ describe('TerminalOutput', () => {
       fireEvent.keyDown(outputDiv, { key: 'f', metaKey: true });
 
       expect(setOutputSearchOpen).toHaveBeenCalledWith(true);
+    });
+
+    it('opens search when Ctrl+F is pressed', () => {
+      const setOutputSearchOpen = vi.fn();
+      const props = createDefaultProps({ setOutputSearchOpen });
+      const { container } = render(<TerminalOutput {...props} />);
+
+      const outputDiv = container.firstChild as HTMLElement;
+      fireEvent.keyDown(outputDiv, { key: 'f', ctrlKey: true });
+
+      expect(setOutputSearchOpen).toHaveBeenCalledWith(true);
+    });
+
+    it('filters logs case-insensitively (in terminal mode)', async () => {
+      // Use terminal mode to avoid log collapsing
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'This contains HELLO world', source: 'stdout' }),
+        createLogEntry({ text: 'This contains hello world', source: 'stdout' }),
+        createLogEntry({ text: 'This does not match', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchQuery: 'hello',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // Both logs with 'hello' and 'HELLO' should match (case insensitive)
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(2);
+    });
+
+    it('shows all logs when search query is empty (terminal mode)', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'First log', source: 'stdout' }),
+        createLogEntry({ text: 'Second log', source: 'stdout' }),
+        createLogEntry({ text: 'Third log', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchOpen: true,
+        outputSearchQuery: '',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // All 3 logs should be visible when query is empty
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(3);
+    });
+
+    it('hides search input when outputSearchOpen is false', () => {
+      const props = createDefaultProps({ outputSearchOpen: false });
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByPlaceholderText('Filter output... (Esc to close)')).not.toBeInTheDocument();
+    });
+
+    it('preserves search query when filtering (controlled component)', async () => {
+      const setOutputSearchQuery = vi.fn();
+      const props = createDefaultProps({
+        outputSearchOpen: true,
+        outputSearchQuery: 'initial',
+        setOutputSearchQuery
+      });
+      render(<TerminalOutput {...props} />);
+
+      const searchInput = screen.getByPlaceholderText('Filter output... (Esc to close)');
+
+      // The input should show the current query value
+      expect(searchInput).toHaveValue('initial');
+
+      // Typing calls the setter
+      fireEvent.change(searchInput, { target: { value: 'updated' } });
+      expect(setOutputSearchQuery).toHaveBeenCalledWith('updated');
+    });
+
+    it('does not open search when Cmd+F is pressed and search is already open', () => {
+      const setOutputSearchOpen = vi.fn();
+      const props = createDefaultProps({ setOutputSearchOpen, outputSearchOpen: true });
+      const { container } = render(<TerminalOutput {...props} />);
+
+      const outputDiv = container.firstChild as HTMLElement;
+      fireEvent.keyDown(outputDiv, { key: 'f', metaKey: true });
+
+      // Should not call setOutputSearchOpen again when already open
+      expect(setOutputSearchOpen).not.toHaveBeenCalled();
+    });
+
+    it('registers layer when search opens', () => {
+      mockRegisterLayer.mockClear();
+      const props = createDefaultProps({ outputSearchOpen: true });
+      render(<TerminalOutput {...props} />);
+
+      expect(mockRegisterLayer).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'overlay',
+        ariaLabel: 'Output Search',
+        onEscape: expect.any(Function),
+      }));
+    });
+
+    it('unregisters layer when component unmounts with search open', () => {
+      mockUnregisterLayer.mockClear();
+      const props = createDefaultProps({ outputSearchOpen: true });
+      const { unmount } = render(<TerminalOutput {...props} />);
+
+      unmount();
+
+      expect(mockUnregisterLayer).toHaveBeenCalled();
+    });
+
+    it('matches logs containing partial words (terminal mode)', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'authentication failed', source: 'stdout' }),
+        createLogEntry({ text: 'unauthorized access', source: 'stdout' }),
+        createLogEntry({ text: 'success', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchQuery: 'auth',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // Both 'authentication' and 'unauthorized' contain 'auth'
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(2);
     });
   });
 
