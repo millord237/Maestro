@@ -541,8 +541,8 @@ export class ProcessManager extends EventEmitter {
         // need to be executed through the shell. This is because:
         // 1. spawn() with shell:false cannot execute batch scripts directly
         // 2. Commands without extensions need PATHEXT resolution
-        let spawnCommand = command;
-        let spawnArgs = finalArgs;
+        const spawnCommand = command;
+        const spawnArgs = finalArgs;
         let useShell = false;
 
         if (isWindows) {
@@ -844,7 +844,7 @@ export class ProcessManager extends EventEmitter {
                     this.emit('usage', sessionId, usageStats);
                   }
                 }
-              } catch (e) {
+              } catch (_e) {
                 // If it's not valid JSON, emit as raw text
                 this.emit('data', sessionId, line);
               }

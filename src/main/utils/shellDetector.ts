@@ -90,7 +90,7 @@ async function detectShell(shellId: string, shellName: string): Promise<ShellInf
       name: shellName,
       available: false,
     };
-  } catch (error) {
+  } catch (_error) {
     return {
       id: shellId,
       name: shellName,

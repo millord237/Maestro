@@ -843,7 +843,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
           new ClipboardItem({ [blob.type]: blob })
         ]);
         setCopyNotificationMessage('Image Copied to Clipboard');
-      } catch (err) {
+      } catch (_err) {
         // Fallback: copy the data URL if image copy fails
         navigator.clipboard.writeText(file.content);
         setCopyNotificationMessage('Image URL Copied to Clipboard');
