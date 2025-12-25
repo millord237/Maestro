@@ -1174,6 +1174,212 @@ describe('TerminalOutput', () => {
 
       expect(onDeleteLog).toHaveBeenCalledWith('log-1');
     });
+
+    it('does not show delete button when onDeleteLog is not provided', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        // onDeleteLog is not provided
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('does not call onDeleteLog when No is clicked', async () => {
+      const onDeleteLog = vi.fn().mockReturnValue(null);
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Click delete button
+      const deleteButton = screen.getByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      // Click No to cancel
+      const cancelButton = screen.getByRole('button', { name: 'No' });
+      await act(async () => {
+        fireEvent.click(cancelButton);
+      });
+
+      expect(onDeleteLog).not.toHaveBeenCalled();
+      // Confirmation dialog should be dismissed
+      expect(screen.queryByText('Delete?')).not.toBeInTheDocument();
+    });
+
+    it('does not show delete button for stdout messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'AI response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('does not show delete button for stderr messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Error output', source: 'stderr' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('shows delete button with correct tooltip in terminal mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'ls -la', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs: [], isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.getByTitle(/Delete command and output/)).toBeInTheDocument();
+    });
+
+    it('shows delete button for each user message in a conversation', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'First user message', source: 'user' }),
+        createLogEntry({ id: 'log-2', text: 'AI response', source: 'stdout' }),
+        createLogEntry({ id: 'log-3', text: 'Second user message', source: 'user' }),
+        createLogEntry({ id: 'log-4', text: 'Another AI response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Should have 2 delete buttons, one for each user message
+      const deleteButtons = screen.getAllByTitle(/Delete message/);
+      expect(deleteButtons).toHaveLength(2);
+    });
+
+    it('confirmation dialog shows Delete? text with Yes and No buttons', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const deleteButton = screen.getByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      expect(screen.getByText('Delete?')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'No' })).toBeInTheDocument();
+    });
+
+    it('handles onDeleteLog return value for scroll positioning', async () => {
+      const onDeleteLog = vi.fn().mockReturnValue(0); // Return index 0
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'First message', source: 'user' }),
+        createLogEntry({ id: 'log-2', text: 'Response', source: 'stdout' }),
+        createLogEntry({ id: 'log-3', text: 'Second message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Click delete on first message
+      const deleteButtons = screen.getAllByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButtons[0]);
+      });
+
+      const confirmButton = screen.getByRole('button', { name: 'Yes' });
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
+
+      expect(onDeleteLog).toHaveBeenCalledWith('log-1');
+    });
   });
 
   describe('markdown rendering', () => {
