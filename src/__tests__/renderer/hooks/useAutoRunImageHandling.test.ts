@@ -17,7 +17,7 @@ import {
   useAutoRunImageHandling,
   imageCache,
   type UseAutoRunImageHandlingDeps,
-} from '../../../renderer/hooks/useAutoRunImageHandling';
+} from '../../../renderer/hooks';
 import React from 'react';
 
 // ============================================================================

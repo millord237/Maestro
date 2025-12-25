@@ -1,6 +1,8 @@
 /**
- * Batch processing modules
- * Extracted from useBatchProcessor.ts for modularity
+ * Batch Processing & Auto Run Module
+ *
+ * Hooks and utilities for batch/Auto Run document processing,
+ * including state management, document handling, and playbook configuration.
  */
 
 // Utility functions for markdown task processing
@@ -55,3 +57,30 @@ export type {
   ErrorOccurredPayload,
   LoopCompletedPayload,
 } from './batchStateMachine';
+
+// Main batch processor hook
+export { useBatchProcessor } from './useBatchProcessor';
+
+// Auto Run event handlers
+export { useAutoRunHandlers } from './useAutoRunHandlers';
+export type { UseAutoRunHandlersReturn, UseAutoRunHandlersDeps, AutoRunTreeNode } from './useAutoRunHandlers';
+
+// Auto Run image handling
+export { useAutoRunImageHandling, imageCache } from './useAutoRunImageHandling';
+export type { UseAutoRunImageHandlingReturn, UseAutoRunImageHandlingDeps } from './useAutoRunImageHandling';
+
+// Auto Run undo/redo
+export { useAutoRunUndo } from './useAutoRunUndo';
+export type { UseAutoRunUndoReturn, UseAutoRunUndoDeps, UndoState } from './useAutoRunUndo';
+
+// Playbook management
+export { usePlaybookManagement } from './usePlaybookManagement';
+export type { UsePlaybookManagementReturn, UsePlaybookManagementDeps, PlaybookConfigState } from './usePlaybookManagement';
+
+// Worktree validation
+export { useWorktreeValidation } from './useWorktreeValidation';
+export type { UseWorktreeValidationReturn, UseWorktreeValidationDeps } from './useWorktreeValidation';
+
+// Auto Run achievements/badges
+export { useAchievements, queueAchievement } from './useAchievements';
+export type { AchievementState, PendingAchievement, UseAchievementsReturn } from './useAchievements';

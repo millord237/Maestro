@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { GitBranch, AlertTriangle, Loader2, ChevronDown } from 'lucide-react';
 import type { Theme, WorktreeValidationState, GhCliStatus } from '../types';
-import { useClickOutside } from '../hooks/useClickOutside';
+import { useClickOutside } from '../hooks';
 
 // Re-export types for backward compatibility
 export type { WorktreeValidationState, GhCliStatus } from '../types';

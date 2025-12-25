@@ -8,7 +8,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { gitService } from '../services/git';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import type { WizardStep } from './Wizard/WizardContext';
-import { useListNavigation } from '../hooks/useListNavigation';
+import { useListNavigation } from '../hooks';
 
 interface QuickAction {
   id: string;

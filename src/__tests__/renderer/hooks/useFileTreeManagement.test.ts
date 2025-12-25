@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useFileTreeManagement, type UseFileTreeManagementDeps } from '../../../renderer/hooks/useFileTreeManagement';
+import { useFileTreeManagement, type UseFileTreeManagementDeps } from '../../../renderer/hooks';
 import type { Session } from '../../../renderer/types';
 import type { FileNode } from '../../../renderer/types/fileTree';
 import type { RightPanelHandle } from '../../../renderer/components/RightPanel';

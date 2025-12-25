@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useLayerStack } from '../../../renderer/hooks/useLayerStack';
+import { useLayerStack } from '../../../renderer/hooks';
 import { ModalLayer, OverlayLayer } from '../../../renderer/types/layer';
 
 describe('useLayerStack', () => {

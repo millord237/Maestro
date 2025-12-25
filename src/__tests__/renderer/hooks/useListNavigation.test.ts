@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useListNavigation } from '../../../renderer/hooks/useListNavigation';
+import { useListNavigation } from '../../../renderer/hooks';
 
 // Helper to create keyboard events
 function createKeyboardEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {

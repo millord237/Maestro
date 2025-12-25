@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { Theme, Session, Shortcut, FocusArea, BatchRunState } from '../../../renderer/types';
-import { clearCapabilitiesCache, setCapabilitiesCache } from '../../../renderer/hooks/useAgentCapabilities';
+import { clearCapabilitiesCache, setCapabilitiesCache } from '../../../renderer/hooks';
 
 // Mock child components to simplify testing - must be before MainPanel import
 vi.mock('../../../renderer/components/LogViewer', () => ({

@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, ReactNode } from 'react';
-import { useGitStatusPolling } from '../hooks/useGitStatusPolling';
-import type { GitStatusData, GitFileChange, UseGitStatusPollingOptions } from '../hooks/useGitStatusPolling';
+import { useGitStatusPolling, type GitStatusData, type GitFileChange, type UseGitStatusPollingOptions } from '../hooks';
 import type { Session } from '../types';
 
 /**

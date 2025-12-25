@@ -7,10 +7,13 @@ import { SessionActivityGraph, type ActivityEntry } from './SessionActivityGraph
 import { SessionListItem } from './SessionListItem';
 import { ToolCallCard, getToolName } from './ToolCallCard';
 import { formatSize, formatNumber, formatTokens, formatRelativeTime } from '../utils/formatters';
-import { useSessionViewer, type ClaudeSession } from '../hooks/useSessionViewer';
-import { useSessionPagination } from '../hooks/useSessionPagination';
-import { useFilteredAndSortedSessions } from '../hooks/useFilteredAndSortedSessions';
-import { useClickOutside } from '../hooks';
+import {
+  useSessionViewer,
+  useSessionPagination,
+  useFilteredAndSortedSessions,
+  useClickOutside,
+  type ClaudeSession,
+} from '../hooks';
 
 type SearchMode = 'title' | 'user' | 'assistant' | 'all';
 

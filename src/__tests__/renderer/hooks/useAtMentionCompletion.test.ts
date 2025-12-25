@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAtMentionCompletion, type AtMentionSuggestion, type UseAtMentionCompletionReturn } from '../../../renderer/hooks/useAtMentionCompletion';
+import { useAtMentionCompletion, type AtMentionSuggestion, type UseAtMentionCompletionReturn } from '../../../renderer/hooks';
 import type { Session } from '../../../renderer/types';
 import type { FileNode } from '../../../renderer/types/fileTree';
 

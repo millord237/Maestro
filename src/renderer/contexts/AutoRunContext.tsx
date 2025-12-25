@@ -18,7 +18,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import type { AutoRunTreeNode } from '../hooks/useAutoRunHandlers';
+import type { AutoRunTreeNode } from '../hooks';
 
 /**
  * Task count entry - tracks completed vs total tasks for a document

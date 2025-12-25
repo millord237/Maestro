@@ -13,7 +13,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Session, Group, HistoryEntry, UsageStats, BatchRunConfig, AgentError } from '../../../renderer/types';
 
 // Import the exported functions directly
-import { countUnfinishedTasks, uncheckAllTasks, useBatchProcessor } from '../../../renderer/hooks/useBatchProcessor';
+import { countUnfinishedTasks, uncheckAllTasks, useBatchProcessor } from '../../../renderer/hooks';
 
 // ============================================================================
 // Tests for countUnfinishedTasks

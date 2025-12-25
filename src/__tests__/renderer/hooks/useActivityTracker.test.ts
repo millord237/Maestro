@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useActivityTracker, UseActivityTrackerReturn } from '../../../renderer/hooks/useActivityTracker';
+import { useActivityTracker, UseActivityTrackerReturn } from '../../../renderer/hooks';
 import type { Session } from '../../../renderer/types';
 
 // Constants matching the source file

@@ -15,7 +15,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import type { TabCompletionFilter } from '../hooks/useTabCompletion';
+import type { TabCompletionFilter } from '../hooks';
 
 /**
  * Input context value - all input and completion states and their setters

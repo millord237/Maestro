@@ -91,7 +91,7 @@ vi.mock('../../../renderer/components/AutoRunDocumentSelector', () => ({
 // Store the onChange handler so our mock can call it
 let autocompleteOnChange: ((content: string) => void) | null = null;
 
-vi.mock('../../../renderer/hooks/useTemplateAutocomplete', () => ({
+vi.mock('../../../renderer/hooks/input/useTemplateAutocomplete', () => ({
   useTemplateAutocomplete: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
     // Store the onChange handler so handleAutocompleteChange can trigger state updates
     autocompleteOnChange = onChange;

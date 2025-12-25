@@ -57,28 +57,51 @@ import { EditGroupChatModal } from './components/EditGroupChatModal';
 import { GroupChatInfoOverlay } from './components/GroupChatInfoOverlay';
 
 // Import custom hooks
-import { useBatchProcessor } from './hooks/useBatchProcessor';
-import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers, useInputSync, useSessionNavigation, useDebouncedPersistence, useBatchedSessionUpdates } from './hooks';
-import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from './hooks/useTabCompletion';
-import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
-import { useKeyboardShortcutHelpers } from './hooks/useKeyboardShortcutHelpers';
-import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import { useMainKeyboardHandler } from './hooks/useMainKeyboardHandler';
-import { useRemoteIntegration } from './hooks/useRemoteIntegration';
-import { useAgentSessionManagement } from './hooks/useAgentSessionManagement';
-import { useAgentExecution } from './hooks/useAgentExecution';
-import { useFileTreeManagement } from './hooks/useFileTreeManagement';
-import { useGroupManagement } from './hooks/useGroupManagement';
-import { useWebBroadcasting } from './hooks/useWebBroadcasting';
-import { useCliActivityMonitoring } from './hooks/useCliActivityMonitoring';
-import { useThemeStyles } from './hooks/useThemeStyles';
-import { useSortedSessions, compareNamesIgnoringEmojis } from './hooks/useSortedSessions';
-import { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './hooks/useInputProcessing';
-import { useAgentErrorRecovery } from './hooks/useAgentErrorRecovery';
-import { useAgentCapabilities } from './hooks/useAgentCapabilities';
-import { useMergeSessionWithSessions } from './hooks/useMergeSession';
-import { useSendToAgentWithSessions } from './hooks/useSendToAgent';
-import { useSummarizeAndContinue } from './hooks/useSummarizeAndContinue';
+import {
+  // Batch processing
+  useBatchProcessor,
+  // Settings
+  useSettings,
+  useDebouncedPersistence,
+  // Session management
+  useActivityTracker,
+  useNavigationHistory,
+  useSessionNavigation,
+  useBatchedSessionUpdates,
+  useSortedSessions,
+  compareNamesIgnoringEmojis,
+  useGroupManagement,
+  // Input processing
+  useInputSync,
+  useTabCompletion,
+  useAtMentionCompletion,
+  useInputProcessing,
+  DEFAULT_IMAGE_ONLY_PROMPT,
+  // Keyboard handling
+  useKeyboardShortcutHelpers,
+  useKeyboardNavigation,
+  useMainKeyboardHandler,
+  // Agent
+  useAgentSessionManagement,
+  useAgentExecution,
+  useAgentErrorRecovery,
+  useAgentCapabilities,
+  useMergeSessionWithSessions,
+  useSendToAgentWithSessions,
+  useSummarizeAndContinue,
+  // Git
+  useFileTreeManagement,
+  // Remote
+  useRemoteIntegration,
+  useWebBroadcasting,
+  useCliActivityMonitoring,
+  useMobileLandscape,
+  // UI
+  useThemeStyles,
+  // Auto Run
+  useAutoRunHandlers,
+} from './hooks';
+import type { TabCompletionSuggestion, TabCompletionFilter } from './hooks';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';

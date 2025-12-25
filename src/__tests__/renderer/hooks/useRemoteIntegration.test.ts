@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useRemoteIntegration } from '../../../renderer/hooks/useRemoteIntegration';
+import { useRemoteIntegration } from '../../../renderer/hooks';
 import type { Session, AITab } from '../../../renderer/types';
 
 const createMockTab = (overrides: Partial<AITab> = {}): AITab => ({

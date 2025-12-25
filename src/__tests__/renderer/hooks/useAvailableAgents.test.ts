@@ -3,9 +3,9 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import {
   useAvailableAgents,
   useAvailableAgentsForCapability,
-} from '../../../renderer/hooks/useAvailableAgents';
+} from '../../../renderer/hooks';
 import type { Session } from '../../../renderer/types';
-import { DEFAULT_CAPABILITIES, type AgentCapabilities } from '../../../renderer/hooks/useAgentCapabilities';
+import { DEFAULT_CAPABILITIES, type AgentCapabilities } from '../../../renderer/hooks';
 
 // Define agent config type matching what detect() returns
 interface AgentConfigDetected {

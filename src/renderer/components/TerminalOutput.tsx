@@ -7,7 +7,7 @@ import DOMPurify from 'dompurify';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { getActiveTab } from '../utils/tabHelpers';
-import { useDebouncedValue, useThrottledCallback } from '../hooks/useThrottle';
+import { useDebouncedValue, useThrottledCallback } from '../hooks';
 import {
   processCarriageReturns,
   processLogTextHelper,

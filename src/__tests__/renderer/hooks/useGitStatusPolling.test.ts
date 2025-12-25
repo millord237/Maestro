@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useGitStatusPolling } from '../../../renderer/hooks/useGitStatusPolling';
+import { useGitStatusPolling } from '../../../renderer/hooks';
 import type { Session } from '../../../renderer/types';
 import { gitService } from '../../../renderer/services/git';
 

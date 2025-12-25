@@ -5,7 +5,7 @@ import {
   useMergeSessionWithSessions,
   type MergeSessionRequest,
   __resetMergeInProgress,
-} from '../../../renderer/hooks/useMergeSession';
+} from '../../../renderer/hooks';
 import type { Session, AITab, LogEntry, ToolType } from '../../../renderer/types';
 import type { MergeOptions } from '../../../renderer/components/MergeSessionModal';
 import * as contextGroomer from '../../../renderer/services/contextGroomer';

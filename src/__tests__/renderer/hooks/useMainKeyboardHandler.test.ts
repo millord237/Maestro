@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { useMainKeyboardHandler } from '../../../renderer/hooks/useMainKeyboardHandler';
+import { useMainKeyboardHandler } from '../../../renderer/hooks';
 
 /**
  * Creates a minimal mock context with all required handler functions.

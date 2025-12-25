@@ -8,7 +8,7 @@ import type { Session, Theme } from '../../../renderer/types';
 Element.prototype.scrollIntoView = vi.fn();
 
 // Mock useAgentCapabilities hook - return claude-code capabilities by default
-vi.mock('../../../renderer/hooks/useAgentCapabilities', () => ({
+vi.mock('../../../renderer/hooks/agent/useAgentCapabilities', () => ({
   useAgentCapabilities: vi.fn(() => ({
     capabilities: {
       supportsResume: true,
@@ -246,7 +246,7 @@ describe('InputArea', () => {
 
     it('hides attach image button when agent does not support image input', async () => {
       // Mock capabilities to return false for supportsImageInput
-      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/useAgentCapabilities');
+      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/agent/useAgentCapabilities');
       vi.mocked(useAgentCapabilitiesMock.useAgentCapabilities).mockReturnValueOnce({
         capabilities: {
           supportsResume: true,
@@ -306,7 +306,7 @@ describe('InputArea', () => {
 
     it('hides read-only toggle when agent does not support read-only mode', async () => {
       // Mock capabilities to return false for supportsReadOnlyMode
-      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/useAgentCapabilities');
+      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/agent/useAgentCapabilities');
       vi.mocked(useAgentCapabilitiesMock.useAgentCapabilities).mockReturnValueOnce({
         capabilities: {
           supportsResume: true,

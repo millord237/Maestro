@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo } from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, Eye, History, File, Folder, GitBranch, Tag, PenLine, Brain } from 'lucide-react';
 import type { Session, Theme, BatchRunState } from '../types';
-import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks/useTabCompletion';
+import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks';
 import type { SummarizeProgress, SummarizeResult, GroomingProgress, MergeResult } from '../types/contextMerge';
 import { ThinkingStatusPill } from './ThinkingStatusPill';
 import { MergeProgressOverlay } from './MergeProgressOverlay';
 import { ExecutionQueueIndicator } from './ExecutionQueueIndicator';
 import { ContextWarningSash } from './ContextWarningSash';
 import { SummarizeProgressOverlay } from './SummarizeProgressOverlay';
-import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
-import { useScrollIntoView } from '../hooks/useScrollIntoView';
+import { useAgentCapabilities, useScrollIntoView } from '../hooks';
 import { getProviderDisplayName } from '../utils/sessionValidation';
 
 interface SlashCommand {

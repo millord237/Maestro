@@ -11,8 +11,7 @@ import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { useGitStatus } from '../contexts/GitStatusContext';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
-import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
-import { useHoverTooltip } from '../hooks/useHoverTooltip';
+import { useAgentCapabilities, useHoverTooltip } from '../hooks';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -53,9 +52,9 @@ interface MainPanelProps {
   selectedSlashCommandIndex: number;
   // Tab completion props
   tabCompletionOpen?: boolean;
-  tabCompletionSuggestions?: import('../hooks/useTabCompletion').TabCompletionSuggestion[];
+  tabCompletionSuggestions?: import('../hooks').TabCompletionSuggestion[];
   selectedTabCompletionIndex?: number;
-  tabCompletionFilter?: import('../hooks/useTabCompletion').TabCompletionFilter;
+  tabCompletionFilter?: import('../hooks').TabCompletionFilter;
   // @ mention completion props (AI mode)
   atMentionOpen?: boolean;
   atMentionFilter?: string;
@@ -96,7 +95,7 @@ interface MainPanelProps {
   // Tab completion setters
   setTabCompletionOpen?: (open: boolean) => void;
   setSelectedTabCompletionIndex?: (index: number) => void;
-  setTabCompletionFilter?: (filter: import('../hooks/useTabCompletion').TabCompletionFilter) => void;
+  setTabCompletionFilter?: (filter: import('../hooks').TabCompletionFilter) => void;
   // @ mention completion setters
   setAtMentionOpen?: (open: boolean) => void;
   setAtMentionFilter?: (filter: string) => void;
