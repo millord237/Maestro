@@ -7136,6 +7136,7 @@ export default function MaestroConsole() {
         <LeaderboardRegistrationModal
           theme={theme}
           autoRunStats={autoRunStats}
+          keyboardMasteryStats={keyboardMasteryStats}
           existingRegistration={leaderboardRegistration}
           onClose={() => setLeaderboardRegistrationOpen(false)}
           onSave={(registration) => {
@@ -8869,6 +8870,12 @@ export default function MaestroConsole() {
         contextWarningsEnabled={contextManagementSettings.contextWarningsEnabled}
         contextWarningYellowThreshold={contextManagementSettings.contextWarningYellowThreshold}
         contextWarningRedThreshold={contextManagementSettings.contextWarningRedThreshold}
+        onShortcutUsed={(shortcutId: string) => {
+          const result = recordShortcutUsage(shortcutId);
+          if (result.newLevel !== null) {
+            onKeyboardMasteryLevelUp(result.newLevel);
+          }
+        }}
       />
       )}
 

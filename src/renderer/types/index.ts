@@ -585,6 +585,10 @@ export interface LeaderboardRegistration {
   // Authentication
   clientToken?: string;          // Client-generated token for polling auth status
   authToken?: string;            // 64-character token received after email confirmation
+  // Keyboard mastery data
+  keyboardMasteryLevel?: number;       // 0-4 (Beginner to Maestro)
+  keyboardMasteryLevelName?: string;   // Level name
+  keyboardMasteryPercentage?: number;  // 0-100
 }
 
 // Ranking info for a single leaderboard category

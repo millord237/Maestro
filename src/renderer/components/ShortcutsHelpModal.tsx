@@ -21,7 +21,7 @@ export function ShortcutsHelpModal({ theme, shortcuts, tabShortcuts, onClose, ha
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Combine all shortcuts for display: editable + tab + fixed (non-editable)
+  // Combine all shortcuts for display and mastery tracking
   const allShortcuts = useMemo(() => ({
     ...shortcuts,
     ...tabShortcuts,

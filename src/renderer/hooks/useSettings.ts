@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { LLMProvider, ThemeId, ThemeColors, Shortcut, CustomAICommand, GlobalStats, AutoRunStats, OnboardingStats, LeaderboardRegistration, ContextManagementSettings, KeyboardMasteryStats } from '../types';
 import { DEFAULT_CUSTOM_THEME_COLORS } from '../constants/themes';
-import { DEFAULT_SHORTCUTS, TAB_SHORTCUTS } from '../constants/shortcuts';
+import { DEFAULT_SHORTCUTS, TAB_SHORTCUTS, FIXED_SHORTCUTS } from '../constants/shortcuts';
 import { getLevelIndex } from '../constants/keyboardMastery';
 import { commitCommandPrompt } from '../../prompts';
 
@@ -50,8 +50,8 @@ const DEFAULT_KEYBOARD_MASTERY_STATS: KeyboardMasteryStats = {
   lastAcknowledgedLevel: 0,
 };
 
-// Total trackable shortcuts for calculating mastery percentage
-const TOTAL_SHORTCUTS_COUNT = Object.keys(DEFAULT_SHORTCUTS).length + Object.keys(TAB_SHORTCUTS).length;
+// Total shortcuts for calculating mastery percentage (includes all shortcut types)
+const TOTAL_SHORTCUTS_COUNT = Object.keys(DEFAULT_SHORTCUTS).length + Object.keys(TAB_SHORTCUTS).length + Object.keys(FIXED_SHORTCUTS).length;
 
 // Default onboarding stats (all local, no external telemetry)
 const DEFAULT_ONBOARDING_STATS: OnboardingStats = {

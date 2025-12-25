@@ -50,14 +50,18 @@ export function KeyboardMasteryCelebration({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Use ref for isClosing to avoid race conditions and stale closures
+  const isClosingRef = useRef(false);
   const [isClosing, setIsClosing] = useState(false);
+
+  // Track active timeouts for cleanup
+  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   // Determine level info
   const levelInfo = KEYBOARD_MASTERY_LEVELS[level] || KEYBOARD_MASTERY_LEVELS[0];
   const isMaestro = level === 4;
-  const isVirtuoso = level === 3;
 
-  // Fire confetti burst
+  // Fire confetti burst - returns timeout ID for cleanup
   const fireConfetti = useCallback(() => {
     // Check for reduced motion preference
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -81,9 +85,9 @@ export function KeyboardMasteryCelebration({
       disableForReducedMotion: true,
     });
 
-    // Extra burst for Maestro
+    // Extra burst for Maestro - track timeout for cleanup
     if (isMaestro) {
-      setTimeout(() => {
+      const burstTimeout = setTimeout(() => {
         confetti({
           particleCount: 100,
           spread: 360,
@@ -95,41 +99,53 @@ export function KeyboardMasteryCelebration({
           disableForReducedMotion: true,
         });
       }, 300);
+      timeoutsRef.current.push(burstTimeout);
     }
   }, [level, isMaestro]);
 
-  // Fire confetti on mount
+  // Fire confetti on mount with cleanup
   useEffect(() => {
     fireConfetti();
+    return () => {
+      // Clear all tracked timeouts on unmount
+      timeoutsRef.current.forEach(clearTimeout);
+      timeoutsRef.current = [];
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle close with confetti
+  // Handle close with confetti - use ref to avoid stale state
   const handleClose = useCallback(() => {
-    if (isClosing) return;
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     setIsClosing(true);
 
     // Fire closing confetti
     fireConfetti();
 
-    // Wait then close
-    setTimeout(() => {
+    // Wait then close - track timeout for cleanup
+    const closeTimeout = setTimeout(() => {
       onCloseRef.current();
     }, 800);
-  }, [isClosing, fireConfetti]);
+    timeoutsRef.current.push(closeTimeout);
+  }, [fireConfetti]);
 
-  // Handle keyboard events
+  // Stable ref for handleClose to avoid re-attaching keyboard listener
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
+  // Handle keyboard events - use ref to avoid stale closure
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
-        handleClose();
+        handleCloseRef.current();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleClose]);
+  }, []); // Empty deps - handler reads from ref
 
   // Register with layer stack
   useEffect(() => {
@@ -140,7 +156,7 @@ export function KeyboardMasteryCelebration({
       capturesFocus: true,
       focusTrap: 'strict',
       ariaLabel: 'Keyboard Mastery Level Up Celebration',
-      onEscape: () => handleClose(),
+      onEscape: () => handleCloseRef.current(),
     });
     layerIdRef.current = id;
 
@@ -151,7 +167,7 @@ export function KeyboardMasteryCelebration({
         unregisterLayer(layerIdRef.current);
       }
     };
-  }, [registerLayer, unregisterLayer, handleClose]);
+  }, [registerLayer, unregisterLayer]);
 
   // Update escape handler when handleClose changes
   useEffect(() => {

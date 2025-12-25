@@ -366,6 +366,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         if (targetIndex >= 0 && targetIndex < ctx.visibleSessions.length) {
           const targetSession = ctx.visibleSessions[targetIndex];
           ctx.setActiveSessionId(targetSession.id);
+          trackShortcut('jumpToSession');
           // Also expand sidebar if collapsed
           if (!ctx.leftSidebarOpen) {
             ctx.setLeftSidebarOpen(true);
@@ -529,10 +530,22 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         }
       }
 
-      // Cmd+F to open file tree filter when file tree has focus
-      if (e.key === 'f' && (e.metaKey || e.ctrlKey) && ctx.activeFocus === 'right' && ctx.activeRightTab === 'files') {
-        e.preventDefault();
-        ctx.setFileTreeFilterOpen(true);
+      // Cmd+F contextual shortcuts - track based on current focus/context
+      if (e.key === 'f' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        if (ctx.activeFocus === 'right' && ctx.activeRightTab === 'files') {
+          e.preventDefault();
+          ctx.setFileTreeFilterOpen(true);
+          trackShortcut('filterFiles');
+        } else if (ctx.activeFocus === 'sidebar') {
+          // Sidebar filter - handled by SessionList component, just track here
+          trackShortcut('filterSessions');
+        } else if (ctx.activeFocus === 'right' && ctx.activeRightTab === 'history') {
+          // History filter - handled by HistoryPanel component, just track here
+          trackShortcut('filterHistory');
+        } else if (ctx.activeFocus === 'main') {
+          // Main panel search - handled by TerminalOutput component, just track here
+          trackShortcut('searchOutput');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
