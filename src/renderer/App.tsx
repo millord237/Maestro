@@ -7344,6 +7344,11 @@ function MaestroConsoleInner() {
             }
             setTimeout(() => setSuccessFlashNotification(null), 4000);
           }}
+          autoRunSelectedDocument={activeSession?.autoRunSelectedFile ?? null}
+          autoRunCompletedTaskCount={rightPanelRef.current?.getAutoRunCompletedTaskCount() ?? 0}
+          onAutoRunResetTasks={() => {
+            rightPanelRef.current?.openAutoRunResetTasksModal();
+          }}
         />
       )}
       {lightboxImage && (

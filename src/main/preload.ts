@@ -333,6 +333,15 @@ contextBridge.exposeInMainWorld('maestro', {
       thinkingStartTime?: number | null;
     }>, activeTabId: string) =>
       ipcRenderer.invoke('web:broadcastTabsChange', sessionId, aiTabs, activeTabId),
+    // Broadcast session state change to web clients (for real-time busy/idle updates)
+    // This bypasses the debounced persistence which resets state to idle
+    broadcastSessionState: (sessionId: string, state: string, additionalData?: {
+      name?: string;
+      toolType?: string;
+      inputMode?: string;
+      cwd?: string;
+    }) =>
+      ipcRenderer.invoke('web:broadcastSessionState', sessionId, state, additionalData),
   },
 
   // Git API

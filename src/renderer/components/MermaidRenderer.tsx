@@ -3,8 +3,8 @@ import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 import type { Theme } from '../types';
 
-// Track if mermaid has been initialized
-let mermaidInitialized = false;
+// Track theme for mermaid initialization
+let lastThemeId: string | null = null;
 
 interface MermaidRendererProps {
   chart: string;
@@ -206,9 +206,11 @@ export function MermaidRenderer({ chart, theme }: MermaidRendererProps) {
       setError(null);
       setSvgContent(null);
 
-      // Initialize mermaid with the app's theme colors (only once, or when theme changes)
-      initMermaid(theme);
-      mermaidInitialized = true;
+      // Initialize mermaid with the app's theme colors (only when theme changes)
+      if (lastThemeId !== theme.name) {
+        initMermaid(theme);
+        lastThemeId = theme.name;
+      }
 
       try {
         // Generate a unique ID for this diagram
@@ -249,6 +251,27 @@ export function MermaidRenderer({ chart, theme }: MermaidRendererProps) {
     };
   }, [chart, theme]);
 
+  // Update container with SVG when content changes
+  // NOTE: This hook must be called before any conditional returns to satisfy rules-of-hooks
+  useLayoutEffect(() => {
+    if (containerRef.current && svgContent) {
+      // Parse sanitized SVG and append to container
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+      const svgElement = doc.documentElement;
+
+      // Clear existing content
+      while (containerRef.current.firstChild) {
+        containerRef.current.removeChild(containerRef.current.firstChild);
+      }
+
+      // Append new SVG
+      if (svgElement && svgElement.tagName === 'svg') {
+        containerRef.current.appendChild(document.importNode(svgElement, true));
+      }
+    }
+  }, [svgContent]);
+
   if (error) {
     return (
       <div
@@ -281,26 +304,6 @@ export function MermaidRenderer({ chart, theme }: MermaidRendererProps) {
       </div>
     );
   }
-
-  // Update container with SVG when content changes
-  useLayoutEffect(() => {
-    if (containerRef.current && svgContent) {
-      // Parse sanitized SVG and append to container
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(svgContent, 'image/svg+xml');
-      const svgElement = doc.documentElement;
-
-      // Clear existing content
-      while (containerRef.current.firstChild) {
-        containerRef.current.removeChild(containerRef.current.firstChild);
-      }
-
-      // Append new SVG
-      if (svgElement && svgElement.tagName === 'svg') {
-        containerRef.current.appendChild(document.importNode(svgElement, true));
-      }
-    }
-  }, [svgContent]);
 
   // Show loading state
   if (isLoading) {

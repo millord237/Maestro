@@ -330,6 +330,11 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
   // The internal comparison logic ensures broadcasts only happen when actually needed.
   const prevTabsRef = useRef<Map<string, { tabCount: number; activeTabId: string; tabsHash: string }>>(new Map());
 
+  // Track previous session states for broadcasting state changes to web clients
+  // This is separate from tab changes because session state (busy/idle) changes need
+  // to be broadcast immediately for proper UI feedback on the web interface
+  const prevSessionStatesRef = useRef<Map<string, string>>(new Map());
+
   // Only set up the interval when live mode is active
   useEffect(() => {
     // Skip entirely if not in live mode - no web clients to broadcast to
@@ -341,6 +346,19 @@ export function useRemoteIntegration(deps: UseRemoteIntegrationDeps): UseRemoteI
       const sessions = sessionsRef.current;
 
       sessions.forEach(session => {
+        // Broadcast session state changes (busy/idle) to web clients
+        // This bypasses the debounced persistence which resets state to 'idle' before saving
+        const prevState = prevSessionStatesRef.current.get(session.id);
+        if (prevState !== session.state) {
+          window.maestro.web.broadcastSessionState(session.id, session.state, {
+            name: session.name,
+            toolType: session.toolType,
+            inputMode: session.inputMode,
+            cwd: session.cwd,
+          });
+          prevSessionStatesRef.current.set(session.id, session.state);
+        }
+
         if (!session.aiTabs || session.aiTabs.length === 0) return;
 
         // Create a hash of tab properties that should trigger a broadcast when changed

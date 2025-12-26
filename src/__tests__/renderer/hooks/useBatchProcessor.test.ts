@@ -598,6 +598,7 @@ describe('useBatchProcessor hook', () => {
   // Mock window.maestro methods
   let mockReadDoc: ReturnType<typeof vi.fn>;
   let mockWriteDoc: ReturnType<typeof vi.fn>;
+  let mockCreateWorkingCopy: ReturnType<typeof vi.fn>;
   let mockStatus: ReturnType<typeof vi.fn>;
   let mockBranch: ReturnType<typeof vi.fn>;
   let mockBroadcastAutoRunState: ReturnType<typeof vi.fn>;
@@ -619,6 +620,7 @@ describe('useBatchProcessor hook', () => {
     // Set up window.maestro mocks
     mockReadDoc = vi.fn().mockResolvedValue({ success: true, content: '# Tasks\n- [ ] Task 1\n- [ ] Task 2' });
     mockWriteDoc = vi.fn().mockResolvedValue({ success: true });
+    mockCreateWorkingCopy = vi.fn().mockResolvedValue({ workingCopyPath: 'runs/tasks-run-1.md' });
     mockStatus = vi.fn().mockResolvedValue({ stdout: '' });
     mockBranch = vi.fn().mockResolvedValue({ stdout: 'main' });
     mockBroadcastAutoRunState = vi.fn();
@@ -634,6 +636,7 @@ describe('useBatchProcessor hook', () => {
       autorun: {
         readDoc: mockReadDoc,
         writeDoc: mockWriteDoc,
+        createWorkingCopy: mockCreateWorkingCopy,
         watchFolder: vi.fn(),
         unwatchFolder: vi.fn(),
         readFolder: vi.fn()
@@ -1362,7 +1365,10 @@ describe('useBatchProcessor hook', () => {
   });
 
   describe('reset on completion', () => {
-    it('should reset checked tasks when resetOnCompletion is enabled', async () => {
+    it('should create working copy when resetOnCompletion is enabled', async () => {
+      // Note: Reset-on-completion now uses working copies in /runs/ directory
+      // instead of modifying the original document. This preserves the original
+      // and allows the agent to work on a copy.
       const sessions = [createMockSession()];
       const groups = [createMockGroup()];
 
@@ -1398,8 +1404,8 @@ describe('useBatchProcessor hook', () => {
         }, '/test/folder');
       });
 
-      // Should have written the reset content back
-      expect(mockWriteDoc).toHaveBeenCalled();
+      // Should have created a working copy for the reset-on-completion document
+      expect(mockCreateWorkingCopy).toHaveBeenCalledWith('/test/folder', 'tasks', 1);
     });
   });
 
@@ -3198,7 +3204,10 @@ describe('useBatchProcessor hook', () => {
   });
 
   describe('reset-on-completion in loop mode', () => {
-    it('should reset checked tasks when document has resetOnCompletion enabled', async () => {
+    it('should create working copy when document has resetOnCompletion enabled', async () => {
+      // Note: Reset-on-completion now uses working copies in /runs/ directory
+      // instead of modifying the original document. This preserves the original
+      // and allows the agent to work on a copy each loop iteration.
       const sessions = [createMockSession()];
       const groups = [createMockGroup()];
 
@@ -3209,9 +3218,6 @@ describe('useBatchProcessor hook', () => {
         if (readCount <= 3) return { success: true, content: '- [ ] Repeating task' };
         return { success: true, content: '- [x] Repeating task' };
       });
-
-      const mockWriteDoc = vi.fn().mockResolvedValue({ success: true });
-      window.maestro.autorun.writeDoc = mockWriteDoc;
 
       mockOnSpawnAgent.mockResolvedValue({ success: true, agentSessionId: 'test' });
 
@@ -3236,7 +3242,8 @@ describe('useBatchProcessor hook', () => {
         }, '/test/folder');
       });
 
-      expect(mockWriteDoc).toHaveBeenCalled();
+      // Should have created a working copy for the reset-on-completion document
+      expect(mockCreateWorkingCopy).toHaveBeenCalledWith('/test/folder', 'tasks', 1);
     });
   });
 

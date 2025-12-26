@@ -2,11 +2,12 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo,
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle, RotateCcw } from 'lucide-react';
 import { getEncoder, formatTokenCount } from '../utils/tokenCounter';
 import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
 import type { FileNode } from '../types/fileTree';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
+import { ResetTasksConfirmModal } from './ResetTasksConfirmModal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { AutoRunDocumentSelector, DocumentTaskCount } from './AutoRunDocumentSelector';
 import { AutoRunLightbox } from './AutoRunLightbox';
@@ -90,6 +91,8 @@ export interface AutoRunHandle {
   isDirty: () => boolean;
   save: () => Promise<void>;
   revert: () => void;
+  openResetTasksModal: () => void;
+  getCompletedTaskCount: () => number;
 }
 
 // Custom image component that loads images from the Auto Run folder or external URLs
@@ -494,6 +497,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [resetTasksModalOpen, setResetTasksModalOpen] = useState(false);
   // Token count state
   const [tokenCount, setTokenCount] = useState<number | null>(null);
   // Search state
@@ -545,6 +549,27 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     // Reset undo history snapshot to the new content (so first edit creates a proper undo point)
     resetUndoHistory(content);
   }, [selectedFile, sessionId, content, resetUndoHistory]);
+
+  // Reset completed tasks - converts all '- [x]' to '- [ ]'
+  const handleResetTasks = useCallback(async () => {
+    if (!folderPath || !selectedFile) return;
+
+    // Push undo state before resetting
+    pushUndoState();
+
+    // Replace all completed checkboxes with unchecked ones
+    const resetContent = localContent.replace(/^([\s]*[-*]\s*)\[x\]/gim, '$1[ ]');
+    setLocalContent(resetContent);
+    lastUndoSnapshotRef.current = resetContent;
+
+    // Auto-save the reset content
+    try {
+      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', resetContent);
+      setSavedContent(resetContent);
+    } catch (err) {
+      console.error('Failed to save after reset:', err);
+    }
+  }, [folderPath, selectedFile, localContent, setLocalContent, setSavedContent, pushUndoState, lastUndoSnapshotRef]);
 
   // Image handling hook (attachments, paste, upload, lightbox)
   const {
@@ -625,6 +650,13 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     switchMode(mode === 'edit' ? 'preview' : 'edit');
   }, [mode, switchMode]);
 
+  // Helper function to count completed tasks (used by useImperativeHandle before taskCounts is defined)
+  const getCompletedTaskCountFromContent = useCallback(() => {
+    const completedRegex = /^[\s]*[-*]\s*\[x\]/gim;
+    const completedMatches = localContent.match(completedRegex) || [];
+    return completedMatches.length;
+  }, [localContent]);
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -639,7 +671,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     isDirty: () => isDirty,
     save: handleSave,
     revert: handleRevert,
-  }), [mode, switchMode, isDirty, handleSave, handleRevert]);
+    openResetTasksModal: () => {
+      const completedCount = getCompletedTaskCountFromContent();
+      if (completedCount > 0 && !isLocked) {
+        setResetTasksModalOpen(true);
+      }
+    },
+    getCompletedTaskCount: getCompletedTaskCountFromContent,
+  }), [mode, switchMode, isDirty, handleSave, handleRevert, getCompletedTaskCountFromContent, isLocked]);
 
   // Auto-switch to preview mode when auto-run starts, restore when it ends
   useEffect(() => {
@@ -1654,8 +1693,19 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             <div />
           )}
 
-          {/* Center info: Task count and/or Token count */}
+          {/* Center info: Reset button, Task count, and/or Token count */}
           <div className="flex items-center gap-3">
+            {/* Reset button - only show when there are completed tasks */}
+            {taskCounts.completed > 0 && !isLocked && (
+              <button
+                onClick={() => setResetTasksModalOpen(true)}
+                className="p-0.5 rounded transition-colors hover:bg-white/10"
+                style={{ color: theme.colors.textDim }}
+                title={`Reset ${taskCounts.completed} completed task${taskCounts.completed !== 1 ? 's' : ''}`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
             {taskCounts.total > 0 && (
               <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
                 {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
@@ -1708,6 +1758,17 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         <AutoRunnerHelpModal
           theme={theme}
           onClose={() => setHelpModalOpen(false)}
+        />
+      )}
+
+      {/* Reset Tasks Confirmation Modal */}
+      {resetTasksModalOpen && selectedFile && (
+        <ResetTasksConfirmModal
+          theme={theme}
+          documentName={selectedFile}
+          completedTaskCount={taskCounts.completed}
+          onConfirm={handleResetTasks}
+          onClose={() => setResetTasksModalOpen(false)}
         />
       )}
 

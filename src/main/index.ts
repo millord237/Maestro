@@ -912,6 +912,22 @@ function setupIpcHandlers() {
     return false;
   });
 
+  // Broadcast session state change to web clients (for real-time busy/idle updates)
+  // This is called directly from the renderer to bypass debounced persistence
+  // which resets state to 'idle' before saving
+  ipcMain.handle('web:broadcastSessionState', async (_, sessionId: string, state: string, additionalData?: {
+    name?: string;
+    toolType?: string;
+    inputMode?: string;
+    cwd?: string;
+  }) => {
+    if (webServer && webServer.getWebClientCount() > 0) {
+      webServer.broadcastSessionStateChange(sessionId, state, additionalData);
+      return true;
+    }
+    return false;
+  });
+
   // Git operations - extracted to src/main/ipc/handlers/git.ts
   registerGitHandlers();
 

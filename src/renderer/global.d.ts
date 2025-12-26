@@ -245,6 +245,12 @@ interface MaestroAPI {
       state: 'idle' | 'busy';
       thinkingStartTime?: number | null;
     }>, activeTabId: string) => Promise<void>;
+    broadcastSessionState: (sessionId: string, state: string, additionalData?: {
+      name?: string;
+      toolType?: string;
+      inputMode?: string;
+      cwd?: string;
+    }) => Promise<boolean>;
   };
   git: {
     status: (cwd: string) => Promise<{ stdout: string; stderr: string }>;

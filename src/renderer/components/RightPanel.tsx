@@ -13,6 +13,8 @@ export interface RightPanelHandle {
   refreshHistoryPanel: () => void;
   focusAutoRun: () => void;
   toggleAutoRunExpanded: () => void;
+  openAutoRunResetTasksModal: () => void;
+  getAutoRunCompletedTaskCount: () => number;
 }
 
 interface RightPanelProps {
@@ -210,7 +212,13 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     focusAutoRun: () => {
       autoRunRef.current?.focus();
     },
-    toggleAutoRunExpanded
+    toggleAutoRunExpanded,
+    openAutoRunResetTasksModal: () => {
+      autoRunRef.current?.openResetTasksModal();
+    },
+    getAutoRunCompletedTaskCount: () => {
+      return autoRunRef.current?.getCompletedTaskCount() ?? 0;
+    }
   }), [toggleAutoRunExpanded]);
 
   // Focus the history panel when switching to history tab
@@ -523,7 +531,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           </div>
 
           {/* Overall completed count with loop info */}
-          <div className="mt-2 flex items-center justify-center gap-2">
+          <div className="mt-2 flex items-start justify-between gap-2">
             <span className="text-[10px]" style={{ color: theme.colors.textDim }}>
               {currentSessionBatchState.isStopping
                 ? 'Waiting for current task to complete before stopping...'
@@ -535,7 +543,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
             {/* Loop iteration indicator */}
             {currentSessionBatchState.loopEnabled && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded"
+                className="text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
                 style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent }}
               >
                 Loop {currentSessionBatchState.loopIteration + 1} of {currentSessionBatchState.maxLoops ?? '∞'}
