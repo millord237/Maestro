@@ -159,9 +159,10 @@ function Tab({
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    // Only show overlay for tabs with an established Claude session
-    // New/empty tabs don't have a session yet, so star/rename don't apply
-    if (!tab.agentSessionId) return;
+    // Only show overlay if there's something meaningful to show:
+    // - Tabs with sessions: always show (for session actions)
+    // - Tabs without sessions: only show if there are multiple tabs (for close actions)
+    if (!tab.agentSessionId && hasOnlyOneTab) return;
 
     // Open overlay after delay
     hoverTimeoutRef.current = setTimeout(() => {
@@ -307,7 +308,6 @@ function Tab({
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onContextMenu={handleContextMenu}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -412,31 +412,31 @@ function Tab({
             setIsHovered(false);
           }}
         >
-          {/* Header with session name and ID */}
-          <div
-            className="border-b"
-            style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
-          >
-            {/* Session name display */}
-            {tab.name && (
-              <div
-                className="px-3 py-2 text-sm font-medium"
-                style={{ color: theme.colors.textMain }}
-              >
-                {tab.name}
-              </div>
-            )}
+          {/* Header with session name and ID - only show for tabs with sessions */}
+          {tab.agentSessionId && (
+            <div
+              className="border-b"
+              style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
+            >
+              {/* Session name display */}
+              {tab.name && (
+                <div
+                  className="px-3 py-2 text-sm font-medium"
+                  style={{ color: theme.colors.textMain }}
+                >
+                  {tab.name}
+                </div>
+              )}
 
-            {/* Session ID display */}
-            {tab.agentSessionId && (
+              {/* Session ID display */}
               <div
                 className="px-3 py-2 text-[10px] font-mono"
                 style={{ color: theme.colors.textDim }}
               >
                 {tab.agentSessionId}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="p-1">
@@ -467,23 +467,29 @@ function Tab({
               </button>
             )}
 
-            <button
-              onClick={handleRenameClick}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
-              style={{ color: theme.colors.textMain }}
-            >
-              <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-              Rename Tab
-            </button>
+            {/* Rename button - only show for tabs with established session */}
+            {tab.agentSessionId && (
+              <button
+                onClick={handleRenameClick}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                Rename Tab
+              </button>
+            )}
 
-            <button
-              onClick={handleMarkUnreadClick}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
-              style={{ color: theme.colors.textMain }}
-            >
-              <Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-              Mark as Unread
-            </button>
+            {/* Mark as Unread button - only show for tabs with established session */}
+            {tab.agentSessionId && (
+              <button
+                onClick={handleMarkUnreadClick}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                Mark as Unread
+              </button>
+            )}
 
             {/* Export as HTML - only show if tab has logs */}
             {(tab.logs?.length ?? 0) >= 1 && onExportHtml && (
@@ -549,6 +555,61 @@ function Tab({
                 Context: Send to Agent
               </button>
             )}
+
+            {/* Tab Close Actions Section - divider and close options */}
+            <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+
+            {/* Close Tab - disabled if only one tab */}
+            <button
+              onClick={handleCloseClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                hasOnlyOneTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={hasOnlyOneTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close
+            </button>
+
+            {/* Close Others - disabled if only one tab */}
+            <button
+              onClick={handleCloseOthersClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                hasOnlyOneTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={hasOnlyOneTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Others
+            </button>
+
+            {/* Close Tabs to the Left - disabled if first tab */}
+            <button
+              onClick={handleCloseLeftClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                isFirstTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={isFirstTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Tabs to the Left
+            </button>
+
+            {/* Close Tabs to the Right - disabled if last tab */}
+            <button
+              onClick={handleCloseRightClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                isLastTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={isLastTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Tabs to the Right
+            </button>
           </div>
         </div>,
         document.body
@@ -682,7 +743,6 @@ export function TabBar({
     };
   }, [tabs.length, displayedTabs.length]);
 
-<<<<<<< HEAD
   const handleCloseOthers = useCallback((tabId: string) => {
     // Close all VISIBLE tabs except the specified one
     displayedTabs.forEach(tab => {
