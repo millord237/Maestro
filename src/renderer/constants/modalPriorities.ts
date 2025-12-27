@@ -182,6 +182,9 @@ export const MODAL_PRIORITIES = {
   /** System log viewer overlay */
   LOG_VIEWER: 500,
 
+  /** SSH Remote configuration modal (above settings) */
+  SSH_REMOTE: 460,
+
   /** Settings modal */
   SETTINGS: 450,
 
