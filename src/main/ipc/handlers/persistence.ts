@@ -136,10 +136,11 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
       for (const session of sessions) {
         const prevSession = previousSessionMap.get(session.id);
         if (prevSession) {
-          // Session exists - check if state changed
+          // Session exists - check if state or other tracked properties changed
           if (prevSession.state !== session.state ||
               prevSession.inputMode !== session.inputMode ||
               prevSession.name !== session.name ||
+              prevSession.cwd !== session.cwd ||
               JSON.stringify(prevSession.cliActivity) !== JSON.stringify(session.cliActivity)) {
             webServer.broadcastSessionStateChange(session.id, session.state, {
               name: session.name,
@@ -197,7 +198,7 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
       const content = await fs.readFile(cliActivityPath, 'utf-8');
       const data = JSON.parse(content);
       return data.activities || [];
-    } catch (error) {
+    } catch {
       // File doesn't exist or is invalid - return empty array
       return [];
     }

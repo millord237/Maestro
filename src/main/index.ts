@@ -339,11 +339,14 @@ function createWebServer(): WebServer {
 
     // Get the requested tab's logs (or active tab if no tabId provided)
     // Tabs are the source of truth for AI conversation history
+    // Filter out thinking and tool logs - these should never be shown on the web interface
     let aiLogs: any[] = [];
     const targetTabId = tabId || session.activeTabId;
     if (session.aiTabs && session.aiTabs.length > 0) {
       const targetTab = session.aiTabs.find((t: any) => t.id === targetTabId) || session.aiTabs[0];
-      aiLogs = targetTab?.logs || [];
+      const rawLogs = targetTab?.logs || [];
+      // Web interface should never show thinking/tool logs regardless of desktop settings
+      aiLogs = rawLogs.filter((log: any) => log.source !== 'thinking' && log.source !== 'tool');
     }
 
     return {
@@ -904,6 +907,22 @@ function setupIpcHandlers() {
   ipcMain.handle('web:broadcastTabsChange', async (_, sessionId: string, aiTabs: any[], activeTabId: string) => {
     if (webServer && webServer.getWebClientCount() > 0) {
       webServer.broadcastTabsChange(sessionId, aiTabs, activeTabId);
+      return true;
+    }
+    return false;
+  });
+
+  // Broadcast session state change to web clients (for real-time busy/idle updates)
+  // This is called directly from the renderer to bypass debounced persistence
+  // which resets state to 'idle' before saving
+  ipcMain.handle('web:broadcastSessionState', async (_, sessionId: string, state: string, additionalData?: {
+    name?: string;
+    toolType?: string;
+    inputMode?: string;
+    cwd?: string;
+  }) => {
+    if (webServer && webServer.getWebClientCount() > 0) {
+      webServer.broadcastSessionStateChange(sessionId, state, additionalData);
       return true;
     }
     return false;
@@ -1887,8 +1906,8 @@ function extractTextFromAgentOutput(rawOutput: string, agentType: string): strin
 
   const textParts: string[] = [];
   let resultText: string | null = null;
-  let resultMessageCount = 0;
-  let textMessageCount = 0;
+  let _resultMessageCount = 0;
+  let _textMessageCount = 0;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -1900,12 +1919,12 @@ function extractTextFromAgentOutput(rawOutput: string, agentType: string): strin
     if (event.type === 'result' && event.text) {
       // Result message is the authoritative final response - save it
       resultText = event.text;
-      resultMessageCount++;
+      _resultMessageCount++;
     }
 
     if (event.type === 'text' && event.text) {
       textParts.push(event.text);
-      textMessageCount++;
+      _textMessageCount++;
     }
   }
 

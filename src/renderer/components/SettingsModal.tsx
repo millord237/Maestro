@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle } from 'lucide-react';
-import { useSettings } from '../hooks/useSettings';
+import { useSettings } from '../hooks';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -244,7 +244,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
   // Sync/storage location state
   const [defaultStoragePath, setDefaultStoragePath] = useState<string>('');
-  const [currentStoragePath, setCurrentStoragePath] = useState<string>('');
+  const [_currentStoragePath, setCurrentStoragePath] = useState<string>('');
   const [customSyncPath, setCustomSyncPath] = useState<string | undefined>(undefined);
   const [syncRestartRequired, setSyncRestartRequired] = useState(false);
   const [syncMigrating, setSyncMigrating] = useState(false);

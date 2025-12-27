@@ -11,8 +11,7 @@ import { TabBar } from './TabBar';
 import { gitService } from '../services/git';
 import { useGitStatus } from '../contexts/GitStatusContext';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
-import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
-import { useHoverTooltip } from '../hooks/useHoverTooltip';
+import { useAgentCapabilities, useHoverTooltip } from '../hooks';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
 interface SlashCommand {
@@ -53,9 +52,9 @@ interface MainPanelProps {
   selectedSlashCommandIndex: number;
   // Tab completion props
   tabCompletionOpen?: boolean;
-  tabCompletionSuggestions?: import('../hooks/useTabCompletion').TabCompletionSuggestion[];
+  tabCompletionSuggestions?: import('../hooks').TabCompletionSuggestion[];
   selectedTabCompletionIndex?: number;
-  tabCompletionFilter?: import('../hooks/useTabCompletion').TabCompletionFilter;
+  tabCompletionFilter?: import('../hooks').TabCompletionFilter;
   // @ mention completion props (AI mode)
   atMentionOpen?: boolean;
   atMentionFilter?: string;
@@ -96,7 +95,7 @@ interface MainPanelProps {
   // Tab completion setters
   setTabCompletionOpen?: (open: boolean) => void;
   setSelectedTabCompletionIndex?: (index: number) => void;
-  setTabCompletionFilter?: (filter: import('../hooks/useTabCompletion').TabCompletionFilter) => void;
+  setTabCompletionFilter?: (filter: import('../hooks').TabCompletionFilter) => void;
   // @ mention completion setters
   setAtMentionOpen?: (open: boolean) => void;
   setAtMentionFilter?: (filter: string) => void;
@@ -194,6 +193,7 @@ interface MainPanelProps {
   onSummarizeAndContinue?: (tabId: string) => void;
   onMergeWith?: (tabId: string) => void;
   onSendToAgent?: (tabId: string) => void;
+  onCopyContext?: (tabId: string) => void;
 
   // Context warning sash settings (Phase 6)
   contextWarningsEnabled?: boolean;
@@ -220,7 +220,9 @@ interface MainPanelProps {
   onShortcutUsed?: (shortcutId: string) => void;
 }
 
-export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
+// PERFORMANCE: Wrap with React.memo to prevent re-renders when parent (App.tsx) re-renders
+// due to input value changes. The component will only re-render when its props actually change.
+export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
   const {
     logViewerOpen, agentSessionsOpen, activeAgentSessionId, activeSession, sessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSendAI, enterToSendTerminal, stagedImages, commandHistoryOpen, commandHistoryFilter,
@@ -229,16 +231,16 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     setTabCompletionOpen, setSelectedTabCompletionIndex, setTabCompletionFilter,
     atMentionOpen, atMentionFilter, atMentionStartIndex, atMentionSuggestions, selectedAtMentionIndex,
     setAtMentionOpen, setAtMentionFilter, setAtMentionStartIndex, setSelectedAtMentionIndex,
-    previewFile, markdownEditMode, shortcuts, rightPanelOpen, maxOutputLines, gitDiffPreview,
+    previewFile, markdownEditMode, shortcuts, rightPanelOpen, maxOutputLines, gitDiffPreview: _gitDiffPreview,
     fileTreeFilterOpen, logLevel, setGitDiffPreview, setLogViewerOpen, setAgentSessionsOpen, setActiveAgentSessionId,
     onResumeAgentSession, onNewAgentSession, setActiveFocus, setOutputSearchOpen, setOutputSearchQuery,
     setInputValue, setEnterToSendAI, setEnterToSendTerminal, setStagedImages, setLightboxImage, setCommandHistoryOpen,
     setCommandHistoryFilter, setCommandHistorySelectedIndex, setSlashCommandOpen,
     setSelectedSlashCommandIndex, setPreviewFile, setMarkdownEditMode,
-    setAboutModalOpen, setRightPanelOpen, setGitLogOpen, inputRef, logsEndRef, terminalOutputRef,
+    setAboutModalOpen: _setAboutModalOpen, setRightPanelOpen, setGitLogOpen, inputRef, logsEndRef, terminalOutputRef,
     fileTreeContainerRef, fileTreeFilterInputRef, toggleInputMode, processInput, handleInterrupt,
     handleInputKeyDown, handlePaste, handleDrop, getContextColor, setActiveSessionId,
-    batchRunState, currentSessionBatchState, onStopBatchRun, showConfirmation, onRemoveQueuedItem, onOpenQueueBrowser,
+    batchRunState: _batchRunState, currentSessionBatchState, onStopBatchRun, showConfirmation: _showConfirmation, onRemoveQueuedItem, onOpenQueueBrowser,
     isMobileLandscape = false,
     showFlashNotification,
     onOpenWorktreeConfig,
@@ -247,6 +249,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     onSummarizeAndContinue,
     onMergeWith,
     onSendToAgent,
+    onCopyContext,
     // Context warning sash settings (Phase 6)
     contextWarningsEnabled = false,
     contextWarningYellowThreshold = 60,
@@ -372,8 +375,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
     };
   }, []);
 
-  // Responsive breakpoints for hiding widgets
+  // Responsive breakpoints for hiding/simplifying widgets
   const showCostWidget = panelWidth > 500;
+  const useCompactGitWidget = panelWidth < 700;
 
   // Git status from centralized context (replaces local polling)
   // The context handles polling for all sessions and provides detailed data for the active session
@@ -517,11 +521,14 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                         setGitLogOpen?.(true);
                       }
                     }}
+                    title={activeSession.isGitRepo && gitInfo?.branch ? gitInfo.branch : undefined}
                   >
                     {activeSession.isGitRepo ? (
                       <>
                         <GitBranch className="w-3 h-3" />
-                        {gitInfo?.branch || 'GIT'}
+                        <span className="max-w-[120px] truncate">
+                          {gitInfo?.branch || 'GIT'}
+                        </span>
                       </>
                     ) : 'LOCAL'}
                   </span>
@@ -671,6 +678,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 isGitRepo={activeSession.isGitRepo}
                 theme={theme}
                 onViewDiff={handleViewGitDiff}
+                compact={useCompactGitWidget}
               />
 
             </div>
@@ -686,8 +694,9 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
                 disabled={isCurrentSessionStopping}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all ${isCurrentSessionStopping ? 'cursor-not-allowed' : 'hover:opacity-90 cursor-pointer'}`}
                 style={{
-                  backgroundColor: theme.colors.error,
-                  color: 'white'
+                  backgroundColor: isCurrentSessionStopping ? theme.colors.warning : theme.colors.error,
+                  color: isCurrentSessionStopping ? theme.colors.bgMain : 'white',
+                  pointerEvents: isCurrentSessionStopping ? 'none' : 'auto'
                 }}
                 title={isCurrentSessionStopping ? 'Stopping after current task...' : 'Click to stop batch run'}
               >
@@ -887,6 +896,7 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
               onMergeWith={onMergeWith}
               onSendToAgent={onSendToAgent}
               onSummarizeAndContinue={onSummarizeAndContinue}
+              onCopyContext={onCopyContext}
               showUnreadOnly={showUnreadOnly}
               onToggleUnreadFilter={onToggleUnreadFilter}
               onOpenTabSearch={onOpenTabSearch}
@@ -1135,4 +1145,4 @@ export const MainPanel = forwardRef<MainPanelHandle, MainPanelProps>(function Ma
       )}
     </>
   );
-});
+}));

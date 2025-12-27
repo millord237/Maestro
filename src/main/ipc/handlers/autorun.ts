@@ -569,6 +569,71 @@ export function registerAutorunHandlers(deps: {
     })
   );
 
+  // Create a working copy of a document for reset-on-completion loops
+  // Working copies are stored in /Runs/ subdirectory with format: {name}-{timestamp}-loop-{N}.md
+  ipcMain.handle(
+    'autorun:createWorkingCopy',
+    createIpcHandler(
+      handlerOpts('createWorkingCopy'),
+      async (folderPath: string, filename: string, loopNumber: number) => {
+        // Reject obvious traversal attempts
+        if (filename.includes('..')) {
+          throw new Error('Invalid filename');
+        }
+
+        // Ensure filename has .md extension for source, remove for naming
+        const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+        const baseName = filename.endsWith('.md') ? filename.slice(0, -3) : filename;
+
+        // Handle subdirectory paths (e.g., "Ingest-Loop/0_DISCOVER_NEW")
+        const pathParts = baseName.split('/');
+        const docName = pathParts[pathParts.length - 1];
+        const subDir = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+
+        const sourcePath = path.join(folderPath, fullFilename);
+
+        // Validate source path is within folder
+        if (!validatePathWithinFolder(sourcePath, folderPath)) {
+          throw new Error('Invalid file path');
+        }
+
+        // Check if source file exists
+        try {
+          await fs.access(sourcePath);
+        } catch {
+          throw new Error('Source file not found');
+        }
+
+        // Create Runs directory (with subdirectory if needed)
+        const runsDir = subDir
+          ? path.join(folderPath, 'Runs', subDir)
+          : path.join(folderPath, 'Runs');
+        await fs.mkdir(runsDir, { recursive: true });
+
+        // Generate working copy filename: {name}-{timestamp}-loop-{N}.md
+        const timestamp = Date.now();
+        const workingCopyName = `${docName}-${timestamp}-loop-${loopNumber}.md`;
+        const workingCopyPath = path.join(runsDir, workingCopyName);
+
+        // Validate working copy path is within folder
+        if (!validatePathWithinFolder(workingCopyPath, folderPath)) {
+          throw new Error('Invalid working copy path');
+        }
+
+        // Copy the source to working copy
+        await fs.copyFile(sourcePath, workingCopyPath);
+
+        // Return the relative path (without .md for consistency with other APIs)
+        const relativePath = subDir
+          ? `Runs/${subDir}/${workingCopyName.slice(0, -3)}`
+          : `Runs/${workingCopyName.slice(0, -3)}`;
+
+        logger.info(`Created Auto Run working copy: ${relativePath}`, LOG_CONTEXT);
+        return { workingCopyPath: relativePath, originalPath: baseName };
+      }
+    )
+  );
+
   // Delete all backup files in a folder
   ipcMain.handle(
     'autorun:deleteBackups',

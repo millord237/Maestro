@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import type { Theme } from '../types';
-import type { AutocompleteState } from '../hooks/useTemplateAutocomplete';
+import type { AutocompleteState } from '../hooks';
 
 interface TemplateAutocompleteDropdownProps {
   theme: Theme;

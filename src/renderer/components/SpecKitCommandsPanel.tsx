@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Edit2, Save, X, RotateCcw, RefreshCw, ExternalLink, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
 import type { Theme, SpecKitCommand, SpecKitMetadata } from '../types';
-import { useTemplateAutocomplete } from '../hooks/useTemplateAutocomplete';
+import { useTemplateAutocomplete } from '../hooks';
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 
 interface SpecKitCommandsPanelProps {

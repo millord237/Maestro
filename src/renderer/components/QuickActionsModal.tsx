@@ -8,7 +8,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { gitService } from '../services/git';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import type { WizardStep } from './Wizard/WizardContext';
-import { useListNavigation } from '../hooks/useListNavigation';
+import { useListNavigation } from '../hooks';
 
 interface QuickAction {
   id: string;
@@ -90,6 +90,10 @@ interface QuickActionsModalProps {
   // Summarize and continue
   onSummarizeAndContinue?: () => void;
   canSummarizeActiveTab?: boolean;
+  // Auto Run reset tasks
+  autoRunSelectedDocument?: string | null;
+  autoRunCompletedTaskCount?: number;
+  onAutoRunResetTasks?: () => void;
 }
 
 export function QuickActionsModal(props: QuickActionsModalProps) {
@@ -104,10 +108,11 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
     setAgentSessionsOpen, setActiveAgentSessionId, setGitDiffPreview, setGitLogOpen,
     onRenameTab, onToggleReadOnlyMode, onToggleTabShowThinking, onOpenTabSwitcher, tabShortcuts, isAiMode, setPlaygroundOpen, onRefreshGitFileState,
-    onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep, setDebugWizardModalOpen, setDebugPackageModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent,
+    onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep: _wizardGoToStep, setDebugWizardModalOpen, setDebugPackageModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent,
     groupChats, onNewGroupChat, onOpenGroupChat, onCloseGroupChat, onDeleteGroupChat, activeGroupChatId,
     hasActiveSessionCapability, onOpenMergeSession, onOpenSendToAgent, onOpenCreatePR,
-    onSummarizeAndContinue, canSummarizeActiveTab
+    onSummarizeAndContinue, canSummarizeActiveTab,
+    autoRunSelectedDocument, autoRunCompletedTaskCount, onAutoRunResetTasks
   } = props;
 
   const [search, setSearch] = useState('');
@@ -339,6 +344,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'devtools', label: 'Toggle JavaScript Console', action: () => { window.maestro.devtools.toggle(); setQuickActionOpen(false); } },
     { id: 'about', label: 'About Maestro', action: () => { setAboutModalOpen(true); setQuickActionOpen(false); } },
     { id: 'website', label: 'Maestro Website', subtext: 'Open the Maestro website', action: () => { window.maestro.shell.openExternal('https://runmaestro.ai/'); setQuickActionOpen(false); } },
+    { id: 'docs', label: 'Documentation and User Guide', subtext: 'Open the Maestro documentation', action: () => { window.maestro.shell.openExternal('https://docs.runmaestro.ai/'); setQuickActionOpen(false); } },
     { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/SrBsykvG'); setQuickActionOpen(false); } },
     ...(setUpdateCheckModalOpen ? [{ id: 'updateCheck', label: 'Check for Updates', action: () => { setUpdateCheckModalOpen(true); setQuickActionOpen(false); } }] : []),
     { id: 'createDebugPackage', label: 'Create Debug Package', subtext: 'Generate a support bundle for bug reporting', action: () => {
@@ -362,6 +368,16 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'goToFiles', label: 'Go to Files Tab', shortcut: shortcuts.goToFiles, action: () => { setRightPanelOpen(true); setActiveRightTab('files'); setQuickActionOpen(false); } },
     { id: 'goToHistory', label: 'Go to History Tab', shortcut: shortcuts.goToHistory, action: () => { setRightPanelOpen(true); setActiveRightTab('history'); setQuickActionOpen(false); } },
     { id: 'goToAutoRun', label: 'Go to Auto Run Tab', shortcut: shortcuts.goToAutoRun, action: () => { setRightPanelOpen(true); setActiveRightTab('autorun'); setQuickActionOpen(false); } },
+    // Auto Run reset tasks - only show when there are completed tasks in the selected document
+    ...(autoRunSelectedDocument && autoRunCompletedTaskCount && autoRunCompletedTaskCount > 0 && onAutoRunResetTasks ? [{
+      id: 'resetAutoRunTasks',
+      label: `Reset Finished Tasks in ${autoRunSelectedDocument}`,
+      subtext: `Uncheck ${autoRunCompletedTaskCount} completed task${autoRunCompletedTaskCount !== 1 ? 's' : ''}`,
+      action: () => {
+        onAutoRunResetTasks();
+        setQuickActionOpen(false);
+      }
+    }] : []),
     ...(setFuzzyFileSearchOpen ? [{ id: 'fuzzyFileSearch', label: 'Fuzzy File Search', shortcut: shortcuts.fuzzyFileSearch, action: () => { setFuzzyFileSearchOpen(true); setQuickActionOpen(false); } }] : []),
     // Group Chat commands - only show when at least 2 AI agents exist
     ...(onNewGroupChat && sessions.filter(s => s.toolType !== 'terminal').length >= 2 ? [{ id: 'newGroupChat', label: 'New Group Chat', action: () => { onNewGroupChat(); setQuickActionOpen(false); } }] : []),

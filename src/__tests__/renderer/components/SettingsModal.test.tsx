@@ -60,7 +60,7 @@ vi.mock('../../../renderer/components/CustomThemeBuilder', () => ({
 }));
 
 // Mock useSettings hook (used for context management settings)
-vi.mock('../../../renderer/hooks/useSettings', () => ({
+vi.mock('../../../renderer/hooks/settings/useSettings', () => ({
   useSettings: () => ({
     contextManagementSettings: {
       autoGroomContexts: true,

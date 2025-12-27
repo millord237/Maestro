@@ -8,7 +8,7 @@ import type { Session, Theme } from '../../../renderer/types';
 Element.prototype.scrollIntoView = vi.fn();
 
 // Mock useAgentCapabilities hook - return claude-code capabilities by default
-vi.mock('../../../renderer/hooks/useAgentCapabilities', () => ({
+vi.mock('../../../renderer/hooks/agent/useAgentCapabilities', () => ({
   useAgentCapabilities: vi.fn(() => ({
     capabilities: {
       supportsResume: true,
@@ -246,7 +246,7 @@ describe('InputArea', () => {
 
     it('hides attach image button when agent does not support image input', async () => {
       // Mock capabilities to return false for supportsImageInput
-      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/useAgentCapabilities');
+      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/agent/useAgentCapabilities');
       vi.mocked(useAgentCapabilitiesMock.useAgentCapabilities).mockReturnValueOnce({
         capabilities: {
           supportsResume: true,
@@ -306,7 +306,7 @@ describe('InputArea', () => {
 
     it('hides read-only toggle when agent does not support read-only mode', async () => {
       // Mock capabilities to return false for supportsReadOnlyMode
-      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/useAgentCapabilities');
+      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/agent/useAgentCapabilities');
       vi.mocked(useAgentCapabilitiesMock.useAgentCapabilities).mockReturnValueOnce({
         capabilities: {
           supportsResume: true,
@@ -713,6 +713,107 @@ describe('InputArea', () => {
       // Should open slash command autocomplete for all agents
       expect(setSlashCommandOpen).toHaveBeenCalledWith(true);
     });
+
+    it('calls handleInputKeyDown when pressing arrow keys in input', () => {
+      const handleInputKeyDown = vi.fn();
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/',
+        handleInputKeyDown,
+      });
+      render(<InputArea {...props} />);
+
+      // Slash commands ArrowDown/ArrowUp/Enter/Escape are handled in App.tsx handleInputKeyDown
+      // The InputArea should pass these events to the handler
+      const textarea = screen.getByRole('textbox');
+      fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+      expect(handleInputKeyDown).toHaveBeenCalled();
+    });
+
+    it('shows empty state when no commands match filter', () => {
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/xyz123nonexistent',
+        slashCommands: [
+          { command: '/clear', description: 'Clear chat history' },
+          { command: '/help', description: 'Show help', aiOnly: true },
+        ],
+      });
+      render(<InputArea {...props} />);
+
+      // When no commands match, the dropdown should not render any command items
+      expect(screen.queryByText('/clear')).not.toBeInTheDocument();
+      expect(screen.queryByText('/help')).not.toBeInTheDocument();
+    });
+
+    it('single click updates selection without closing dropdown', () => {
+      const setSelectedSlashCommandIndex = vi.fn();
+      const setSlashCommandOpen = vi.fn();
+      const setInputValue = vi.fn();
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/',
+        setSelectedSlashCommandIndex,
+        setSlashCommandOpen,
+        setInputValue,
+      });
+      render(<InputArea {...props} />);
+
+      const helpCmd = screen.getByText('/help').closest('.px-4');
+      fireEvent.click(helpCmd!);
+
+      // Single click should update selection
+      expect(setSelectedSlashCommandIndex).toHaveBeenCalledWith(1);
+      // But should NOT close dropdown or fill input
+      expect(setSlashCommandOpen).not.toHaveBeenCalled();
+      expect(setInputValue).not.toHaveBeenCalled();
+    });
+
+    it('renders command description text', () => {
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/',
+        slashCommands: [
+          { command: '/test', description: 'Test command description' },
+        ],
+      });
+      render(<InputArea {...props} />);
+
+      expect(screen.getByText('Test command description')).toBeInTheDocument();
+    });
+
+    it('applies correct styling to unselected items', () => {
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/',
+        selectedSlashCommandIndex: 0, // First item selected
+      });
+      render(<InputArea {...props} />);
+
+      // The second item (/help) should NOT have accent background since index 0 is selected
+      const helpCmd = screen.getByText('/help').closest('.px-4');
+      // Unselected items don't have the accent color background
+      expect(helpCmd).not.toHaveStyle({ backgroundColor: mockTheme.colors.accent });
+      // First item (selected) should have accent background
+      const clearCmd = screen.getByText('/clear').closest('.px-4');
+      expect(clearCmd).toHaveStyle({ backgroundColor: mockTheme.colors.accent });
+    });
+
+    it('scrolls selected item into view via refs', () => {
+      // This test verifies the ref array for scroll-into-view is populated
+      const props = createDefaultProps({
+        slashCommandOpen: true,
+        inputValue: '/',
+        selectedSlashCommandIndex: 0,
+      });
+      render(<InputArea {...props} />);
+
+      // Items should be rendered (refs should be attached)
+      expect(screen.getByText('/clear')).toBeInTheDocument();
+      expect(screen.getByText('/help')).toBeInTheDocument();
+      // The scrollIntoView mock should have been called for selected item
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    });
   });
 
   describe('Command History Modal', () => {
@@ -1006,6 +1107,79 @@ describe('InputArea', () => {
 
       expect(setInputValue).toHaveBeenCalledWith('git checkout main');
       expect(setTabCompletionOpen).toHaveBeenCalledWith(false);
+    });
+
+    it('highlights selected suggestion based on selectedTabCompletionIndex', () => {
+      const props = createDefaultProps({
+        session: createMockSession({ inputMode: 'terminal' }),
+        tabCompletionOpen: true,
+        tabCompletionSuggestions: [
+          { value: 'ls -la', type: 'history', displayText: 'ls -la' },
+          { value: 'cd src', type: 'history', displayText: 'cd src' },
+          { value: 'main', type: 'branch', displayText: 'main' },
+        ],
+        selectedTabCompletionIndex: 1,
+        setSelectedTabCompletionIndex: vi.fn(),
+      });
+      render(<InputArea {...props} />);
+
+      const items = screen.getAllByText(/ls -la|cd src|main/).map(el => el.closest('div[class*="cursor-pointer"]'));
+
+      // The second item (index 1) should have the ring class indicating selection
+      expect(items[1]).toHaveClass('ring-1');
+      // The first and third items should NOT have the ring class
+      expect(items[0]).not.toHaveClass('ring-1');
+      expect(items[2]).not.toHaveClass('ring-1');
+    });
+
+    it('updates selection on mouse hover', () => {
+      const setSelectedTabCompletionIndex = vi.fn();
+      const props = createDefaultProps({
+        session: createMockSession({ inputMode: 'terminal' }),
+        tabCompletionOpen: true,
+        tabCompletionSuggestions: [
+          { value: 'ls -la', type: 'history', displayText: 'ls -la' },
+          { value: 'cd src', type: 'history', displayText: 'cd src' },
+        ],
+        selectedTabCompletionIndex: 0,
+        setSelectedTabCompletionIndex,
+      });
+      render(<InputArea {...props} />);
+
+      const secondItem = screen.getByText('cd src').closest('div[class*="cursor-pointer"]');
+      fireEvent.mouseEnter(secondItem!);
+
+      expect(setSelectedTabCompletionIndex).toHaveBeenCalledWith(1);
+    });
+
+    it('shows appropriate icons for different suggestion types', () => {
+      const props = createDefaultProps({
+        session: createMockSession({ inputMode: 'terminal', isGitRepo: true }),
+        tabCompletionOpen: true,
+        tabCompletionSuggestions: [
+          { value: 'ls -la', type: 'history', displayText: 'ls -la' },
+          { value: 'git checkout main', type: 'branch', displayText: 'main' },
+          { value: 'v1.0.0', type: 'tag', displayText: 'v1.0.0' },
+          { value: 'src/components', type: 'folder', displayText: 'components' },
+          { value: 'src/index.ts', type: 'file', displayText: 'index.ts' },
+        ],
+        setTabCompletionFilter: vi.fn(),
+      });
+      render(<InputArea {...props} />);
+
+      // Each suggestion should be visible
+      expect(screen.getByText('ls -la')).toBeInTheDocument();
+      expect(screen.getByText('main')).toBeInTheDocument();
+      expect(screen.getByText('v1.0.0')).toBeInTheDocument();
+      expect(screen.getByText('components')).toBeInTheDocument();
+      expect(screen.getByText('index.ts')).toBeInTheDocument();
+
+      // Each suggestion should have its type label
+      expect(screen.getByText('history')).toBeInTheDocument();
+      expect(screen.getByText('branch')).toBeInTheDocument();
+      expect(screen.getByText('tag')).toBeInTheDocument();
+      expect(screen.getByText('folder')).toBeInTheDocument();
+      expect(screen.getByText('file')).toBeInTheDocument();
     });
 
     it('shows empty state for filtered results', () => {

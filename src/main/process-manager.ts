@@ -403,8 +403,11 @@ export class ProcessManager extends EventEmitter {
 
           // Apply custom shell environment variables from user configuration
           if (shellEnvVars && Object.keys(shellEnvVars).length > 0) {
+            const homeDir = os.homedir();
             for (const [key, value] of Object.entries(shellEnvVars)) {
-              ptyEnv[key] = value;
+              // Expand tilde (~) to home directory - shells do this automatically,
+              // but environment variables passed programmatically need manual expansion
+              ptyEnv[key] = value.startsWith('~/') ? path.join(homeDir, value.slice(2)) : value;
             }
             logger.debug('Applied custom shell env vars to PTY', 'ProcessManager', {
               keys: Object.keys(shellEnvVars)
@@ -521,7 +524,9 @@ export class ProcessManager extends EventEmitter {
         // See: https://github.com/pedramamini/Maestro/issues/41
         if (customEnvVars && Object.keys(customEnvVars).length > 0) {
           for (const [key, value] of Object.entries(customEnvVars)) {
-            env[key] = value;
+            // Expand tilde (~) to home directory - shells do this automatically,
+            // but environment variables passed programmatically need manual expansion
+            env[key] = value.startsWith('~/') ? path.join(home, value.slice(2)) : value;
           }
           logger.debug('[ProcessManager] Applied custom env vars', 'ProcessManager', {
             sessionId,
@@ -541,8 +546,8 @@ export class ProcessManager extends EventEmitter {
         // need to be executed through the shell. This is because:
         // 1. spawn() with shell:false cannot execute batch scripts directly
         // 2. Commands without extensions need PATHEXT resolution
-        let spawnCommand = command;
-        let spawnArgs = finalArgs;
+        const spawnCommand = command;
+        const spawnArgs = finalArgs;
         let useShell = false;
 
         if (isWindows) {
@@ -844,7 +849,7 @@ export class ProcessManager extends EventEmitter {
                     this.emit('usage', sessionId, usageStats);
                   }
                 }
-              } catch (e) {
+              } catch {
                 // If it's not valid JSON, emit as raw text
                 this.emit('data', sessionId, line);
               }
@@ -1298,8 +1303,11 @@ export class ProcessManager extends EventEmitter {
 
       // Apply custom shell environment variables from user configuration
       if (shellEnvVars && Object.keys(shellEnvVars).length > 0) {
+        const homeDir = os.homedir();
         for (const [key, value] of Object.entries(shellEnvVars)) {
-          env[key] = value;
+          // Expand tilde (~) to home directory - shells do this automatically,
+          // but environment variables passed programmatically need manual expansion
+          env[key] = value.startsWith('~/') ? path.join(homeDir, value.slice(2)) : value;
         }
         logger.debug('[ProcessManager] Applied custom shell env vars to runCommand', 'ProcessManager', {
           keys: Object.keys(shellEnvVars)
@@ -1340,8 +1348,8 @@ export class ProcessManager extends EventEmitter {
         shell: shellPath, // Use resolved full path to shell
       });
 
-      let stdoutBuffer = '';
-      let stderrBuffer = '';
+      let _stdoutBuffer = '';
+      let _stderrBuffer = '';
 
       // Handle stdout - emit data events for real-time streaming
       childProcess.stdout?.on('data', (data: Buffer) => {
@@ -1361,7 +1369,7 @@ export class ProcessManager extends EventEmitter {
 
         // Only emit if there's actual content after filtering
         if (output.trim()) {
-          stdoutBuffer += output;
+          _stdoutBuffer += output;
           logger.debug('[ProcessManager] runCommand EMITTING data event', 'ProcessManager', { sessionId, outputLength: output.length });
           this.emit('data', sessionId, output);
         } else {
@@ -1372,7 +1380,7 @@ export class ProcessManager extends EventEmitter {
       // Handle stderr - emit with [stderr] prefix for differentiation
       childProcess.stderr?.on('data', (data: Buffer) => {
         const output = data.toString();
-        stderrBuffer += output;
+        _stderrBuffer += output;
         // Emit stderr with prefix so renderer can style it differently
         this.emit('stderr', sessionId, output);
       });

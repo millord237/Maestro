@@ -49,11 +49,16 @@ vi.mock('ansi-to-html', () => ({
   },
 }));
 
+// Track layer stack mock functions
+const mockRegisterLayer = vi.fn().mockReturnValue('layer-1');
+const mockUnregisterLayer = vi.fn();
+const mockUpdateLayerHandler = vi.fn();
+
 vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
   useLayerStack: () => ({
-    registerLayer: vi.fn().mockReturnValue('layer-1'),
-    unregisterLayer: vi.fn(),
-    updateLayerHandler: vi.fn(),
+    registerLayer: mockRegisterLayer,
+    unregisterLayer: mockUnregisterLayer,
+    updateLayerHandler: mockUpdateLayerHandler,
   }),
 }));
 
@@ -341,6 +346,166 @@ describe('TerminalOutput', () => {
       fireEvent.keyDown(outputDiv, { key: 'f', metaKey: true });
 
       expect(setOutputSearchOpen).toHaveBeenCalledWith(true);
+    });
+
+    it('opens search when Ctrl+F is pressed', () => {
+      const setOutputSearchOpen = vi.fn();
+      const props = createDefaultProps({ setOutputSearchOpen });
+      const { container } = render(<TerminalOutput {...props} />);
+
+      const outputDiv = container.firstChild as HTMLElement;
+      fireEvent.keyDown(outputDiv, { key: 'f', ctrlKey: true });
+
+      expect(setOutputSearchOpen).toHaveBeenCalledWith(true);
+    });
+
+    it('filters logs case-insensitively (in terminal mode)', async () => {
+      // Use terminal mode to avoid log collapsing
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'This contains HELLO world', source: 'stdout' }),
+        createLogEntry({ text: 'This contains hello world', source: 'stdout' }),
+        createLogEntry({ text: 'This does not match', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchQuery: 'hello',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // Both logs with 'hello' and 'HELLO' should match (case insensitive)
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(2);
+    });
+
+    it('shows all logs when search query is empty (terminal mode)', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'First log', source: 'stdout' }),
+        createLogEntry({ text: 'Second log', source: 'stdout' }),
+        createLogEntry({ text: 'Third log', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchOpen: true,
+        outputSearchQuery: '',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // All 3 logs should be visible when query is empty
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(3);
+    });
+
+    it('hides search input when outputSearchOpen is false', () => {
+      const props = createDefaultProps({ outputSearchOpen: false });
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByPlaceholderText('Filter output... (Esc to close)')).not.toBeInTheDocument();
+    });
+
+    it('preserves search query when filtering (controlled component)', async () => {
+      const setOutputSearchQuery = vi.fn();
+      const props = createDefaultProps({
+        outputSearchOpen: true,
+        outputSearchQuery: 'initial',
+        setOutputSearchQuery
+      });
+      render(<TerminalOutput {...props} />);
+
+      const searchInput = screen.getByPlaceholderText('Filter output... (Esc to close)');
+
+      // The input should show the current query value
+      expect(searchInput).toHaveValue('initial');
+
+      // Typing calls the setter
+      fireEvent.change(searchInput, { target: { value: 'updated' } });
+      expect(setOutputSearchQuery).toHaveBeenCalledWith('updated');
+    });
+
+    it('does not open search when Cmd+F is pressed and search is already open', () => {
+      const setOutputSearchOpen = vi.fn();
+      const props = createDefaultProps({ setOutputSearchOpen, outputSearchOpen: true });
+      const { container } = render(<TerminalOutput {...props} />);
+
+      const outputDiv = container.firstChild as HTMLElement;
+      fireEvent.keyDown(outputDiv, { key: 'f', metaKey: true });
+
+      // Should not call setOutputSearchOpen again when already open
+      expect(setOutputSearchOpen).not.toHaveBeenCalled();
+    });
+
+    it('registers layer when search opens', () => {
+      mockRegisterLayer.mockClear();
+      const props = createDefaultProps({ outputSearchOpen: true });
+      render(<TerminalOutput {...props} />);
+
+      expect(mockRegisterLayer).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'overlay',
+        ariaLabel: 'Output Search',
+        onEscape: expect.any(Function),
+      }));
+    });
+
+    it('unregisters layer when component unmounts with search open', () => {
+      mockUnregisterLayer.mockClear();
+      const props = createDefaultProps({ outputSearchOpen: true });
+      const { unmount } = render(<TerminalOutput {...props} />);
+
+      unmount();
+
+      expect(mockUnregisterLayer).toHaveBeenCalled();
+    });
+
+    it('matches logs containing partial words (terminal mode)', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'authentication failed', source: 'stdout' }),
+        createLogEntry({ text: 'unauthorized access', source: 'stdout' }),
+        createLogEntry({ text: 'success', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        outputSearchQuery: 'auth',
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Wait for debounce (150ms)
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // Both 'authentication' and 'unauthorized' contain 'auth'
+      const logItems = container.querySelectorAll('[data-log-index]');
+      expect(logItems.length).toBe(2);
     });
   });
 
@@ -1009,6 +1174,212 @@ describe('TerminalOutput', () => {
 
       expect(onDeleteLog).toHaveBeenCalledWith('log-1');
     });
+
+    it('does not show delete button when onDeleteLog is not provided', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        // onDeleteLog is not provided
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('does not call onDeleteLog when No is clicked', async () => {
+      const onDeleteLog = vi.fn().mockReturnValue(null);
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Click delete button
+      const deleteButton = screen.getByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      // Click No to cancel
+      const cancelButton = screen.getByRole('button', { name: 'No' });
+      await act(async () => {
+        fireEvent.click(cancelButton);
+      });
+
+      expect(onDeleteLog).not.toHaveBeenCalled();
+      // Confirmation dialog should be dismissed
+      expect(screen.queryByText('Delete?')).not.toBeInTheDocument();
+    });
+
+    it('does not show delete button for stdout messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'AI response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('does not show delete button for stderr messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Error output', source: 'stderr' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Delete message/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Delete command/)).not.toBeInTheDocument();
+    });
+
+    it('shows delete button with correct tooltip in terminal mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'ls -la', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs: [], isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.getByTitle(/Delete command and output/)).toBeInTheDocument();
+    });
+
+    it('shows delete button for each user message in a conversation', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'First user message', source: 'user' }),
+        createLogEntry({ id: 'log-2', text: 'AI response', source: 'stdout' }),
+        createLogEntry({ id: 'log-3', text: 'Second user message', source: 'user' }),
+        createLogEntry({ id: 'log-4', text: 'Another AI response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Should have 2 delete buttons, one for each user message
+      const deleteButtons = screen.getAllByTitle(/Delete message/);
+      expect(deleteButtons).toHaveLength(2);
+    });
+
+    it('confirmation dialog shows Delete? text with Yes and No buttons', async () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog: vi.fn(),
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const deleteButton = screen.getByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      expect(screen.getByText('Delete?')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'No' })).toBeInTheDocument();
+    });
+
+    it('handles onDeleteLog return value for scroll positioning', async () => {
+      const onDeleteLog = vi.fn().mockReturnValue(0); // Return index 0
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'log-1', text: 'First message', source: 'user' }),
+        createLogEntry({ id: 'log-2', text: 'Response', source: 'stdout' }),
+        createLogEntry({ id: 'log-3', text: 'Second message', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        onDeleteLog,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Click delete on first message
+      const deleteButtons = screen.getAllByTitle(/Delete message/);
+      await act(async () => {
+        fireEvent.click(deleteButtons[0]);
+      });
+
+      const confirmButton = screen.getByRole('button', { name: 'Yes' });
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
+
+      expect(onDeleteLog).toHaveBeenCalledWith('log-1');
+    });
   });
 
   describe('markdown rendering', () => {
@@ -1057,6 +1428,388 @@ describe('TerminalOutput', () => {
       });
 
       expect(setMarkdownEditMode).toHaveBeenCalledWith(true);
+    });
+
+    it('shows "Show formatted" tooltip when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\nParagraph', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.getByTitle(/Show formatted/)).toBeInTheDocument();
+    });
+
+    it('toggles from formatted mode to plain text mode when clicked', async () => {
+      const setMarkdownEditMode = vi.fn();
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+        setMarkdownEditMode,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      await act(async () => {
+        fireEvent.click(toggleButton);
+      });
+
+      // When markdownEditMode is true, clicking should set it to false
+      expect(setMarkdownEditMode).toHaveBeenCalledWith(false);
+    });
+
+    it('does not show markdown toggle button for user messages', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'User message with **markdown**', source: 'user' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Show plain text/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Show formatted/)).not.toBeInTheDocument();
+    });
+
+    it('does not show markdown toggle button in terminal mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Terminal output', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        inputMode: 'terminal',
+        shellLogs: logs,
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      expect(screen.queryByTitle(/Show plain text/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Show formatted/)).not.toBeInTheDocument();
+    });
+
+    it('uses MarkdownRenderer when markdownEditMode is false (formatted mode)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\n**Bold text**', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // MarkdownRenderer is mocked as react-markdown, which renders with data-testid
+      expect(screen.getByTestId('react-markdown')).toBeInTheDocument();
+    });
+
+    it('strips markdown when markdownEditMode is true (plain text mode)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading\n\n**Bold text**', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // In plain text mode, markdown should be stripped
+      // Heading symbol (#) should be removed
+      // Bold markers (**) should be removed
+      expect(screen.getByText(/Heading/)).toBeInTheDocument();
+      expect(screen.getByText(/Bold text/)).toBeInTheDocument();
+      // Should not render via MarkdownRenderer
+      expect(screen.queryByTestId('react-markdown')).not.toBeInTheDocument();
+    });
+
+    it('toggle button has accent color when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      // In markdownEditMode=true, button color should be accent color
+      expect(toggleButton).toHaveStyle({ color: defaultTheme.colors.accent });
+    });
+
+    it('toggle button has dim color when markdownEditMode is false', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      // In markdownEditMode=false, button color should be textDim
+      expect(toggleButton).toHaveStyle({ color: defaultTheme.colors.textDim });
+    });
+
+    it('preserves code block content when stripping markdown', () => {
+      const codeBlockText = '```javascript\nconst x = 1;\nconst y = 2;\n```';
+      const logs: LogEntry[] = [
+        createLogEntry({ text: codeBlockText, source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Code content should be preserved without fences
+      expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+      expect(screen.getByText(/const y = 2/)).toBeInTheDocument();
+    });
+
+    it('renders inline code without backticks when stripping markdown', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Use the `console.log` function', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Should show the code without backticks
+      expect(screen.getByText(/Use the console.log function/)).toBeInTheDocument();
+    });
+
+    it('shows markdown toggle button for stderr messages in AI mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Error: Something went wrong', source: 'stderr' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // All non-user messages in AI mode show the markdown toggle
+      expect(screen.getByTitle(/Show plain text/)).toBeInTheDocument();
+    });
+
+    it('maintains markdown mode state across multiple AI responses', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ id: 'ai-1', text: '# First Response', source: 'stdout' }),
+        createLogEntry({ id: 'user-1', text: 'Follow up question', source: 'user' }),
+        createLogEntry({ id: 'ai-2', text: '# Second Response', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Both AI responses should be affected by the same markdown mode
+      // In plain text mode, we should see stripped markdown for both
+      expect(screen.getByText(/First Response/)).toBeInTheDocument();
+      expect(screen.getByText(/Second Response/)).toBeInTheDocument();
+    });
+
+    it('shows Eye icon when markdownEditMode is true', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // Eye icon should be present (lucide renders an svg with specific path)
+      const toggleButton = screen.getByTitle(/Show formatted/);
+      const svg = toggleButton.querySelector('svg');
+      expect(svg).toBeInTheDocument();
+    });
+
+    it('shows FileText icon when markdownEditMode is false', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      const { container } = render(<TerminalOutput {...props} />);
+
+      // FileText icon should be present
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      const svg = toggleButton.querySelector('svg');
+      expect(svg).toBeInTheDocument();
+    });
+
+    it('toggle button appears on hover (has opacity-0 group-hover:opacity-50 classes)', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '# Heading', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: false,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      const toggleButton = screen.getByTitle(/Show plain text/);
+      // Verify the hover behavior classes are present
+      expect(toggleButton).toHaveClass('opacity-0');
+      expect(toggleButton).toHaveClass('group-hover:opacity-50');
+    });
+
+    it('removes links from markdown when in plain text mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: 'Check out [this link](https://example.com)', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // Link text should be shown, but not as a link
+      expect(screen.getByText(/Check out this link/)).toBeInTheDocument();
+    });
+
+    it('removes list markers from markdown when in plain text mode', () => {
+      const logs: LogEntry[] = [
+        createLogEntry({ text: '* Item one\n* Item two\n* Item three', source: 'stdout' }),
+      ];
+
+      const session = createDefaultSession({
+        tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+        activeTabId: 'tab-1',
+      });
+
+      const props = createDefaultProps({
+        session,
+        markdownEditMode: true,
+      });
+
+      render(<TerminalOutput {...props} />);
+
+      // List items should be shown (stripMarkdown converts * to - for list markers)
+      expect(screen.getByText(/Item one/)).toBeInTheDocument();
     });
   });
 

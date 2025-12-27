@@ -455,7 +455,7 @@ function buildWebSocketUrl(baseUrl?: string, sessionId?: string): string {
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
   const {
     url: baseUrl,
-    token,
+    token: _token,
     autoReconnect = DEFAULT_OPTIONS.autoReconnect,
     maxReconnectAttempts = DEFAULT_OPTIONS.maxReconnectAttempts,
     reconnectDelay = DEFAULT_OPTIONS.reconnectDelay,
@@ -776,7 +776,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       handlersRef.current?.onConnectionChange?.('disconnected');
     }
   // Note: handleMessage is not a dependency because we use handleMessageRef pattern
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [baseUrl, clearTimers, attemptReconnect]);
 
   /**
@@ -862,7 +862,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         wsRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Derived state

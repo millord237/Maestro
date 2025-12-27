@@ -8,7 +8,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 import { TemplateAutocompleteDropdown } from '../../../renderer/components/TemplateAutocompleteDropdown';
 import type { Theme } from '../../../renderer/types';
-import type { AutocompleteState } from '../../../renderer/hooks/useTemplateAutocomplete';
+import type { AutocompleteState } from '../../../renderer/hooks';
 
 // Create a mock theme for testing
 const createMockTheme = (): Theme => ({

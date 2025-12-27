@@ -4,7 +4,7 @@ import {
   useAgentCapabilities,
   clearCapabilitiesCache,
   DEFAULT_CAPABILITIES,
-} from '../../../renderer/hooks/useAgentCapabilities';
+} from '../../../renderer/hooks';
 
 const baseCapabilities = {
   supportsResume: true,

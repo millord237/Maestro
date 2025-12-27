@@ -42,7 +42,7 @@ const mockHandleChange = vi.fn();
 const mockSelectVariable = vi.fn();
 const mockAutocompleteRef = { current: null };
 
-vi.mock('../../../renderer/hooks/useTemplateAutocomplete', () => ({
+vi.mock('../../../renderer/hooks/input/useTemplateAutocomplete', () => ({
   useTemplateAutocomplete: () => ({
     autocompleteState: mockAutocompleteState,
     handleKeyDown: mockHandleKeyDown,

@@ -197,6 +197,7 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
       layerIdRef.current = id;
       return () => unregisterLayer(id);
     }
+     
   }, [fileTreeFilterOpen, registerLayer, unregisterLayer]);
 
   // Update handler when dependencies change
@@ -346,6 +347,7 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
         )}
       </div>
     );
+     
   }, [session.fullPath, session.changedFiles, session.fileExplorerExpanded, session.id, previewFile?.path, activeFocus, activeRightTab, selectedFileIndex, theme, toggleFolder, setSessions, setSelectedFileIndex, setActiveFocus, handleFileClick, fileTreeFilter]);
 
   return (

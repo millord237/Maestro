@@ -3,8 +3,7 @@ import { Bot, User, ExternalLink, Check, X, Clock, HelpCircle, Award } from 'luc
 import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
 import { HistoryHelpModal } from './HistoryHelpModal';
-import { useThrottledCallback } from '../hooks/useThrottle';
-import { useListNavigation } from '../hooks/useListNavigation';
+import { useThrottledCallback, useListNavigation } from '../hooks';
 import { formatElapsedTime } from '../utils/formatters';
 
 // Double checkmark SVG component for validated entries

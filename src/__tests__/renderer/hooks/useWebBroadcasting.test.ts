@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useWebBroadcasting } from '../../../renderer/hooks/useWebBroadcasting';
+import { useWebBroadcasting } from '../../../renderer/hooks';
 import type { RightPanelHandle } from '../../../renderer/components/RightPanel';
 import type { RefObject } from 'react';
 

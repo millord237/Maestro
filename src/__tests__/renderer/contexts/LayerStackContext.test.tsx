@@ -18,7 +18,7 @@ import React from 'react';
 import { LayerStackProvider, useLayerStack } from '../../../renderer/contexts/LayerStackContext';
 
 // Mock the useLayerStack hook from the hooks module
-vi.mock('../../../renderer/hooks/useLayerStack', () => {
+vi.mock('../../../renderer/hooks/ui/useLayerStack', () => {
   const mockRegisterLayer = vi.fn().mockReturnValue('test-layer-id');
   const mockUnregisterLayer = vi.fn();
   const mockGetTopLayer = vi.fn().mockReturnValue(null);
@@ -45,7 +45,7 @@ vi.mock('../../../renderer/hooks/useLayerStack', () => {
 });
 
 // Import the mocked module to get access to the mock functions
-import { useLayerStack as useLayerStackHook } from '../../../renderer/hooks/useLayerStack';
+import { useLayerStack as useLayerStackHook } from '../../../renderer/hooks';
 
 describe('LayerStackContext', () => {
   let mockLayerStackAPI: ReturnType<typeof useLayerStackHook>;

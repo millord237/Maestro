@@ -820,7 +820,7 @@ describe('ThinkingStatusPill', () => {
       expect(onStopAutoRun).toHaveBeenCalledTimes(1);
     });
 
-    it('shows "AutoRun Stopping..." when isStopping is true', () => {
+    it('shows AutoRun label and Stopping button when isStopping is true', () => {
       const autoRunState: BatchRunState = {
         isRunning: true,
         isPaused: false,
@@ -840,29 +840,9 @@ describe('ThinkingStatusPill', () => {
           onStopAutoRun={() => {}}
         />
       );
-      expect(screen.getByText('AutoRun Stopping...')).toBeInTheDocument();
-    });
-
-    it('shows "Stopping" button text when isStopping', () => {
-      const autoRunState: BatchRunState = {
-        isRunning: true,
-        isPaused: false,
-        isStopping: true,
-        currentTaskIndex: 0,
-        totalTasks: 5,
-        completedTasks: 0,
-        startTime: Date.now(),
-        tasks: [],
-        batchName: 'Batch',
-      };
-      render(
-        <ThinkingStatusPill
-          sessions={[]}
-          theme={mockTheme}
-          autoRunState={autoRunState}
-          onStopAutoRun={() => {}}
-        />
-      );
+      // AutoRun label should still be visible
+      expect(screen.getByText('AutoRun')).toBeInTheDocument();
+      // Button should show "Stopping" text
       expect(screen.getByText('Stopping')).toBeInTheDocument();
     });
 

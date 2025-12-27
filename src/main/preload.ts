@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { MainLogLevel, SystemLogEntry } from '../shared/logger-types';
 
 // Type definitions that match renderer types
 interface ProcessConfig {
@@ -147,10 +148,16 @@ contextBridge.exposeInMainWorld('maestro', {
     // This allows web commands to go through the same code path as desktop commands
     // inputMode is optional - if provided, renderer should use it instead of session state
     onRemoteCommand: (callback: (sessionId: string, command: string, inputMode?: 'ai' | 'terminal') => void) => {
-      console.log('[Preload] Registering onRemoteCommand listener');
+      console.log('[Preload] Registering onRemoteCommand listener, callback type:', typeof callback);
       const handler = (_: any, sessionId: string, command: string, inputMode?: 'ai' | 'terminal') => {
         console.log('[Preload] Received remote:executeCommand IPC:', { sessionId, command: command?.substring(0, 50), inputMode });
-        callback(sessionId, command, inputMode);
+        console.log('[Preload] About to invoke callback, callback type:', typeof callback);
+        try {
+          callback(sessionId, command, inputMode);
+          console.log('[Preload] Callback invoked successfully');
+        } catch (error) {
+          console.error('[Preload] Error invoking remote command callback:', error);
+        }
       };
       ipcRenderer.on('remote:executeCommand', handler);
       return () => ipcRenderer.removeListener('remote:executeCommand', handler);
@@ -327,6 +334,15 @@ contextBridge.exposeInMainWorld('maestro', {
       thinkingStartTime?: number | null;
     }>, activeTabId: string) =>
       ipcRenderer.invoke('web:broadcastTabsChange', sessionId, aiTabs, activeTabId),
+    // Broadcast session state change to web clients (for real-time busy/idle updates)
+    // This bypasses the debounced persistence which resets state to idle
+    broadcastSessionState: (sessionId: string, state: string, additionalData?: {
+      name?: string;
+      toolType?: string;
+      inputMode?: string;
+      cwd?: string;
+    }) =>
+      ipcRenderer.invoke('web:broadcastSessionState', sessionId, state, additionalData),
   },
 
   // Git API
@@ -606,12 +622,12 @@ contextBridge.exposeInMainWorld('maestro', {
 
   // Logger API
   logger: {
-    log: (level: string, message: string, context?: string, data?: unknown) =>
+    log: (level: MainLogLevel, message: string, context?: string, data?: unknown) =>
       ipcRenderer.invoke('logger:log', level, message, context, data),
-    getLogs: (filter?: { level?: string; context?: string; limit?: number }) =>
+    getLogs: (filter?: { level?: MainLogLevel; context?: string; limit?: number }) =>
       ipcRenderer.invoke('logger:getLogs', filter),
     clearLogs: () => ipcRenderer.invoke('logger:clearLogs'),
-    setLogLevel: (level: string) => ipcRenderer.invoke('logger:setLogLevel', level),
+    setLogLevel: (level: MainLogLevel) => ipcRenderer.invoke('logger:setLogLevel', level),
     getLogLevel: () => ipcRenderer.invoke('logger:getLogLevel'),
     setMaxLogBuffer: (max: number) => ipcRenderer.invoke('logger:setMaxLogBuffer', max),
     getMaxLogBuffer: () => ipcRenderer.invoke('logger:getMaxLogBuffer'),
@@ -622,8 +638,8 @@ contextBridge.exposeInMainWorld('maestro', {
     autorun: (message: string, context?: string, data?: unknown) =>
       ipcRenderer.invoke('logger:log', 'autorun', message, context || 'AutoRun', data),
     // Subscribe to new log entries in real-time
-    onNewLog: (callback: (log: { timestamp: number; level: string; message: string; context?: string; data?: unknown }) => void) => {
-      const handler = (_: any, log: any) => callback(log);
+    onNewLog: (callback: (log: SystemLogEntry) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, log: SystemLogEntry) => callback(log);
       ipcRenderer.on('logger:newLog', handler);
       return () => ipcRenderer.removeListener('logger:newLog', handler);
     },
@@ -1027,13 +1043,17 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('autorun:fileChanged', wrappedHandler);
       return () => ipcRenderer.removeListener('autorun:fileChanged', wrappedHandler);
     },
-    // Backup operations for reset-on-completion documents
+    // Backup operations for reset-on-completion documents (legacy)
     createBackup: (folderPath: string, filename: string) =>
       ipcRenderer.invoke('autorun:createBackup', folderPath, filename),
     restoreBackup: (folderPath: string, filename: string) =>
       ipcRenderer.invoke('autorun:restoreBackup', folderPath, filename),
     deleteBackups: (folderPath: string) =>
       ipcRenderer.invoke('autorun:deleteBackups', folderPath),
+    // Working copy operations for reset-on-completion documents (preferred)
+    // Creates a copy in /Runs/ subdirectory: {name}-{timestamp}-loop-{N}.md
+    createWorkingCopy: (folderPath: string, filename: string, loopNumber: number): Promise<{ workingCopyPath: string; originalPath: string }> =>
+      ipcRenderer.invoke('autorun:createWorkingCopy', folderPath, filename, loopNumber),
   },
 
   // Playbooks API (saved batch run configurations)
@@ -1574,20 +1594,16 @@ export interface MaestroAPI {
     }) => void) => () => void;
   };
   logger: {
-    log: (level: string, message: string, context?: string, data?: unknown) => Promise<void>;
-    getLogs: (filter?: { level?: string; context?: string; limit?: number }) => Promise<Array<{
-      timestamp: number;
-      level: string;
-      message: string;
-      context?: string;
-      data?: unknown;
-    }>>;
+    log: (level: MainLogLevel, message: string, context?: string, data?: unknown) => Promise<void>;
+    getLogs: (filter?: { level?: MainLogLevel; context?: string; limit?: number }) => Promise<SystemLogEntry[]>;
     clearLogs: () => Promise<void>;
-    setLogLevel: (level: string) => Promise<void>;
-    getLogLevel: () => Promise<string>;
+    setLogLevel: (level: MainLogLevel) => Promise<void>;
+    getLogLevel: () => Promise<MainLogLevel>;
     setMaxLogBuffer: (max: number) => Promise<void>;
     getMaxLogBuffer: () => Promise<number>;
-    onNewLog: (callback: (log: { timestamp: number; level: string; message: string; context?: string; data?: unknown }) => void) => () => void;
+    toast: (title: string, data?: unknown) => Promise<void>;
+    autorun: (message: string, context?: string, data?: unknown) => Promise<void>;
+    onNewLog: (callback: (log: SystemLogEntry) => void) => () => void;
   };
   claude: {
     listSessions: (projectPath: string) => Promise<Array<{
@@ -1927,6 +1943,7 @@ export interface MaestroAPI {
     createBackup: (folderPath: string, filename: string) => Promise<{ success: boolean; backupFilename?: string; error?: string }>;
     restoreBackup: (folderPath: string, filename: string) => Promise<{ success: boolean; error?: string }>;
     deleteBackups: (folderPath: string) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+    createWorkingCopy: (folderPath: string, filename: string, loopNumber: number) => Promise<{ workingCopyPath: string; originalPath: string }>;
   };
   playbooks: {
     list: (sessionId: string) => Promise<{

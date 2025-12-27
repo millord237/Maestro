@@ -1,18 +1,18 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo, useMemo, forwardRef, useImperativeHandle } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle } from 'lucide-react';
+import rehypeSlug from 'rehype-slug';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle, RotateCcw } from 'lucide-react';
 import { getEncoder, formatTokenCount } from '../utils/tokenCounter';
 import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
 import type { FileNode } from '../types/fileTree';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
+import { ResetTasksConfirmModal } from './ResetTasksConfirmModal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { AutoRunDocumentSelector, DocumentTaskCount } from './AutoRunDocumentSelector';
 import { AutoRunLightbox } from './AutoRunLightbox';
 import { AutoRunSearchBar } from './AutoRunSearchBar';
-import { useTemplateAutocomplete } from '../hooks/useTemplateAutocomplete';
-import { useAutoRunUndo } from '../hooks/useAutoRunUndo';
-import { useAutoRunImageHandling, imageCache } from '../hooks/useAutoRunImageHandling';
+import { useTemplateAutocomplete, useAutoRunUndo, useAutoRunImageHandling, imageCache } from '../hooks';
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 import { generateAutoRunProseStyles, createMarkdownComponents } from '../utils/markdownConfig';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
@@ -91,6 +91,8 @@ export interface AutoRunHandle {
   isDirty: () => boolean;
   save: () => Promise<void>;
   revert: () => void;
+  openResetTasksModal: () => void;
+  getCompletedTaskCount: () => number;
 }
 
 // Custom image component that loads images from the Auto Run folder or external URLs
@@ -495,6 +497,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [resetTasksModalOpen, setResetTasksModalOpen] = useState(false);
   // Token count state
   const [tokenCount, setTokenCount] = useState<number | null>(null);
   // Search state
@@ -518,7 +521,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     handleKeyDown: handleAutocompleteKeyDown,
     handleChange: handleAutocompleteChange,
     selectVariable,
-    closeAutocomplete,
+    closeAutocomplete: _closeAutocomplete,
     autocompleteRef,
   } = useTemplateAutocomplete({
     textareaRef,
@@ -546,6 +549,27 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     // Reset undo history snapshot to the new content (so first edit creates a proper undo point)
     resetUndoHistory(content);
   }, [selectedFile, sessionId, content, resetUndoHistory]);
+
+  // Reset completed tasks - converts all '- [x]' to '- [ ]'
+  const handleResetTasks = useCallback(async () => {
+    if (!folderPath || !selectedFile) return;
+
+    // Push undo state before resetting
+    pushUndoState();
+
+    // Replace all completed checkboxes with unchecked ones
+    const resetContent = localContent.replace(/^([\s]*[-*]\s*)\[x\]/gim, '$1[ ]');
+    setLocalContent(resetContent);
+    lastUndoSnapshotRef.current = resetContent;
+
+    // Auto-save the reset content
+    try {
+      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', resetContent);
+      setSavedContent(resetContent);
+    } catch (err) {
+      console.error('Failed to save after reset:', err);
+    }
+  }, [folderPath, selectedFile, localContent, setLocalContent, setSavedContent, pushUndoState, lastUndoSnapshotRef]);
 
   // Image handling hook (attachments, paste, upload, lightbox)
   const {
@@ -618,12 +642,20 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         previewScrollPos: previewRef.current?.scrollTop || 0
       });
     }
+     
   }, [mode, onStateChange]);
 
   // Toggle between edit and preview modes
   const toggleMode = useCallback(() => {
     switchMode(mode === 'edit' ? 'preview' : 'edit');
   }, [mode, switchMode]);
+
+  // Helper function to count completed tasks (used by useImperativeHandle before taskCounts is defined)
+  const getCompletedTaskCountFromContent = useCallback(() => {
+    const completedRegex = /^[\s]*[-*]\s*\[x\]/gim;
+    const completedMatches = localContent.match(completedRegex) || [];
+    return completedMatches.length;
+  }, [localContent]);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -639,7 +671,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     isDirty: () => isDirty,
     save: handleSave,
     revert: handleRevert,
-  }), [mode, switchMode, isDirty, handleSave, handleRevert]);
+    openResetTasksModal: () => {
+      const completedCount = getCompletedTaskCountFromContent();
+      if (completedCount > 0 && !isLocked) {
+        setResetTasksModalOpen(true);
+      }
+    },
+    getCompletedTaskCount: getCompletedTaskCountFromContent,
+  }), [mode, switchMode, isDirty, handleSave, handleRevert, getCompletedTaskCountFromContent, isLocked]);
 
   // Auto-switch to preview mode when auto-run starts, restore when it ends
   useEffect(() => {
@@ -654,6 +693,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       setMode(modeBeforeAutoRunRef.current);
       modeBeforeAutoRunRef.current = null;
     }
+     
   }, [isLocked]);
 
   // Restore cursor and scroll positions when component mounts
@@ -665,6 +705,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     if (previewRef.current && initialPreviewScrollPos > 0) {
       previewRef.current.scrollTop = initialPreviewScrollPos;
     }
+     
   }, []);
 
   // Restore scroll position after content changes cause ReactMarkdown to rebuild DOM
@@ -712,7 +753,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   }, [selectedFile, mode]);
 
   // Save cursor position and scroll position when they change
-  const handleCursorOrScrollChange = () => {
+  const _handleCursorOrScrollChange = () => {
     if (textareaRef.current) {
       // Save to ref for persistence across re-renders
       editScrollPosRef.current = textareaRef.current.scrollTop;
@@ -788,6 +829,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       setTotalMatches(0);
       setCurrentMatchIndex(0);
     }
+     
   }, [searchQuery, localContent]);
 
   // Navigate to next search match
@@ -1140,6 +1182,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       onFileClick: handleFileClick,
       // Open external links in system browser
       onExternalLinkClick: (href) => window.maestro.shell.openExternal(href),
+      // Provide container ref for anchor link scrolling
+      containerRef: previewRef,
       // Add search highlighting when search is active with matches
       searchHighlight: searchOpen && searchQuery.trim() && totalMatches > 0
         ? {
@@ -1283,13 +1327,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         {/* Run / Stop button */}
         {isLocked ? (
           <button
-            onClick={() => onStopBatchRun?.(sessionId)}
+            onClick={() => !isStopping && onStopBatchRun?.(sessionId)}
             disabled={isStopping}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors font-semibold ${isStopping ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors font-semibold ${isStopping ? 'cursor-not-allowed' : ''}`}
             style={{
-              backgroundColor: theme.colors.error,
-              color: 'white',
-              border: `1px solid ${theme.colors.error}`
+              backgroundColor: isStopping ? theme.colors.warning : theme.colors.error,
+              color: isStopping ? theme.colors.bgMain : 'white',
+              border: `1px solid ${isStopping ? theme.colors.warning : theme.colors.error}`,
+              pointerEvents: isStopping ? 'none' : 'auto'
             }}
             title={isStopping ? 'Stopping after current task...' : 'Stop batch run'}
           >
@@ -1611,6 +1656,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             <style>{proseStyles}</style>
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
+              rehypePlugins={[rehypeSlug]}
               components={markdownComponents}
             >
               {localContent || '*No content yet. Switch to Edit mode to start writing.*'}
@@ -1647,8 +1693,19 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             <div />
           )}
 
-          {/* Center info: Task count and/or Token count */}
+          {/* Center info: Reset button, Task count, and/or Token count */}
           <div className="flex items-center gap-3">
+            {/* Reset button - only show when there are completed tasks */}
+            {taskCounts.completed > 0 && !isLocked && (
+              <button
+                onClick={() => setResetTasksModalOpen(true)}
+                className="p-0.5 rounded transition-colors hover:bg-white/10"
+                style={{ color: theme.colors.textDim }}
+                title={`Reset ${taskCounts.completed} completed task${taskCounts.completed !== 1 ? 's' : ''}`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
             {taskCounts.total > 0 && (
               <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
                 {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
@@ -1701,6 +1758,17 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         <AutoRunnerHelpModal
           theme={theme}
           onClose={() => setHelpModalOpen(false)}
+        />
+      )}
+
+      {/* Reset Tasks Confirmation Modal */}
+      {resetTasksModalOpen && selectedFile && (
+        <ResetTasksConfirmModal
+          theme={theme}
+          documentName={selectedFile}
+          completedTaskCount={taskCounts.completed}
+          onConfirm={handleResetTasks}
+          onClose={() => setResetTasksModalOpen(false)}
         />
       )}
 

@@ -211,7 +211,10 @@ export const SessionItem = memo(function SessionItem({
         {isInBatch && (
           <div
             className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase animate-pulse"
-            style={{ backgroundColor: theme.colors.warning + '30', color: theme.colors.warning }}
+            style={{
+              backgroundColor: theme.colors.warning + '30',
+              color: theme.colors.warning
+            }}
             title="Auto Run active"
           >
             <Bot className="w-2.5 h-2.5" />
@@ -265,11 +268,11 @@ export const SessionItem = memo(function SessionItem({
         {/* AI Status Indicator with Unread Badge - ml-auto ensures it aligns to right edge */}
         <div className="relative ml-auto">
           <div
-            className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : (session.state === 'busy' ? 'animate-pulse' : '')}`}
+            className={`w-2 h-2 rounded-full ${session.state === 'connecting' ? 'animate-pulse' : ((session.state === 'busy' || isInBatch) ? 'animate-pulse' : '')}`}
             style={
-              session.toolType === 'claude' && !session.agentSessionId
+              session.toolType === 'claude' && !session.agentSessionId && !isInBatch
                 ? { border: `1.5px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                : { backgroundColor: getStatusColor(session.state, theme) }
+                : { backgroundColor: isInBatch ? theme.colors.warning : getStatusColor(session.state, theme) }
             }
             title={
               session.toolType === 'claude' && !session.agentSessionId ? 'No active Claude session' :

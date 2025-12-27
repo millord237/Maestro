@@ -20,7 +20,7 @@ import type { Theme, Session, AITab } from '../types';
 import type { MergeResult } from '../types/contextMerge';
 import { fuzzyMatchWithScore } from '../utils/search';
 import { useLayerStack } from '../contexts/LayerStackContext';
-import { useListNavigation } from '../hooks/useListNavigation';
+import { useListNavigation } from '../hooks';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatTokensCompact } from '../utils/formatters';
 import { ScreenReaderAnnouncement, useAnnouncement } from './Wizard/ScreenReaderAnnouncement';
@@ -813,7 +813,7 @@ export function MergeSessionModal({
                             style={{ borderColor: theme.colors.border }}
                             role="group"
                           >
-                            {items.map((item, itemIndex) => {
+                            {items.map((item, _itemIndex) => {
                               const flatIndex = filteredItems.indexOf(item);
                               const isSelected = flatIndex === selectedIndex;
                               const isTarget = selectedTarget?.tabId === item.tabId;

@@ -36,7 +36,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Session } from './useSessions';
 import type { WebSocketState, AITabData, AutoRunState, CustomCommand } from './useWebSocket';
-import { buildApiUrl } from '../utils/config';
+import { buildApiUrl, getMaestroConfig, updateUrlForSessionTab } from '../utils/config';
 import { webLogger } from '../utils/logger';
 import type { Theme } from '../../shared/theme-types';
 
@@ -156,6 +156,7 @@ export interface UseMobileSessionManagementReturn {
  * - Active session/tab selection
  * - Session logs fetching
  * - WebSocket event handlers for session updates
+ * - URL synchronization for shareable links
  *
  * @param deps - Dependencies including saved state, network status, and callbacks
  * @returns Session state and handlers
@@ -176,10 +177,15 @@ export function useMobileSessionManagement(
     onAutoRunStateChange,
   } = deps;
 
-  // Session state
+  // Get URL-based session/tab from config (takes precedence over localStorage)
+  const config = getMaestroConfig();
+  const urlSessionId = config.sessionId;
+  const urlTabId = config.tabId;
+
+  // Session state - URL takes precedence over saved state
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(savedActiveSessionId);
-  const [activeTabId, setActiveTabId] = useState<string | null>(savedActiveTabId);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(urlSessionId || savedActiveSessionId);
+  const [activeTabId, setActiveTabId] = useState<string | null>(urlTabId || savedActiveTabId);
 
   // Session logs state
   const [sessionLogs, setSessionLogs] = useState<SessionLogsState>({
@@ -205,6 +211,14 @@ export function useMobileSessionManagement(
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+
+  // Update URL to reflect current session and tab (for shareable links)
+  // Only update if we're in session mode (not dashboard)
+  useEffect(() => {
+    if (activeSessionId) {
+      updateUrlForSessionTab(activeSessionId, activeTabId);
+    }
+  }, [activeSessionId, activeTabId]);
 
   // Get active session object
   const activeSession = useMemo(() => {
@@ -253,6 +267,10 @@ export function useMobileSessionManagement(
   const handleSelectSession = useCallback((sessionId: string) => {
     // Find the session to get its activeTabId
     const session = sessions.find(s => s.id === sessionId);
+    // Update refs synchronously BEFORE state updates to avoid race conditions
+    // with WebSocket messages arriving during the render cycle
+    activeSessionIdRef.current = sessionId;
+    activeTabIdRef.current = session?.activeTabId || null;
     setActiveSessionId(sessionId);
     setActiveTabId(session?.activeTabId || null);
     triggerHaptic(hapticTapPattern);
@@ -266,6 +284,8 @@ export function useMobileSessionManagement(
     triggerHaptic(hapticTapPattern);
     // Notify desktop to switch to this tab
     sendRef.current?.({ type: 'select_tab', sessionId: activeSessionId, tabId });
+    // Update ref synchronously to avoid race conditions with WebSocket messages
+    activeTabIdRef.current = tabId;
     // Update local activeTabId state directly (triggers log fetch)
     setActiveTabId(tabId);
     // Also update sessions state for UI consistency
@@ -324,21 +344,22 @@ export function useMobileSessionManagement(
 
       setSessions(newSessions);
       // Auto-select first session if none selected, and sync activeTabId
-      setActiveSessionId(prev => {
-        if (!prev && newSessions.length > 0) {
-          const firstSession = newSessions[0];
-          setActiveTabId(firstSession.activeTabId || null);
-          return firstSession.id;
-        }
+      // Update refs synchronously to avoid race conditions with WebSocket messages
+      const currentActiveId = activeSessionIdRef.current;
+      if (!currentActiveId && newSessions.length > 0) {
+        const firstSession = newSessions[0];
+        activeSessionIdRef.current = firstSession.id;
+        activeTabIdRef.current = firstSession.activeTabId || null;
+        setActiveSessionId(firstSession.id);
+        setActiveTabId(firstSession.activeTabId || null);
+      } else if (currentActiveId) {
         // Sync activeTabId for current session
-        if (prev) {
-          const currentSession = newSessions.find(s => s.id === prev);
-          if (currentSession) {
-            setActiveTabId(currentSession.activeTabId || null);
-          }
+        const currentSession = newSessions.find(s => s.id === currentActiveId);
+        if (currentSession) {
+          activeTabIdRef.current = currentSession.activeTabId || null;
+          setActiveTabId(currentSession.activeTabId || null);
         }
-        return prev;
-      });
+      }
     },
     onSessionStateChange: (sessionId: string, state: string, additionalData?: Partial<Session>) => {
       // Check if this is a busy -> idle transition (AI response completed)
@@ -360,7 +381,7 @@ export function useMobileSessionManagement(
           const session = updatedSessions.find(s => s.id === sessionId);
           if (session) {
             // Get the response from additionalData or the updated session
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const response = (additionalData as any)?.lastResponse || (session as any).lastResponse;
             onResponseComplete(session, response);
           }
@@ -383,17 +404,20 @@ export function useMobileSessionManagement(
       previousSessionStatesRef.current.delete(sessionId);
 
       setSessions(prev => prev.filter(s => s.id !== sessionId));
-      setActiveSessionId(prev => {
-        if (prev === sessionId) {
-          setActiveTabId(null);
-          return null;
-        }
-        return prev;
-      });
+      // Update refs synchronously if the removed session was active
+      if (activeSessionIdRef.current === sessionId) {
+        activeSessionIdRef.current = null;
+        activeTabIdRef.current = null;
+        setActiveSessionId(null);
+        setActiveTabId(null);
+      }
     },
     onActiveSessionChanged: (sessionId: string) => {
       // Desktop app switched to a different session - sync with web
       webLogger.debug(`Desktop active session changed: ${sessionId}`, 'Mobile');
+      // Update refs synchronously BEFORE state updates to avoid race conditions
+      activeSessionIdRef.current = sessionId;
+      activeTabIdRef.current = null;
       setActiveSessionId(sessionId);
       setActiveTabId(null);
     },
@@ -532,9 +556,10 @@ export function useMobileSessionManagement(
           ? { ...s, aiTabs, activeTabId: newActiveTabId }
           : s
       ));
-      // Also update activeTabId state if this is the current session
+      // Also update activeTabId ref and state if this is the current session
       const currentSessionId = activeSessionIdRef.current;
       if (currentSessionId === sessionId) {
+        activeTabIdRef.current = newActiveTabId;
         setActiveTabId(newActiveTabId);
       }
     },

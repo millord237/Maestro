@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Clock, MessageSquare, HardDrive, Play, ChevronLeft, Loader2, Star } from 'lucide-react';
 import type { Theme, Session } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
-import { useListNavigation } from '../hooks/useListNavigation';
+import { useListNavigation } from '../hooks';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatSize, formatRelativeTime } from '../utils/formatters';
 import { ToolCallCard } from './ToolCallCard';

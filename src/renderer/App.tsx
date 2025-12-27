@@ -1,91 +1,88 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { NewInstanceModal, EditAgentModal } from './components/NewInstanceModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionList } from './components/SessionList';
 import { RightPanel, RightPanelHandle } from './components/RightPanel';
-import { QuickActionsModal } from './components/QuickActionsModal';
-import { LightboxModal } from './components/LightboxModal';
-import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { slashCommands } from './slashCommands';
-import { AboutModal } from './components/AboutModal';
-import { UpdateCheckModal } from './components/UpdateCheckModal';
-import { CreateGroupModal } from './components/CreateGroupModal';
-import { RenameSessionModal } from './components/RenameSessionModal';
-import { RenameTabModal } from './components/RenameTabModal';
-import { RenameGroupModal } from './components/RenameGroupModal';
-import { ConfirmModal } from './components/ConfirmModal';
-import { QuitConfirmModal } from './components/QuitConfirmModal';
+import {
+  AppModals,
+  type PRDetails,
+  type FlatFileItem,
+  type MergeOptions,
+  type SendToAgentOptions,
+} from './components/AppModals';
+import { DEFAULT_BATCH_PROMPT } from './components/BatchRunnerModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MainPanel, type MainPanelHandle } from './components/MainPanel';
-import { ProcessMonitor } from './components/ProcessMonitor';
-import { GitDiffViewer } from './components/GitDiffViewer';
-import { GitLogViewer } from './components/GitLogViewer';
 import { LogViewer } from './components/LogViewer';
-import { BatchRunnerModal, DEFAULT_BATCH_PROMPT } from './components/BatchRunnerModal';
-import { TabSwitcherModal } from './components/TabSwitcherModal';
-import { FileSearchModal, type FlatFileItem } from './components/FileSearchModal';
-import { PromptComposerModal } from './components/PromptComposerModal';
-import { ExecutionQueueBrowser } from './components/ExecutionQueueBrowser';
-import { StandingOvationOverlay } from './components/StandingOvationOverlay';
-import { FirstRunCelebration } from './components/FirstRunCelebration';
-import { KeyboardMasteryCelebration } from './components/KeyboardMasteryCelebration';
-import { LeaderboardRegistrationModal } from './components/LeaderboardRegistrationModal';
+import { AppOverlays } from './components/AppOverlays';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
-import { AutoRunSetupModal } from './components/AutoRunSetupModal';
 import { DebugWizardModal } from './components/DebugWizardModal';
 import { DebugPackageModal } from './components/DebugPackageModal';
-import { MaestroWizard, useWizard, WizardResumeModal, SerializableWizardState, AUTO_RUN_FOLDER_NAME } from './components/Wizard';
+import { MaestroWizard, useWizard, WizardResumeModal, AUTO_RUN_FOLDER_NAME } from './components/Wizard';
 import { TourOverlay } from './components/Wizard/tour';
 import { CONDUCTOR_BADGES, getBadgeForTime } from './constants/conductorBadges';
 import { EmptyStateView } from './components/EmptyStateView';
-import { AgentErrorModal } from './components/AgentErrorModal';
-import { WorktreeConfigModal } from './components/WorktreeConfigModal';
-import { CreateWorktreeModal } from './components/CreateWorktreeModal';
-import { CreatePRModal, PRDetails } from './components/CreatePRModal';
-import { DeleteWorktreeModal } from './components/DeleteWorktreeModal';
-import { MergeSessionModal } from './components/MergeSessionModal';
-import { SendToAgentModal } from './components/SendToAgentModal';
-import { TransferProgressModal } from './components/TransferProgressModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
-import { type GroupChatMessagesHandle } from './components/GroupChatMessages';
 import { GroupChatRightPanel, type GroupChatRightTab } from './components/GroupChatRightPanel';
-import { NewGroupChatModal } from './components/NewGroupChatModal';
-import { DeleteGroupChatModal } from './components/DeleteGroupChatModal';
-import { RenameGroupChatModal } from './components/RenameGroupChatModal';
-import { EditGroupChatModal } from './components/EditGroupChatModal';
-import { GroupChatInfoOverlay } from './components/GroupChatInfoOverlay';
 
 // Import custom hooks
-import { useBatchProcessor } from './hooks/useBatchProcessor';
-import { useSettings, useActivityTracker, useMobileLandscape, useNavigationHistory, useAutoRunHandlers, useInputSync, useSessionNavigation, useDebouncedPersistence, useBatchedSessionUpdates } from './hooks';
-import type { AutoRunTreeNode } from './hooks';
-import { useTabCompletion, TabCompletionSuggestion, TabCompletionFilter } from './hooks/useTabCompletion';
-import { useAtMentionCompletion } from './hooks/useAtMentionCompletion';
-import { useKeyboardShortcutHelpers } from './hooks/useKeyboardShortcutHelpers';
-import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import { useMainKeyboardHandler } from './hooks/useMainKeyboardHandler';
-import { useRemoteIntegration } from './hooks/useRemoteIntegration';
-import { useAgentSessionManagement } from './hooks/useAgentSessionManagement';
-import { useAgentExecution } from './hooks/useAgentExecution';
-import { useFileTreeManagement } from './hooks/useFileTreeManagement';
-import { useGroupManagement } from './hooks/useGroupManagement';
-import { useWebBroadcasting } from './hooks/useWebBroadcasting';
-import { useCliActivityMonitoring } from './hooks/useCliActivityMonitoring';
-import { useThemeStyles } from './hooks/useThemeStyles';
-import { useSortedSessions, compareNamesIgnoringEmojis } from './hooks/useSortedSessions';
-import { useInputProcessing, DEFAULT_IMAGE_ONLY_PROMPT } from './hooks/useInputProcessing';
-import { useAgentErrorRecovery } from './hooks/useAgentErrorRecovery';
-import { useAgentCapabilities } from './hooks/useAgentCapabilities';
-import { useMergeSessionWithSessions } from './hooks/useMergeSession';
-import { useSendToAgentWithSessions } from './hooks/useSendToAgent';
-import { useSummarizeAndContinue } from './hooks/useSummarizeAndContinue';
+import {
+  // Batch processing
+  useBatchProcessor,
+  // Settings
+  useSettings,
+  useDebouncedPersistence,
+  // Session management
+  useActivityTracker,
+  useNavigationHistory,
+  useSessionNavigation,
+  useSortedSessions,
+  compareNamesIgnoringEmojis,
+  useGroupManagement,
+  // Input processing
+  useInputSync,
+  useTabCompletion,
+  useAtMentionCompletion,
+  useInputProcessing,
+  DEFAULT_IMAGE_ONLY_PROMPT,
+  // Keyboard handling
+  useKeyboardShortcutHelpers,
+  useKeyboardNavigation,
+  useMainKeyboardHandler,
+  // Agent
+  useAgentSessionManagement,
+  useAgentExecution,
+  useAgentErrorRecovery,
+  useAgentCapabilities,
+  useMergeSessionWithSessions,
+  useSendToAgentWithSessions,
+  useSummarizeAndContinue,
+  // Git
+  useFileTreeManagement,
+  // Remote
+  useRemoteIntegration,
+  useWebBroadcasting,
+  useCliActivityMonitoring,
+  useMobileLandscape,
+  // UI
+  useThemeStyles,
+  useAppHandlers,
+  // Auto Run
+  useAutoRunHandlers,
+} from './hooks';
+import type { TabCompletionSuggestion, TabCompletionFilter } from './hooks';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
 import { useToast } from './contexts/ToastContext';
+import { useModalContext } from './contexts/ModalContext';
 import { GitStatusProvider } from './contexts/GitStatusContext';
+import { InputProvider, useInputContext } from './contexts/InputContext';
+import { GroupChatProvider, useGroupChat } from './contexts/GroupChatContext';
+import { AutoRunProvider, useAutoRun } from './contexts/AutoRunContext';
+import { SessionProvider, useSession } from './contexts/SessionContext';
 import { ToastContainer } from './components/Toast';
 
 // Import services
@@ -97,119 +94,125 @@ import { autorunSynopsisPrompt, maestroSystemPrompt } from '../prompts';
 import { parseSynopsis } from '../shared/synopsis';
 
 // Import types and constants
+// Note: GroupChat, GroupChatState are now imported via GroupChatContext; GroupChatMessage still used locally
 import type {
-  ToolType, SessionState, RightPanelTab, SettingsTab,
-  FocusArea, LogEntry, Session, Group, AITab, UsageStats, QueuedItem, BatchRunConfig,
-  AgentError, BatchRunState, GroupChat, GroupChatMessage, GroupChatState,
-  SpecKitCommand
+  ToolType, SessionState, RightPanelTab,
+  FocusArea, LogEntry, Session, AITab, UsageStats, QueuedItem, BatchRunConfig,
+  AgentError, BatchRunState, GroupChatMessage,
+  SpecKitCommand, LeaderboardRegistration, CustomAICommand
 } from './types';
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
 import { getContextColor } from './utils/theme';
-import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue, createMergedSession } from './utils/tabHelpers';
-import { TAB_SHORTCUTS } from './constants/shortcuts';
-import { shouldOpenExternally, getAllFolderPaths, flattenTree } from './utils/fileExplorer';
+import { setActiveTab, createTab, closeTab, reopenClosedTab, getActiveTab, getWriteModeTab, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab, getInitialRenameValue } from './utils/tabHelpers';
+import { shouldOpenExternally, flattenTree } from './utils/fileExplorer';
 import type { FileNode } from './types/fileTree';
 import { substituteTemplateVariables } from './utils/templateVariables';
 import { validateNewSession } from './utils/sessionValidation';
-import { estimateContextUsage, DEFAULT_CONTEXT_WINDOWS } from './utils/contextUsage';
-
-/**
- * Known Claude Code tool names - used to detect concatenated tool name patterns
- * that shouldn't appear in thinking content
- */
-const KNOWN_TOOL_NAMES = [
-  // Core Claude Code tools
-  'Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write',
-  'NotebookEdit', 'WebFetch', 'TodoWrite', 'WebSearch', 'KillShell',
-  'AskUserQuestion', 'Skill', 'EnterPlanMode', 'ExitPlanMode', 'LSP'
-];
-
-/**
- * Check if a string looks like concatenated tool names (e.g., "TaskGrepGrepReadReadRead")
- * This can happen if malformed content is emitted as thinking chunks
- */
-function isLikelyConcatenatedToolNames(text: string): boolean {
-  // Pattern: 3+ tool names concatenated without spaces
-  let matchCount = 0;
-  let remaining = text.trim();
-
-  // Also handle MCP tools with pattern mcp__<provider>__<tool>
-  const mcpPattern = /^mcp__[a-zA-Z0-9_]+__[a-zA-Z0-9_]+/;
-
-  while (remaining.length > 0) {
-    let foundMatch = false;
-
-    // Check for MCP tool pattern first
-    const mcpMatch = remaining.match(mcpPattern);
-    if (mcpMatch) {
-      matchCount++;
-      remaining = remaining.substring(mcpMatch[0].length);
-      foundMatch = true;
-    } else {
-      // Check for known tool names
-      for (const toolName of KNOWN_TOOL_NAMES) {
-        if (remaining.startsWith(toolName)) {
-          matchCount++;
-          remaining = remaining.substring(toolName.length);
-          foundMatch = true;
-          break;
-        }
-      }
-    }
-
-    if (!foundMatch) {
-      // Found non-tool-name content, this is probably real text
-      return false;
-    }
-  }
-
-  // If we matched 3+ consecutive tool names with no other content, it's likely malformed
-  return matchCount >= 3;
-}
-
-// Get description for Claude Code slash commands
-// Built-in commands have known descriptions, custom ones use a generic description
-const CLAUDE_BUILTIN_COMMANDS: Record<string, string> = {
-  'compact': 'Summarize conversation to reduce context usage',
-  'context': 'Show current context window usage',
-  'cost': 'Show session cost and token usage',
-  'init': 'Initialize CLAUDE.md with codebase info',
-  'pr-comments': 'Address PR review comments',
-  'release-notes': 'Generate release notes from changes',
-  'todos': 'Find and list TODO comments in codebase',
-  'review': 'Review code changes',
-  'security-review': 'Review code for security issues',
-  'plan': 'Create an implementation plan',
-};
-
-const getSlashCommandDescription = (cmd: string): string => {
-  // Remove leading slash if present
-  const cmdName = cmd.startsWith('/') ? cmd.slice(1) : cmd;
-
-  // Check for built-in command
-  if (CLAUDE_BUILTIN_COMMANDS[cmdName]) {
-    return CLAUDE_BUILTIN_COMMANDS[cmdName];
-  }
-
-  // For plugin commands (e.g., "plugin-name:command"), use the full name as description hint
-  if (cmdName.includes(':')) {
-    const [plugin, command] = cmdName.split(':');
-    return `${command} (${plugin})`;
-  }
-
-  // Generic description for unknown commands
-  return 'Claude Code command';
-};
+import { estimateContextUsage } from './utils/contextUsage';
+import { formatLogsForClipboard } from './utils/contextExtractor';
+import { isLikelyConcatenatedToolNames, getSlashCommandDescription } from './constants/app';
 
 // Note: DEFAULT_IMAGE_ONLY_PROMPT is now imported from useInputProcessing hook
 
-export default function MaestroConsole() {
+function MaestroConsoleInner() {
   // --- LAYER STACK (for blocking shortcuts when modals are open) ---
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
   // --- TOAST NOTIFICATIONS ---
   const { addToast, setDefaultDuration: setToastDefaultDuration, setAudioFeedback, setOsNotifications } = useToast();
+
+  // --- MODAL STATE (centralized modal state management) ---
+  const {
+    // Settings Modal
+    settingsModalOpen, setSettingsModalOpen, settingsTab, setSettingsTab,
+    // New Instance Modal
+    newInstanceModalOpen, setNewInstanceModalOpen,
+    // Edit Agent Modal
+    editAgentModalOpen, setEditAgentModalOpen, editAgentSession, setEditAgentSession,
+    // Shortcuts Help Modal
+    shortcutsHelpOpen, setShortcutsHelpOpen, setShortcutsSearchQuery,
+    // Quick Actions Modal
+    quickActionOpen, setQuickActionOpen, quickActionInitialMode, setQuickActionInitialMode,
+    // Lightbox Modal
+    lightboxImage, setLightboxImage, lightboxImages, setLightboxImages, setLightboxSource,
+    lightboxIsGroupChatRef, lightboxAllowDeleteRef,
+    // About Modal
+    aboutModalOpen, setAboutModalOpen,
+    // Update Check Modal
+    updateCheckModalOpen, setUpdateCheckModalOpen,
+    // Leaderboard Registration Modal
+    leaderboardRegistrationOpen, setLeaderboardRegistrationOpen,
+    // Standing Ovation Overlay
+    standingOvationData, setStandingOvationData,
+    // First Run Celebration
+    firstRunCelebrationData, setFirstRunCelebrationData,
+    // Log Viewer
+    logViewerOpen, setLogViewerOpen,
+    // Process Monitor
+    processMonitorOpen, setProcessMonitorOpen,
+    // Keyboard Mastery Celebration
+    pendingKeyboardMasteryLevel, setPendingKeyboardMasteryLevel,
+    // Playground Panel
+    playgroundOpen, setPlaygroundOpen,
+    // Debug Wizard Modal
+    debugWizardModalOpen, setDebugWizardModalOpen,
+    // Debug Package Modal
+    debugPackageModalOpen, setDebugPackageModalOpen,
+    // Confirmation Modal
+    confirmModalOpen, setConfirmModalOpen, confirmModalMessage, setConfirmModalMessage,
+    confirmModalOnConfirm, setConfirmModalOnConfirm,
+    // Quit Confirmation Modal
+    quitConfirmModalOpen, setQuitConfirmModalOpen,
+    // Rename Instance Modal
+    renameInstanceModalOpen, setRenameInstanceModalOpen, renameInstanceValue, setRenameInstanceValue,
+    renameInstanceSessionId, setRenameInstanceSessionId,
+    // Rename Tab Modal
+    renameTabModalOpen, setRenameTabModalOpen, renameTabId, setRenameTabId,
+    renameTabInitialName, setRenameTabInitialName,
+    // Rename Group Modal
+    renameGroupModalOpen, setRenameGroupModalOpen, renameGroupId, setRenameGroupId,
+    renameGroupValue, setRenameGroupValue, renameGroupEmoji, setRenameGroupEmoji,
+    // Agent Sessions Browser
+    agentSessionsOpen, setAgentSessionsOpen, activeAgentSessionId, setActiveAgentSessionId,
+    // Execution Queue Browser Modal
+    queueBrowserOpen, setQueueBrowserOpen,
+    // Batch Runner Modal
+    batchRunnerModalOpen, setBatchRunnerModalOpen,
+    // Auto Run Setup Modal
+    autoRunSetupModalOpen, setAutoRunSetupModalOpen,
+    // Wizard Resume Modal
+    wizardResumeModalOpen, setWizardResumeModalOpen, wizardResumeState, setWizardResumeState,
+    // Agent Error Modal
+    agentErrorModalSessionId, setAgentErrorModalSessionId,
+    // Worktree Modals
+    worktreeConfigModalOpen, setWorktreeConfigModalOpen,
+    createWorktreeModalOpen, setCreateWorktreeModalOpen, createWorktreeSession, setCreateWorktreeSession,
+    createPRModalOpen, setCreatePRModalOpen, createPRSession, setCreatePRSession,
+    deleteWorktreeModalOpen, setDeleteWorktreeModalOpen, deleteWorktreeSession, setDeleteWorktreeSession,
+    // Tab Switcher Modal
+    tabSwitcherOpen, setTabSwitcherOpen,
+    // Fuzzy File Search Modal
+    fuzzyFileSearchOpen, setFuzzyFileSearchOpen,
+    // Prompt Composer Modal
+    promptComposerOpen, setPromptComposerOpen,
+    // Merge Session Modal
+    mergeSessionModalOpen, setMergeSessionModalOpen,
+    // Send to Agent Modal
+    sendToAgentModalOpen, setSendToAgentModalOpen,
+    // Group Chat Modals
+    showNewGroupChatModal, setShowNewGroupChatModal,
+    showDeleteGroupChatModal, setShowDeleteGroupChatModal,
+    showRenameGroupChatModal, setShowRenameGroupChatModal,
+    showEditGroupChatModal, setShowEditGroupChatModal,
+    showGroupChatInfo, setShowGroupChatInfo,
+    // Git Diff Viewer
+    gitDiffPreview, setGitDiffPreview,
+    // Git Log Viewer
+    gitLogOpen, setGitLogOpen,
+    // Tour Overlay
+    tourOpen, setTourOpen, tourFromWizard, setTourFromWizard,
+  } = useModalContext();
 
   // --- MOBILE LANDSCAPE MODE (reading-only view) ---
   const isMobileLandscape = useMobileLandscape();
@@ -226,10 +229,10 @@ export default function MaestroConsole() {
     state: wizardState,
     openWizard: openWizardModal,
     restoreState: restoreWizardState,
-    loadResumeState,
+    loadResumeState: _loadResumeState,
     clearResumeState,
     completeWizard,
-    closeWizard: closeWizardModal,
+    closeWizard: _closeWizardModal,
     goToStep: wizardGoToStep,
   } = useWizard();
 
@@ -272,15 +275,16 @@ export default function MaestroConsole() {
     shortcuts, setShortcuts,
     tabShortcuts, setTabShortcuts,
     customAICommands, setCustomAICommands,
-    globalStats, updateGlobalStats,
+    globalStats: _globalStats, updateGlobalStats,
     autoRunStats, recordAutoRunComplete, updateAutoRunProgress, acknowledgeBadge, getUnacknowledgedBadgeLevel,
-    tourCompleted, setTourCompleted,
+    usageStats, updateUsageStats,
+    tourCompleted: _tourCompleted, setTourCompleted,
     firstAutoRunCompleted, setFirstAutoRunCompleted,
     recordWizardStart, recordWizardComplete, recordWizardAbandon, recordWizardResume,
     recordTourStart, recordTourComplete, recordTourSkip,
     leaderboardRegistration, setLeaderboardRegistration, isLeaderboardRegistered,
 
-    contextManagementSettings, updateContextManagementSettings,
+    contextManagementSettings, updateContextManagementSettings: _updateContextManagementSettings,
 
     keyboardMasteryStats, recordShortcutUsage, acknowledgeKeyboardMasteryLevel, getUnacknowledgedKeyboardMasteryLevel,
 
@@ -289,68 +293,76 @@ export default function MaestroConsole() {
   // --- KEYBOARD SHORTCUT HELPERS ---
   const { isShortcut, isTabShortcut } = useKeyboardShortcutHelpers({ shortcuts, tabShortcuts });
 
-  // --- STATE ---
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  // --- SESSION STATE (Phase 6: extracted to SessionContext) ---
+  // Use SessionContext for all core session states
+  const {
+    sessions, setSessions,
+    groups, setGroups,
+    activeSessionId, setActiveSessionId: setActiveSessionIdFromContext,
+    setActiveSessionIdInternal,
+    sessionsLoaded, setSessionsLoaded,
+    initialLoadComplete,
+    sessionsRef, groupsRef, activeSessionIdRef,
+    batchedUpdater,
+    activeSession,
+    cyclePositionRef,
+    removedWorktreePaths: _removedWorktreePaths, setRemovedWorktreePaths, removedWorktreePathsRef,
+  } = useSession();
+
   // Spec Kit commands (loaded from bundled prompts)
   const [speckitCommands, setSpeckitCommands] = useState<SpecKitCommand[]>([]);
-  // Track worktree paths that were manually removed - prevents re-discovery during this session
-  const [removedWorktreePaths, setRemovedWorktreePaths] = useState<Set<string>>(new Set());
-  // Ref to always access current removed paths (avoids stale closure in async scanner)
-  const removedWorktreePathsRef = useRef<Set<string>>(removedWorktreePaths);
-  removedWorktreePathsRef.current = removedWorktreePaths;
 
-  // --- GROUP CHAT STATE ---
-  const [groupChats, setGroupChats] = useState<GroupChat[]>([]);
+  // --- GROUP CHAT STATE (Phase 4: extracted to GroupChatContext) ---
+  // Note: groupChatsExpanded remains here as it's a UI layout concern (already in UILayoutContext)
   const [groupChatsExpanded, setGroupChatsExpanded] = useState(true);
-  const [activeGroupChatId, setActiveGroupChatId] = useState<string | null>(null);
-  const [groupChatMessages, setGroupChatMessages] = useState<GroupChatMessage[]>([]);
-  const [groupChatState, setGroupChatState] = useState<GroupChatState>('idle');
-  const [groupChatStagedImages, setGroupChatStagedImages] = useState<string[]>([]);
-  const [groupChatReadOnlyMode, setGroupChatReadOnlyMode] = useState(false);
-  const [groupChatExecutionQueue, setGroupChatExecutionQueue] = useState<QueuedItem[]>([]);
-  const [groupChatRightTab, setGroupChatRightTab] = useState<GroupChatRightTab>('participants');
-  const [groupChatParticipantColors, setGroupChatParticipantColors] = useState<Record<string, string>>({});
-  const [moderatorUsage, setModeratorUsage] = useState<{ contextUsage: number; totalCost: number; tokenCount: number } | null>(null);
-  // Track per-participant working state (participantName -> 'idle' | 'working')
-  const [participantStates, setParticipantStates] = useState<Map<string, 'idle' | 'working'>>(new Map());
-  // Track state per-group-chat (for showing busy indicator when not active)
-  const [groupChatStates, setGroupChatStates] = useState<Map<string, GroupChatState>>(new Map());
-  // Track participant states per-group-chat (groupChatId -> Map<participantName, state>)
-  const [allGroupChatParticipantStates, setAllGroupChatParticipantStates] = useState<Map<string, Map<string, 'idle' | 'working'>>>(new Map());
-  // Group chat agent error state
-  const [groupChatError, setGroupChatError] = useState<{ groupChatId: string; error: AgentError; participantName?: string } | null>(null);
 
-  // --- BATCHED SESSION UPDATES (reduces React re-renders during AI streaming) ---
-  const batchedUpdater = useBatchedSessionUpdates(setSessions);
+  // Use GroupChatContext for all group chat states
+  const {
+    groupChats, setGroupChats,
+    activeGroupChatId, setActiveGroupChatId,
+    groupChatMessages, setGroupChatMessages,
+    groupChatState, setGroupChatState,
+    groupChatStagedImages, setGroupChatStagedImages,
+    groupChatReadOnlyMode, setGroupChatReadOnlyMode,
+    groupChatExecutionQueue, setGroupChatExecutionQueue,
+    groupChatRightTab, setGroupChatRightTab,
+    groupChatParticipantColors, setGroupChatParticipantColors,
+    moderatorUsage, setModeratorUsage,
+    participantStates, setParticipantStates,
+    groupChatStates, setGroupChatStates,
+    allGroupChatParticipantStates, setAllGroupChatParticipantStates,
+    groupChatError, setGroupChatError,
+    groupChatInputRef,
+    groupChatMessagesRef,
+    clearGroupChatError: handleClearGroupChatErrorBase,
+  } = useGroupChat();
 
-  // Track if initial data has been loaded to prevent overwriting on mount
-  const initialLoadComplete = useRef(false);
-
-  // Track if sessions/groups have been loaded (for splash screen coordination)
-  const [sessionsLoaded, setSessionsLoaded] = useState(false);
-
-  const [activeSessionId, setActiveSessionIdInternal] = useState<string>(sessions[0]?.id || 's1');
-
-  // Track current position in visual order for cycling (allows same session to appear twice)
-  const cyclePositionRef = useRef<number>(-1);
-
-  // Wrapper that resets cycle position when session is changed via click (not cycling)
-  // Also flushes batched updates to ensure previous session's state is fully updated
-  // Dismisses any active group chat when selecting an agent
+  // Wrapper for setActiveSessionId that also dismisses active group chat
   const setActiveSessionId = useCallback((id: string) => {
-    batchedUpdater.flushNow(); // Flush pending updates before switching sessions
-    cyclePositionRef.current = -1; // Reset so next cycle finds first occurrence
     setActiveGroupChatId(null); // Dismiss group chat when selecting an agent
-    setActiveSessionIdInternal(id);
-  }, [batchedUpdater]);
+    setActiveSessionIdFromContext(id);
+  }, [setActiveSessionIdFromContext, setActiveGroupChatId]);
 
-  // Input State - both modes use local state for responsive typing
-  // AI mode syncs to tab state on blur/submit for persistence
+  // Input State - PERFORMANCE CRITICAL: Input values stay in App.tsx local state
+  // to avoid context re-renders on every keystroke. Only completion states are in context.
   const [terminalInputValue, setTerminalInputValue] = useState('');
   const [aiInputValueLocal, setAiInputValueLocal] = useState('');
-  const [slashCommandOpen, setSlashCommandOpen] = useState(false);
-  const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
+
+  // Completion states from InputContext (these change infrequently)
+  const {
+    slashCommandOpen, setSlashCommandOpen,
+    selectedSlashCommandIndex, setSelectedSlashCommandIndex,
+    tabCompletionOpen, setTabCompletionOpen,
+    selectedTabCompletionIndex, setSelectedTabCompletionIndex,
+    tabCompletionFilter, setTabCompletionFilter,
+    atMentionOpen, setAtMentionOpen,
+    atMentionFilter, setAtMentionFilter,
+    atMentionStartIndex, setAtMentionStartIndex,
+    selectedAtMentionIndex, setSelectedAtMentionIndex,
+    commandHistoryOpen, setCommandHistoryOpen,
+    commandHistoryFilter, setCommandHistoryFilter,
+    commandHistorySelectedIndex, setCommandHistorySelectedIndex,
+  } = useInputContext();
 
   // UI State
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
@@ -369,59 +381,17 @@ export default function MaestroConsole() {
   const [fileTreeFilter, setFileTreeFilter] = useState('');
   const [fileTreeFilterOpen, setFileTreeFilterOpen] = useState(false);
 
-  // Git Diff State
-  const [gitDiffPreview, setGitDiffPreview] = useState<string | null>(null);
-
-  // Tour Overlay State
-  const [tourOpen, setTourOpen] = useState(false);
-  const [tourFromWizard, setTourFromWizard] = useState(false);
-
-  // Git Log Viewer State
-  const [gitLogOpen, setGitLogOpen] = useState(false);
+  // Note: Git Diff State, Tour Overlay State, and Git Log Viewer State are now from ModalContext
 
   // Renaming State
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
-  // Drag and Drop State
+  // Drag and Drop State (for session list - image drag handled by useAppHandlers)
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
-  const [isDraggingImage, setIsDraggingImage] = useState(false);
-  const dragCounterRef = useRef(0); // Track nested drag enter/leave events
 
-  // Modals
-  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [newInstanceModalOpen, setNewInstanceModalOpen] = useState(false);
-  const [editAgentModalOpen, setEditAgentModalOpen] = useState(false);
-  const [editAgentSession, setEditAgentSession] = useState<Session | null>(null);
-  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
-  const [shortcutsSearchQuery, setShortcutsSearchQuery] = useState('');
-  const [quickActionOpen, setQuickActionOpen] = useState(false);
-  const [quickActionInitialMode, setQuickActionInitialMode] = useState<'main' | 'move-to-group'>('main');
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]); // Context images for navigation
-  const [lightboxSource, setLightboxSource] = useState<'staged' | 'history'>('history'); // Track source for delete permission
-  const lightboxIsGroupChatRef = useRef<boolean>(false); // Track if lightbox was opened from group chat
-  const lightboxAllowDeleteRef = useRef<boolean>(false); // Track if delete should be allowed (set synchronously before state updates)
-  const [aboutModalOpen, setAboutModalOpen] = useState(false);
-  const [updateCheckModalOpen, setUpdateCheckModalOpen] = useState(false);
-  const [leaderboardRegistrationOpen, setLeaderboardRegistrationOpen] = useState(false);
-  const [standingOvationData, setStandingOvationData] = useState<{
-    badge: typeof CONDUCTOR_BADGES[number];
-    isNewRecord: boolean;
-    recordTimeMs?: number;
-  } | null>(null);
-  const [firstRunCelebrationData, setFirstRunCelebrationData] = useState<{
-    elapsedTimeMs: number;
-    completedTasks: number;
-    totalTasks: number;
-  } | null>(null);
-  const [logViewerOpen, setLogViewerOpen] = useState(false);
-  const [processMonitorOpen, setProcessMonitorOpen] = useState(false);
-  const [pendingKeyboardMasteryLevel, setPendingKeyboardMasteryLevel] = useState<number | null>(null);
-  const [playgroundOpen, setPlaygroundOpen] = useState(false);
-  const [debugWizardModalOpen, setDebugWizardModalOpen] = useState(false);
-  const [debugPackageModalOpen, setDebugPackageModalOpen] = useState(false);
+  // Note: All modal states are now managed by ModalContext
+  // See useModalContext() destructuring above for modal states
 
   // Stable callbacks for memoized modals (prevents re-renders from callback reference changes)
   // NOTE: These must be declared AFTER the state they reference
@@ -429,6 +399,27 @@ export default function MaestroConsole() {
   const handleCloseGitLog = useCallback(() => setGitLogOpen(false), []);
   const handleCloseSettings = useCallback(() => setSettingsModalOpen(false), []);
   const handleCloseDebugPackage = useCallback(() => setDebugPackageModalOpen(false), []);
+
+  // AppInfoModals stable callbacks
+  const handleCloseShortcutsHelp = useCallback(() => setShortcutsHelpOpen(false), []);
+  const handleCloseAboutModal = useCallback(() => setAboutModalOpen(false), []);
+  const handleCloseUpdateCheckModal = useCallback(() => setUpdateCheckModalOpen(false), []);
+  const handleCloseProcessMonitor = useCallback(() => setProcessMonitorOpen(false), []);
+  const handleCloseLogViewer = useCallback(() => setLogViewerOpen(false), []);
+
+  // Confirm modal close handler
+  const handleCloseConfirmModal = useCallback(() => setConfirmModalOpen(false), []);
+
+  // Quit confirm modal handlers
+  const handleConfirmQuit = useCallback(() => {
+    setQuitConfirmModalOpen(false);
+    window.maestro.app.confirmQuit();
+  }, []);
+
+  const handleCancelQuit = useCallback(() => {
+    setQuitConfirmModalOpen(false);
+    window.maestro.app.cancelQuit();
+  }, []);
 
   // Keyboard mastery level-up callback
   const onKeyboardMasteryLevelUp = useCallback((level: number) => {
@@ -443,109 +434,62 @@ export default function MaestroConsole() {
     setPendingKeyboardMasteryLevel(null);
   }, [pendingKeyboardMasteryLevel, acknowledgeKeyboardMasteryLevel]);
 
-  // Confirmation Modal State
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [confirmModalMessage, setConfirmModalMessage] = useState('');
-  const [confirmModalOnConfirm, setConfirmModalOnConfirm] = useState<(() => void) | null>(null);
+  // Handle standing ovation close
+  const handleStandingOvationClose = useCallback(() => {
+    if (standingOvationData) {
+      // Mark badge as acknowledged when user clicks "Take a Bow"
+      acknowledgeBadge(standingOvationData.badge.level);
+    }
+    setStandingOvationData(null);
+  }, [standingOvationData, acknowledgeBadge]);
 
-  // Quit Confirmation Modal State
-  const [quitConfirmModalOpen, setQuitConfirmModalOpen] = useState(false);
+  // Handle first run celebration close
+  const handleFirstRunCelebrationClose = useCallback(() => {
+    setFirstRunCelebrationData(null);
+  }, []);
 
-  // Rename Instance Modal State
-  const [renameInstanceModalOpen, setRenameInstanceModalOpen] = useState(false);
-  const [renameInstanceValue, setRenameInstanceValue] = useState('');
-  const [renameInstanceSessionId, setRenameInstanceSessionId] = useState<string | null>(null);
+  // Handle open leaderboard registration
+  const handleOpenLeaderboardRegistration = useCallback(() => {
+    setLeaderboardRegistrationOpen(true);
+  }, []);
 
-  // Rename Tab Modal State
-  const [renameTabModalOpen, setRenameTabModalOpen] = useState(false);
-  const [renameTabId, setRenameTabId] = useState<string | null>(null);
-  const [renameTabInitialName, setRenameTabInitialName] = useState('');
+  // Handle open leaderboard registration from About modal (closes About first)
+  const handleOpenLeaderboardRegistrationFromAbout = useCallback(() => {
+    setAboutModalOpen(false);
+    setLeaderboardRegistrationOpen(true);
+  }, []);
 
-  // Rename Group Modal State
-  const [renameGroupModalOpen, setRenameGroupModalOpen] = useState(false);
+  // AppSessionModals stable callbacks
+  const handleCloseNewInstanceModal = useCallback(() => setNewInstanceModalOpen(false), []);
+  const handleCloseEditAgentModal = useCallback(() => {
+    setEditAgentModalOpen(false);
+    setEditAgentSession(null);
+  }, []);
+  const handleCloseRenameSessionModal = useCallback(() => {
+    setRenameInstanceModalOpen(false);
+    setRenameInstanceSessionId(null);
+  }, []);
+  const handleCloseRenameTabModal = useCallback(() => {
+    setRenameTabModalOpen(false);
+    setRenameTabId(null);
+  }, []);
 
-  // Agent Sessions Browser State (main panel view)
-  const [agentSessionsOpen, setAgentSessionsOpen] = useState(false);
-  const [activeAgentSessionId, setActiveAgentSessionId] = useState<string | null>(null);
+  // Note: All modal states (confirmation, rename, queue browser, batch runner, etc.)
+  // are now managed by ModalContext - see useModalContext() destructuring above
 
   // NOTE: showSessionJumpNumbers state is now provided by useMainKeyboardHandler hook
-
-  // Execution Queue Browser Modal State
-  const [queueBrowserOpen, setQueueBrowserOpen] = useState(false);
-
-  // Batch Runner Modal State
-  const [batchRunnerModalOpen, setBatchRunnerModalOpen] = useState(false);
-
-  // Auto Run Setup Modal State
-  const [autoRunSetupModalOpen, setAutoRunSetupModalOpen] = useState(false);
-
-  // Wizard Resume Modal State
-  const [wizardResumeModalOpen, setWizardResumeModalOpen] = useState(false);
-  const [wizardResumeState, setWizardResumeState] = useState<SerializableWizardState | null>(null);
-
-  // Agent Error Modal State - tracks which session has an active error being shown
-  const [agentErrorModalSessionId, setAgentErrorModalSessionId] = useState<string | null>(null);
-
-  // Worktree Modal State
-  const [worktreeConfigModalOpen, setWorktreeConfigModalOpen] = useState(false);
-  const [createWorktreeModalOpen, setCreateWorktreeModalOpen] = useState(false);
-  const [createWorktreeSession, setCreateWorktreeSession] = useState<Session | null>(null);
-  const [createPRModalOpen, setCreatePRModalOpen] = useState(false);
-  const [createPRSession, setCreatePRSession] = useState<Session | null>(null);
-  const [deleteWorktreeModalOpen, setDeleteWorktreeModalOpen] = useState(false);
-  const [deleteWorktreeSession, setDeleteWorktreeSession] = useState<Session | null>(null);
-
-  // Tab Switcher Modal State
-  const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
-
-  // Fuzzy File Search Modal State
-  const [fuzzyFileSearchOpen, setFuzzyFileSearchOpen] = useState(false);
-
-  // Prompt Composer Modal State
-  const [promptComposerOpen, setPromptComposerOpen] = useState(false);
-
-  // Merge Session Modal State
-  const [mergeSessionModalOpen, setMergeSessionModalOpen] = useState(false);
-
-  // Send to Agent Modal State
-  const [sendToAgentModalOpen, setSendToAgentModalOpen] = useState(false);
-
-  // Group Chat Modal State
-  const [showNewGroupChatModal, setShowNewGroupChatModal] = useState(false);
-  const [showDeleteGroupChatModal, setShowDeleteGroupChatModal] = useState<string | null>(null);
-  const [showRenameGroupChatModal, setShowRenameGroupChatModal] = useState<string | null>(null);
-  const [showEditGroupChatModal, setShowEditGroupChatModal] = useState<string | null>(null);
-  const [showGroupChatInfo, setShowGroupChatInfo] = useState(false);
-
-  const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
-  const [renameGroupValue, setRenameGroupValue] = useState('');
-  const [renameGroupEmoji, setRenameGroupEmoji] = useState('📂');
-  const [renameGroupEmojiPickerOpen, setRenameGroupEmojiPickerOpen] = useState(false);
 
   // Output Search State
   const [outputSearchOpen, setOutputSearchOpen] = useState(false);
   const [outputSearchQuery, setOutputSearchQuery] = useState('');
 
-  // Command History Modal State
-  const [commandHistoryOpen, setCommandHistoryOpen] = useState(false);
-  const [commandHistoryFilter, setCommandHistoryFilter] = useState('');
-  const [commandHistorySelectedIndex, setCommandHistorySelectedIndex] = useState(0);
-
-  // Tab Completion State (terminal mode only)
-  const [tabCompletionOpen, setTabCompletionOpen] = useState(false);
-  const [selectedTabCompletionIndex, setSelectedTabCompletionIndex] = useState(0);
-  const [tabCompletionFilter, setTabCompletionFilter] = useState<TabCompletionFilter>('all');
+  // Note: Command History, Tab Completion, and @ Mention states are now in InputContext
+  // See useInputContext() destructuring above for these states
 
   // Flash notification state (for inline notifications like "Commands disabled while agent is working")
   const [flashNotification, setFlashNotification] = useState<string | null>(null);
   // Success flash notification state (for success messages like "Refresh complete")
   const [successFlashNotification, setSuccessFlashNotification] = useState<string | null>(null);
-
-  // @ mention file completion state (AI mode only, desktop only)
-  const [atMentionOpen, setAtMentionOpen] = useState(false);
-  const [atMentionFilter, setAtMentionFilter] = useState('');
-  const [atMentionStartIndex, setAtMentionStartIndex] = useState(-1);  // Position of @ in input
-  const [selectedAtMentionIndex, setSelectedAtMentionIndex] = useState(0);
 
   // Note: Images are now stored per-tab in AITab.stagedImages
   // See stagedImages/setStagedImages computed from active tab below
@@ -554,11 +498,18 @@ export default function MaestroConsole() {
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [webInterfaceUrl, setWebInterfaceUrl] = useState<string | null>(null);
 
-  // Auto Run document management state (content is per-session in session.autoRunContent)
-  const [autoRunDocumentList, setAutoRunDocumentList] = useState<string[]>([]);
-  const [autoRunDocumentTree, setAutoRunDocumentTree] = useState<AutoRunTreeNode[]>([]);
-  const [autoRunIsLoadingDocuments, setAutoRunIsLoadingDocuments] = useState(false);
-  const [autoRunDocumentTaskCounts, setAutoRunDocumentTaskCounts] = useState<Map<string, { completed: number; total: number }>>(new Map());
+  // Auto Run document management state (Phase 5: now from AutoRunContext)
+  // Content is per-session in session.autoRunContent
+  const {
+    documentList: autoRunDocumentList,
+    setDocumentList: setAutoRunDocumentList,
+    documentTree: autoRunDocumentTree,
+    setDocumentTree: setAutoRunDocumentTree,
+    isLoadingDocuments: autoRunIsLoadingDocuments,
+    setIsLoadingDocuments: setAutoRunIsLoadingDocuments,
+    documentTaskCounts: autoRunDocumentTaskCounts,
+    setDocumentTaskCounts: setAutoRunDocumentTaskCounts,
+  } = useAutoRun();
 
   // Restore focus when LogViewer closes to ensure global hotkeys work
   useEffect(() => {
@@ -578,6 +529,33 @@ export default function MaestroConsole() {
       }, 50);
     }
   }, [logViewerOpen]);
+
+  // ProcessMonitor navigation handlers
+  const handleProcessMonitorNavigateToSession = useCallback((sessionId: string, tabId?: string) => {
+    setActiveSessionId(sessionId);
+    if (tabId) {
+      // Switch to the specific tab within the session
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, activeTabId: tabId } : s
+      ));
+    }
+  }, [setActiveSessionId, setSessions]);
+
+  const handleProcessMonitorNavigateToGroupChat = useCallback((groupChatId: string) => {
+    // Restore state for this group chat when navigating from ProcessMonitor
+    setActiveGroupChatId(groupChatId);
+    setGroupChatState(groupChatStates.get(groupChatId) ?? 'idle');
+    setParticipantStates(allGroupChatParticipantStates.get(groupChatId) ?? new Map());
+    setProcessMonitorOpen(false);
+  }, [setActiveGroupChatId, setGroupChatState, groupChatStates, setParticipantStates, allGroupChatParticipantStates]);
+
+  // LogViewer shortcut handler
+  const handleLogViewerShortcutUsed = useCallback((shortcutId: string) => {
+    const result = recordShortcutUsage(shortcutId);
+    if (result.newLevel !== null) {
+      onKeyboardMasteryLevelUp(result.newLevel);
+    }
+  }, [recordShortcutUsage, onKeyboardMasteryLevelUp]);
 
   // Sync toast duration setting to ToastContext
   useEffect(() => {
@@ -605,10 +583,12 @@ export default function MaestroConsole() {
   }, []);
 
   // Close file preview when switching sessions (history is now per-session)
+  // previewFile intentionally omitted: we only want to clear preview on session change, not when preview itself changes
   useEffect(() => {
     if (previewFile !== null) {
       setPreviewFile(null);
     }
+     
   }, [activeSessionId]);
 
   // Restore a persisted session by respawning its process
@@ -768,7 +748,7 @@ export default function MaestroConsole() {
     sessionLoadStarted.current = true;
 
     const loadSessionsAndGroups = async () => {
-      let hasSessionsLoaded = false;
+      let _hasSessionsLoaded = false;
 
       try {
         const savedSessions = await window.maestro.sessions.getAll();
@@ -780,7 +760,7 @@ export default function MaestroConsole() {
             savedSessions.map(s => restoreSession(s))
           );
           setSessions(restoredSessions);
-          hasSessionsLoaded = true;
+          _hasSessionsLoaded = true;
           // Set active session to first session if current activeSessionId is invalid
           if (restoredSessions.length > 0 && !restoredSessions.find(s => s.id === activeSessionId)) {
             setActiveSessionId(restoredSessions[0].id);
@@ -820,6 +800,7 @@ export default function MaestroConsole() {
       }
     };
     loadSessionsAndGroups();
+     
   }, []);
 
   // Hide splash screen only when both settings and sessions have fully loaded
@@ -860,7 +841,10 @@ export default function MaestroConsole() {
         }
       }
     }
-  }, [settingsLoaded, sessionsLoaded]); // Only run once on startup
+  // autoRunStats.longestRunMs and getUnacknowledgedBadgeLevel intentionally omitted -
+  // this effect runs once on startup to check for missed badges, not on every stats update
+   
+  }, [settingsLoaded, sessionsLoaded]);
 
   // Check for unacknowledged badges when user returns to the app
   // Uses multiple triggers: visibility change, window focus, and mouse activity
@@ -941,7 +925,10 @@ export default function MaestroConsole() {
         }, 1200); // Slightly longer delay than badge to avoid overlap
       }
     }
-  }, [settingsLoaded, sessionsLoaded]); // Only run once on startup
+  // getUnacknowledgedKeyboardMasteryLevel intentionally omitted -
+  // this effect runs once on startup to check for unacknowledged levels, not on function changes
+   
+  }, [settingsLoaded, sessionsLoaded]);
 
   // Scan worktree directories on startup for sessions with worktreeConfig
   // This restores worktree sub-agents after app restart
@@ -970,16 +957,20 @@ export default function MaestroConsole() {
             }
 
             // Check if a session already exists for this worktree
-            const existingSession = sessions.find(s =>
-              (s.parentSessionId === parentSession.id && s.worktreeBranch === subdir.branch) ||
-              s.cwd === subdir.path
-            );
+            // Normalize paths for comparison (remove trailing slashes)
+            const normalizedSubdirPath = subdir.path.replace(/\/+$/, '');
+            const existingSession = sessions.find(s => {
+              const normalizedCwd = s.cwd.replace(/\/+$/, '');
+              // Check if same path (regardless of parent) or same branch under same parent
+              return normalizedCwd === normalizedSubdirPath ||
+                (s.parentSessionId === parentSession.id && s.worktreeBranch === subdir.branch);
+            });
             if (existingSession) {
               continue;
             }
 
             // Also check in sessions we're about to add
-            if (newWorktreeSessions.some(s => s.cwd === subdir.path)) {
+            if (newWorktreeSessions.some(s => s.cwd.replace(/\/+$/, '') === normalizedSubdirPath)) {
               continue;
             }
 
@@ -1086,7 +1077,7 @@ export default function MaestroConsole() {
     // Run once on startup with a small delay to let UI settle
     const timer = setTimeout(scanWorktreeConfigsOnStartup, 500);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [sessionsLoaded]); // Only run once when sessions are loaded
 
   // Check for updates on startup if enabled
@@ -1122,6 +1113,9 @@ export default function MaestroConsole() {
 
   // Set up process event listeners for real-time output
   useEffect(() => {
+    // Copy ref value to local variable for cleanup (React ESLint rule)
+    const thinkingChunkBuffer = thinkingChunkBufferRef.current;
+
     // Handle process output data (BATCHED for performance)
     // sessionId will be in format: "{id}-ai-{tabId}", "{id}-terminal", "{id}-batch-{timestamp}", etc.
     const unsubscribeData = window.maestro.process.onData((sessionId: string, data: string) => {
@@ -2209,8 +2203,9 @@ export default function MaestroConsole() {
         cancelAnimationFrame(thinkingChunkRafIdRef.current);
         thinkingChunkRafIdRef.current = null;
       }
-      thinkingChunkBufferRef.current.clear();
+      thinkingChunkBuffer.clear();
     };
+     
   }, []);
 
   // --- GROUP CHAT EVENT LISTENERS ---
@@ -2290,6 +2285,7 @@ export default function MaestroConsole() {
       unsubParticipantState?.();
       unsubModeratorSessionId?.();
     };
+     
   }, [activeGroupChatId]);
 
   // Process group chat execution queue when state becomes idle
@@ -2315,11 +2311,9 @@ export default function MaestroConsole() {
     }
   }, [groupChatState, groupChatExecutionQueue, activeGroupChatId]);
 
-  // Refs
+  // Refs (groupChatInputRef and groupChatMessagesRef are now in GroupChatContext)
   const logsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const groupChatInputRef = useRef<HTMLTextAreaElement>(null);
-  const groupChatMessagesRef = useRef<GroupChatMessagesHandle>(null);
   const terminalOutputRef = useRef<HTMLDivElement>(null);
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
@@ -2329,20 +2323,15 @@ export default function MaestroConsole() {
   const mainPanelRef = useRef<MainPanelHandle>(null);
 
   // Refs for toast notifications (to access latest values in event handlers)
-  const groupsRef = useRef(groups);
+  // Note: sessionsRef, groupsRef, activeSessionIdRef are now provided by SessionContext
   const addToastRef = useRef(addToast);
-  const sessionsRef = useRef(sessions);
   const updateGlobalStatsRef = useRef(updateGlobalStats);
   const customAICommandsRef = useRef(customAICommands);
   const speckitCommandsRef = useRef(speckitCommands);
-  const activeSessionIdRef = useRef(activeSessionId);
-  groupsRef.current = groups;
   addToastRef.current = addToast;
-  sessionsRef.current = sessions;
   updateGlobalStatsRef.current = updateGlobalStats;
   customAICommandsRef.current = customAICommands;
   speckitCommandsRef.current = speckitCommands;
-  activeSessionIdRef.current = activeSessionId;
 
   // Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now provided by useAgentExecution hook
   // Note: addHistoryEntryRef is now provided by useAgentSessionManagement hook
@@ -2351,7 +2340,7 @@ export default function MaestroConsole() {
 
   // Ref for handling remote commands from web interface
   // This allows web commands to go through the exact same code path as desktop commands
-  const pendingRemoteCommandRef = useRef<{ sessionId: string; command: string } | null>(null);
+  const _pendingRemoteCommandRef = useRef<{ sessionId: string; command: string } | null>(null);
 
   // Refs for batch processor error handling (Phase 5.10)
   // These are populated after useBatchProcessor is called and used in the agent error handler
@@ -2386,10 +2375,7 @@ export default function MaestroConsole() {
 
   // Keyboard navigation state
   const [selectedSidebarIndex, setSelectedSidebarIndex] = useState(0);
-  const activeSession = useMemo(() =>
-    sessions.find(s => s.id === activeSessionId) || sessions[0] || null,
-    [sessions, activeSessionId]
-  );
+  // Note: activeSession is now provided by SessionContext
   const activeTabForError = useMemo(() => (
     activeSession ? getActiveTab(activeSession) : null
   ), [activeSession]);
@@ -2516,6 +2502,34 @@ export default function MaestroConsole() {
     ));
   }, [activeSessionId]);
 
+  // --- APP HANDLERS (drag, file, folder operations) ---
+  const {
+    handleImageDragEnter,
+    handleImageDragLeave,
+    handleImageDragOver,
+    isDraggingImage,
+    setIsDraggingImage,
+    dragCounterRef,
+    handleFileClick,
+    updateSessionWorkingDirectory,
+    toggleFolder,
+    expandAllFolders,
+    collapseAllFolders,
+  } = useAppHandlers({
+    activeSession,
+    activeSessionId,
+    setSessions,
+    setActiveFocus,
+    setPreviewFile,
+    filePreviewHistory,
+    setFilePreviewHistory,
+    filePreviewHistoryIndex,
+    setFilePreviewHistoryIndex,
+    setConfirmModalMessage,
+    setConfirmModalOnConfirm,
+    setConfirmModalOpen,
+  });
+
   // Use custom colors when custom theme is selected, otherwise use the standard theme
   const theme = useMemo(() => {
     if (activeThemeId === 'custom') {
@@ -2534,6 +2548,7 @@ export default function MaestroConsole() {
           ? (activeSession.shellCwd || activeSession.cwd)
           : activeSession.cwd)
       : '',
+     
     [activeSession?.inputMode, activeSession?.shellCwd, activeSession?.cwd]
   );
 
@@ -2658,12 +2673,8 @@ export default function MaestroConsole() {
     onAuthenticate: errorSession ? () => handleAuthenticateAfterError(errorSession.id) : undefined,
   });
 
-  // Handler to clear group chat error and resume operations
-  const handleClearGroupChatError = useCallback(() => {
-    setGroupChatError(null);
-    // Focus the input for retry
-    setTimeout(() => groupChatInputRef.current?.focus(), 0);
-  }, []);
+  // Handler to clear group chat error (now uses context's clearGroupChatError)
+  const handleClearGroupChatError = handleClearGroupChatErrorBase;
 
   // Use the agent error recovery hook for group chat errors
   const { recoveryActions: groupChatRecoveryActions } = useAgentErrorRecovery({
@@ -2734,13 +2745,13 @@ export default function MaestroConsole() {
   const {
     mergeState,
     progress: mergeProgress,
-    error: mergeError,
+    error: _mergeError,
     startTime: mergeStartTime,
     sourceName: mergeSourceName,
     targetName: mergeTargetName,
     executeMerge,
     cancelTab: cancelMergeTab,
-    cancelMerge,
+    cancelMerge: _cancelMerge,
     clearTabState: clearMergeTabState,
     reset: resetMerge,
   } = useMergeSessionWithSessions({
@@ -2817,8 +2828,8 @@ export default function MaestroConsole() {
   const {
     transferState,
     progress: transferProgress,
-    error: transferError,
-    executeTransfer,
+    error: _transferError,
+    executeTransfer: _executeTransfer,
     cancelTransfer,
     reset: resetTransfer,
   } = useSendToAgentWithSessions({
@@ -2851,12 +2862,166 @@ export default function MaestroConsole() {
     },
   });
 
+  // --- STABLE HANDLERS FOR APP AGENT MODALS ---
+
+  // LeaderboardRegistrationModal handlers
+  const handleCloseLeaderboardRegistration = useCallback(() => {
+    setLeaderboardRegistrationOpen(false);
+  }, []);
+
+  const handleSaveLeaderboardRegistration = useCallback((registration: LeaderboardRegistration) => {
+    setLeaderboardRegistration(registration);
+  }, []);
+
+  const handleLeaderboardOptOut = useCallback(() => {
+    setLeaderboardRegistration(null);
+  }, []);
+
+  // MergeSessionModal handlers
+  const handleCloseMergeSession = useCallback(() => {
+    setMergeSessionModalOpen(false);
+    resetMerge();
+  }, [resetMerge]);
+
+  const handleMerge = useCallback(async (
+    targetSessionId: string,
+    targetTabId: string | undefined,
+    options: MergeOptions
+  ) => {
+    // Close the modal - merge will show in the input area overlay
+    setMergeSessionModalOpen(false);
+
+    // Execute merge using the hook (callbacks handle toasts and navigation)
+    const result = await executeMerge(
+      activeSession!,
+      activeSession!.activeTabId,
+      targetSessionId,
+      targetTabId,
+      options
+    );
+
+    if (!result.success) {
+      addToast({
+        type: 'error',
+        title: 'Merge Failed',
+        message: result.error || 'Failed to merge contexts',
+      });
+    }
+    // Note: Success toasts are handled by onSessionCreated (for new sessions)
+    // and onMergeComplete (for merging into existing sessions) callbacks
+
+    return result;
+  }, [activeSession, executeMerge, addToast]);
+
+  // TransferProgressModal handlers
+  const handleCancelTransfer = useCallback(() => {
+    cancelTransfer();
+    setTransferSourceAgent(null);
+    setTransferTargetAgent(null);
+  }, [cancelTransfer]);
+
+  const handleCompleteTransfer = useCallback(() => {
+    resetTransfer();
+    setTransferSourceAgent(null);
+    setTransferTargetAgent(null);
+  }, [resetTransfer]);
+
+  // SendToAgentModal handlers
+  const handleCloseSendToAgent = useCallback(() => {
+    setSendToAgentModalOpen(false);
+  }, []);
+
+  const handleSendToAgent = useCallback(async (
+    targetSessionId: string,
+    options: SendToAgentOptions
+  ) => {
+    // Find the target session
+    const targetSession = sessions.find(s => s.id === targetSessionId);
+    if (!targetSession) {
+      return { success: false, error: 'Target session not found' };
+    }
+
+    // Store source and target agents for progress modal display
+    setTransferSourceAgent(activeSession!.toolType);
+    setTransferTargetAgent(targetSession.toolType);
+
+    // Close the selection modal - progress modal will take over
+    setSendToAgentModalOpen(false);
+
+    // Get source tab context
+    const sourceTab = activeSession!.aiTabs.find(t => t.id === activeSession!.activeTabId);
+    if (!sourceTab) {
+      return { success: false, error: 'Source tab not found' };
+    }
+
+    // Transfer context to the target session's active tab
+    // Create a new tab in the target session with the transferred context
+    const newTabId = `tab-${Date.now()}`;
+    const transferNotice: LogEntry = {
+      id: `transfer-notice-${Date.now()}`,
+      timestamp: Date.now(),
+      source: 'system',
+      text: `Context transferred from "${activeSession!.name}" (${activeSession!.toolType})${options.groomContext ? ' - cleaned to reduce size' : ''}`,
+    };
+
+    const newTab: AITab = {
+      id: newTabId,
+      name: `From: ${activeSession!.name}`,
+      logs: [transferNotice, ...sourceTab.logs],
+      agentSessionId: null,
+      starred: false,
+      inputValue: '',
+      stagedImages: [],
+      createdAt: Date.now(),
+      state: 'idle',
+    };
+
+    // Add the new tab to the target session
+    setSessions(prev => prev.map(s => {
+      if (s.id === targetSessionId) {
+        return {
+          ...s,
+          aiTabs: [...s.aiTabs, newTab],
+          activeTabId: newTabId,
+        };
+      }
+      return s;
+    }));
+
+    // Navigate to the target session
+    setActiveSessionId(targetSessionId);
+
+    // Calculate estimated tokens for the message
+    const estimatedTokens = sourceTab.logs
+      .filter(log => log.text && log.source !== 'system')
+      .reduce((sum, log) => sum + Math.round((log.text?.length || 0) / 4), 0);
+    const tokenInfo = estimatedTokens > 0
+      ? ` (~${estimatedTokens.toLocaleString()} tokens)`
+      : '';
+
+    // Show success toast with detailed info
+    addToast({
+      type: 'success',
+      title: 'Context Transferred',
+      message: `"${activeSession!.name}" → "${targetSession.name}"${tokenInfo}. Ready in new tab.`,
+      sessionId: targetSessionId,
+      tabId: newTabId,
+    });
+
+    // Reset transfer state
+    resetTransfer();
+    setTransferSourceAgent(null);
+    setTransferTargetAgent(null);
+
+    return { success: true, newSessionId: targetSessionId, newTabId };
+  }, [activeSession, sessions, setSessions, setActiveSessionId, addToast, resetTransfer]);
+
   // Summarize & Continue hook for context compaction (non-blocking, per-tab)
   const {
     summarizeState,
     progress: summarizeProgress,
     result: summarizeResult,
-    error: summarizeError,
+    error: _summarizeError,
     startTime,
     startSummarize,
     cancelTab,
@@ -2921,6 +3086,20 @@ export default function MaestroConsole() {
       }
     });
   }, [activeSession, canSummarize, minContextUsagePercent, startSummarize, setSessions, addToast, clearTabState]);
+
+  // Combine custom AI commands with spec-kit commands for input processing (slash command execution)
+  // This ensures speckit commands are processed the same way as custom commands
+  const allCustomCommands = useMemo((): CustomAICommand[] => {
+    // Convert speckit commands to CustomAICommand format
+    const speckitAsCustom: CustomAICommand[] = speckitCommands.map(cmd => ({
+      id: `speckit-${cmd.id}`,
+      command: cmd.command,
+      description: cmd.description,
+      prompt: cmd.prompt,
+      isBuiltIn: true, // Speckit commands are built-in (bundled)
+    }));
+    return [...customAICommands, ...speckitAsCustom];
+  }, [customAICommands, speckitCommands]);
 
   // Combine built-in slash commands with custom AI commands, spec-kit commands, AND agent-specific commands for autocomplete
   const allSlashCommands = useMemo(() => {
@@ -3016,7 +3195,7 @@ export default function MaestroConsole() {
     // The inputValue changes when we blur (syncAiInputToSession), but we don't want
     // to read it back into local state - that would cause a feedback loop.
     // We only need to load inputValue when switching TO a different tab.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [activeTab?.id]);
 
   // Input sync handlers (extracted to useInputSync hook)
@@ -3052,7 +3231,7 @@ export default function MaestroConsole() {
       // Update ref to current session
       prevActiveSessionIdRef.current = activeSession.id;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [activeSession?.id]);
 
   // Use local state for responsive typing - no session state update on every keystroke
@@ -3065,6 +3244,7 @@ export default function MaestroConsole() {
     if (!activeSession || activeSession.inputMode !== 'ai') return [];
     const activeTab = getActiveTab(activeSession);
     return activeTab?.stagedImages || [];
+     
   }, [activeSession?.aiTabs, activeSession?.activeTabId, activeSession?.inputMode]);
 
   // Set staged images on the active tab
@@ -3184,11 +3364,11 @@ export default function MaestroConsole() {
   // Extracted hook for agent spawning and execution operations
   const {
     spawnAgentForSession,
-    spawnAgentWithPrompt,
+    spawnAgentWithPrompt: _spawnAgentWithPrompt,
     spawnBackgroundSynopsis,
     spawnBackgroundSynopsisRef,
-    spawnAgentWithPromptRef,
-    showFlashNotification,
+    spawnAgentWithPromptRef: _spawnAgentWithPromptRef,
+    showFlashNotification: _showFlashNotification,
     showSuccessFlash,
   } = useAgentExecution({
     activeSession,
@@ -3216,11 +3396,71 @@ export default function MaestroConsole() {
     defaultShowThinking,
   });
 
+  // PERFORMANCE: Memoized callback for creating new agent sessions
+  // Extracted from inline function to prevent MainPanel re-renders
+  const handleNewAgentSession = useCallback(() => {
+    // Create a fresh AI tab using functional setState to avoid stale closure
+    setSessions(prev => {
+      const currentSession = prev.find(s => s.id === activeSessionIdRef.current);
+      if (!currentSession) return prev;
+      return prev.map(s => {
+        if (s.id !== currentSession.id) return s;
+        const result = createTab(s, { saveToHistory: defaultSaveToHistory, showThinking: defaultShowThinking });
+        if (!result) return s;
+        return result.session;
+      });
+    });
+    setActiveAgentSessionId(null);
+    setAgentSessionsOpen(false);
+  }, [defaultSaveToHistory, defaultShowThinking]);
+
+  // PERFORMANCE: Memoized tab management callbacks
+  // Extracted from inline functions to prevent MainPanel re-renders
+  const handleTabSelect = useCallback((tabId: string) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSessionIdRef.current) return s;
+      const result = setActiveTab(s, tabId);
+      return result ? result.session : s;
+    }));
+  }, []);
+
+  const handleTabClose = useCallback((tabId: string) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSessionIdRef.current) return s;
+      // Note: showUnreadOnly is accessed via ref pattern if needed, or we accept this dep
+      const result = closeTab(s, tabId, false); // Don't filter for unread during close
+      return result ? result.session : s;
+    }));
+  }, []);
+
+  const handleNewTab = useCallback(() => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSessionIdRef.current) return s;
+      const result = createTab(s, { saveToHistory: defaultSaveToHistory, showThinking: defaultShowThinking });
+      if (!result) return s;
+      return result.session;
+    }));
+  }, [defaultSaveToHistory, defaultShowThinking]);
+
+  const handleRemoveQueuedItem = useCallback((itemId: string) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSessionIdRef.current) return s;
+      return {
+        ...s,
+        executionQueue: s.executionQueue.filter(item => item.id !== itemId)
+      };
+    }));
+  }, []);
+
+  const handleOpenQueueBrowser = useCallback(() => {
+    setQueueBrowserOpen(true);
+  }, []);
+
   // Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now updated in useAgentExecution hook
 
   // Initialize batch processor (supports parallel batches per session)
   const {
-    batchRunStates,
+    batchRunStates: _batchRunStates,
     getBatchState,
     activeBatchSessionIds,
     startBatchRun,
@@ -3432,6 +3672,61 @@ export default function MaestroConsole() {
           sessionId: info.sessionId,
         });
       }
+    },
+    // Process queued items after batch completion/stop
+    // This ensures pending user messages are processed after Auto Run ends
+    onProcessQueueAfterCompletion: (sessionId) => {
+      const session = sessionsRef.current.find(s => s.id === sessionId);
+      if (session && session.executionQueue.length > 0 && processQueuedItemRef.current) {
+        // Pop first item and process it
+        const [nextItem, ...remainingQueue] = session.executionQueue;
+
+        // Update session state: set to busy, pop first item from queue
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+
+          const targetTab = s.aiTabs.find(tab => tab.id === nextItem.tabId) || getActiveTab(s);
+          if (!targetTab) {
+            return {
+              ...s,
+              state: 'busy' as SessionState,
+              busySource: 'ai',
+              executionQueue: remainingQueue,
+              thinkingStartTime: Date.now(),
+            };
+          }
+
+          // For message items, add a log entry to the target tab
+          let updatedAiTabs = s.aiTabs;
+          if (nextItem.type === 'message' && nextItem.text) {
+            const logEntry: LogEntry = {
+              id: generateId(),
+              timestamp: Date.now(),
+              source: 'user',
+              text: nextItem.text,
+              images: nextItem.images
+            };
+            updatedAiTabs = s.aiTabs.map(tab =>
+              tab.id === targetTab.id
+                ? { ...tab, logs: [...tab.logs, logEntry], state: 'busy' as const }
+                : tab
+            );
+          }
+
+          return {
+            ...s,
+            state: 'busy' as SessionState,
+            busySource: 'ai',
+            aiTabs: updatedAiTabs,
+            activeTabId: targetTab.id,
+            executionQueue: remainingQueue,
+            thinkingStartTime: Date.now(),
+          };
+        }));
+
+        // Process the item after state update
+        processQueuedItemRef.current(sessionId, nextItem);
+      }
     }
   });
 
@@ -3594,7 +3889,7 @@ export default function MaestroConsole() {
   }, [activeSession, groups, spawnBackgroundSynopsis, addHistoryEntry, addLogToActiveTab, setSessions, addToast]);
 
   // Input processing hook - handles sending messages and commands
-  const { processInput, processInputRef } = useInputProcessing({
+  const { processInput, processInputRef: _processInputRef } = useInputProcessing({
     activeSession,
     activeSessionId,
     setSessions,
@@ -3603,7 +3898,7 @@ export default function MaestroConsole() {
     stagedImages,
     setStagedImages,
     inputRef,
-    customAICommands,
+    customAICommands: allCustomCommands, // Use combined custom + speckit commands
     setSlashCommandOpen,
     syncAiInputToSession,
     syncTerminalInputToSession,
@@ -3666,6 +3961,36 @@ export default function MaestroConsole() {
     };
   }, [activeBatchSessionIds.length, updateAutoRunProgress, autoRunStats.longestRunMs]);
 
+  // Track peak usage stats for achievements image
+  useEffect(() => {
+    // Count current active agents (non-terminal sessions)
+    const activeAgents = sessions.filter(s => s.toolType !== 'terminal').length;
+
+    // Count busy sessions (currently processing)
+    const busySessions = sessions.filter(s => s.state === 'busy').length;
+
+    // Count auto-run sessions (sessions with active batch runs)
+    const autoRunSessions = activeBatchSessionIds.length;
+
+    // Count total queue depth across all sessions
+    const totalQueueDepth = sessions.reduce((sum, s) => sum + (s.executionQueue?.length || 0), 0);
+
+    // Update usage stats (only updates if new values are higher)
+    updateUsageStats({
+      maxAgents: activeAgents,
+      maxDefinedAgents: activeAgents, // Same as active agents for now
+      maxSimultaneousAutoRuns: autoRunSessions,
+      maxSimultaneousQueries: busySessions,
+      maxQueueDepth: totalQueueDepth,
+    });
+  }, [sessions, activeBatchSessionIds, updateUsageStats]);
+
+  // Memoize worktree config key to avoid complex expression in dependency array
+  const worktreeConfigKey = useMemo(() =>
+    sessions.map(s => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`).join(','),
+    [sessions]
+  );
+
   // File watcher for worktree directories - provides immediate detection
   // This is more efficient than polling and gives real-time results
   useEffect(() => {
@@ -3696,10 +4021,14 @@ export default function MaestroConsole() {
       if (!parentSession) return;
 
       // Check if session already exists for this worktree
-      const existingSession = currentSessions.find(s =>
-        (s.parentSessionId === sessionId && s.worktreeBranch === worktree.branch) ||
-        s.cwd === worktree.path
-      );
+      // Normalize paths for comparison (remove trailing slashes)
+      const normalizedWorktreePath = worktree.path.replace(/\/+$/, '');
+      const existingSession = currentSessions.find(s => {
+        const normalizedCwd = s.cwd.replace(/\/+$/, '');
+        // Check if same path (regardless of parent) or same branch under same parent
+        return normalizedCwd === normalizedWorktreePath ||
+          (s.parentSessionId === sessionId && s.worktreeBranch === worktree.branch);
+      });
       if (existingSession) return;
 
       // Create new worktree session
@@ -3804,166 +4133,190 @@ export default function MaestroConsole() {
         window.maestro.git.unwatchWorktreeDirectory(session.id);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [
     // Re-run when worktreeConfig changes on any session
-    sessions.map(s => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`).join(','),
+    worktreeConfigKey,
     defaultSaveToHistory
   ]);
 
-  // Legacy: Periodic scanner for sessions using old worktreeParentPath
-  // TODO: Remove after migration to new parent/child model
+  // Legacy: Scanner for sessions using old worktreeParentPath
+  // TODO: Remove after migration to new parent/child model (use worktreeConfig with file watchers instead)
+  // PERFORMANCE: Only scan on app focus (visibility change) instead of continuous polling
+  // This avoids blocking the main thread every 30 seconds during active use
   useEffect(() => {
+    // Check if any sessions use the legacy worktreeParentPath model
+    const hasLegacyWorktreeSessions = sessions.some(s => s.worktreeParentPath);
+    if (!hasLegacyWorktreeSessions) return;
+
+    // Track if we're currently scanning to avoid overlapping scans
+    let isScanning = false;
+
     const scanWorktreeParents = async () => {
-      // Find sessions that have worktreeParentPath set (legacy model)
-      const worktreeParentSessions = sessions.filter(s => s.worktreeParentPath);
-      if (worktreeParentSessions.length === 0) return;
+      if (isScanning) return;
+      isScanning = true;
 
-      // Collect all new sessions to add in a single batch (avoids stale closure issues)
-      const newSessionsToAdd: Session[] = [];
-      // Track paths we're about to add to avoid duplicates within this scan
-      const pathsBeingAdded = new Set<string>();
+      try {
+        // Find sessions that have worktreeParentPath set (legacy model)
+        const worktreeParentSessions = sessionsRef.current.filter(s => s.worktreeParentPath);
+        if (worktreeParentSessions.length === 0) return;
 
-      for (const session of worktreeParentSessions) {
-        try {
-          const result = await window.maestro.git.scanWorktreeDirectory(session.worktreeParentPath!);
-          const { gitSubdirs } = result;
+        // Collect all new sessions to add in a single batch (avoids stale closure issues)
+        const newSessionsToAdd: Session[] = [];
+        // Track paths we're about to add to avoid duplicates within this scan
+        const pathsBeingAdded = new Set<string>();
 
-          for (const subdir of gitSubdirs) {
-            // Skip if this path was manually removed by the user (use ref for current value)
-            const currentRemovedPaths = removedWorktreePathsRef.current;
-            if (currentRemovedPaths.has(subdir.path)) {
-              continue;
+        for (const session of worktreeParentSessions) {
+          try {
+            const result = await window.maestro.git.scanWorktreeDirectory(session.worktreeParentPath!);
+            const { gitSubdirs } = result;
+
+            for (const subdir of gitSubdirs) {
+              // Skip if this path was manually removed by the user (use ref for current value)
+              const currentRemovedPaths = removedWorktreePathsRef.current;
+              if (currentRemovedPaths.has(subdir.path)) {
+                continue;
+              }
+
+              // Skip if session already exists (check current sessions via ref)
+              const currentSessions = sessionsRef.current;
+              const existingSession = currentSessions.find(s => s.cwd === subdir.path || s.projectRoot === subdir.path);
+              if (existingSession) {
+                continue;
+              }
+
+              // Skip if we're already adding this path in this scan batch
+              if (pathsBeingAdded.has(subdir.path)) {
+                continue;
+              }
+
+              // Found a new worktree - prepare session creation
+              pathsBeingAdded.add(subdir.path);
+
+              const sessionName = subdir.branch
+                ? `${subdir.name} (${subdir.branch})`
+                : subdir.name;
+
+              const newId = generateId();
+              const initialTabId = generateId();
+              const initialTab: AITab = {
+                id: initialTabId,
+                agentSessionId: null,
+                name: null,
+                starred: false,
+                logs: [],
+                inputValue: '',
+                stagedImages: [],
+                createdAt: Date.now(),
+                state: 'idle',
+                saveToHistory: defaultSaveToHistory
+              };
+
+              // Fetch git info
+              let gitBranches: string[] | undefined;
+              let gitTags: string[] | undefined;
+              let gitRefsCacheTime: number | undefined;
+
+              try {
+                [gitBranches, gitTags] = await Promise.all([
+                  gitService.getBranches(subdir.path),
+                  gitService.getTags(subdir.path)
+                ]);
+                gitRefsCacheTime = Date.now();
+              } catch {
+                // Ignore errors
+              }
+
+              const newSession: Session = {
+                id: newId,
+                name: sessionName,
+                groupId: session.groupId,
+                toolType: session.toolType,
+                state: 'idle',
+                cwd: subdir.path,
+                fullPath: subdir.path,
+                projectRoot: subdir.path,
+                isGitRepo: true,
+                gitBranches,
+                gitTags,
+                gitRefsCacheTime,
+                worktreeParentPath: session.worktreeParentPath,
+                aiLogs: [],
+                shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
+                workLog: [],
+                contextUsage: 0,
+                inputMode: session.inputMode,
+                aiPid: 0,
+                terminalPid: 0,
+                port: 3000 + Math.floor(Math.random() * 100),
+                isLive: false,
+                changedFiles: [],
+                fileTree: [],
+                fileExplorerExpanded: [],
+                fileExplorerScrollPos: 0,
+                fileTreeAutoRefreshInterval: 180,
+                shellCwd: subdir.path,
+                aiCommandHistory: [],
+                shellCommandHistory: [],
+                executionQueue: [],
+                activeTimeMs: 0,
+                aiTabs: [initialTab],
+                activeTabId: initialTabId,
+                closedTabHistory: [],
+                customPath: session.customPath,
+                customArgs: session.customArgs,
+                customEnvVars: session.customEnvVars,
+                customModel: session.customModel
+              };
+
+              newSessionsToAdd.push(newSession);
             }
-
-            // Skip if session already exists (check current sessions)
-            const existingSession = sessions.find(s => s.cwd === subdir.path || s.projectRoot === subdir.path);
-            if (existingSession) {
-              continue;
-            }
-
-            // Skip if we're already adding this path in this scan batch
-            if (pathsBeingAdded.has(subdir.path)) {
-              continue;
-            }
-
-            // Found a new worktree - prepare session creation
-            pathsBeingAdded.add(subdir.path);
-
-            const sessionName = subdir.branch
-              ? `${subdir.name} (${subdir.branch})`
-              : subdir.name;
-
-            const newId = generateId();
-            const initialTabId = generateId();
-            const initialTab: AITab = {
-              id: initialTabId,
-              agentSessionId: null,
-              name: null,
-              starred: false,
-              logs: [],
-              inputValue: '',
-              stagedImages: [],
-              createdAt: Date.now(),
-              state: 'idle',
-              saveToHistory: defaultSaveToHistory
-            };
-
-            // Fetch git info
-            let gitBranches: string[] | undefined;
-            let gitTags: string[] | undefined;
-            let gitRefsCacheTime: number | undefined;
-
-            try {
-              [gitBranches, gitTags] = await Promise.all([
-                gitService.getBranches(subdir.path),
-                gitService.getTags(subdir.path)
-              ]);
-              gitRefsCacheTime = Date.now();
-            } catch {
-              // Ignore errors
-            }
-
-            const newSession: Session = {
-              id: newId,
-              name: sessionName,
-              groupId: session.groupId,
-              toolType: session.toolType,
-              state: 'idle',
-              cwd: subdir.path,
-              fullPath: subdir.path,
-              projectRoot: subdir.path,
-              isGitRepo: true,
-              gitBranches,
-              gitTags,
-              gitRefsCacheTime,
-              worktreeParentPath: session.worktreeParentPath,
-              aiLogs: [],
-              shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
-              workLog: [],
-              contextUsage: 0,
-              inputMode: session.inputMode,
-              aiPid: 0,
-              terminalPid: 0,
-              port: 3000 + Math.floor(Math.random() * 100),
-              isLive: false,
-              changedFiles: [],
-              fileTree: [],
-              fileExplorerExpanded: [],
-              fileExplorerScrollPos: 0,
-              fileTreeAutoRefreshInterval: 180,
-              shellCwd: subdir.path,
-              aiCommandHistory: [],
-              shellCommandHistory: [],
-              executionQueue: [],
-              activeTimeMs: 0,
-              aiTabs: [initialTab],
-              activeTabId: initialTabId,
-              closedTabHistory: [],
-              customPath: session.customPath,
-              customArgs: session.customArgs,
-              customEnvVars: session.customEnvVars,
-              customModel: session.customModel
-            };
-
-            newSessionsToAdd.push(newSession);
+          } catch (error) {
+            console.error(`[WorktreeScanner] Error scanning ${session.worktreeParentPath}:`, error);
           }
-        } catch (error) {
-          console.error(`[WorktreeScanner] Error scanning ${session.worktreeParentPath}:`, error);
         }
-      }
 
-      // Add all new sessions in a single update (uses functional update to get fresh state)
-      if (newSessionsToAdd.length > 0) {
-        setSessions(prev => {
-          // Double-check against current state to avoid duplicates
-          const currentPaths = new Set(prev.map(s => s.cwd));
-          const trulyNew = newSessionsToAdd.filter(s => !currentPaths.has(s.cwd));
-          if (trulyNew.length === 0) return prev;
-          return [...prev, ...trulyNew];
-        });
-
-        for (const session of newSessionsToAdd) {
-          addToast({
-            type: 'success',
-            title: 'New Worktree Discovered',
-            message: session.name,
+        // Add all new sessions in a single update (uses functional update to get fresh state)
+        if (newSessionsToAdd.length > 0) {
+          setSessions(prev => {
+            // Double-check against current state to avoid duplicates
+            const currentPaths = new Set(prev.map(s => s.cwd));
+            const trulyNew = newSessionsToAdd.filter(s => !currentPaths.has(s.cwd));
+            if (trulyNew.length === 0) return prev;
+            return [...prev, ...trulyNew];
           });
+
+          for (const session of newSessionsToAdd) {
+            addToast({
+              type: 'success',
+              title: 'New Worktree Discovered',
+              message: session.name,
+            });
+          }
         }
+      } finally {
+        isScanning = false;
       }
     };
 
-    // Scan immediately on mount if there are worktree parents
+    // Scan once on mount
     scanWorktreeParents();
 
-    // Set up interval to scan every 30 seconds
-    const intervalId = setInterval(scanWorktreeParents, 30000);
+    // Scan when app regains focus (visibility change) instead of polling
+    // This is much more efficient - only scans when user returns to app
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        scanWorktreeParents();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions.length, defaultSaveToHistory]); // Re-run when session count changes (removedWorktreePaths accessed via ref)
+
+  }, [sessions.some(s => s.worktreeParentPath), defaultSaveToHistory]); // Only re-run when legacy sessions exist/don't exist
 
   // Handler to open batch runner modal
   const handleOpenBatchRunner = useCallback(() => {
@@ -4025,10 +4378,12 @@ export default function MaestroConsole() {
     const sessionId = targetSessionId
       ?? (activeBatchSessionIds.length > 0 ? activeBatchSessionIds[0] : activeSession?.id);
     if (!sessionId) return;
-    setConfirmModalMessage('Stop Auto Run after the current task completes?');
+    const session = sessions.find(s => s.id === sessionId);
+    const agentName = session?.name || 'this session';
+    setConfirmModalMessage(`Stop Auto Run for "${agentName}" after the current task completes?`);
     setConfirmModalOnConfirm(() => () => stopBatchRun(sessionId));
     setConfirmModalOpen(true);
-  }, [activeBatchSessionIds, activeSession, stopBatchRun]);
+  }, [activeBatchSessionIds, activeSession, sessions, stopBatchRun]);
 
   // Error handling callbacks for Auto Run (Phase 5.10)
   const handleSkipCurrentDocument = useCallback(() => {
@@ -4103,7 +4458,7 @@ export default function MaestroConsole() {
 
       // Restore the state for this specific chat from the per-chat state map
       // This prevents state from one chat bleeding into another when switching
-      setGroupChatState(prev => {
+      setGroupChatState(_prev => {
         const savedState = groupChatStates.get(id);
         return savedState ?? 'idle';
       });
@@ -4185,7 +4540,7 @@ export default function MaestroConsole() {
         ));
       }
     }
-  }, [sessions]);
+  }, [sessions, setActiveSessionId]);
 
   const handleCreateGroupChat = useCallback(async (
     name: string,
@@ -4227,6 +4582,24 @@ export default function MaestroConsole() {
     setGroupChats(prev => prev.map(c => c.id === id ? updated : c));
     setShowEditGroupChatModal(null);
   }, []);
+
+  // --- GROUP CHAT MODAL HANDLERS ---
+  // Stable callback handlers for AppGroupChatModals component
+  const handleCloseNewGroupChatModal = useCallback(() => setShowNewGroupChatModal(false), []);
+  const handleCloseDeleteGroupChatModal = useCallback(() => setShowDeleteGroupChatModal(null), []);
+  const handleConfirmDeleteGroupChat = useCallback(() => {
+    if (showDeleteGroupChatModal) {
+      handleDeleteGroupChat(showDeleteGroupChatModal);
+    }
+  }, [showDeleteGroupChatModal, handleDeleteGroupChat]);
+  const handleCloseRenameGroupChatModal = useCallback(() => setShowRenameGroupChatModal(null), []);
+  const handleRenameGroupChatFromModal = useCallback((newName: string) => {
+    if (showRenameGroupChatModal) {
+      handleRenameGroupChat(showRenameGroupChatModal, newName);
+    }
+  }, [showRenameGroupChatModal, handleRenameGroupChat]);
+  const handleCloseEditGroupChatModal = useCallback(() => setShowEditGroupChatModal(null), []);
+  const handleCloseGroupChatInfo = useCallback(() => setShowGroupChatInfo(false), []);
 
   const handleSendGroupChatMessage = useCallback(async (content: string, images?: string[], readOnly?: boolean) => {
     if (!activeGroupChatId) return;
@@ -4321,6 +4694,62 @@ export default function MaestroConsole() {
   // The hook handles: debouncing, flush-on-unmount, flush-on-visibility-change, flush-on-beforeunload
   const { flushNow: flushSessionPersistence } = useDebouncedPersistence(sessions, initialLoadComplete);
 
+  // AppSessionModals handlers that depend on flushSessionPersistence
+  const handleSaveEditAgent = useCallback((
+    sessionId: string,
+    name: string,
+    nudgeMessage?: string,
+    customPath?: string,
+    customArgs?: string,
+    customEnvVars?: Record<string, string>,
+    customModel?: string,
+    customContextWindow?: number
+  ) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
+      return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow };
+    }));
+  }, []);
+
+  const handleRenameTab = useCallback((newName: string) => {
+    if (!activeSession || !renameTabId) return;
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSession.id) return s;
+      // Find the tab to get its agentSessionId for persistence
+      const tab = s.aiTabs.find(t => t.id === renameTabId);
+      if (tab?.agentSessionId) {
+        // Persist name to agent session metadata (async, fire and forget)
+        // Use projectRoot (not cwd) for consistent session storage access
+        const agentId = s.toolType || 'claude-code';
+        if (agentId === 'claude-code') {
+          window.maestro.claude.updateSessionName(
+            s.projectRoot,
+            tab.agentSessionId,
+            newName || ''
+          ).catch(err => console.error('Failed to persist tab name:', err));
+        } else {
+          window.maestro.agentSessions.setSessionName(
+            agentId,
+            s.projectRoot,
+            tab.agentSessionId,
+            newName || null
+          ).catch(err => console.error('Failed to persist tab name:', err));
+        }
+        // Also update past history entries with this agentSessionId
+        window.maestro.history.updateSessionName(
+          tab.agentSessionId,
+          newName || ''
+        ).catch(err => console.error('Failed to update history session names:', err));
+      }
+      return {
+        ...s,
+        aiTabs: s.aiTabs.map(tab =>
+          tab.id === renameTabId ? { ...tab, name: newName || null } : tab
+        )
+      };
+    }));
+  }, [activeSession, renameTabId]);
+
   // Persist groups directly (groups change infrequently, no need to debounce)
   useEffect(() => {
     if (initialLoadComplete.current) {
@@ -4337,7 +4766,7 @@ export default function MaestroConsole() {
     if (activeSession && fileTreeContainerRef.current && activeSession.fileExplorerScrollPos !== undefined) {
       fileTreeContainerRef.current.scrollTop = activeSession.fileExplorerScrollPos;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [activeSessionId]); // Only restore on session switch, not on scroll position changes
 
   // Track navigation history when session or AI tab changes
@@ -4348,7 +4777,7 @@ export default function MaestroConsole() {
         tabId: activeSession.inputMode === 'ai' && activeSession.aiTabs?.length > 0 ? activeSession.activeTabId : undefined
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [activeSessionId, activeSession?.activeTabId]); // Track session and tab changes
 
   // Reset shortcuts search when modal closes
@@ -5075,6 +5504,8 @@ export default function MaestroConsole() {
     setTourOpen,
     setActiveFocus,
     startBatchRun,
+    sessions,
+    addToast,
   ]);
 
   /**
@@ -5089,7 +5520,7 @@ export default function MaestroConsole() {
    *                         (e.g., "Here's a summary of our previous conversations...")
    * @returns Promise that resolves when the session is initialized
    */
-  const initializeMergedSession = useCallback(async (
+  const _initializeMergedSession = useCallback(async (
     session: Session,
     contextSummary?: string
   ) => {
@@ -5262,7 +5693,7 @@ export default function MaestroConsole() {
       if (isLiveMode) {
         // Stop tunnel first (if running), then stop web server
         await window.maestro.tunnel.stop();
-        const result = await window.maestro.live.disableAll();
+        const _result = await window.maestro.live.disableAll();
         setIsLiveMode(false);
         setWebInterfaceUrl(null);
       } else {
@@ -5646,7 +6077,7 @@ export default function MaestroConsole() {
     };
     window.addEventListener('maestro:remoteCommand', handleRemoteCommand);
     return () => window.removeEventListener('maestro:remoteCommand', handleRemoteCommand);
-  }, []);
+  }, [addLogToActiveTab]);
 
   // Listen for tour UI actions to control right panel state
   useEffect(() => {
@@ -6140,7 +6571,7 @@ export default function MaestroConsole() {
             if (s.id !== activeSession.id) return s;
 
             // Add kill log to the appropriate place and clear thinking/tool logs
-            let updatedSession = { ...s };
+            const updatedSession = { ...s };
             if (currentMode === 'ai') {
               const tab = getActiveTab(s);
               if (tab) {
@@ -6378,7 +6809,7 @@ export default function MaestroConsole() {
 
     // Handle slash command autocomplete
     if (slashCommandOpen) {
-      const isTerminalMode = activeSession.inputMode === 'terminal';
+      const isTerminalMode = activeSession?.inputMode === 'terminal';
       const filteredCommands = allSlashCommands.filter(cmd => {
         // Check if command is only available in terminal mode
         if ('terminalOnly' in cmd && cmd.terminalOnly && !isTerminalMode) return false;
@@ -6413,7 +6844,7 @@ export default function MaestroConsole() {
 
     if (e.key === 'Enter') {
       // Use the appropriate setting based on input mode
-      const currentEnterToSend = activeSession.inputMode === 'terminal' ? enterToSendTerminal : enterToSendAI;
+      const currentEnterToSend = activeSession?.inputMode === 'terminal' ? enterToSendTerminal : enterToSendAI;
 
       if (currentEnterToSend && !e.shiftKey && !e.metaKey) {
         e.preventDefault();
@@ -6428,7 +6859,7 @@ export default function MaestroConsole() {
       terminalOutputRef.current?.focus();
     } else if (e.key === 'ArrowUp') {
       // Only show command history in terminal mode, not AI mode
-      if (activeSession.inputMode === 'terminal') {
+      if (activeSession?.inputMode === 'terminal') {
         e.preventDefault();
         setCommandHistoryOpen(true);
         setCommandHistoryFilter(inputValue);
@@ -6571,147 +7002,6 @@ export default function MaestroConsole() {
     }
   };
 
-  // Drag event handlers for app-level image drop zone
-  const handleImageDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-    // Check if dragging files that include images
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDraggingImage(true);
-    }
-  }, []);
-
-  const handleImageDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    // Only hide overlay when all nested elements have been left
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0;
-      setIsDraggingImage(false);
-    }
-  }, []);
-
-  const handleImageDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  // Reset drag state when drag ends (e.g., user cancels by pressing Escape or dragging outside window)
-  useEffect(() => {
-    const handleDragEnd = () => {
-      dragCounterRef.current = 0;
-      setIsDraggingImage(false);
-    };
-
-    // dragend fires when the drag operation ends (drop or cancel)
-    document.addEventListener('dragend', handleDragEnd);
-    // Also listen for drop anywhere in case it's not on our drop zone
-    document.addEventListener('drop', handleDragEnd);
-
-    return () => {
-      document.removeEventListener('dragend', handleDragEnd);
-      document.removeEventListener('drop', handleDragEnd);
-    };
-  }, []);
-
-  // --- RENDER ---
-
-  // Recursive File Tree Renderer
-
-  const handleFileClick = async (node: any, path: string) => {
-    if (node.type === 'file') {
-      try {
-        // Construct full file path
-        const fullPath = `${activeSession.fullPath}/${path}`;
-
-        // Check if file should be opened externally
-        if (shouldOpenExternally(node.name)) {
-          // Show confirmation modal before opening externally
-          setConfirmModalMessage(`Open "${node.name}" in external application?`);
-          setConfirmModalOnConfirm(() => async () => {
-            await window.maestro.shell.openExternal(`file://${fullPath}`);
-            setConfirmModalOpen(false);
-          });
-          setConfirmModalOpen(true);
-          return;
-        }
-
-        const content = await window.maestro.fs.readFile(fullPath);
-        const newFile = {
-          name: node.name,
-          content: content,
-          path: fullPath
-        };
-
-        // Only add to history if it's a different file than the current one
-        const currentFile = filePreviewHistory[filePreviewHistoryIndex];
-        if (!currentFile || currentFile.path !== fullPath) {
-          // Add to navigation history (truncate forward history if we're not at the end)
-          const newHistory = filePreviewHistory.slice(0, filePreviewHistoryIndex + 1);
-          newHistory.push(newFile);
-          setFilePreviewHistory(newHistory);
-          setFilePreviewHistoryIndex(newHistory.length - 1);
-        }
-
-        setPreviewFile(newFile);
-        setActiveFocus('main');
-      } catch (error) {
-        console.error('Failed to read file:', error);
-      }
-    }
-  };
-
-
-  const updateSessionWorkingDirectory = async () => {
-    const newPath = await window.maestro.dialog.selectFolder();
-    if (!newPath) return;
-
-    setSessions(prev => prev.map(s => {
-      if (s.id !== activeSessionId) return s;
-      return {
-        ...s,
-        cwd: newPath,
-        fullPath: newPath,
-        fileTree: [],
-        fileTreeError: undefined
-      };
-    }));
-  };
-
-  const toggleFolder = (path: string, sessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id !== sessionId) return s;
-      if (!s.fileExplorerExpanded) return s;
-      const expanded = new Set(s.fileExplorerExpanded);
-      if (expanded.has(path)) {
-        expanded.delete(path);
-      } else {
-        expanded.add(path);
-      }
-      return { ...s, fileExplorerExpanded: Array.from(expanded) };
-    }));
-  };
-
-  // Expand all folders in file tree
-  const expandAllFolders = (sessionId: string, session: Session, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id !== sessionId) return s;
-      if (!s.fileTree) return s;
-      const allFolderPaths = getAllFolderPaths(s.fileTree);
-      return { ...s, fileExplorerExpanded: allFolderPaths };
-    }));
-  };
-
-  // Collapse all folders in file tree
-  const collapseAllFolders = (sessionId: string, setSessions: React.Dispatch<React.SetStateAction<Session[]>>) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id !== sessionId) return s;
-      return { ...s, fileExplorerExpanded: [] };
-    }));
-  };
-
   // --- FILE TREE MANAGEMENT ---
   // Extracted hook for file tree operations (refresh, git state, filtering)
   const {
@@ -6753,6 +7043,740 @@ export default function MaestroConsole() {
     createGroupModalOpen,
     setCreateGroupModalOpen,
   } = groupModalState;
+
+  // Group Modal Handlers (stable callbacks for AppGroupModals)
+  // Must be defined after groupModalState destructure since setCreateGroupModalOpen comes from there
+  const handleCloseCreateGroupModal = useCallback(() => {
+    setCreateGroupModalOpen(false);
+  }, [setCreateGroupModalOpen]);
+  const handleCloseRenameGroupModal = useCallback(() => {
+    setRenameGroupModalOpen(false);
+  }, []);
+
+  // Worktree Modal Handlers (stable callbacks for AppWorktreeModals)
+  const handleCloseWorktreeConfigModal = useCallback(() => {
+    setWorktreeConfigModalOpen(false);
+  }, []);
+
+  const handleSaveWorktreeConfig = useCallback(async (config: { basePath: string; watchEnabled: boolean }) => {
+    if (!activeSession) return;
+
+    // Save the config first
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id
+        ? { ...s, worktreeConfig: config }
+        : s
+    ));
+
+    // Scan for worktrees and create sub-agent sessions
+    try {
+      const scanResult = await window.maestro.git.scanWorktreeDirectory(config.basePath);
+      const { gitSubdirs } = scanResult;
+
+      if (gitSubdirs.length > 0) {
+        const newWorktreeSessions: Session[] = [];
+
+        for (const subdir of gitSubdirs) {
+          // Skip main/master/HEAD branches - they're typically the main repo
+          if (subdir.branch === 'main' || subdir.branch === 'master' || subdir.branch === 'HEAD') {
+            continue;
+          }
+
+          // Check if a session already exists for this worktree
+          const existingSession = sessions.find(s =>
+            s.parentSessionId === activeSession.id &&
+            s.worktreeBranch === subdir.branch
+          );
+          if (existingSession) {
+            continue;
+          }
+
+          // Also check by path
+          const existingByPath = sessions.find(s => s.cwd === subdir.path);
+          if (existingByPath) {
+            continue;
+          }
+
+          const newId = generateId();
+          const initialTabId = generateId();
+          const initialTab: AITab = {
+            id: initialTabId,
+            agentSessionId: null,
+            name: null,
+            starred: false,
+            logs: [],
+            inputValue: '',
+            stagedImages: [],
+            createdAt: Date.now(),
+            state: 'idle',
+            saveToHistory: true
+          };
+
+          // Fetch git info for this subdirectory
+          let gitBranches: string[] | undefined;
+          let gitTags: string[] | undefined;
+          let gitRefsCacheTime: number | undefined;
+
+          try {
+            [gitBranches, gitTags] = await Promise.all([
+              gitService.getBranches(subdir.path),
+              gitService.getTags(subdir.path)
+            ]);
+            gitRefsCacheTime = Date.now();
+          } catch {
+            // Ignore errors fetching git info
+          }
+
+          const worktreeSession: Session = {
+            id: newId,
+            name: subdir.branch || subdir.name,
+            groupId: activeSession.groupId,
+            toolType: activeSession.toolType,
+            state: 'idle',
+            cwd: subdir.path,
+            fullPath: subdir.path,
+            projectRoot: subdir.path,
+            isGitRepo: true,
+            gitBranches,
+            gitTags,
+            gitRefsCacheTime,
+            parentSessionId: activeSession.id,
+            worktreeBranch: subdir.branch || undefined,
+            aiLogs: [],
+            shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+            workLog: [],
+            contextUsage: 0,
+            inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
+            aiPid: 0,
+            terminalPid: 0,
+            port: 3000 + Math.floor(Math.random() * 100),
+            isLive: false,
+            changedFiles: [],
+            fileTree: [],
+            fileExplorerExpanded: [],
+            fileExplorerScrollPos: 0,
+            fileTreeAutoRefreshInterval: 180,
+            shellCwd: subdir.path,
+            aiCommandHistory: [],
+            shellCommandHistory: [],
+            executionQueue: [],
+            activeTimeMs: 0,
+            aiTabs: [initialTab],
+            activeTabId: initialTabId,
+            closedTabHistory: [],
+            customPath: activeSession.customPath,
+            customArgs: activeSession.customArgs,
+            customEnvVars: activeSession.customEnvVars,
+            customModel: activeSession.customModel,
+            customContextWindow: activeSession.customContextWindow,
+            nudgeMessage: activeSession.nudgeMessage,
+            autoRunFolderPath: activeSession.autoRunFolderPath
+          };
+
+          newWorktreeSessions.push(worktreeSession);
+        }
+
+        if (newWorktreeSessions.length > 0) {
+          setSessions(prev => [...prev, ...newWorktreeSessions]);
+          // Expand worktrees on parent
+          setSessions(prev => prev.map(s =>
+            s.id === activeSession.id
+              ? { ...s, worktreesExpanded: true }
+              : s
+          ));
+          addToast({
+            type: 'success',
+            title: 'Worktrees Discovered',
+            message: `Found ${newWorktreeSessions.length} worktree sub-agent${newWorktreeSessions.length > 1 ? 's' : ''}`,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to scan for worktrees:', err);
+    }
+  }, [activeSession, sessions, addToast]);
+
+  const handleDisableWorktreeConfig = useCallback(() => {
+    if (!activeSession) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id
+        ? { ...s, worktreeConfig: undefined, worktreeParentPath: undefined }
+        : s
+    ));
+    addToast({
+      type: 'success',
+      title: 'Worktrees Disabled',
+      message: 'Worktree configuration cleared for this agent.',
+    });
+  }, [activeSession, addToast]);
+
+  const handleCreateWorktreeFromConfig = useCallback(async (branchName: string, basePath: string) => {
+    if (!activeSession || !basePath) {
+      addToast({ type: 'error', title: 'Error', message: 'No worktree directory configured' });
+      return;
+    }
+
+    const worktreePath = `${basePath}/${branchName}`;
+    console.log('[WorktreeConfig] Create worktree:', branchName, 'at', worktreePath);
+
+    try {
+      // Create the worktree via git
+      const result = await window.maestro.git.worktreeSetup(
+        activeSession.cwd,
+        worktreePath,
+        branchName
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create worktree');
+      }
+
+      // Create a new session for the worktree, inheriting all config from parent
+      const newId = generateId();
+      const initialTabId = generateId();
+      const initialTab: AITab = {
+        id: initialTabId,
+        agentSessionId: null,
+        name: null,
+        starred: false,
+        logs: [],
+        inputValue: '',
+        stagedImages: [],
+        createdAt: Date.now(),
+        state: 'idle',
+        saveToHistory: defaultSaveToHistory
+      };
+
+      // Fetch git info for the worktree
+      let gitBranches: string[] | undefined;
+      let gitTags: string[] | undefined;
+      let gitRefsCacheTime: number | undefined;
+
+      try {
+        [gitBranches, gitTags] = await Promise.all([
+          gitService.getBranches(worktreePath),
+          gitService.getTags(worktreePath)
+        ]);
+        gitRefsCacheTime = Date.now();
+      } catch {
+        // Ignore errors
+      }
+
+      const worktreeSession: Session = {
+        id: newId,
+        name: branchName,
+        groupId: activeSession.groupId,
+        toolType: activeSession.toolType,
+        state: 'idle',
+        cwd: worktreePath,
+        fullPath: worktreePath,
+        projectRoot: worktreePath,
+        isGitRepo: true,
+        gitBranches,
+        gitTags,
+        gitRefsCacheTime,
+        parentSessionId: activeSession.id,
+        worktreeBranch: branchName,
+        aiLogs: [],
+        shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+        workLog: [],
+        contextUsage: 0,
+        inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
+        aiPid: 0,
+        terminalPid: 0,
+        port: 3000 + Math.floor(Math.random() * 100),
+        isLive: false,
+        changedFiles: [],
+        fileTree: [],
+        fileExplorerExpanded: [],
+        fileExplorerScrollPos: 0,
+        fileTreeAutoRefreshInterval: 180,
+        shellCwd: worktreePath,
+        aiCommandHistory: [],
+        shellCommandHistory: [],
+        executionQueue: [],
+        activeTimeMs: 0,
+        aiTabs: [initialTab],
+        activeTabId: initialTabId,
+        closedTabHistory: [],
+        customPath: activeSession.customPath,
+        customArgs: activeSession.customArgs,
+        customEnvVars: activeSession.customEnvVars,
+        customModel: activeSession.customModel,
+        customContextWindow: activeSession.customContextWindow,
+        nudgeMessage: activeSession.nudgeMessage,
+        autoRunFolderPath: activeSession.autoRunFolderPath
+      };
+
+      setSessions(prev => [...prev, worktreeSession]);
+
+      // Expand parent's worktrees
+      setSessions(prev => prev.map(s =>
+        s.id === activeSession.id ? { ...s, worktreesExpanded: true } : s
+      ));
+
+      addToast({
+        type: 'success',
+        title: 'Worktree Created',
+        message: branchName,
+      });
+    } catch (err) {
+      console.error('[WorktreeConfig] Failed to create worktree:', err);
+      addToast({
+        type: 'error',
+        title: 'Failed to Create Worktree',
+        message: err instanceof Error ? err.message : String(err),
+      });
+      throw err; // Re-throw so the modal can show the error
+    }
+  }, [activeSession, defaultSaveToHistory, addToast]);
+
+  const handleCloseCreateWorktreeModal = useCallback(() => {
+    setCreateWorktreeModalOpen(false);
+    setCreateWorktreeSession(null);
+  }, []);
+
+  const handleCreateWorktree = useCallback(async (branchName: string) => {
+    if (!createWorktreeSession) return;
+
+    // Determine base path: use configured path or default to parent directory
+    const basePath = createWorktreeSession.worktreeConfig?.basePath ||
+      createWorktreeSession.cwd.replace(/\/[^/]+$/, '') + '/worktrees';
+
+    const worktreePath = `${basePath}/${branchName}`;
+    console.log('[CreateWorktree] Create worktree:', branchName, 'at', worktreePath);
+
+    // Create the worktree via git
+    const result = await window.maestro.git.worktreeSetup(
+      createWorktreeSession.cwd,
+      worktreePath,
+      branchName
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create worktree');
+    }
+
+    // Create a new session for the worktree, inheriting all config from parent
+    const newId = generateId();
+    const initialTabId = generateId();
+    const initialTab: AITab = {
+      id: initialTabId,
+      agentSessionId: null,
+      name: null,
+      starred: false,
+      logs: [],
+      inputValue: '',
+      stagedImages: [],
+      createdAt: Date.now(),
+      state: 'idle',
+      saveToHistory: defaultSaveToHistory
+    };
+
+    // Fetch git info for the worktree
+    let gitBranches: string[] | undefined;
+    let gitTags: string[] | undefined;
+    let gitRefsCacheTime: number | undefined;
+
+    try {
+      [gitBranches, gitTags] = await Promise.all([
+        gitService.getBranches(worktreePath),
+        gitService.getTags(worktreePath)
+      ]);
+      gitRefsCacheTime = Date.now();
+    } catch {
+      // Ignore errors
+    }
+
+    const worktreeSession: Session = {
+      id: newId,
+      name: branchName,
+      groupId: createWorktreeSession.groupId,
+      toolType: createWorktreeSession.toolType,
+      state: 'idle',
+      cwd: worktreePath,
+      fullPath: worktreePath,
+      projectRoot: worktreePath,
+      isGitRepo: true,
+      gitBranches,
+      gitTags,
+      gitRefsCacheTime,
+      parentSessionId: createWorktreeSession.id,
+      worktreeBranch: branchName,
+      aiLogs: [],
+      shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
+      workLog: [],
+      contextUsage: 0,
+      inputMode: createWorktreeSession.toolType === 'terminal' ? 'terminal' : 'ai',
+      aiPid: 0,
+      terminalPid: 0,
+      port: 3000 + Math.floor(Math.random() * 100),
+      isLive: false,
+      changedFiles: [],
+      fileTree: [],
+      fileExplorerExpanded: [],
+      fileExplorerScrollPos: 0,
+      fileTreeAutoRefreshInterval: 180,
+      shellCwd: worktreePath,
+      aiCommandHistory: [],
+      shellCommandHistory: [],
+      executionQueue: [],
+      activeTimeMs: 0,
+      aiTabs: [initialTab],
+      activeTabId: initialTabId,
+      closedTabHistory: [],
+      customPath: createWorktreeSession.customPath,
+      customArgs: createWorktreeSession.customArgs,
+      customEnvVars: createWorktreeSession.customEnvVars,
+      customModel: createWorktreeSession.customModel,
+      customContextWindow: createWorktreeSession.customContextWindow,
+      nudgeMessage: createWorktreeSession.nudgeMessage,
+      autoRunFolderPath: createWorktreeSession.autoRunFolderPath
+    };
+
+    setSessions(prev => [...prev, worktreeSession]);
+
+    // Expand parent's worktrees
+    setSessions(prev => prev.map(s =>
+      s.id === createWorktreeSession.id ? { ...s, worktreesExpanded: true } : s
+    ));
+
+    // Save worktree config if not already configured
+    if (!createWorktreeSession.worktreeConfig?.basePath) {
+      setSessions(prev => prev.map(s =>
+        s.id === createWorktreeSession.id
+          ? { ...s, worktreeConfig: { basePath, watchEnabled: true } }
+          : s
+      ));
+    }
+
+    addToast({
+      type: 'success',
+      title: 'Worktree Created',
+      message: branchName,
+    });
+  }, [createWorktreeSession, defaultSaveToHistory, addToast]);
+
+  const handleCloseCreatePRModal = useCallback(() => {
+    setCreatePRModalOpen(false);
+    setCreatePRSession(null);
+  }, []);
+
+  const handlePRCreated = useCallback(async (prDetails: PRDetails) => {
+    const session = createPRSession || activeSession;
+    addToast({
+      type: 'success',
+      title: 'Pull Request Created',
+      message: prDetails.title,
+      actionUrl: prDetails.url,
+      actionLabel: prDetails.url,
+    });
+    // Add history entry with PR details
+    if (session) {
+      await window.maestro.history.add({
+        id: generateId(),
+        type: 'USER',
+        timestamp: Date.now(),
+        summary: `Created PR: ${prDetails.title}`,
+        fullResponse: [
+          `**Pull Request:** [${prDetails.title}](${prDetails.url})`,
+          `**Branch:** ${prDetails.sourceBranch} → ${prDetails.targetBranch}`,
+          prDetails.description ? `**Description:** ${prDetails.description}` : '',
+        ].filter(Boolean).join('\n\n'),
+        projectPath: session.projectRoot || session.cwd,
+        sessionId: session.id,
+        sessionName: session.name,
+      });
+      rightPanelRef.current?.refreshHistoryPanel();
+    }
+    setCreatePRSession(null);
+  }, [createPRSession, activeSession, addToast]);
+
+  const handleCloseDeleteWorktreeModal = useCallback(() => {
+    setDeleteWorktreeModalOpen(false);
+    setDeleteWorktreeSession(null);
+  }, []);
+
+  const handleConfirmDeleteWorktree = useCallback(() => {
+    if (!deleteWorktreeSession) return;
+    // Remove the session but keep the worktree on disk
+    setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
+  }, [deleteWorktreeSession]);
+
+  const handleConfirmAndDeleteWorktreeOnDisk = useCallback(async () => {
+    if (!deleteWorktreeSession) return;
+    // Remove the session AND delete the worktree from disk
+    const result = await window.maestro.git.removeWorktree(deleteWorktreeSession.cwd, true);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to remove worktree');
+    }
+    setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
+  }, [deleteWorktreeSession]);
+
+  // AppUtilityModals stable callbacks
+  const handleCloseLightbox = useCallback(() => {
+    setLightboxImage(null);
+    setLightboxImages([]);
+    setLightboxSource('history');
+    lightboxIsGroupChatRef.current = false;
+    lightboxAllowDeleteRef.current = false;
+    // Return focus to input after closing carousel
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+  const handleNavigateLightbox = useCallback((img: string) => setLightboxImage(img), []);
+  const handleDeleteLightboxImage = useCallback((img: string) => {
+    // Use ref for group chat check - refs are set synchronously before React batches state updates
+    if (lightboxIsGroupChatRef.current) {
+      setGroupChatStagedImages(prev => prev.filter(i => i !== img));
+    } else {
+      setStagedImages(prev => prev.filter(i => i !== img));
+    }
+  }, []);
+  const handleCloseAutoRunSetup = useCallback(() => setAutoRunSetupModalOpen(false), []);
+  const handleCloseBatchRunner = useCallback(() => setBatchRunnerModalOpen(false), []);
+  const handleSaveBatchPrompt = useCallback((prompt: string) => {
+    if (!activeSession) return;
+    // Save the custom prompt and modification timestamp to the session (persisted across restarts)
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id ? { ...s, batchRunnerPrompt: prompt, batchRunnerPromptModifiedAt: Date.now() } : s
+    ));
+  }, [activeSession]);
+  const handleCloseTabSwitcher = useCallback(() => setTabSwitcherOpen(false), []);
+  const handleUtilityTabSelect = useCallback((tabId: string) => {
+    if (!activeSession) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
+    ));
+  }, [activeSession]);
+  const handleNamedSessionSelect = useCallback((agentSessionId: string, _projectPath: string, sessionName: string, starred?: boolean) => {
+    // Open a closed named session as a new tab - use handleResumeSession to properly load messages
+    handleResumeSession(agentSessionId, [], sessionName, starred);
+    // Focus input so user can start interacting immediately
+    setActiveFocus('main');
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [handleResumeSession, setActiveFocus]);
+  const handleCloseFileSearch = useCallback(() => setFuzzyFileSearchOpen(false), []);
+  const handleFileSearchSelect = useCallback((file: FlatFileItem) => {
+    // Preview the file directly (handleFileClick expects relative path)
+    if (!file.isFolder) {
+      handleFileClick({ name: file.name, type: 'file' }, file.fullPath);
+    }
+  }, [handleFileClick]);
+  const handleClosePromptComposer = useCallback(() => {
+    setPromptComposerOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+  const handlePromptComposerSubmit = useCallback((value: string) => {
+    if (activeGroupChatId) {
+      // Update group chat draft
+      setGroupChats(prev => prev.map(c =>
+        c.id === activeGroupChatId ? { ...c, draftMessage: value } : c
+      ));
+    } else {
+      setInputValue(value);
+    }
+  }, [activeGroupChatId]);
+  const handlePromptComposerSend = useCallback((value: string) => {
+    if (activeGroupChatId) {
+      // Send to group chat
+      handleSendGroupChatMessage(value, groupChatStagedImages.length > 0 ? groupChatStagedImages : undefined, groupChatReadOnlyMode);
+      setGroupChatStagedImages([]);
+      // Clear draft
+      setGroupChats(prev => prev.map(c =>
+        c.id === activeGroupChatId ? { ...c, draftMessage: '' } : c
+      ));
+    } else {
+      // Set the input value and trigger send
+      setInputValue(value);
+      // Use setTimeout to ensure state updates before processing
+      setTimeout(() => processInput(value), 0);
+    }
+  }, [activeGroupChatId, groupChatStagedImages, groupChatReadOnlyMode, handleSendGroupChatMessage, processInput]);
+  const handlePromptToggleTabSaveToHistory = useCallback(() => {
+    if (!activeSession) return;
+    const activeTab = getActiveTab(activeSession);
+    if (!activeTab) return;
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSession.id) return s;
+      return {
+        ...s,
+        aiTabs: s.aiTabs.map(tab =>
+          tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
+        )
+      };
+    }));
+  }, [activeSession, getActiveTab]);
+  const handlePromptToggleTabReadOnlyMode = useCallback(() => {
+    if (activeGroupChatId) {
+      setGroupChatReadOnlyMode(prev => !prev);
+    } else {
+      if (!activeSession) return;
+      const activeTab = getActiveTab(activeSession);
+      if (!activeTab) return;
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+        return {
+          ...s,
+          aiTabs: s.aiTabs.map(tab =>
+            tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+          )
+        };
+      }));
+    }
+  }, [activeGroupChatId, activeSession, getActiveTab]);
+  const handlePromptToggleTabShowThinking = useCallback(() => {
+    if (!activeSession) return;
+    const activeTab = getActiveTab(activeSession);
+    if (!activeTab) return;
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSession.id) return s;
+      return {
+        ...s,
+        aiTabs: s.aiTabs.map(tab => {
+          if (tab.id !== activeTab.id) return tab;
+          if (tab.showThinking) {
+            // Turn off - clear thinking logs
+            return {
+              ...tab,
+              showThinking: false,
+              logs: tab.logs.filter(log => log.source !== 'thinking'),
+            };
+          }
+          return { ...tab, showThinking: true };
+        })
+      };
+    }));
+  }, [activeSession, getActiveTab]);
+  const handlePromptToggleEnterToSend = useCallback(() => setEnterToSendAI(!enterToSendAI), [enterToSendAI]);
+
+  // QuickActionsModal stable callbacks
+  const handleQuickActionsRenameTab = useCallback(() => {
+    if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
+      const activeTab = activeSession.aiTabs?.find(t => t.id === activeSession.activeTabId);
+      // Only allow rename if tab has an active Claude session
+      if (activeTab?.agentSessionId) {
+        setRenameTabId(activeTab.id);
+        setRenameTabInitialName(getInitialRenameValue(activeTab));
+        setRenameTabModalOpen(true);
+      }
+    }
+  }, [activeSession, getInitialRenameValue]);
+  const handleQuickActionsToggleReadOnlyMode = useCallback(() => {
+    if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+        return {
+          ...s,
+          aiTabs: s.aiTabs.map(tab =>
+            tab.id === s.activeTabId ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+          )
+        };
+      }));
+    }
+  }, [activeSession]);
+  const handleQuickActionsToggleTabShowThinking = useCallback(() => {
+    if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+        return {
+          ...s,
+          aiTabs: s.aiTabs.map(tab => {
+            if (tab.id !== s.activeTabId) return tab;
+            // When turning OFF, clear any thinking/tool logs
+            if (tab.showThinking) {
+              return {
+                ...tab,
+                showThinking: false,
+                logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
+              };
+            }
+            return { ...tab, showThinking: true };
+          })
+        };
+      }));
+    }
+  }, [activeSession]);
+  const handleQuickActionsOpenTabSwitcher = useCallback(() => {
+    if (activeSession?.inputMode === 'ai' && activeSession.aiTabs) {
+      setTabSwitcherOpen(true);
+    }
+  }, [activeSession]);
+  const handleQuickActionsRefreshGitFileState = useCallback(async () => {
+    if (activeSessionId) {
+      // Refresh file tree, branches/tags, and history
+      await refreshGitFileState(activeSessionId);
+      // Also refresh git info in main panel header (branch, ahead/behind, uncommitted)
+      await mainPanelRef.current?.refreshGitInfo();
+      setSuccessFlashNotification('Files, Git, History Refreshed');
+      setTimeout(() => setSuccessFlashNotification(null), 2000);
+    }
+  }, [activeSessionId, refreshGitFileState, setSuccessFlashNotification]);
+  const handleQuickActionsDebugReleaseQueuedItem = useCallback(() => {
+    if (!activeSession || activeSession.executionQueue.length === 0) return;
+    const [nextItem, ...remainingQueue] = activeSession.executionQueue;
+    // Update state to remove item from queue
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSessionId) return s;
+      return { ...s, executionQueue: remainingQueue };
+    }));
+    // Process the item
+    processQueuedItem(activeSessionId, nextItem);
+  }, [activeSession, activeSessionId, processQueuedItem]);
+  const handleQuickActionsToggleMarkdownEditMode = useCallback(() => setMarkdownEditMode(!markdownEditMode), [markdownEditMode]);
+  const handleQuickActionsStartTour = useCallback(() => {
+    setTourFromWizard(false);
+    setTourOpen(true);
+  }, []);
+  const handleQuickActionsEditAgent = useCallback((session: Session) => {
+    setEditAgentSession(session);
+    setEditAgentModalOpen(true);
+  }, []);
+  const handleQuickActionsNewGroupChat = useCallback(() => setShowNewGroupChatModal(true), []);
+  const handleQuickActionsOpenMergeSession = useCallback(() => setMergeSessionModalOpen(true), []);
+  const handleQuickActionsOpenSendToAgent = useCallback(() => setSendToAgentModalOpen(true), []);
+  const handleQuickActionsOpenCreatePR = useCallback((session: Session) => {
+    setCreatePRSession(session);
+    setCreatePRModalOpen(true);
+  }, []);
+  const handleQuickActionsSummarizeAndContinue = useCallback(() => handleSummarizeAndContinue(), [handleSummarizeAndContinue]);
+  const handleQuickActionsToggleRemoteControl = useCallback(async () => {
+    await toggleGlobalLive();
+    // Show flash notification based on the NEW state (opposite of current)
+    if (isLiveMode) {
+      // Was live, now offline
+      setSuccessFlashNotification('Remote Control: OFFLINE — See indicator at top of left panel');
+    } else {
+      // Was offline, now live
+      setSuccessFlashNotification('Remote Control: LIVE — See LIVE indicator at top of left panel for QR code');
+    }
+    setTimeout(() => setSuccessFlashNotification(null), 4000);
+  }, [toggleGlobalLive, isLiveMode, setSuccessFlashNotification]);
+  const handleQuickActionsAutoRunResetTasks = useCallback(() => {
+    rightPanelRef.current?.openAutoRunResetTasksModal();
+  }, []);
+
+  const handleCloseQueueBrowser = useCallback(() => setQueueBrowserOpen(false), []);
+  const handleRemoveQueueItem = useCallback((sessionId: string, itemId: string) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
+      return {
+        ...s,
+        executionQueue: s.executionQueue.filter(item => item.id !== itemId)
+      };
+    }));
+  }, []);
+  const handleSwitchQueueSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
+  }, [setActiveSessionId]);
+  const handleReorderQueueItems = useCallback((sessionId: string, fromIndex: number, toIndex: number) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
+      const queue = [...s.executionQueue];
+      const [removed] = queue.splice(fromIndex, 1);
+      queue.splice(toIndex, 0, removed);
+      return { ...s, executionQueue: queue };
+    }));
+  }, []);
 
   // Update keyboardHandlerRef synchronously during render (before effects run)
   // This must be placed after all handler functions and state are defined to avoid TDZ errors
@@ -6820,6 +7844,7 @@ export default function MaestroConsole() {
     // Then apply hidden files filter to match what FileExplorerPanel displays
     const displayTree = filterHiddenFiles(filteredFileTree);
     setFlatFileList(flattenTree(displayTree, expandedSet));
+     
   }, [activeSession?.fileExplorerExpanded, filteredFileTree, showHiddenFiles]);
 
   // Handle pending jump path from /jump command
@@ -6852,6 +7877,7 @@ export default function MaestroConsole() {
     setSessions(prev => prev.map(s =>
       s.id === activeSession.id ? { ...s, pendingJumpPath: undefined } : s
     ));
+     
   }, [activeSession?.pendingJumpPath, flatFileList, activeSession?.id]);
 
   // Scroll to selected file item when selection changes via keyboard
@@ -6895,7 +7921,7 @@ export default function MaestroConsole() {
       // Only handle when right panel is focused and on files tab
       if (activeFocus !== 'right' || activeRightTab !== 'files' || flatFileList.length === 0) return;
 
-      const expandedFolders = new Set(activeSession.fileExplorerExpanded || []);
+      const expandedFolders = new Set(activeSession?.fileExplorerExpanded || []);
 
       // Cmd+Arrow: jump to top/bottom
       if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
@@ -7056,261 +8082,255 @@ export default function MaestroConsole() {
       </div>
       )}
 
-      {/* --- MODALS --- */}
-      {quickActionOpen && (
-        <QuickActionsModal
-          theme={theme}
-          sessions={sessions}
-          setSessions={setSessions}
-          activeSessionId={activeSessionId}
-          groups={groups}
-          setGroups={setGroups}
-          shortcuts={shortcuts}
-          initialMode={quickActionInitialMode}
-          setQuickActionOpen={setQuickActionOpen}
-          setActiveSessionId={setActiveSessionId}
-          addNewSession={addNewSession}
-          setRenameInstanceValue={setRenameInstanceValue}
-          setRenameInstanceModalOpen={setRenameInstanceModalOpen}
-          setRenameGroupId={setRenameGroupId}
-          setRenameGroupValue={setRenameGroupValue}
-          setRenameGroupEmoji={setRenameGroupEmoji}
-          setRenameGroupModalOpen={setRenameGroupModalOpen}
-          setCreateGroupModalOpen={setCreateGroupModalOpen}
-          setLeftSidebarOpen={setLeftSidebarOpen}
-          setRightPanelOpen={setRightPanelOpen}
-          toggleInputMode={toggleInputMode}
-          deleteSession={deleteSession}
-          setSettingsModalOpen={setSettingsModalOpen}
-          setSettingsTab={setSettingsTab}
-          setShortcutsHelpOpen={setShortcutsHelpOpen}
-          setAboutModalOpen={setAboutModalOpen}
-          setLogViewerOpen={setLogViewerOpen}
-          setProcessMonitorOpen={setProcessMonitorOpen}
-          setActiveRightTab={setActiveRightTab}
-          setAgentSessionsOpen={setAgentSessionsOpen}
-          setActiveAgentSessionId={setActiveAgentSessionId}
-          setGitDiffPreview={setGitDiffPreview}
-          setGitLogOpen={setGitLogOpen}
-          isAiMode={activeSession?.inputMode === 'ai'}
-          tabShortcuts={tabShortcuts}
-          onRenameTab={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
-              const activeTab = activeSession.aiTabs?.find(t => t.id === activeSession.activeTabId);
-              // Only allow rename if tab has an active Claude session
-              if (activeTab?.agentSessionId) {
-                setRenameTabId(activeTab.id);
-                setRenameTabInitialName(getInitialRenameValue(activeTab));
-                setRenameTabModalOpen(true);
-              }
-            }
-          }}
-          onToggleReadOnlyMode={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
-              setSessions(prev => prev.map(s => {
-                if (s.id !== activeSession.id) return s;
-                return {
-                  ...s,
-                  aiTabs: s.aiTabs.map(tab =>
-                    tab.id === s.activeTabId ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
-                  )
-                };
-              }));
-            }
-          }}
-          onToggleTabShowThinking={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
-              setSessions(prev => prev.map(s => {
-                if (s.id !== activeSession.id) return s;
-                return {
-                  ...s,
-                  aiTabs: s.aiTabs.map(tab => {
-                    if (tab.id !== s.activeTabId) return tab;
-                    // When turning OFF, clear any thinking/tool logs
-                    if (tab.showThinking) {
-                      return {
-                        ...tab,
-                        showThinking: false,
-                        logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
-                      };
-                    }
-                    return { ...tab, showThinking: true };
-                  })
-                };
-              }));
-            }
-          }}
-          onOpenTabSwitcher={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.aiTabs) {
-              setTabSwitcherOpen(true);
-            }
-          }}
-          setPlaygroundOpen={setPlaygroundOpen}
-          onRefreshGitFileState={async () => {
-            if (activeSessionId) {
-              // Refresh file tree, branches/tags, and history
-              await refreshGitFileState(activeSessionId);
-              // Also refresh git info in main panel header (branch, ahead/behind, uncommitted)
-              await mainPanelRef.current?.refreshGitInfo();
-              setSuccessFlashNotification('Files, Git, History Refreshed');
-              setTimeout(() => setSuccessFlashNotification(null), 2000);
-            }
-          }}
-          onDebugReleaseQueuedItem={() => {
-            if (!activeSession || activeSession.executionQueue.length === 0) return;
-            const [nextItem, ...remainingQueue] = activeSession.executionQueue;
-            // Update state to remove item from queue
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSessionId) return s;
-              return { ...s, executionQueue: remainingQueue };
-            }));
-            // Process the item
-            processQueuedItem(activeSessionId, nextItem);
-            console.log('[Debug] Released queued item:', nextItem);
-          }}
-          markdownEditMode={markdownEditMode}
-          onToggleMarkdownEditMode={() => setMarkdownEditMode(!markdownEditMode)}
-          setUpdateCheckModalOpen={setUpdateCheckModalOpen}
-          openWizard={openWizardModal}
-          wizardGoToStep={wizardGoToStep}
-          setDebugWizardModalOpen={setDebugWizardModalOpen}
-          setDebugPackageModalOpen={setDebugPackageModalOpen}
-          startTour={() => {
-            setTourFromWizard(false);
-            setTourOpen(true);
-          }}
-          setFuzzyFileSearchOpen={setFuzzyFileSearchOpen}
-          onEditAgent={(session) => {
-            setEditAgentSession(session);
-            setEditAgentModalOpen(true);
-          }}
-          groupChats={groupChats}
-          onNewGroupChat={() => setShowNewGroupChatModal(true)}
-          onOpenGroupChat={handleOpenGroupChat}
-          onCloseGroupChat={handleCloseGroupChat}
-          onDeleteGroupChat={deleteGroupChatWithConfirmation}
-          activeGroupChatId={activeGroupChatId}
-          hasActiveSessionCapability={hasActiveSessionCapability}
-          onOpenMergeSession={() => setMergeSessionModalOpen(true)}
-          onOpenSendToAgent={() => setSendToAgentModalOpen(true)}
-          onOpenCreatePR={(session) => {
-            setCreatePRSession(session);
-            setCreatePRModalOpen(true);
-          }}
-          onSummarizeAndContinue={() => handleSummarizeAndContinue()}
-          canSummarizeActiveTab={activeSession ? canSummarize(activeSession.contextUsage) : false}
-          onToggleRemoteControl={async () => {
-            await toggleGlobalLive();
-            // Show flash notification based on the NEW state (opposite of current)
-            if (isLiveMode) {
-              // Was live, now offline
-              setSuccessFlashNotification('Remote Control: OFFLINE — See indicator at top of left panel');
-            } else {
-              // Was offline, now live
-              setSuccessFlashNotification('Remote Control: LIVE — See LIVE indicator at top of left panel for QR code');
-            }
-            setTimeout(() => setSuccessFlashNotification(null), 4000);
-          }}
-        />
-      )}
-      {lightboxImage && (
-        <LightboxModal
-          image={lightboxImage}
-          stagedImages={lightboxImages.length > 0 ? lightboxImages : stagedImages}
-          onClose={() => {
-            setLightboxImage(null);
-            setLightboxImages([]);
-            setLightboxSource('history');
-            lightboxIsGroupChatRef.current = false;
-            lightboxAllowDeleteRef.current = false;
-            // Return focus to input after closing carousel
-            setTimeout(() => inputRef.current?.focus(), 0);
-          }}
-          onNavigate={(img) => setLightboxImage(img)}
-          // Use ref for delete permission - refs are set synchronously before React batches state updates
-          // This ensures Cmd+Y and click both correctly enable delete when source is 'staged'
-          onDelete={lightboxAllowDeleteRef.current ? (img: string) => {
-            // Use ref for group chat check too, for consistency
-            if (lightboxIsGroupChatRef.current) {
-              setGroupChatStagedImages(prev => prev.filter(i => i !== img));
-            } else {
-              setStagedImages(prev => prev.filter(i => i !== img));
-            }
-          } : undefined}
-          theme={theme}
-        />
-      )}
-
-      {/* --- GIT DIFF VIEWER --- */}
-      {gitDiffPreview && activeSession && (
-        <GitDiffViewer
-          diffText={gitDiffPreview}
-          cwd={gitViewerCwd}
-          theme={theme}
-          onClose={handleCloseGitDiff}
-        />
-      )}
-
-      {/* --- GIT LOG VIEWER --- */}
-      {gitLogOpen && activeSession && (
-        <GitLogViewer
-          cwd={gitViewerCwd}
-          theme={theme}
-          onClose={handleCloseGitLog}
-        />
-      )}
-
-      {/* --- SHORTCUTS HELP MODAL --- */}
-      {shortcutsHelpOpen && (
-        <ShortcutsHelpModal
-          theme={theme}
-          shortcuts={shortcuts}
-          tabShortcuts={tabShortcuts}
-          onClose={() => setShortcutsHelpOpen(false)}
-          hasNoAgents={hasNoAgents}
-          keyboardMasteryStats={keyboardMasteryStats}
-        />
-      )}
-
-      {/* --- ABOUT MODAL --- */}
-      {aboutModalOpen && (
-        <AboutModal
-          theme={theme}
-          sessions={sessions}
-          autoRunStats={autoRunStats}
-          onClose={() => setAboutModalOpen(false)}
-          onOpenLeaderboardRegistration={() => {
-            setAboutModalOpen(false);
-            setLeaderboardRegistrationOpen(true);
-          }}
-          isLeaderboardRegistered={isLeaderboardRegistered}
-        />
-      )}
-
-      {/* --- LEADERBOARD REGISTRATION MODAL --- */}
-      {leaderboardRegistrationOpen && (
-        <LeaderboardRegistrationModal
-          theme={theme}
-          autoRunStats={autoRunStats}
-          keyboardMasteryStats={keyboardMasteryStats}
-          existingRegistration={leaderboardRegistration}
-          onClose={() => setLeaderboardRegistrationOpen(false)}
-          onSave={(registration) => {
-            setLeaderboardRegistration(registration);
-          }}
-          onOptOut={() => {
-            setLeaderboardRegistration(null);
-          }}
-        />
-      )}
-
-      {/* --- UPDATE CHECK MODAL --- */}
-      {updateCheckModalOpen && (
-        <UpdateCheckModal
-          theme={theme}
-          onClose={() => setUpdateCheckModalOpen(false)}
-        />
-      )}
+      {/* --- UNIFIED MODALS (all modal groups consolidated into AppModals) --- */}
+      <AppModals
+        // Common props
+        theme={theme}
+        sessions={sessions}
+        setSessions={setSessions}
+        activeSessionId={activeSessionId}
+        activeSession={activeSession}
+        groups={groups}
+        setGroups={setGroups}
+        groupChats={groupChats}
+        shortcuts={shortcuts}
+        tabShortcuts={tabShortcuts}
+        // AppInfoModals props
+        shortcutsHelpOpen={shortcutsHelpOpen}
+        onCloseShortcutsHelp={handleCloseShortcutsHelp}
+        hasNoAgents={hasNoAgents}
+        keyboardMasteryStats={keyboardMasteryStats}
+        aboutModalOpen={aboutModalOpen}
+        onCloseAboutModal={handleCloseAboutModal}
+        autoRunStats={autoRunStats}
+        usageStats={usageStats}
+        onOpenLeaderboardRegistration={handleOpenLeaderboardRegistrationFromAbout}
+        isLeaderboardRegistered={isLeaderboardRegistered}
+        updateCheckModalOpen={updateCheckModalOpen}
+        onCloseUpdateCheckModal={handleCloseUpdateCheckModal}
+        processMonitorOpen={processMonitorOpen}
+        onCloseProcessMonitor={handleCloseProcessMonitor}
+        onNavigateToSession={handleProcessMonitorNavigateToSession}
+        onNavigateToGroupChat={handleProcessMonitorNavigateToGroupChat}
+        // AppConfirmModals props
+        confirmModalOpen={confirmModalOpen}
+        confirmModalMessage={confirmModalMessage}
+        confirmModalOnConfirm={confirmModalOnConfirm}
+        onCloseConfirmModal={handleCloseConfirmModal}
+        quitConfirmModalOpen={quitConfirmModalOpen}
+        onConfirmQuit={handleConfirmQuit}
+        onCancelQuit={handleCancelQuit}
+        // AppSessionModals props
+        newInstanceModalOpen={newInstanceModalOpen}
+        onCloseNewInstanceModal={handleCloseNewInstanceModal}
+        onCreateSession={createNewSession}
+        existingSessions={sessionsForValidation}
+        editAgentModalOpen={editAgentModalOpen}
+        onCloseEditAgentModal={handleCloseEditAgentModal}
+        onSaveEditAgent={handleSaveEditAgent}
+        editAgentSession={editAgentSession}
+        renameSessionModalOpen={renameInstanceModalOpen}
+        renameSessionValue={renameInstanceValue}
+        setRenameSessionValue={setRenameInstanceValue}
+        onCloseRenameSessionModal={handleCloseRenameSessionModal}
+        renameSessionTargetId={renameInstanceSessionId}
+        onAfterRename={flushSessionPersistence}
+        renameTabModalOpen={renameTabModalOpen}
+        renameTabId={renameTabId}
+        renameTabInitialName={renameTabInitialName}
+        onCloseRenameTabModal={handleCloseRenameTabModal}
+        onRenameTab={handleRenameTab}
+        // AppGroupModals props
+        createGroupModalOpen={createGroupModalOpen}
+        onCloseCreateGroupModal={handleCloseCreateGroupModal}
+        renameGroupModalOpen={renameGroupModalOpen}
+        renameGroupId={renameGroupId}
+        renameGroupValue={renameGroupValue}
+        setRenameGroupValue={setRenameGroupValue}
+        renameGroupEmoji={renameGroupEmoji}
+        setRenameGroupEmoji={setRenameGroupEmoji}
+        onCloseRenameGroupModal={handleCloseRenameGroupModal}
+        // AppWorktreeModals props
+        worktreeConfigModalOpen={worktreeConfigModalOpen}
+        onCloseWorktreeConfigModal={handleCloseWorktreeConfigModal}
+        onSaveWorktreeConfig={handleSaveWorktreeConfig}
+        onCreateWorktreeFromConfig={handleCreateWorktreeFromConfig}
+        onDisableWorktreeConfig={handleDisableWorktreeConfig}
+        createWorktreeModalOpen={createWorktreeModalOpen}
+        createWorktreeSession={createWorktreeSession}
+        onCloseCreateWorktreeModal={handleCloseCreateWorktreeModal}
+        onCreateWorktree={handleCreateWorktree}
+        createPRModalOpen={createPRModalOpen}
+        createPRSession={createPRSession}
+        onCloseCreatePRModal={handleCloseCreatePRModal}
+        onPRCreated={handlePRCreated}
+        deleteWorktreeModalOpen={deleteWorktreeModalOpen}
+        deleteWorktreeSession={deleteWorktreeSession}
+        onCloseDeleteWorktreeModal={handleCloseDeleteWorktreeModal}
+        onConfirmDeleteWorktree={handleConfirmDeleteWorktree}
+        onConfirmAndDeleteWorktreeOnDisk={handleConfirmAndDeleteWorktreeOnDisk}
+        // AppUtilityModals props
+        quickActionOpen={quickActionOpen}
+        quickActionInitialMode={quickActionInitialMode}
+        setQuickActionOpen={setQuickActionOpen}
+        setActiveSessionId={setActiveSessionId}
+        addNewSession={addNewSession}
+        setRenameInstanceValue={setRenameInstanceValue}
+        setRenameInstanceModalOpen={setRenameInstanceModalOpen}
+        setRenameGroupId={setRenameGroupId}
+        setRenameGroupValueForQuickActions={setRenameGroupValue}
+        setRenameGroupEmojiForQuickActions={setRenameGroupEmoji}
+        setRenameGroupModalOpenForQuickActions={setRenameGroupModalOpen}
+        setCreateGroupModalOpenForQuickActions={setCreateGroupModalOpen}
+        setLeftSidebarOpen={setLeftSidebarOpen}
+        setRightPanelOpen={setRightPanelOpen}
+        toggleInputMode={toggleInputMode}
+        deleteSession={deleteSession}
+        setSettingsModalOpen={setSettingsModalOpen}
+        setSettingsTab={setSettingsTab}
+        setShortcutsHelpOpen={setShortcutsHelpOpen}
+        setAboutModalOpen={setAboutModalOpen}
+        setLogViewerOpen={setLogViewerOpen}
+        setProcessMonitorOpen={setProcessMonitorOpen}
+        setActiveRightTab={setActiveRightTab}
+        setAgentSessionsOpen={setAgentSessionsOpen}
+        setActiveAgentSessionId={setActiveAgentSessionId}
+        setGitDiffPreview={setGitDiffPreview}
+        setGitLogOpen={setGitLogOpen}
+        isAiMode={activeSession?.inputMode === 'ai'}
+        onQuickActionsRenameTab={handleQuickActionsRenameTab}
+        onQuickActionsToggleReadOnlyMode={handleQuickActionsToggleReadOnlyMode}
+        onQuickActionsToggleTabShowThinking={handleQuickActionsToggleTabShowThinking}
+        onQuickActionsOpenTabSwitcher={handleQuickActionsOpenTabSwitcher}
+        setPlaygroundOpen={setPlaygroundOpen}
+        onQuickActionsRefreshGitFileState={handleQuickActionsRefreshGitFileState}
+        onQuickActionsDebugReleaseQueuedItem={handleQuickActionsDebugReleaseQueuedItem}
+        markdownEditMode={markdownEditMode}
+        onQuickActionsToggleMarkdownEditMode={handleQuickActionsToggleMarkdownEditMode}
+        setUpdateCheckModalOpenForQuickActions={setUpdateCheckModalOpen}
+        openWizard={openWizardModal}
+        wizardGoToStep={wizardGoToStep}
+        setDebugWizardModalOpen={setDebugWizardModalOpen}
+        setDebugPackageModalOpen={setDebugPackageModalOpen}
+        startTour={handleQuickActionsStartTour}
+        setFuzzyFileSearchOpen={setFuzzyFileSearchOpen}
+        onEditAgent={handleQuickActionsEditAgent}
+        onNewGroupChat={handleQuickActionsNewGroupChat}
+        onOpenGroupChat={handleOpenGroupChat}
+        onCloseGroupChat={handleCloseGroupChat}
+        onDeleteGroupChat={deleteGroupChatWithConfirmation}
+        activeGroupChatId={activeGroupChatId}
+        hasActiveSessionCapability={hasActiveSessionCapability}
+        onOpenMergeSession={handleQuickActionsOpenMergeSession}
+        onOpenSendToAgent={handleQuickActionsOpenSendToAgent}
+        onOpenCreatePR={handleQuickActionsOpenCreatePR}
+        onSummarizeAndContinue={handleQuickActionsSummarizeAndContinue}
+        canSummarizeActiveTab={activeSession ? canSummarize(activeSession.contextUsage) : false}
+        onToggleRemoteControl={handleQuickActionsToggleRemoteControl}
+        autoRunSelectedDocument={activeSession?.autoRunSelectedFile ?? null}
+        autoRunCompletedTaskCount={rightPanelRef.current?.getAutoRunCompletedTaskCount() ?? 0}
+        onAutoRunResetTasks={handleQuickActionsAutoRunResetTasks}
+        lightboxImage={lightboxImage}
+        lightboxImages={lightboxImages}
+        stagedImages={stagedImages}
+        onCloseLightbox={handleCloseLightbox}
+        onNavigateLightbox={handleNavigateLightbox}
+        onDeleteLightboxImage={lightboxAllowDeleteRef.current ? handleDeleteLightboxImage : undefined}
+        gitDiffPreview={gitDiffPreview}
+        gitViewerCwd={gitViewerCwd}
+        onCloseGitDiff={handleCloseGitDiff}
+        gitLogOpen={gitLogOpen}
+        onCloseGitLog={handleCloseGitLog}
+        autoRunSetupModalOpen={autoRunSetupModalOpen}
+        onCloseAutoRunSetup={handleCloseAutoRunSetup}
+        onAutoRunFolderSelected={handleAutoRunFolderSelected}
+        batchRunnerModalOpen={batchRunnerModalOpen}
+        onCloseBatchRunner={handleCloseBatchRunner}
+        onStartBatchRun={handleStartBatchRun}
+        onSaveBatchPrompt={handleSaveBatchPrompt}
+        showConfirmation={showConfirmation}
+        autoRunDocumentList={autoRunDocumentList}
+        autoRunDocumentTree={autoRunDocumentTree}
+        getDocumentTaskCount={getDocumentTaskCount}
+        onAutoRunRefresh={handleAutoRunRefresh}
+        tabSwitcherOpen={tabSwitcherOpen}
+        onCloseTabSwitcher={handleCloseTabSwitcher}
+        onTabSelect={handleUtilityTabSelect}
+        onNamedSessionSelect={handleNamedSessionSelect}
+        fuzzyFileSearchOpen={fuzzyFileSearchOpen}
+        filteredFileTree={filteredFileTree}
+        onCloseFileSearch={handleCloseFileSearch}
+        onFileSearchSelect={handleFileSearchSelect}
+        promptComposerOpen={promptComposerOpen}
+        onClosePromptComposer={handleClosePromptComposer}
+        promptComposerInitialValue={activeGroupChatId
+          ? (groupChats.find(c => c.id === activeGroupChatId)?.draftMessage || '')
+          : inputValue}
+        onPromptComposerSubmit={handlePromptComposerSubmit}
+        onPromptComposerSend={handlePromptComposerSend}
+        promptComposerSessionName={activeGroupChatId
+          ? groupChats.find(c => c.id === activeGroupChatId)?.name
+          : activeSession?.name}
+        promptComposerStagedImages={activeGroupChatId ? groupChatStagedImages : (canAttachImages ? stagedImages : [])}
+        setPromptComposerStagedImages={activeGroupChatId ? setGroupChatStagedImages : (canAttachImages ? setStagedImages : undefined)}
+        onPromptImageAttachBlocked={activeGroupChatId || !blockCodexResumeImages ? undefined : showImageAttachBlockedNotice}
+        onPromptOpenLightbox={handleSetLightboxImage}
+        promptTabSaveToHistory={activeGroupChatId ? false : (activeSession ? getActiveTab(activeSession)?.saveToHistory ?? false : false)}
+        onPromptToggleTabSaveToHistory={activeGroupChatId ? undefined : handlePromptToggleTabSaveToHistory}
+        promptTabReadOnlyMode={activeGroupChatId ? groupChatReadOnlyMode : (activeSession ? getActiveTab(activeSession)?.readOnlyMode ?? false : false)}
+        onPromptToggleTabReadOnlyMode={handlePromptToggleTabReadOnlyMode}
+        promptTabShowThinking={activeGroupChatId ? false : (activeSession ? getActiveTab(activeSession)?.showThinking ?? false : false)}
+        onPromptToggleTabShowThinking={activeGroupChatId ? undefined : handlePromptToggleTabShowThinking}
+        promptSupportsThinking={!activeGroupChatId && hasActiveSessionCapability('supportsThinkingDisplay')}
+        promptEnterToSend={enterToSendAI}
+        onPromptToggleEnterToSend={handlePromptToggleEnterToSend}
+        queueBrowserOpen={queueBrowserOpen}
+        onCloseQueueBrowser={handleCloseQueueBrowser}
+        onRemoveQueueItem={handleRemoveQueueItem}
+        onSwitchQueueSession={handleSwitchQueueSession}
+        onReorderQueueItems={handleReorderQueueItems}
+        // AppGroupChatModals props
+        showNewGroupChatModal={showNewGroupChatModal}
+        onCloseNewGroupChatModal={handleCloseNewGroupChatModal}
+        onCreateGroupChat={handleCreateGroupChat}
+        showDeleteGroupChatModal={showDeleteGroupChatModal}
+        onCloseDeleteGroupChatModal={handleCloseDeleteGroupChatModal}
+        onConfirmDeleteGroupChat={handleConfirmDeleteGroupChat}
+        showRenameGroupChatModal={showRenameGroupChatModal}
+        onCloseRenameGroupChatModal={handleCloseRenameGroupChatModal}
+        onRenameGroupChatFromModal={handleRenameGroupChatFromModal}
+        showEditGroupChatModal={showEditGroupChatModal}
+        onCloseEditGroupChatModal={handleCloseEditGroupChatModal}
+        onUpdateGroupChat={handleUpdateGroupChat}
+        showGroupChatInfo={showGroupChatInfo}
+        groupChatMessages={groupChatMessages}
+        onCloseGroupChatInfo={handleCloseGroupChatInfo}
+        onOpenModeratorSession={handleOpenModeratorSession}
+        // AppAgentModals props
+        leaderboardRegistrationOpen={leaderboardRegistrationOpen}
+        onCloseLeaderboardRegistration={handleCloseLeaderboardRegistration}
+        leaderboardRegistration={leaderboardRegistration}
+        onSaveLeaderboardRegistration={handleSaveLeaderboardRegistration}
+        onLeaderboardOptOut={handleLeaderboardOptOut}
+        errorSession={errorSession}
+        recoveryActions={recoveryActions}
+        onDismissAgentError={handleCloseAgentErrorModal}
+        groupChatError={groupChatError}
+        groupChatRecoveryActions={groupChatRecoveryActions}
+        onClearGroupChatError={handleClearGroupChatError}
+        mergeSessionModalOpen={mergeSessionModalOpen}
+        onCloseMergeSession={handleCloseMergeSession}
+        onMerge={handleMerge}
+        transferState={transferState}
+        transferProgress={transferProgress}
+        transferSourceAgent={transferSourceAgent}
+        transferTargetAgent={transferTargetAgent}
+        onCancelTransfer={handleCancelTransfer}
+        onCompleteTransfer={handleCompleteTransfer}
+        sendToAgentModalOpen={sendToAgentModalOpen}
+        onCloseSendToAgent={handleCloseSendToAgent}
+        onSendToAgent={handleSendToAgent}
+      />
 
       {/* --- DEBUG PACKAGE MODAL --- */}
       <DebugPackageModal
@@ -7319,723 +8339,20 @@ export default function MaestroConsole() {
         onClose={handleCloseDebugPackage}
       />
 
-      {/* --- AGENT ERROR MODAL --- */}
-      {errorSession?.agentError && (
-        <AgentErrorModal
-          theme={theme}
-          error={errorSession.agentError}
-          agentName={errorSession.toolType === 'claude-code' ? 'Claude Code' : errorSession.toolType}
-          sessionName={errorSession.name}
-          recoveryActions={recoveryActions}
-          onDismiss={handleCloseAgentErrorModal}
-          dismissible={errorSession.agentError.recoverable}
-        />
-      )}
-
-      {/* --- GROUP CHAT ERROR MODAL --- */}
-      {groupChatError && (
-        <AgentErrorModal
-          theme={theme}
-          error={groupChatError.error}
-          agentName={groupChatError.participantName || 'Group Chat'}
-          sessionName={groupChats.find(c => c.id === groupChatError.groupChatId)?.name || 'Unknown'}
-          recoveryActions={groupChatRecoveryActions}
-          onDismiss={handleClearGroupChatError}
-          dismissible={groupChatError.error.recoverable}
-        />
-      )}
-
-      {/* --- WORKTREE CONFIG MODAL --- */}
-      {worktreeConfigModalOpen && activeSession && (
-        <WorktreeConfigModal
-          isOpen={worktreeConfigModalOpen}
-          onClose={() => setWorktreeConfigModalOpen(false)}
-          theme={theme}
-          session={activeSession}
-          onSaveConfig={async (config) => {
-            // Save the config first
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id
-                ? { ...s, worktreeConfig: config }
-                : s
-            ));
-
-            // Scan for worktrees and create sub-agent sessions
-            try {
-              const scanResult = await window.maestro.git.scanWorktreeDirectory(config.basePath);
-              const { gitSubdirs } = scanResult;
-
-              if (gitSubdirs.length > 0) {
-                const newWorktreeSessions: Session[] = [];
-
-                for (const subdir of gitSubdirs) {
-                  // Skip main/master/HEAD branches - they're typically the main repo
-                  if (subdir.branch === 'main' || subdir.branch === 'master' || subdir.branch === 'HEAD') {
-                    continue;
-                  }
-
-                  // Check if a session already exists for this worktree
-                  const existingSession = sessions.find(s =>
-                    s.parentSessionId === activeSession.id &&
-                    s.worktreeBranch === subdir.branch
-                  );
-                  if (existingSession) {
-                    continue;
-                  }
-
-                  // Also check by path
-                  const existingByPath = sessions.find(s => s.cwd === subdir.path);
-                  if (existingByPath) {
-                    continue;
-                  }
-
-                  const newId = generateId();
-                  const initialTabId = generateId();
-                  const initialTab: AITab = {
-                    id: initialTabId,
-                    agentSessionId: null,
-                    name: null,
-                    starred: false,
-                    logs: [],
-                    inputValue: '',
-                    stagedImages: [],
-                    createdAt: Date.now(),
-                    state: 'idle',
-                    saveToHistory: true
-                  };
-
-                  // Fetch git info for this subdirectory
-                  let gitBranches: string[] | undefined;
-                  let gitTags: string[] | undefined;
-                  let gitRefsCacheTime: number | undefined;
-
-                  try {
-                    [gitBranches, gitTags] = await Promise.all([
-                      gitService.getBranches(subdir.path),
-                      gitService.getTags(subdir.path)
-                    ]);
-                    gitRefsCacheTime = Date.now();
-                  } catch {
-                    // Ignore errors fetching git info
-                  }
-
-                  const worktreeSession: Session = {
-                    id: newId,
-                    name: subdir.branch || subdir.name,
-                    groupId: activeSession.groupId,  // Inherit group from parent
-                    toolType: activeSession.toolType,
-                    state: 'idle',
-                    cwd: subdir.path,
-                    fullPath: subdir.path,
-                    projectRoot: subdir.path,
-                    isGitRepo: true,
-                    gitBranches,
-                    gitTags,
-                    gitRefsCacheTime,
-                    parentSessionId: activeSession.id,
-                    worktreeBranch: subdir.branch || undefined,
-                    aiLogs: [],
-                    shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
-                    workLog: [],
-                    contextUsage: 0,
-                    inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
-                    aiPid: 0,
-                    terminalPid: 0,
-                    port: 3000 + Math.floor(Math.random() * 100),
-                    isLive: false,
-                    changedFiles: [],
-                    fileTree: [],
-                    fileExplorerExpanded: [],
-                    fileExplorerScrollPos: 0,
-                    fileTreeAutoRefreshInterval: 180,
-                    shellCwd: subdir.path,
-                    aiCommandHistory: [],
-                    shellCommandHistory: [],
-                    executionQueue: [],
-                    activeTimeMs: 0,
-                    aiTabs: [initialTab],
-                    activeTabId: initialTabId,
-                    closedTabHistory: [],
-                    customPath: activeSession.customPath,
-                    customArgs: activeSession.customArgs,
-                    customEnvVars: activeSession.customEnvVars,
-                    customModel: activeSession.customModel,
-                    customContextWindow: activeSession.customContextWindow,
-                    nudgeMessage: activeSession.nudgeMessage,
-                    autoRunFolderPath: activeSession.autoRunFolderPath
-                  };
-
-                  newWorktreeSessions.push(worktreeSession);
-                }
-
-                if (newWorktreeSessions.length > 0) {
-                  setSessions(prev => [...prev, ...newWorktreeSessions]);
-                  // Expand worktrees on parent
-                  setSessions(prev => prev.map(s =>
-                    s.id === activeSession.id
-                      ? { ...s, worktreesExpanded: true }
-                      : s
-                  ));
-                  addToast({
-                    type: 'success',
-                    title: 'Worktrees Discovered',
-                    message: `Found ${newWorktreeSessions.length} worktree sub-agent${newWorktreeSessions.length > 1 ? 's' : ''}`,
-                  });
-                }
-              }
-            } catch (err) {
-              console.error('Failed to scan for worktrees:', err);
-            }
-          }}
-          onCreateWorktree={async (branchName, basePath) => {
-            if (!basePath) {
-              addToast({ type: 'error', title: 'Error', message: 'No worktree directory configured' });
-              return;
-            }
-
-            const worktreePath = `${basePath}/${branchName}`;
-            console.log('[WorktreeConfig] Create worktree:', branchName, 'at', worktreePath);
-
-            try {
-              // Create the worktree via git
-              const result = await window.maestro.git.worktreeSetup(
-                activeSession.cwd,
-                worktreePath,
-                branchName
-              );
-
-              if (!result.success) {
-                throw new Error(result.error || 'Failed to create worktree');
-              }
-
-              // Create a new session for the worktree, inheriting all config from parent
-              const newId = generateId();
-              const initialTabId = generateId();
-              const initialTab: AITab = {
-                id: initialTabId,
-                agentSessionId: null,
-                name: null,
-                starred: false,
-                logs: [],
-                inputValue: '',
-                stagedImages: [],
-                createdAt: Date.now(),
-                state: 'idle',
-                saveToHistory: defaultSaveToHistory
-              };
-
-              // Fetch git info for the worktree
-              let gitBranches: string[] | undefined;
-              let gitTags: string[] | undefined;
-              let gitRefsCacheTime: number | undefined;
-
-              try {
-                [gitBranches, gitTags] = await Promise.all([
-                  gitService.getBranches(worktreePath),
-                  gitService.getTags(worktreePath)
-                ]);
-                gitRefsCacheTime = Date.now();
-              } catch {
-                // Ignore errors
-              }
-
-              const worktreeSession: Session = {
-                id: newId,
-                name: branchName,
-                groupId: activeSession.groupId,  // Inherit group from parent
-                toolType: activeSession.toolType,
-                state: 'idle',
-                cwd: worktreePath,
-                fullPath: worktreePath,
-                projectRoot: worktreePath,
-                isGitRepo: true,
-                gitBranches,
-                gitTags,
-                gitRefsCacheTime,
-                parentSessionId: activeSession.id,
-                worktreeBranch: branchName,
-                aiLogs: [],
-                shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
-                workLog: [],
-                contextUsage: 0,
-                inputMode: activeSession.toolType === 'terminal' ? 'terminal' : 'ai',
-                aiPid: 0,
-                terminalPid: 0,
-                port: 3000 + Math.floor(Math.random() * 100),
-                isLive: false,
-                changedFiles: [],
-                fileTree: [],
-                fileExplorerExpanded: [],
-                fileExplorerScrollPos: 0,
-                fileTreeAutoRefreshInterval: 180,
-                shellCwd: worktreePath,
-                aiCommandHistory: [],
-                shellCommandHistory: [],
-                executionQueue: [],
-                activeTimeMs: 0,
-                aiTabs: [initialTab],
-                activeTabId: initialTabId,
-                closedTabHistory: [],
-                // Inherit all agent configuration from parent
-                customPath: activeSession.customPath,
-                customArgs: activeSession.customArgs,
-                customEnvVars: activeSession.customEnvVars,
-                customModel: activeSession.customModel,
-                customContextWindow: activeSession.customContextWindow,
-                nudgeMessage: activeSession.nudgeMessage,
-                autoRunFolderPath: activeSession.autoRunFolderPath
-              };
-
-              setSessions(prev => [...prev, worktreeSession]);
-
-              // Expand parent's worktrees
-              setSessions(prev => prev.map(s =>
-                s.id === activeSession.id ? { ...s, worktreesExpanded: true } : s
-              ));
-
-              addToast({
-                type: 'success',
-                title: 'Worktree Created',
-                message: branchName,
-              });
-            } catch (err) {
-              console.error('[WorktreeConfig] Failed to create worktree:', err);
-              addToast({
-                type: 'error',
-                title: 'Failed to Create Worktree',
-                message: err instanceof Error ? err.message : String(err),
-              });
-              throw err; // Re-throw so the modal can show the error
-            }
-          }}
-        />
-      )}
-
-      {/* --- CREATE WORKTREE MODAL (quick create from context menu) --- */}
-      {createWorktreeModalOpen && createWorktreeSession && (
-        <CreateWorktreeModal
-          isOpen={createWorktreeModalOpen}
-          onClose={() => {
-            setCreateWorktreeModalOpen(false);
-            setCreateWorktreeSession(null);
-          }}
-          theme={theme}
-          session={createWorktreeSession}
-          onCreateWorktree={async (branchName) => {
-            // Determine base path: use configured path or default to parent directory
-            const basePath = createWorktreeSession.worktreeConfig?.basePath ||
-              createWorktreeSession.cwd.replace(/\/[^/]+$/, '') + '/worktrees';
-
-            const worktreePath = `${basePath}/${branchName}`;
-            console.log('[CreateWorktree] Create worktree:', branchName, 'at', worktreePath);
-
-            // Create the worktree via git
-            const result = await window.maestro.git.worktreeSetup(
-              createWorktreeSession.cwd,
-              worktreePath,
-              branchName
-            );
-
-            if (!result.success) {
-              throw new Error(result.error || 'Failed to create worktree');
-            }
-
-            // Create a new session for the worktree, inheriting all config from parent
-            const newId = generateId();
-            const initialTabId = generateId();
-            const initialTab: AITab = {
-              id: initialTabId,
-              agentSessionId: null,
-              name: null,
-              starred: false,
-              logs: [],
-              inputValue: '',
-              stagedImages: [],
-              createdAt: Date.now(),
-              state: 'idle',
-              saveToHistory: defaultSaveToHistory
-            };
-
-            // Fetch git info for the worktree
-            let gitBranches: string[] | undefined;
-            let gitTags: string[] | undefined;
-            let gitRefsCacheTime: number | undefined;
-
-            try {
-              [gitBranches, gitTags] = await Promise.all([
-                gitService.getBranches(worktreePath),
-                gitService.getTags(worktreePath)
-              ]);
-              gitRefsCacheTime = Date.now();
-            } catch {
-              // Ignore errors
-            }
-
-            const worktreeSession: Session = {
-              id: newId,
-              name: branchName,
-              groupId: createWorktreeSession.groupId,  // Inherit group from parent
-              toolType: createWorktreeSession.toolType,
-              state: 'idle',
-              cwd: worktreePath,
-              fullPath: worktreePath,
-              projectRoot: worktreePath,
-              isGitRepo: true,
-              gitBranches,
-              gitTags,
-              gitRefsCacheTime,
-              parentSessionId: createWorktreeSession.id,
-              worktreeBranch: branchName,
-              aiLogs: [],
-              shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
-              workLog: [],
-              contextUsage: 0,
-              inputMode: createWorktreeSession.toolType === 'terminal' ? 'terminal' : 'ai',
-              aiPid: 0,
-              terminalPid: 0,
-              port: 3000 + Math.floor(Math.random() * 100),
-              isLive: false,
-              changedFiles: [],
-              fileTree: [],
-              fileExplorerExpanded: [],
-              fileExplorerScrollPos: 0,
-              fileTreeAutoRefreshInterval: 180,
-              shellCwd: worktreePath,
-              aiCommandHistory: [],
-              shellCommandHistory: [],
-              executionQueue: [],
-              activeTimeMs: 0,
-              aiTabs: [initialTab],
-              activeTabId: initialTabId,
-              closedTabHistory: [],
-              // Inherit all agent configuration from parent
-              customPath: createWorktreeSession.customPath,
-              customArgs: createWorktreeSession.customArgs,
-              customEnvVars: createWorktreeSession.customEnvVars,
-              customModel: createWorktreeSession.customModel,
-              customContextWindow: createWorktreeSession.customContextWindow,
-              nudgeMessage: createWorktreeSession.nudgeMessage,
-              autoRunFolderPath: createWorktreeSession.autoRunFolderPath
-            };
-
-            setSessions(prev => [...prev, worktreeSession]);
-
-            // Expand parent's worktrees
-            setSessions(prev => prev.map(s =>
-              s.id === createWorktreeSession.id ? { ...s, worktreesExpanded: true } : s
-            ));
-
-            // Save worktree config if not already configured
-            if (!createWorktreeSession.worktreeConfig?.basePath) {
-              setSessions(prev => prev.map(s =>
-                s.id === createWorktreeSession.id
-                  ? { ...s, worktreeConfig: { basePath, watchEnabled: true } }
-                  : s
-              ));
-            }
-
-            addToast({
-              type: 'success',
-              title: 'Worktree Created',
-              message: branchName,
-            });
-          }}
-        />
-      )}
-
-      {/* --- MERGE SESSION MODAL --- */}
-      {mergeSessionModalOpen && activeSession && activeSession.activeTabId && (
-        <MergeSessionModal
-          theme={theme}
-          isOpen={mergeSessionModalOpen}
-          sourceSession={activeSession}
-          sourceTabId={activeSession.activeTabId}
-          allSessions={sessions}
-          onClose={() => {
-            setMergeSessionModalOpen(false);
-            resetMerge();
-          }}
-          onMerge={async (targetSessionId, targetTabId, options) => {
-            // Close the modal - merge will show in the input area overlay
-            setMergeSessionModalOpen(false);
-
-            // Execute merge using the hook (callbacks handle toasts and navigation)
-            const result = await executeMerge(
-              activeSession,
-              activeSession.activeTabId,
-              targetSessionId,
-              targetTabId,
-              options
-            );
-
-            if (!result.success) {
-              addToast({
-                type: 'error',
-                title: 'Merge Failed',
-                message: result.error || 'Failed to merge contexts',
-              });
-            }
-            // Note: Success toasts are handled by onSessionCreated (for new sessions)
-            // and onMergeComplete (for merging into existing sessions) callbacks
-
-            return result;
-          }}
-        />
-      )}
-
-      {/* --- TRANSFER PROGRESS MODAL --- */}
-      {(transferState === 'grooming' || transferState === 'creating' || transferState === 'complete') &&
-        transferProgress &&
-        transferSourceAgent &&
-        transferTargetAgent && (
-        <TransferProgressModal
-          theme={theme}
-          isOpen={true}
-          progress={transferProgress}
-          sourceAgent={transferSourceAgent}
-          targetAgent={transferTargetAgent}
-          onCancel={() => {
-            cancelTransfer();
-            setTransferSourceAgent(null);
-            setTransferTargetAgent(null);
-          }}
-          onComplete={() => {
-            resetTransfer();
-            setTransferSourceAgent(null);
-            setTransferTargetAgent(null);
-          }}
-        />
-      )}
-
-      {/* --- SEND TO AGENT MODAL --- */}
-      {sendToAgentModalOpen && activeSession && activeSession.activeTabId && (
-        <SendToAgentModal
-          theme={theme}
-          isOpen={sendToAgentModalOpen}
-          sourceSession={activeSession}
-          sourceTabId={activeSession.activeTabId}
-          allSessions={sessions}
-          onClose={() => setSendToAgentModalOpen(false)}
-          onSend={async (targetSessionId, options) => {
-            // Find the target session
-            const targetSession = sessions.find(s => s.id === targetSessionId);
-            if (!targetSession) {
-              return { success: false, error: 'Target session not found' };
-            }
-
-            // Store source and target agents for progress modal display
-            setTransferSourceAgent(activeSession.toolType);
-            setTransferTargetAgent(targetSession.toolType);
-
-            // Close the selection modal - progress modal will take over
-            setSendToAgentModalOpen(false);
-
-            // Get source tab context
-            const sourceTab = activeSession.aiTabs.find(t => t.id === activeSession.activeTabId);
-            if (!sourceTab) {
-              return { success: false, error: 'Source tab not found' };
-            }
-
-            // Transfer context to the target session's active tab
-            // Create a new tab in the target session with the transferred context
-            const newTabId = `tab-${Date.now()}`;
-            const transferNotice: LogEntry = {
-              id: `transfer-notice-${Date.now()}`,
-              timestamp: Date.now(),
-              source: 'system',
-              text: `Context transferred from "${activeSession.name}" (${activeSession.toolType})${options.groomContext ? ' - cleaned to reduce size' : ''}`,
-            };
-
-            const newTab: AITab = {
-              id: newTabId,
-              name: `From: ${activeSession.name}`,
-              logs: [transferNotice, ...sourceTab.logs],
-              agentSessionId: null,
-              starred: false,
-              inputValue: '',
-              stagedImages: [],
-              createdAt: Date.now(),
-              state: 'idle',
-            };
-
-            // Add the new tab to the target session
-            setSessions(prev => prev.map(s => {
-              if (s.id === targetSessionId) {
-                return {
-                  ...s,
-                  aiTabs: [...s.aiTabs, newTab],
-                  activeTabId: newTabId,
-                };
-              }
-              return s;
-            }));
-
-            // Navigate to the target session
-            setActiveSessionId(targetSessionId);
-
-            // Calculate estimated tokens for the message
-            const estimatedTokens = sourceTab.logs
-              .filter(log => log.text && log.source !== 'system')
-              .reduce((sum, log) => sum + Math.round((log.text?.length || 0) / 4), 0);
-            const tokenInfo = estimatedTokens > 0
-              ? ` (~${estimatedTokens.toLocaleString()} tokens)`
-              : '';
-
-            // Show success toast with detailed info
-            addToast({
-              type: 'success',
-              title: 'Context Transferred',
-              message: `"${activeSession.name}" → "${targetSession.name}"${tokenInfo}. Ready in new tab.`,
-              sessionId: targetSessionId,
-              tabId: newTabId,
-            });
-
-            // Reset transfer state
-            resetTransfer();
-            setTransferSourceAgent(null);
-            setTransferTargetAgent(null);
-
-            return { success: true, newSessionId: targetSessionId, newTabId };
-          }}
-        />
-      )}
-
-      {/* --- CREATE PR MODAL --- */}
-      {createPRModalOpen && (createPRSession || activeSession) && (
-        <CreatePRModal
-          isOpen={createPRModalOpen}
-          onClose={() => {
-            setCreatePRModalOpen(false);
-            setCreatePRSession(null);
-          }}
-          theme={theme}
-          worktreePath={(createPRSession || activeSession)!.cwd}
-          worktreeBranch={(createPRSession || activeSession)!.worktreeBranch || (createPRSession || activeSession)!.gitBranches?.[0] || 'main'}
-          availableBranches={(createPRSession || activeSession)!.gitBranches || ['main', 'master']}
-          onPRCreated={async (prDetails: PRDetails) => {
-            const session = createPRSession || activeSession;
-            addToast({
-              type: 'success',
-              title: 'Pull Request Created',
-              message: prDetails.title,
-              actionUrl: prDetails.url,
-              actionLabel: prDetails.url,
-            });
-            // Add history entry with PR details
-            if (session) {
-              await window.maestro.history.add({
-                id: generateId(),
-                type: 'USER',
-                timestamp: Date.now(),
-                summary: `Created PR: ${prDetails.title}`,
-                fullResponse: [
-                  `**Pull Request:** [${prDetails.title}](${prDetails.url})`,
-                  `**Branch:** ${prDetails.sourceBranch} → ${prDetails.targetBranch}`,
-                  prDetails.description ? `**Description:** ${prDetails.description}` : '',
-                ].filter(Boolean).join('\n\n'),
-                projectPath: session.projectRoot || session.cwd,
-                sessionId: session.id,
-                sessionName: session.name,
-              });
-              rightPanelRef.current?.refreshHistoryPanel();
-            }
-            setCreatePRSession(null);
-          }}
-        />
-      )}
-
-      {/* --- DELETE WORKTREE MODAL --- */}
-      {deleteWorktreeModalOpen && deleteWorktreeSession && (
-        <DeleteWorktreeModal
-          theme={theme}
-          session={deleteWorktreeSession}
-          onClose={() => {
-            setDeleteWorktreeModalOpen(false);
-            setDeleteWorktreeSession(null);
-          }}
-          onConfirm={() => {
-            // Remove the session but keep the worktree on disk
-            setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
-          }}
-          onConfirmAndDelete={async () => {
-            // Remove the session AND delete the worktree from disk
-            const result = await window.maestro.git.removeWorktree(deleteWorktreeSession.cwd, true);
-            if (!result.success) {
-              throw new Error(result.error || 'Failed to remove worktree');
-            }
-            setSessions(prev => prev.filter(s => s.id !== deleteWorktreeSession.id));
-          }}
-        />
-      )}
-
-      {/* --- FIRST RUN CELEBRATION OVERLAY --- */}
-      {firstRunCelebrationData && (
-        <FirstRunCelebration
-          theme={theme}
-          elapsedTimeMs={firstRunCelebrationData.elapsedTimeMs}
-          completedTasks={firstRunCelebrationData.completedTasks}
-          totalTasks={firstRunCelebrationData.totalTasks}
-          onClose={() => setFirstRunCelebrationData(null)}
-          onOpenLeaderboardRegistration={() => setLeaderboardRegistrationOpen(true)}
-          isLeaderboardRegistered={isLeaderboardRegistered}
-        />
-      )}
-
-      {/* --- KEYBOARD MASTERY CELEBRATION OVERLAY --- */}
-      {pendingKeyboardMasteryLevel !== null && (
-        <KeyboardMasteryCelebration
-          theme={theme}
-          level={pendingKeyboardMasteryLevel}
-          onClose={handleKeyboardMasteryCelebrationClose}
-          shortcuts={shortcuts}
-        />
-      )}
-
-      {/* --- STANDING OVATION OVERLAY --- */}
-      {standingOvationData && (
-        <StandingOvationOverlay
-          theme={theme}
-          themeMode={theme.mode}
-          badge={standingOvationData.badge}
-          isNewRecord={standingOvationData.isNewRecord}
-          recordTimeMs={standingOvationData.recordTimeMs}
-          cumulativeTimeMs={autoRunStats.cumulativeTimeMs}
-          onClose={() => {
-            // Mark badge as acknowledged when user clicks "Take a Bow"
-            acknowledgeBadge(standingOvationData.badge.level);
-            setStandingOvationData(null);
-          }}
-          onOpenLeaderboardRegistration={() => setLeaderboardRegistrationOpen(true)}
-          isLeaderboardRegistered={isLeaderboardRegistered}
-        />
-      )}
-
-      {/* --- PROCESS MONITOR --- */}
-      {processMonitorOpen && (
-        <ProcessMonitor
-          theme={theme}
-          sessions={sessions}
-          groups={groups}
-          groupChats={groupChats}
-          onClose={() => setProcessMonitorOpen(false)}
-          onNavigateToSession={(sessionId, tabId) => {
-            setActiveSessionId(sessionId);
-            if (tabId) {
-              // Switch to the specific tab within the session
-              setSessions(prev => prev.map(s =>
-                s.id === sessionId ? { ...s, activeTabId: tabId } : s
-              ));
-            }
-          }}
-          onNavigateToGroupChat={(groupChatId) => {
-            // Restore state for this group chat when navigating from ProcessMonitor
-            setActiveGroupChatId(groupChatId);
-            setGroupChatState(groupChatStates.get(groupChatId) ?? 'idle');
-            setParticipantStates(allGroupChatParticipantStates.get(groupChatId) ?? new Map());
-            setProcessMonitorOpen(false);
-          }}
-        />
-      )}
+      {/* --- CELEBRATION OVERLAYS --- */}
+      <AppOverlays
+        theme={theme}
+        standingOvationData={standingOvationData}
+        cumulativeTimeMs={autoRunStats.cumulativeTimeMs}
+        onCloseStandingOvation={handleStandingOvationClose}
+        onOpenLeaderboardRegistration={handleOpenLeaderboardRegistration}
+        isLeaderboardRegistered={isLeaderboardRegistered}
+        firstRunCelebrationData={firstRunCelebrationData}
+        onCloseFirstRun={handleFirstRunCelebrationClose}
+        pendingKeyboardMasteryLevel={pendingKeyboardMasteryLevel}
+        onCloseKeyboardMastery={handleKeyboardMasteryCelebrationClose}
+        shortcuts={shortcuts}
+      />
 
       {/* --- DEVELOPER PLAYGROUND --- */}
       {playgroundOpen && (
@@ -8053,185 +8370,7 @@ export default function MaestroConsole() {
         onClose={() => setDebugWizardModalOpen(false)}
       />
 
-      {/* --- GROUP CHAT MODALS --- */}
-      {showNewGroupChatModal && (
-        <NewGroupChatModal
-          theme={theme}
-          isOpen={showNewGroupChatModal}
-          onClose={() => setShowNewGroupChatModal(false)}
-          onCreate={handleCreateGroupChat}
-        />
-      )}
-
-      {showDeleteGroupChatModal && (
-        <DeleteGroupChatModal
-          theme={theme}
-          isOpen={!!showDeleteGroupChatModal}
-          groupChatName={groupChats.find(c => c.id === showDeleteGroupChatModal)?.name || ''}
-          onClose={() => setShowDeleteGroupChatModal(null)}
-          onConfirm={() => handleDeleteGroupChat(showDeleteGroupChatModal)}
-        />
-      )}
-
-      {showRenameGroupChatModal && (
-        <RenameGroupChatModal
-          theme={theme}
-          isOpen={!!showRenameGroupChatModal}
-          currentName={groupChats.find(c => c.id === showRenameGroupChatModal)?.name || ''}
-          onClose={() => setShowRenameGroupChatModal(null)}
-          onRename={(newName) => handleRenameGroupChat(showRenameGroupChatModal, newName)}
-        />
-      )}
-
-      {showEditGroupChatModal && (
-        <EditGroupChatModal
-          theme={theme}
-          isOpen={!!showEditGroupChatModal}
-          groupChat={groupChats.find(c => c.id === showEditGroupChatModal) || null}
-          onClose={() => setShowEditGroupChatModal(null)}
-          onSave={handleUpdateGroupChat}
-        />
-      )}
-
-      {showGroupChatInfo && activeGroupChatId && groupChats.find(c => c.id === activeGroupChatId) && (
-        <GroupChatInfoOverlay
-          theme={theme}
-          isOpen={showGroupChatInfo}
-          groupChat={groupChats.find(c => c.id === activeGroupChatId)!}
-          messages={groupChatMessages}
-          onClose={() => setShowGroupChatInfo(false)}
-          onOpenModeratorSession={handleOpenModeratorSession}
-        />
-      )}
-
-      {/* --- CREATE GROUP MODAL --- */}
-      {createGroupModalOpen && (
-        <CreateGroupModal
-          theme={theme}
-          onClose={() => {
-            setCreateGroupModalOpen(false);
-          }}
-          groups={groups}
-          setGroups={setGroups}
-        />
-      )}
-
-      {/* --- CONFIRMATION MODAL --- */}
-      {confirmModalOpen && (
-        <ConfirmModal
-          theme={theme}
-          message={confirmModalMessage}
-          onConfirm={confirmModalOnConfirm}
-          onClose={() => setConfirmModalOpen(false)}
-        />
-      )}
-
-      {/* --- QUIT CONFIRMATION MODAL --- */}
-      {quitConfirmModalOpen && (() => {
-        // Get busy agent info for display
-        const busyAgents = sessions.filter(
-          s => s.state === 'busy' && s.busySource === 'ai' && s.toolType !== 'terminal'
-        );
-        return (
-          <QuitConfirmModal
-            theme={theme}
-            busyAgentCount={busyAgents.length}
-            busyAgentNames={busyAgents.map(s => s.name)}
-            onConfirmQuit={() => {
-              setQuitConfirmModalOpen(false);
-              window.maestro.app.confirmQuit();
-            }}
-            onCancel={() => {
-              setQuitConfirmModalOpen(false);
-              window.maestro.app.cancelQuit();
-            }}
-          />
-        );
-      })()}
-
-      {/* --- RENAME INSTANCE MODAL --- */}
-      {renameInstanceModalOpen && (
-        <RenameSessionModal
-          theme={theme}
-          value={renameInstanceValue}
-          setValue={setRenameInstanceValue}
-          onClose={() => {
-            setRenameInstanceModalOpen(false);
-            setRenameInstanceSessionId(null);
-          }}
-          sessions={sessions}
-          setSessions={setSessions}
-          activeSessionId={activeSessionId}
-          targetSessionId={renameInstanceSessionId || undefined}
-          onAfterRename={flushSessionPersistence}
-        />
-      )}
-
-      {/* --- RENAME TAB MODAL --- */}
-      {renameTabModalOpen && renameTabId && (
-        <RenameTabModal
-          theme={theme}
-          initialName={renameTabInitialName}
-          agentSessionId={activeSession?.aiTabs?.find(t => t.id === renameTabId)?.agentSessionId}
-          onClose={() => {
-            setRenameTabModalOpen(false);
-            setRenameTabId(null);
-          }}
-          onRename={(newName: string) => {
-            if (!activeSession || !renameTabId) return;
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSession.id) return s;
-              // Find the tab to get its agentSessionId for persistence
-              const tab = s.aiTabs.find(t => t.id === renameTabId);
-              if (tab?.agentSessionId) {
-                // Persist name to agent session metadata (async, fire and forget)
-                // Use projectRoot (not cwd) for consistent session storage access
-                const agentId = s.toolType || 'claude-code';
-                if (agentId === 'claude-code') {
-                  window.maestro.claude.updateSessionName(
-                    s.projectRoot,
-                    tab.agentSessionId,
-                    newName || ''
-                  ).catch(err => console.error('Failed to persist tab name:', err));
-                } else {
-                  window.maestro.agentSessions.setSessionName(
-                    agentId,
-                    s.projectRoot,
-                    tab.agentSessionId,
-                    newName || null
-                  ).catch(err => console.error('Failed to persist tab name:', err));
-                }
-                // Also update past history entries with this agentSessionId
-                window.maestro.history.updateSessionName(
-                  tab.agentSessionId,
-                  newName || ''
-                ).catch(err => console.error('Failed to update history session names:', err));
-              }
-              return {
-                ...s,
-                aiTabs: s.aiTabs.map(tab =>
-                  tab.id === renameTabId ? { ...tab, name: newName || null } : tab
-                )
-              };
-            }));
-          }}
-        />
-      )}
-
-      {/* --- RENAME GROUP MODAL --- */}
-      {renameGroupModalOpen && renameGroupId && (
-        <RenameGroupModal
-          theme={theme}
-          groupId={renameGroupId}
-          groupName={renameGroupValue}
-          setGroupName={setRenameGroupValue}
-          groupEmoji={renameGroupEmoji}
-          setGroupEmoji={setRenameGroupEmoji}
-          onClose={() => setRenameGroupModalOpen(false)}
-          groups={groups}
-          setGroups={setGroups}
-        />
-      )}
+      {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
 
       {/* --- EMPTY STATE VIEW (when no sessions) --- */}
       {sessions.length === 0 && !isMobileLandscape ? (
@@ -8367,16 +8506,11 @@ export default function MaestroConsole() {
         <div className="flex-1 flex flex-col min-w-0" style={{ backgroundColor: theme.colors.bgMain }}>
           <LogViewer
             theme={theme}
-            onClose={() => setLogViewerOpen(false)}
+            onClose={handleCloseLogViewer}
             logLevel={logLevel}
             savedSelectedLevels={logViewerSelectedLevels}
             onSelectedLevelsChange={setLogViewerSelectedLevels}
-            onShortcutUsed={(shortcutId: string) => {
-              const result = recordShortcutUsage(shortcutId);
-              if (result.newLevel !== null) {
-                onKeyboardMasteryLevelUp(result.newLevel);
-              }
-            }}
+            onShortcutUsed={handleLogViewerShortcutUsed}
           />
         </div>
       )}
@@ -8506,23 +8640,8 @@ export default function MaestroConsole() {
         setLogViewerOpen={setLogViewerOpen}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}
-        onResumeAgentSession={(agentSessionId: string, messages: LogEntry[], sessionName?: string, starred?: boolean, usageStats?: UsageStats) => {
-          // Opens the Claude session as a new tab (or switches to existing tab if duplicate)
-          handleResumeSession(agentSessionId, messages, sessionName, starred, usageStats);
-        }}
-        onNewAgentSession={() => {
-          // Create a fresh AI tab
-          if (activeSession) {
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSession.id) return s;
-              const result = createTab(s, { saveToHistory: defaultSaveToHistory, showThinking: defaultShowThinking });
-              if (!result) return s;
-              return result.session;
-            }));
-            setActiveAgentSessionId(null);
-          }
-          setAgentSessionsOpen(false);
-        }}
+        onResumeAgentSession={handleResumeSession}
+        onNewAgentSession={handleNewAgentSession}
         setActiveFocus={setActiveFocus}
         setOutputSearchOpen={setOutputSearchOpen}
         setOutputSearchQuery={setOutputSearchQuery}
@@ -8679,47 +8798,13 @@ export default function MaestroConsole() {
 
           return nextUserCommandIndex;
         }}
-        onRemoveQueuedItem={(itemId: string) => {
-          if (!activeSession) return;
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            return {
-              ...s,
-              executionQueue: s.executionQueue.filter(item => item.id !== itemId)
-            };
-          }));
-        }}
-        onOpenQueueBrowser={() => setQueueBrowserOpen(true)}
+        onRemoveQueuedItem={handleRemoveQueuedItem}
+        onOpenQueueBrowser={handleOpenQueueBrowser}
         audioFeedbackCommand={audioFeedbackCommand}
-        // Tab management handlers
-        onTabSelect={(tabId: string) => {
-          if (!activeSession) return;
-          // Use functional setState to compute new session from fresh state (avoids stale closure issues)
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            const result = setActiveTab(s, tabId); // Use 's' from prev, not stale 'activeSession'
-            return result ? result.session : s;
-          }));
-        }}
-        onTabClose={(tabId: string) => {
-          if (!activeSession) return;
-          // Use functional setState to compute from fresh state (avoids stale closure issues)
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            const result = closeTab(s, tabId, showUnreadOnly);
-            return result ? result.session : s;
-          }));
-        }}
-        onNewTab={() => {
-          if (!activeSession) return;
-          // Use functional setState to compute from fresh state (avoids stale closure issues)
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            const result = createTab(s, { saveToHistory: defaultSaveToHistory, showThinking: defaultShowThinking });
-            if (!result) return s;
-            return result.session;
-          }));
-        }}
+        // Tab management handlers (memoized for performance)
+        onTabSelect={handleTabSelect}
+        onTabClose={handleTabClose}
+        onNewTab={handleNewTab}
         onRequestTabRename={(tabId: string) => {
           if (!activeSession) return;
           const tab = activeSession.aiTabs?.find(t => t.id === tabId);
@@ -9020,6 +9105,28 @@ export default function MaestroConsole() {
           }
           setSendToAgentModalOpen(true);
         }}
+        onCopyContext={(tabId: string) => {
+          // Copy tab conversation context to clipboard
+          if (!activeSession) return;
+          const tab = activeSession.aiTabs.find(t => t.id === tabId);
+          if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+          const text = formatLogsForClipboard(tab.logs);
+          navigator.clipboard.writeText(text).then(() => {
+            addToast({
+              type: 'success',
+              title: 'Context Copied',
+              message: 'Conversation copied to clipboard.',
+            });
+          }).catch((err) => {
+            console.error('Failed to copy context:', err);
+            addToast({
+              type: 'error',
+              title: 'Copy Failed',
+              message: 'Failed to copy context to clipboard.',
+            });
+          });
+        }}
         // Context warning sash settings (Phase 6)
         contextWarningsEnabled={contextManagementSettings.contextWarningsEnabled}
         contextWarningYellowThreshold={contextManagementSettings.contextWarningYellowThreshold}
@@ -9156,251 +9263,8 @@ export default function MaestroConsole() {
         </ErrorBoundary>
       )}
 
-      {/* --- AUTO RUN SETUP MODAL --- */}
-      {autoRunSetupModalOpen && (
-        <AutoRunSetupModal
-          theme={theme}
-          onClose={() => setAutoRunSetupModalOpen(false)}
-          onFolderSelected={handleAutoRunFolderSelected}
-          currentFolder={activeSession?.autoRunFolderPath}
-          sessionName={activeSession?.name}
-        />
-      )}
-
-      {/* --- BATCH RUNNER MODAL --- */}
-      {batchRunnerModalOpen && activeSession && activeSession.autoRunFolderPath && (
-        <BatchRunnerModal
-          theme={theme}
-          onClose={() => setBatchRunnerModalOpen(false)}
-          onGo={handleStartBatchRun}
-          onSave={(prompt) => {
-            // Save the custom prompt and modification timestamp to the session (persisted across restarts)
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id ? { ...s, batchRunnerPrompt: prompt, batchRunnerPromptModifiedAt: Date.now() } : s
-            ));
-          }}
-          initialPrompt={activeSession.batchRunnerPrompt || ''}
-          lastModifiedAt={activeSession.batchRunnerPromptModifiedAt}
-          showConfirmation={showConfirmation}
-          folderPath={activeSession.autoRunFolderPath}
-          currentDocument={activeSession.autoRunSelectedFile || ''}
-          allDocuments={autoRunDocumentList}
-          documentTree={autoRunDocumentTree}
-          getDocumentTaskCount={getDocumentTaskCount}
-          onRefreshDocuments={handleAutoRunRefresh}
-          sessionId={activeSession.id}
-        />
-      )}
-
-      {/* --- TAB SWITCHER MODAL --- */}
-      {tabSwitcherOpen && activeSession?.aiTabs && (
-        <TabSwitcherModal
-          theme={theme}
-          tabs={activeSession.aiTabs}
-          activeTabId={activeSession.activeTabId}
-          projectRoot={activeSession.projectRoot}
-          agentId={activeSession.toolType}
-          shortcut={tabShortcuts.tabSwitcher}
-          onTabSelect={(tabId) => {
-            setSessions(prev => prev.map(s =>
-              s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
-            ));
-          }}
-          onNamedSessionSelect={(agentSessionId, _projectPath, sessionName, starred) => {
-            // Open a closed named session as a new tab - use handleResumeSession to properly load messages
-            handleResumeSession(agentSessionId, [], sessionName, starred);
-            // Focus input so user can start interacting immediately
-            setActiveFocus('main');
-            setTimeout(() => inputRef.current?.focus(), 50);
-          }}
-          onClose={() => setTabSwitcherOpen(false)}
-        />
-      )}
-
-      {/* --- FUZZY FILE SEARCH MODAL --- */}
-      {fuzzyFileSearchOpen && activeSession && (
-        <FileSearchModal
-          theme={theme}
-          fileTree={filteredFileTree}
-          shortcut={shortcuts.fuzzyFileSearch}
-          onFileSelect={(file: FlatFileItem) => {
-            // Preview the file directly (handleFileClick expects relative path)
-            if (!file.isFolder) {
-              handleFileClick({ name: file.name, type: 'file' }, file.fullPath);
-            }
-          }}
-          onClose={() => setFuzzyFileSearchOpen(false)}
-        />
-      )}
-
-      {/* --- PROMPT COMPOSER MODAL --- */}
-      <PromptComposerModal
-        isOpen={promptComposerOpen}
-        onClose={() => {
-          setPromptComposerOpen(false);
-          setTimeout(() => inputRef.current?.focus(), 0);
-        }}
-        theme={theme}
-        initialValue={activeGroupChatId
-          ? (groupChats.find(c => c.id === activeGroupChatId)?.draftMessage || '')
-          : inputValue
-        }
-        onSubmit={(value) => {
-          if (activeGroupChatId) {
-            // Update group chat draft
-            setGroupChats(prev => prev.map(c =>
-              c.id === activeGroupChatId ? { ...c, draftMessage: value } : c
-            ));
-          } else {
-            setInputValue(value);
-          }
-        }}
-        onSend={(value) => {
-          if (activeGroupChatId) {
-            // Send to group chat
-            handleSendGroupChatMessage(value, groupChatStagedImages.length > 0 ? groupChatStagedImages : undefined, groupChatReadOnlyMode);
-            setGroupChatStagedImages([]);
-            // Clear draft
-            setGroupChats(prev => prev.map(c =>
-              c.id === activeGroupChatId ? { ...c, draftMessage: '' } : c
-            ));
-          } else {
-            // Set the input value and trigger send
-            setInputValue(value);
-            // Use setTimeout to ensure state updates before processing
-            setTimeout(() => processInput(value), 0);
-          }
-        }}
-        sessionName={activeGroupChatId
-          ? groupChats.find(c => c.id === activeGroupChatId)?.name
-          : activeSession?.name
-        }
-        // Image attachment props - context-aware
-        stagedImages={activeGroupChatId ? groupChatStagedImages : (canAttachImages ? stagedImages : [])}
-        setStagedImages={activeGroupChatId ? setGroupChatStagedImages : (canAttachImages ? setStagedImages : undefined)}
-        onImageAttachBlocked={activeGroupChatId || !blockCodexResumeImages ? undefined : showImageAttachBlockedNotice}
-        onOpenLightbox={handleSetLightboxImage}
-        // Bottom bar toggles - context-aware (History not applicable for group chat)
-        tabSaveToHistory={activeGroupChatId ? false : (activeSession ? getActiveTab(activeSession)?.saveToHistory ?? false : false)}
-        onToggleTabSaveToHistory={activeGroupChatId ? undefined : () => {
-          if (!activeSession) return;
-          const activeTab = getActiveTab(activeSession);
-          if (!activeTab) return;
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            return {
-              ...s,
-              aiTabs: s.aiTabs.map(tab =>
-                tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
-              )
-            };
-          }));
-        }}
-        tabReadOnlyMode={activeGroupChatId ? groupChatReadOnlyMode : (activeSession ? getActiveTab(activeSession)?.readOnlyMode ?? false : false)}
-        onToggleTabReadOnlyMode={activeGroupChatId
-          ? () => setGroupChatReadOnlyMode(!groupChatReadOnlyMode)
-          : () => {
-            if (!activeSession) return;
-            const activeTab = getActiveTab(activeSession);
-            if (!activeTab) return;
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSession.id) return s;
-              return {
-                ...s,
-                aiTabs: s.aiTabs.map(tab =>
-                  tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
-                )
-              };
-            }));
-          }
-        }
-        tabShowThinking={activeGroupChatId ? false : (activeSession ? getActiveTab(activeSession)?.showThinking ?? false : false)}
-        onToggleTabShowThinking={activeGroupChatId ? undefined : () => {
-          if (!activeSession) return;
-          const activeTab = getActiveTab(activeSession);
-          if (!activeTab) return;
-          setSessions(prev => prev.map(s => {
-            if (s.id !== activeSession.id) return s;
-            return {
-              ...s,
-              aiTabs: s.aiTabs.map(tab => {
-                if (tab.id !== activeTab.id) return tab;
-                if (tab.showThinking) {
-                  // Turn off - clear thinking logs
-                  return {
-                    ...tab,
-                    showThinking: false,
-                    logs: tab.logs.filter(log => log.source !== 'thinking'),
-                  };
-                }
-                return { ...tab, showThinking: true };
-              })
-            };
-          }));
-        }}
-        supportsThinking={!activeGroupChatId && hasActiveSessionCapability('supportsThinkingDisplay')}
-        enterToSend={enterToSendAI}
-        onToggleEnterToSend={() => setEnterToSendAI(!enterToSendAI)}
-      />
-
-      {/* --- EXECUTION QUEUE BROWSER --- */}
-      <ExecutionQueueBrowser
-        isOpen={queueBrowserOpen}
-        onClose={() => setQueueBrowserOpen(false)}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        theme={theme}
-        onRemoveItem={(sessionId, itemId) => {
-          setSessions(prev => prev.map(s => {
-            if (s.id !== sessionId) return s;
-            return {
-              ...s,
-              executionQueue: s.executionQueue.filter(item => item.id !== itemId)
-            };
-          }));
-        }}
-        onSwitchSession={(sessionId) => {
-          setActiveSessionId(sessionId);
-        }}
-        onReorderItems={(sessionId, fromIndex, toIndex) => {
-          setSessions(prev => prev.map(s => {
-            if (s.id !== sessionId) return s;
-            const queue = [...s.executionQueue];
-            const [removed] = queue.splice(fromIndex, 1);
-            queue.splice(toIndex, 0, removed);
-            return { ...s, executionQueue: queue };
-          }));
-        }}
-      />
-
       {/* Old settings modal removed - using new SettingsModal component below */}
-
-      {/* --- NEW INSTANCE MODAL --- */}
-      <NewInstanceModal
-        isOpen={newInstanceModalOpen}
-        onClose={() => setNewInstanceModalOpen(false)}
-        onCreate={createNewSession}
-        theme={theme}
-        existingSessions={sessionsForValidation}
-      />
-
-      {/* --- EDIT AGENT MODAL --- */}
-      <EditAgentModal
-        isOpen={editAgentModalOpen}
-        onClose={() => {
-          setEditAgentModalOpen(false);
-          setEditAgentSession(null);
-        }}
-        onSave={(sessionId, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow) => {
-          setSessions(prev => prev.map(s => {
-            if (s.id !== sessionId) return s;
-            return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow };
-          }));
-        }}
-        theme={theme}
-        session={editAgentSession}
-        existingSessions={sessionsForValidation}
-      />
+      {/* NOTE: NewInstanceModal and EditAgentModal are now rendered via AppSessionModals */}
 
       {/* --- SETTINGS MODAL (New Component) --- */}
       <SettingsModal
@@ -9599,5 +9463,29 @@ export default function MaestroConsole() {
       <ToastContainer theme={theme} onSessionClick={handleToastSessionClick} />
       </div>
     </GitStatusProvider>
+  );
+}
+
+/**
+ * MaestroConsole - Main application component with context providers
+ *
+ * Wraps MaestroConsoleInner with context providers for centralized state management.
+ * Phase 3: InputProvider - centralized input state management
+ * Phase 4: GroupChatProvider - centralized group chat state management
+ * Phase 5: AutoRunProvider - centralized Auto Run and batch processing state management
+ * Phase 6: SessionProvider - centralized session and group state management
+ * See refactor-details-2.md for full plan.
+ */
+export default function MaestroConsole() {
+  return (
+    <SessionProvider>
+      <AutoRunProvider>
+        <GroupChatProvider>
+          <InputProvider>
+            <MaestroConsoleInner />
+          </InputProvider>
+        </GroupChatProvider>
+      </AutoRunProvider>
+    </SessionProvider>
   );
 }

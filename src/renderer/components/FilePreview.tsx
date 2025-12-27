@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import rehypeSlug from 'rehype-slug';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen, AlertTriangle } from 'lucide-react';
+import { FileCode, X, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen, AlertTriangle } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -843,7 +844,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
           new ClipboardItem({ [blob.type]: blob })
         ]);
         setCopyNotificationMessage('Image Copied to Clipboard');
-      } catch (err) {
+      } catch {
         // Fallback: copy the data URL if image copy fails
         navigator.clipboard.writeText(file.content);
         setCopyNotificationMessage('Image URL Copied to Clipboard');
@@ -1534,14 +1535,18 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                   ? [[remarkFileLinks, { fileTree, cwd }] as any]
                   : [])
               ]}
-              rehypePlugins={[rehypeRaw]}
+              rehypePlugins={[rehypeRaw, rehypeSlug]}
               components={{
-                a: ({ node, href, children, ...props }) => {
+                a: ({ node: _node, href, children, ...props }) => {
                   // Check for maestro-file:// protocol OR data-maestro-file attribute
                   // (data attribute is fallback when rehype strips custom protocols)
                   const dataFilePath = (props as any)['data-maestro-file'];
                   const isMaestroFile = href?.startsWith('maestro-file://') || !!dataFilePath;
                   const filePath = dataFilePath || (href?.startsWith('maestro-file://') ? href.replace('maestro-file://', '') : null);
+
+                  // Check for anchor links (same-page navigation)
+                  const isAnchorLink = href?.startsWith('#') ?? false;
+                  const anchorId = isAnchorLink && href ? href.slice(1) : null;
 
                   return (
                     <a
@@ -1551,6 +1556,14 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                         e.preventDefault();
                         if (isMaestroFile && filePath && onFileClick) {
                           onFileClick(filePath);
+                        } else if (isAnchorLink && anchorId) {
+                          // Handle anchor links - scroll to the target element
+                          const targetElement = markdownContainerRef.current
+                            ? markdownContainerRef.current.querySelector(`#${CSS.escape(anchorId)}`)
+                            : document.getElementById(anchorId);
+                          if (targetElement) {
+                            targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }
                         } else if (href) {
                           window.maestro.shell.openExternal(href);
                         }
@@ -1561,7 +1574,7 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                     </a>
                   );
                 },
-                code: ({ node, inline, className, children, ...props }: any) => {
+                code: ({ node: _node, inline, className, children, ...props }: any) => {
                   const match = (className || '').match(/language-(\w+)/);
                   const language = match ? match[1] : 'text';
                   const codeContent = String(children).replace(/\n$/, '');
@@ -1592,12 +1605,12 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                     </code>
                   );
                 },
-                img: ({ node, src, alt, ...props }) => {
+                img: ({ node: _node, src, alt, ...props }) => {
                   // Check if this image came from file tree (set by remarkFileLinks)
                   const isFromTree = (props as any)['data-maestro-from-tree'] === 'true';
                   // Get the project root from the markdown file path (directory containing the file tree root)
                   // For FilePreview, the file.path is absolute, so we extract the root from it
-                  const markdownDir = file.path.substring(0, file.path.lastIndexOf('/'));
+                  const _markdownDir = file.path.substring(0, file.path.lastIndexOf('/'));
                   // If image is from file tree, we need the project root to resolve correctly
                   // The project root would be the common ancestor - we'll derive it from the file path
                   // For now, use the directory where the first folder in cwd would be located

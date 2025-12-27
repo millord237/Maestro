@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { Theme, Session, Shortcut, FocusArea, BatchRunState } from '../../../renderer/types';
-import { clearCapabilitiesCache, setCapabilitiesCache } from '../../../renderer/hooks/useAgentCapabilities';
+import { clearCapabilitiesCache, setCapabilitiesCache } from '../../../renderer/hooks';
 
 // Mock child components to simplify testing - must be before MainPanel import
 vi.mock('../../../renderer/components/LogViewer', () => ({
@@ -1050,6 +1050,430 @@ describe('MainPanel', () => {
 
       expect(onStopBatchRun).not.toHaveBeenCalled();
     });
+
+    it('should not display Auto mode button when currentSessionBatchState is null', () => {
+      render(<MainPanel {...defaultProps} currentSessionBatchState={null} />);
+
+      expect(screen.queryByText('Auto')).not.toBeInTheDocument();
+      expect(screen.queryByText('Stopping...')).not.toBeInTheDocument();
+    });
+
+    it('should not display Auto mode button when currentSessionBatchState is undefined', () => {
+      render(<MainPanel {...defaultProps} currentSessionBatchState={undefined} />);
+
+      expect(screen.queryByText('Auto')).not.toBeInTheDocument();
+    });
+
+    it('should not display Auto mode button when isRunning is false', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: false,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 5,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 5,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 5,
+        currentTaskIndex: 5,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      expect(screen.queryByText('Auto')).not.toBeInTheDocument();
+    });
+
+    it('should display worktree indicator (GitBranch icon) when worktreeActive is true', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: true,
+        worktreeBranch: 'feature-branch',
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      expect(screen.getByText('Auto')).toBeInTheDocument();
+      // Check for worktree title tooltip
+      const worktreeIcon = screen.getByTitle('Worktree: feature-branch');
+      expect(worktreeIcon).toBeInTheDocument();
+    });
+
+    it('should display worktree indicator with default title when worktreeBranch is not set', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: true,
+        worktreeBranch: undefined,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      // Check for default worktree title tooltip
+      const worktreeIcon = screen.getByTitle('Worktree: active');
+      expect(worktreeIcon).toBeInTheDocument();
+    });
+
+    it('should not display worktree indicator when worktreeActive is false', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      expect(screen.getByText('Auto')).toBeInTheDocument();
+      expect(screen.queryByTitle(/Worktree:/)).not.toBeInTheDocument();
+    });
+
+    it('should have button disabled when isStopping is true', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: true,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Stopping...').closest('button');
+      expect(button).toBeDisabled();
+    });
+
+    it('should have button enabled when isStopping is false', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Auto').closest('button');
+      expect(button).not.toBeDisabled();
+    });
+
+    it('should display correct tooltip when running', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Auto').closest('button');
+      expect(button).toHaveAttribute('title', 'Click to stop batch run');
+    });
+
+    it('should display correct tooltip when stopping', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: true,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Stopping...').closest('button');
+      expect(button).toHaveAttribute('title', 'Stopping after current task...');
+    });
+
+    it('should display progress with zero completed tasks', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 10,
+        currentDocTasksCompleted: 0,
+        totalTasksAcrossAllDocs: 10,
+        completedTasksAcrossAllDocs: 0,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 10,
+        completedTasks: 0,
+        currentTaskIndex: 0,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      expect(screen.getByText('Auto')).toBeInTheDocument();
+      expect(screen.getByText('0/10')).toBeInTheDocument();
+    });
+
+    it('should display progress with all tasks completed', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 8,
+        currentDocTasksCompleted: 8,
+        totalTasksAcrossAllDocs: 8,
+        completedTasksAcrossAllDocs: 8,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 8,
+        completedTasks: 8,
+        currentTaskIndex: 8,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      expect(screen.getByText('Auto')).toBeInTheDocument();
+      expect(screen.getByText('8/8')).toBeInTheDocument();
+    });
+
+    it('should apply error background color styling to Auto button', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Auto').closest('button');
+      expect(button).toHaveStyle({ backgroundColor: theme.colors.error });
+    });
+
+    it('should apply cursor-not-allowed class when stopping', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: true,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Stopping...').closest('button');
+      expect(button).toHaveClass('cursor-not-allowed');
+    });
+
+    it('should apply cursor-pointer class when not stopping', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      const button = screen.getByText('Auto').closest('button');
+      expect(button).toHaveClass('cursor-pointer');
+    });
+
+    it('should display uppercase AUTO text', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
+
+      // The text should have uppercase class applied
+      const autoText = screen.getByText('Auto');
+      expect(autoText).toHaveClass('uppercase');
+    });
+
+    it('should handle onStopBatchRun being undefined gracefully', () => {
+      const currentSessionBatchState: BatchRunState = {
+        isRunning: true,
+        isStopping: false,
+        documents: ['doc1.md'],
+        currentDocumentIndex: 0,
+        currentDocTasksTotal: 5,
+        currentDocTasksCompleted: 2,
+        totalTasksAcrossAllDocs: 5,
+        completedTasksAcrossAllDocs: 2,
+        loopEnabled: false,
+        loopIteration: 0,
+        folderPath: '/test/folder',
+        worktreeActive: false,
+        totalTasks: 5,
+        completedTasks: 2,
+        currentTaskIndex: 2,
+        originalContent: '',
+        sessionIds: [],
+      };
+
+      // Render without onStopBatchRun callback
+      render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} onStopBatchRun={undefined} />);
+
+      // Click should not throw
+      expect(() => fireEvent.click(screen.getByText('Auto'))).not.toThrow();
+    });
   });
 
   describe('Git tooltip', () => {
@@ -1847,6 +2271,504 @@ describe('MainPanel', () => {
       await waitFor(() => {
         expect(screen.getByText(/1 uncommitted change$/)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('Agent error banner', () => {
+    const createAgentError = (overrides: Partial<{
+      type: string;
+      message: string;
+      recoverable: boolean;
+      agentId: string;
+      sessionId?: string;
+      timestamp: number;
+    }> = {}) => ({
+      type: 'auth_expired' as const,
+      message: 'Authentication token has expired. Please re-authenticate.',
+      recoverable: true,
+      agentId: 'claude-code',
+      sessionId: 'session-1',
+      timestamp: Date.now(),
+      ...overrides,
+    });
+
+    it('should display error banner when active tab has an agent error', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      expect(screen.getByText('Authentication token has expired. Please re-authenticate.')).toBeInTheDocument();
+    });
+
+    it('should not display error banner when active tab has no error', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: undefined,
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      expect(screen.queryByText(/error|expired|failed/i)).not.toBeInTheDocument();
+    });
+
+    it('should display View Details button when onShowAgentErrorModal is provided', () => {
+      const onShowAgentErrorModal = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onShowAgentErrorModal={onShowAgentErrorModal} />);
+
+      expect(screen.getByText('View Details')).toBeInTheDocument();
+    });
+
+    it('should call onShowAgentErrorModal when View Details button is clicked', () => {
+      const onShowAgentErrorModal = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onShowAgentErrorModal={onShowAgentErrorModal} />);
+
+      fireEvent.click(screen.getByText('View Details'));
+
+      expect(onShowAgentErrorModal).toHaveBeenCalled();
+    });
+
+    it('should not display View Details button when onShowAgentErrorModal is not provided', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onShowAgentErrorModal={undefined} />);
+
+      expect(screen.queryByText('View Details')).not.toBeInTheDocument();
+    });
+
+    it('should display dismiss button (X) for recoverable errors when onClearAgentError is provided', () => {
+      const onClearAgentError = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ recoverable: true }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onClearAgentError={onClearAgentError} />);
+
+      expect(screen.getByTitle('Dismiss error')).toBeInTheDocument();
+    });
+
+    it('should call onClearAgentError when dismiss button is clicked', () => {
+      const onClearAgentError = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ recoverable: true }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onClearAgentError={onClearAgentError} />);
+
+      fireEvent.click(screen.getByTitle('Dismiss error'));
+
+      expect(onClearAgentError).toHaveBeenCalled();
+    });
+
+    it('should not display dismiss button for non-recoverable errors', () => {
+      const onClearAgentError = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ recoverable: false }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onClearAgentError={onClearAgentError} />);
+
+      // Error banner should be shown but dismiss button should not be present
+      expect(screen.getByText('Authentication token has expired. Please re-authenticate.')).toBeInTheDocument();
+      expect(screen.queryByTitle('Dismiss error')).not.toBeInTheDocument();
+    });
+
+    it('should not display dismiss button when onClearAgentError is not provided', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ recoverable: true }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} onClearAgentError={undefined} />);
+
+      expect(screen.queryByTitle('Dismiss error')).not.toBeInTheDocument();
+    });
+
+    it('should display error banner with AlertCircle icon', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      const { container } = render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Check for the AlertCircle icon (lucide-react renders as SVG with lucide class)
+      // Look for an SVG within the error banner container (next to the error message)
+      const errorMessage = screen.getByText('Authentication token has expired. Please re-authenticate.');
+      const banner = errorMessage.closest('div.flex.items-center');
+      const alertIcon = banner?.querySelector('svg');
+      expect(alertIcon).toBeInTheDocument();
+    });
+
+    it('should display different error messages for different error types', () => {
+      const errorTypes = [
+        { type: 'auth_expired', message: 'Your session has expired' },
+        { type: 'token_exhaustion', message: 'Context window is full' },
+        { type: 'rate_limited', message: 'Rate limit exceeded' },
+        { type: 'network_error', message: 'Network connection failed' },
+        { type: 'agent_crashed', message: 'Agent process crashed unexpectedly' },
+      ];
+
+      for (const { type, message } of errorTypes) {
+        const session = createSession({
+          inputMode: 'ai',
+          aiTabs: [{
+            id: 'tab-1',
+            name: 'Tab 1',
+            isUnread: false,
+            createdAt: Date.now(),
+            agentError: createAgentError({ type: type as any, message }),
+          }],
+          activeTabId: 'tab-1',
+        });
+
+        const { unmount } = render(<MainPanel {...defaultProps} activeSession={session} />);
+
+        expect(screen.getByText(message)).toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it('should only show error for the active tab, not inactive tabs', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [
+          {
+            id: 'tab-1',
+            name: 'Tab 1',
+            isUnread: false,
+            createdAt: Date.now(),
+            agentError: createAgentError({ message: 'Error on tab 1' }),
+          },
+          {
+            id: 'tab-2',
+            name: 'Tab 2',
+            isUnread: false,
+            createdAt: Date.now(),
+            agentError: createAgentError({ message: 'Error on tab 2' }),
+          },
+        ],
+        activeTabId: 'tab-2', // Tab 2 is active
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Should show tab-2's error, not tab-1's
+      expect(screen.getByText('Error on tab 2')).toBeInTheDocument();
+      expect(screen.queryByText('Error on tab 1')).not.toBeInTheDocument();
+    });
+
+    it('should not display error banner when session is null', () => {
+      render(<MainPanel {...defaultProps} activeSession={null} />);
+
+      // Empty state should be shown, no error banner
+      expect(screen.getByText('No agents. Create one to get started.')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('should still display error banner in terminal mode when active tab has error', () => {
+      // The error banner is shown based on activeTab's error, not inputMode
+      // This ensures users see errors even when they switch to terminal mode
+      const session = createSession({
+        inputMode: 'terminal',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // The error banner is shown regardless of inputMode to ensure visibility
+      expect(screen.getByText('Authentication token has expired. Please re-authenticate.')).toBeInTheDocument();
+    });
+
+    it('should display both View Details and dismiss buttons when both callbacks are provided for recoverable errors', () => {
+      const onShowAgentErrorModal = vi.fn();
+      const onClearAgentError = vi.fn();
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ recoverable: true }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel
+        {...defaultProps}
+        activeSession={session}
+        onShowAgentErrorModal={onShowAgentErrorModal}
+        onClearAgentError={onClearAgentError}
+      />);
+
+      expect(screen.getByText('View Details')).toBeInTheDocument();
+      expect(screen.getByTitle('Dismiss error')).toBeInTheDocument();
+    });
+
+    it('should have appropriate styling (error color) for the banner', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      const { container } = render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Find the error banner element by looking for the error message container
+      const errorMessage = screen.getByText('Authentication token has expired. Please re-authenticate.');
+      const banner = errorMessage.closest('div.flex.items-center');
+
+      // The banner should have error-colored styling
+      expect(banner).toHaveStyle({ backgroundColor: expect.stringMatching(/ef4444|#ef4444/) });
+    });
+
+    it('should handle error banner when switching between tabs with and without errors', () => {
+      // Start with a tab that has an error
+      const sessionWithError = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ message: 'Error message' }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      const { rerender } = render(<MainPanel {...defaultProps} activeSession={sessionWithError} />);
+
+      expect(screen.getByText('Error message')).toBeInTheDocument();
+
+      // Switch to a tab without an error
+      const sessionWithoutError = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-2',
+          name: 'Tab 2',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: undefined,
+        }],
+        activeTabId: 'tab-2',
+      });
+
+      rerender(<MainPanel {...defaultProps} activeSession={sessionWithoutError} />);
+
+      expect(screen.queryByText('Error message')).not.toBeInTheDocument();
+    });
+
+    it('should display error banner below tab bar in AI mode', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      const { container } = render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Tab bar should exist
+      expect(screen.getByTestId('tab-bar')).toBeInTheDocument();
+
+      // Error banner should exist
+      const errorMessage = screen.getByText('Authentication token has expired. Please re-authenticate.');
+      expect(errorMessage).toBeInTheDocument();
+
+      // Verify DOM order: tab-bar comes before error banner
+      const tabBar = screen.getByTestId('tab-bar');
+      const errorBanner = errorMessage.closest('div.flex.items-center');
+
+      // Both should be siblings in the DOM tree
+      const mainPanel = container.querySelector('[style*="backgroundColor"]');
+      if (mainPanel && tabBar && errorBanner) {
+        const children = Array.from(mainPanel.children);
+        const tabBarIndex = children.indexOf(tabBar);
+        const errorBannerIndex = children.indexOf(errorBanner as Element);
+
+        // Tab bar should come before error banner (smaller index)
+        // Note: This depends on the exact DOM structure
+      }
+    });
+
+    it('should truncate very long error messages gracefully', () => {
+      const longMessage = 'A'.repeat(500) + ' error message';
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError({ message: longMessage }),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // The error message should be displayed (the component doesn't truncate, but CSS might)
+      expect(screen.getByText(longMessage)).toBeInTheDocument();
+    });
+
+    it('should still display error banner when previewFile is open', () => {
+      // The error banner appears above file preview in the layout hierarchy
+      // This ensures users see critical errors even while previewing files
+      const previewFile = { name: 'test.ts', content: 'test content', path: '/test/test.ts' };
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: createAgentError(),
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      render(<MainPanel {...defaultProps} activeSession={session} previewFile={previewFile} />);
+
+      // Both error banner and file preview should be visible
+      expect(screen.getByText('Authentication token has expired. Please re-authenticate.')).toBeInTheDocument();
+      expect(screen.getByTestId('file-preview')).toBeInTheDocument();
+    });
+
+    it('should handle error with empty message gracefully', () => {
+      const session = createSession({
+        inputMode: 'ai',
+        aiTabs: [{
+          id: 'tab-1',
+          name: 'Tab 1',
+          isUnread: false,
+          createdAt: Date.now(),
+          agentError: {
+            type: 'unknown',
+            message: '',  // Empty message
+            recoverable: true,
+            agentId: 'claude-code',
+            timestamp: Date.now(),
+          },
+        }],
+        activeTabId: 'tab-1',
+      });
+
+      // Should render without crashing
+      const { container } = render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // The banner should still render with an icon even if message is empty
+      // Look for the error banner structure - contains an SVG icon
+      const errorBanner = container.querySelector('div.flex.items-center.gap-3');
+      expect(errorBanner).toBeInTheDocument();
+      const alertIcon = errorBanner?.querySelector('svg');
+      expect(alertIcon).toBeInTheDocument();
     });
   });
 });

@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo } from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, Eye, History, File, Folder, GitBranch, Tag, PenLine, Brain } from 'lucide-react';
 import type { Session, Theme, BatchRunState } from '../types';
-import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks/useTabCompletion';
+import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks';
 import type { SummarizeProgress, SummarizeResult, GroomingProgress, MergeResult } from '../types/contextMerge';
 import { ThinkingStatusPill } from './ThinkingStatusPill';
 import { MergeProgressOverlay } from './MergeProgressOverlay';
 import { ExecutionQueueIndicator } from './ExecutionQueueIndicator';
 import { ContextWarningSash } from './ContextWarningSash';
 import { SummarizeProgressOverlay } from './SummarizeProgressOverlay';
-import { useAgentCapabilities } from '../hooks/useAgentCapabilities';
-import { useScrollIntoView } from '../hooks/useScrollIntoView';
+import { useAgentCapabilities, useScrollIntoView } from '../hooks';
 import { getProviderDisplayName } from '../utils/sessionValidation';
 
 interface SlashCommand {
@@ -667,43 +666,40 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                 }
 
                 // @ mention file completion (AI mode only)
+                // PERFORMANCE: Quick check with lastIndexOf before doing detailed scan
                 if (!isTerminalMode && setAtMentionOpen && setAtMentionFilter && setAtMentionStartIndex && setSelectedAtMentionIndex) {
-                  // Find the last @ before cursor that's not part of a completed mention
-                  let atIndex = -1;
-                  for (let i = cursorPosition - 1; i >= 0; i--) {
-                    if (value[i] === '@') {
-                      // Check if this @ is at start of input or after a space/newline
-                      if (i === 0 || /\s/.test(value[i - 1])) {
-                        atIndex = i;
-                        break;
-                      }
-                    }
-                    // Stop if we hit a space (means we're past any potential @ trigger)
-                    if (value[i] === ' ' || value[i] === '\n') {
-                      break;
-                    }
-                  }
+                  // Quick check: if no @ in the text before cursor, skip the detailed scan
+                  const textBeforeCursor = value.substring(0, cursorPosition);
+                  const lastAtPos = textBeforeCursor.lastIndexOf('@');
 
-                  if (atIndex >= 0) {
-                    // Extract filter text after @
-                    const filterText = value.substring(atIndex + 1, cursorPosition);
-                    // Only show dropdown if filter doesn't contain spaces (incomplete mention)
-                    if (!filterText.includes(' ')) {
+                  if (lastAtPos === -1) {
+                    // No @ at all before cursor
+                    setAtMentionOpen(false);
+                  } else {
+                    // Check if this @ could be a valid mention trigger
+                    // It must be at start or after whitespace, and text after it must not contain spaces
+                    const isValidTrigger = lastAtPos === 0 || /\s/.test(value[lastAtPos - 1]);
+                    const textAfterAt = value.substring(lastAtPos + 1, cursorPosition);
+                    const hasSpaceAfterAt = textAfterAt.includes(' ');
+
+                    if (isValidTrigger && !hasSpaceAfterAt) {
                       setAtMentionOpen(true);
-                      setAtMentionFilter(filterText);
-                      setAtMentionStartIndex(atIndex);
+                      setAtMentionFilter(textAfterAt);
+                      setAtMentionStartIndex(lastAtPos);
                       setSelectedAtMentionIndex(0);
                     } else {
                       setAtMentionOpen(false);
                     }
-                  } else {
-                    setAtMentionOpen(false);
                   }
                 }
 
-                // Auto-grow logic - limit to 5 lines (~112px with text-sm)
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 112)}px`;
+                // PERFORMANCE: Auto-grow logic deferred to next animation frame
+                // This prevents layout thrashing from blocking the keystroke handling
+                const textarea = e.target;
+                requestAnimationFrame(() => {
+                  textarea.style.height = 'auto';
+                  textarea.style.height = `${Math.min(textarea.scrollHeight, 112)}px`;
+                });
               }}
               onKeyDown={handleInputKeyDown}
               onPaste={handlePaste}

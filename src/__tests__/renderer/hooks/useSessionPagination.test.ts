@@ -11,7 +11,7 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useSessionPagination } from '../../../renderer/hooks/useSessionPagination';
+import { useSessionPagination } from '../../../renderer/hooks';
 
 // Mock the window.maestro API
 const mockListPaginated = vi.fn();

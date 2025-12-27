@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Minimize2, Eye, Edit, Play, Square, Loader2, Image, Save, RotateCcw } from 'lucide-react';
+import { X, Minimize2, Eye, Edit, Play, Square, Loader2, Save, RotateCcw } from 'lucide-react';
 import type { Theme, BatchRunState, SessionState, Shortcut } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -309,13 +309,14 @@ export function AutoRunExpandedModal({
             {/* Run / Stop button */}
             {isLocked ? (
               <button
-                onClick={() => onStopBatchRun?.(sessionId)}
+                onClick={() => !isStopping && onStopBatchRun?.(sessionId)}
                 disabled={isStopping}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors font-semibold ${isStopping ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors font-semibold ${isStopping ? 'cursor-not-allowed' : ''}`}
                 style={{
-                  backgroundColor: theme.colors.error,
-                  color: 'white',
-                  border: `1px solid ${theme.colors.error}`
+                  backgroundColor: isStopping ? theme.colors.warning : theme.colors.error,
+                  color: isStopping ? theme.colors.bgMain : 'white',
+                  border: `1px solid ${isStopping ? theme.colors.warning : theme.colors.error}`,
+                  pointerEvents: isStopping ? 'none' : 'auto'
                 }}
                 title={isStopping ? 'Stopping after current task...' : 'Stop batch run'}
               >

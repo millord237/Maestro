@@ -92,7 +92,7 @@ vi.mock('../../../renderer/components/AutoRunDocumentSelector', () => ({
   ),
 }));
 
-vi.mock('../../../renderer/hooks/useTemplateAutocomplete', () => ({
+vi.mock('../../../renderer/hooks/input/useTemplateAutocomplete', () => ({
   useTemplateAutocomplete: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
     return {
       autocompleteState: { isOpen: false, suggestions: [], selectedIndex: 0, position: { top: 0, left: 0 } },

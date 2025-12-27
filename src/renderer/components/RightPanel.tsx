@@ -13,6 +13,8 @@ export interface RightPanelHandle {
   refreshHistoryPanel: () => void;
   focusAutoRun: () => void;
   toggleAutoRunExpanded: () => void;
+  openAutoRunResetTasksModal: () => void;
+  getAutoRunCompletedTaskCount: () => number;
 }
 
 interface RightPanelProps {
@@ -120,8 +122,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
   const autoRunRef = useRef<AutoRunHandle>(null);
 
-  // Elapsed time for Auto Run display - uses cumulative task time (sum of actual task durations)
-  // This is the most accurate measure of actual work time, unaffected by display sleep
+  // Elapsed time for Auto Run display - tracks wall clock time from startTime
   const [elapsedTime, setElapsedTime] = useState<string>('');
 
   // Shared draft state for Auto Run (shared between panel and expanded modal)
@@ -189,18 +190,25 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     }
   }, []);
 
-  // Update elapsed time display when cumulative task time changes
-  // This is simply reading from the batch state - no complex tracking needed
+  // Update elapsed time display using wall clock time from startTime
+  // Uses an interval to update every second while running
   useEffect(() => {
-    if (!currentSessionBatchState?.isRunning) {
+    if (!currentSessionBatchState?.isRunning || !currentSessionBatchState?.startTime) {
       setElapsedTime('');
       return;
     }
 
-    // Use cumulative task time (sum of actual task durations) as primary display
-    const cumulativeMs = currentSessionBatchState.cumulativeTaskTimeMs || 0;
-    setElapsedTime(cumulativeMs > 0 ? formatElapsed(cumulativeMs) : '');
-  }, [currentSessionBatchState?.isRunning, currentSessionBatchState?.cumulativeTaskTimeMs, formatElapsed]);
+    // Calculate elapsed immediately
+    const updateElapsed = () => {
+      const elapsed = Date.now() - currentSessionBatchState.startTime!;
+      setElapsedTime(formatElapsed(elapsed));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentSessionBatchState?.isRunning, currentSessionBatchState?.startTime, formatElapsed]);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
@@ -210,7 +218,13 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     focusAutoRun: () => {
       autoRunRef.current?.focus();
     },
-    toggleAutoRunExpanded
+    toggleAutoRunExpanded,
+    openAutoRunResetTasksModal: () => {
+      autoRunRef.current?.openResetTasksModal();
+    },
+    getAutoRunCompletedTaskCount: () => {
+      return autoRunRef.current?.getCompletedTaskCount() ?? 0;
+    }
   }), [toggleAutoRunExpanded]);
 
   // Focus the history panel when switching to history tab
@@ -450,12 +464,12 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
                 </span>
               )}
             </div>
-            {/* Elapsed time - shows sum of actual task durations */}
-            {elapsedTime && !currentSessionBatchState.isStopping && (
+            {/* Elapsed time - wall clock time since run started */}
+            {elapsedTime && (
               <span
                 className="text-xs font-mono"
                 style={{ color: theme.colors.textDim }}
-                title="Total task time"
+                title="Total elapsed time"
               >
                 {elapsedTime}
               </span>
@@ -523,7 +537,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           </div>
 
           {/* Overall completed count with loop info */}
-          <div className="mt-2 flex items-center justify-center gap-2">
+          <div className="mt-2 flex items-start justify-between gap-2">
             <span className="text-[10px]" style={{ color: theme.colors.textDim }}>
               {currentSessionBatchState.isStopping
                 ? 'Waiting for current task to complete before stopping...'
@@ -535,7 +549,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
             {/* Loop iteration indicator */}
             {currentSessionBatchState.loopEnabled && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded"
+                className="text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
                 style={{ backgroundColor: theme.colors.accent + '20', color: theme.colors.accent }}
               >
                 Loop {currentSessionBatchState.loopIteration + 1} of {currentSessionBatchState.maxLoops ?? '∞'}

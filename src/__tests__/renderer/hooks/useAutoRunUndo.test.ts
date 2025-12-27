@@ -18,7 +18,7 @@ import {
   useAutoRunUndo,
   type UseAutoRunUndoDeps,
   type UndoState,
-} from '../../../renderer/hooks/useAutoRunUndo';
+} from '../../../renderer/hooks';
 import React from 'react';
 
 // ============================================================================

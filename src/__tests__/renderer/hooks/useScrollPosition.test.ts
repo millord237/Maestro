@@ -7,10 +7,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useScrollPosition } from '../../../renderer/hooks/useScrollPosition';
+import { useScrollPosition } from '../../../renderer/hooks';
 
 // Mock useThrottledCallback to call immediately in tests
-vi.mock('../../../renderer/hooks/useThrottle', () => ({
+vi.mock('../../../renderer/hooks/utils/useThrottle', () => ({
   useThrottledCallback: (fn: () => void) => fn,
 }));
 

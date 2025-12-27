@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, ChevronUp, X, Keyboard,
   Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, Info, GitBranch, Bot, Clock,
   ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe,
-  GitPullRequest
+  GitPullRequest, BookOpen
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Session, Group, Theme, Shortcut, AutoRunStats, GroupChat, GroupChatState, SettingsTab, FocusArea } from '../types';
@@ -308,7 +308,7 @@ function SessionContextMenu({
               style={{ color: theme.colors.error }}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Delete Worktree
+              Remove Worktree
             </button>
           )}
         </>
@@ -473,6 +473,17 @@ function HamburgerMenuContent({
         <ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
       </button>
       <button
+        onClick={() => { window.maestro.shell.openExternal('https://docs.runmaestro.ai'); setMenuOpen(false); }}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+      >
+        <BookOpen className="w-5 h-5" style={{ color: theme.colors.accent }} />
+        <div className="flex-1">
+          <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Documentation</div>
+          <div className="text-xs" style={{ color: theme.colors.textDim }}>See usage docs on docs.runmaestro.ai</div>
+        </div>
+        <ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+      </button>
+      <button
         onClick={() => { setAboutModalOpen(true); setMenuOpen(false); }}
         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
       >
@@ -495,6 +506,7 @@ interface SessionTooltipContentProps {
   theme: Theme;
   gitFileCount?: number;
   groupName?: string; // Optional group name (for skinny mode)
+  isInBatch?: boolean; // Whether session is running in auto mode
 }
 
 function SessionTooltipContent({
@@ -502,6 +514,7 @@ function SessionTooltipContent({
   theme,
   gitFileCount,
   groupName,
+  isInBatch = false,
 }: SessionTooltipContentProps) {
   return (
     <>
@@ -521,6 +534,19 @@ function SessionTooltipContent({
             }}
           >
             {session.isGitRepo ? 'GIT' : 'LOCAL'}
+          </span>
+        )}
+        {/* AUTO Mode Indicator */}
+        {isInBatch && (
+          <span
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase animate-pulse"
+            style={{
+              backgroundColor: theme.colors.warning + '30',
+              color: theme.colors.warning
+            }}
+          >
+            <Bot className="w-2.5 h-2.5" />
+            AUTO
           </span>
         )}
       </div>
@@ -788,7 +814,7 @@ export function SessionList(props: SessionListProps) {
     setLiveOverlayOpen,
     liveOverlayRef,
     cloudflaredInstalled,
-    cloudflaredChecked,
+    cloudflaredChecked: _cloudflaredChecked,
     tunnelStatus,
     tunnelUrl,
     tunnelError,
@@ -916,7 +942,7 @@ export function SessionList(props: SessionListProps) {
   };
 
   // Helper: Check if a session has worktree children
-  const hasWorktreeChildren = (sessionId: string): boolean => {
+  const _hasWorktreeChildren = (sessionId: string): boolean => {
     return sessions.some(s => s.parentSessionId === sessionId);
   };
 
@@ -924,7 +950,7 @@ export function SessionList(props: SessionListProps) {
   const renderCollapsedPill = (
     session: Session,
     keyPrefix: string,
-    onExpand: () => void
+    _onExpand: () => void
   ) => {
     const worktreeChildren = getWorktreeChildren(session.id);
     const allSessions = [session, ...worktreeChildren];
@@ -941,15 +967,16 @@ export function SessionList(props: SessionListProps) {
           const hasUnreadTabs = s.aiTabs?.some(tab => tab.hasUnread);
           const isFirst = idx === 0;
           const isLast = idx === allSessions.length - 1;
+          const isInBatch = activeBatchSessionIds.includes(s.id);
 
           return (
             <div
               key={`${keyPrefix}-part-${s.id}`}
-              className="group/segment relative flex-1 h-full"
+              className={`group/segment relative flex-1 h-full ${isInBatch ? 'animate-pulse' : ''}`}
               style={{
-                ...(s.toolType === 'claude' && !s.agentSessionId
+                ...(s.toolType === 'claude' && !s.agentSessionId && !isInBatch
                   ? { border: `1px solid ${theme.colors.textDim}`, backgroundColor: 'transparent' }
-                  : { backgroundColor: getStatusColor(s.state, theme) }),
+                  : { backgroundColor: isInBatch ? theme.colors.warning : getStatusColor(s.state, theme) }),
                 // Rounded ends only on first/last
                 borderRadius: hasWorktrees
                   ? `${isFirst ? '9999px' : '0'} ${isLast ? '9999px' : '0'} ${isLast ? '9999px' : '0'} ${isFirst ? '9999px' : '0'}`
@@ -984,6 +1011,7 @@ export function SessionList(props: SessionListProps) {
                   session={s}
                   theme={theme}
                   gitFileCount={gitFileCounts.get(s.id)}
+                  isInBatch={isInBatch}
                 />
               </div>
             </div>
@@ -1069,7 +1097,7 @@ export function SessionList(props: SessionListProps) {
           >
             {/* Worktree children list */}
             <div>
-              {worktreeChildren.sort((a, b) => compareSessionNames(a.worktreeBranch || a.name, b.worktreeBranch || b.name)).map(child => {
+              {worktreeChildren.sort((a, b) => compareSessionNames(a.name, b.name)).map(child => {
                 const childGlobalIdx = sortedSessions.findIndex(s => s.id === child.id);
                 const isChildKeyboardSelected = activeFocus === 'sidebar' && childGlobalIdx === selectedSidebarIndex;
                 return (
@@ -1187,7 +1215,7 @@ export function SessionList(props: SessionListProps) {
         setPreFilterBookmarksCollapsed(null);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [sessionFilterOpen]);
 
   // Temporarily expand groups when filtering to show matching sessions
@@ -1227,7 +1255,7 @@ export function SessionList(props: SessionListProps) {
       setGroups(prev => prev.map(g => ({ ...g, collapsed: true })));
       setBookmarksCollapsed(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [sessionFilter]);
 
   // Get the jump number (1-9, 0=10th) for a session based on its position in visibleSessions
@@ -2069,6 +2097,7 @@ export function SessionList(props: SessionListProps) {
                   theme={theme}
                   gitFileCount={gitFileCounts.get(session.id)}
                   groupName={groups.find(g => g.id === session.groupId)?.name}
+                  isInBatch={isInBatch}
                 />
               </div>
             </div>

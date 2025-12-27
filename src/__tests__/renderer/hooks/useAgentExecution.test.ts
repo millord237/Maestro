@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useAgentExecution } from '../../../renderer/hooks/useAgentExecution';
+import { useAgentExecution } from '../../../renderer/hooks';
 import type { Session, AITab, UsageStats, QueuedItem } from '../../../renderer/types';
 
 const createMockTab = (overrides: Partial<AITab> = {}): AITab => ({

@@ -4,7 +4,7 @@ import {
   useSendToAgent,
   useSendToAgentWithSessions,
   type TransferRequest,
-} from '../../../renderer/hooks/useSendToAgent';
+} from '../../../renderer/hooks';
 import type { Session, AITab, LogEntry, ToolType } from '../../../renderer/types';
 import type { SendToAgentOptions } from '../../../renderer/components/SendToAgentModal';
 import * as contextGroomer from '../../../renderer/services/contextGroomer';

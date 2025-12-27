@@ -41,13 +41,6 @@ interface BatchRunnerModalProps {
   sessionId: string;
 }
 
-// Helper function to count unchecked tasks in scratchpad content
-function countUncheckedTasks(content: string): number {
-  if (!content) return 0;
-  const matches = content.match(/^-\s*\[\s*\]/gm);
-  return matches ? matches.length : 0;
-}
-
 // Helper function to format the last modified date
 function formatLastModified(timestamp: number): string {
   const date = new Date(timestamp);
@@ -200,7 +193,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
   // Count missing documents for warning display
   const missingDocCount = documents.filter(doc => doc.isMissing).length;
-  const hasMissingDocs = missingDocCount > 0;
+  const _hasMissingDocs = missingDocCount > 0;
 
   // Register layer on mount
   useEffect(() => {
@@ -227,6 +220,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         unregisterLayer(layerIdRef.current);
       }
     };
+     
   }, [registerLayer, unregisterLayer, showSavePlaybookModal, showDeleteConfirmModal, handleCancelDeletePlaybook]);
 
   // Update handler when dependencies change
@@ -242,6 +236,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         }
       });
     }
+     
   }, [onClose, updateLayerHandler, showSavePlaybookModal, showDeleteConfirmModal, handleCancelDeletePlaybook]);
 
   // Focus textarea on mount

@@ -517,6 +517,45 @@ export function calculateTotalTokens(contexts: ContextSource[]): number {
 }
 
 /**
+ * Convert log entries to a simple text format for clipboard copying.
+ * Only includes user messages and AI responses - excludes thinking, system prompts,
+ * tool calls, and other internal entries.
+ *
+ * @param logs - Array of log entries to convert
+ * @returns Plain text with USER/ASSISTANT labels
+ *
+ * @example
+ * const text = formatLogsForClipboard(tab.logs);
+ * // Returns:
+ * // USER:
+ * // How do I implement feature X?
+ * //
+ * // ASSISTANT:
+ * // To implement feature X, you should...
+ */
+export function formatLogsForClipboard(logs: LogEntry[]): string {
+  const sections: string[] = [];
+
+  for (const log of logs) {
+    // Skip empty entries
+    if (!log.text || log.text.trim() === '') {
+      continue;
+    }
+
+    // Only include user messages and AI responses
+    // AI responses can be 'ai' or 'stdout' depending on the agent
+    if (log.source === 'user') {
+      sections.push(`USER:\n${log.text}`);
+    } else if (log.source === 'ai' || log.source === 'stdout') {
+      sections.push(`ASSISTANT:\n${log.text}`);
+    }
+    // Skip: thinking, tool, system, stderr, error
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
  * Get a summary of context sources for display purposes.
  *
  * @param contexts - Array of context sources

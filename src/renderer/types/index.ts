@@ -22,7 +22,6 @@ export type {
 // Import for extension in this file
 import type {
   WorktreeConfig as BaseWorktreeConfig,
-  BatchRunConfig as BaseBatchRunConfig,
   BatchDocumentEntry,
   UsageStats,
   ToolType,
@@ -164,10 +163,17 @@ export interface BatchRunConfig {
   worktree?: WorktreeConfig;     // Optional worktree configuration
 }
 
+// Import BatchProcessingState for state machine integration
+import type { BatchProcessingState } from '../hooks/batch/batchStateMachine';
+
 // Batch processing state
 export interface BatchRunState {
   isRunning: boolean;
   isStopping: boolean; // Waiting for current task to finish before stopping
+
+  // State machine integration (Phase 11)
+  // Tracks explicit processing state for invariant checking and debugging
+  processingState?: BatchProcessingState;
 
   // Document-level progress (multi-document support)
   documents: string[];           // Ordered list of document filenames to process
@@ -245,6 +251,16 @@ export interface AutoRunStats {
   lastBadgeUnlockLevel: number;   // Last badge level that triggered unlock notification
   lastAcknowledgedBadgeLevel: number; // Last badge level user clicked "Take a Bow" on
   badgeHistory: BadgeUnlockRecord[]; // History of badge unlocks with timestamps
+}
+
+// Maestro usage peak statistics (survives app restarts)
+// These track maximum usage peaks for achievement display
+export interface MaestroUsageStats {
+  maxAgents: number;                  // Maximum number of agents active at once
+  maxDefinedAgents: number;           // Maximum number of defined agents (ever configured)
+  maxSimultaneousAutoRuns: number;    // Maximum concurrent Auto Run sessions
+  maxSimultaneousQueries: number;     // Maximum concurrent AI queries
+  maxQueueDepth: number;              // Maximum number of queued queries at once
 }
 
 // Onboarding analytics statistics (survives app restarts)

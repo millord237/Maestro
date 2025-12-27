@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useKeyboardNavigation, UseKeyboardNavigationDeps } from '../../../renderer/hooks/useKeyboardNavigation';
+import { useKeyboardNavigation, UseKeyboardNavigationDeps } from '../../../renderer/hooks';
 import type { Session, Group, FocusArea } from '../../../renderer/types';
 
 // Create a mock session

@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useGroupManagement, type UseGroupManagementDeps } from '../../../renderer/hooks/useGroupManagement';
+import { useGroupManagement, type UseGroupManagementDeps } from '../../../renderer/hooks';
 import type { Group, Session } from '../../../renderer/types';
 
 // ============================================================================

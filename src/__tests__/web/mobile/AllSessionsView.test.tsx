@@ -900,7 +900,7 @@ describe('AllSessionsView', () => {
   });
 
   describe('integration scenarios', () => {
-    it('complete user flow: search, expand group, select session', async () => {
+    it('complete user flow: search, auto-expand group, select session', async () => {
       const onSelectSession = vi.fn();
       const onClose = vi.fn();
       const sessions = [
@@ -915,21 +915,18 @@ describe('AllSessionsView', () => {
       const searchInput = screen.getByPlaceholderText('Search agents...');
       fireEvent.change(searchInput, { target: { value: 'end' } });
 
-      // Only Frontend and Backend should match
+      // 2. Wait for search results and auto-expand to complete
+      // Groups with matching sessions should auto-expand when searching
       await waitFor(() => {
+        // Only Frontend and Backend should match
         expect(screen.getByText('Dev')).toBeInTheDocument();
         expect(screen.queryByText('Database')).not.toBeInTheDocument();
+        // Sessions should be visible due to auto-expand
+        expect(screen.getByText('Frontend')).toBeInTheDocument();
+        expect(screen.getByText('Backend')).toBeInTheDocument();
       });
 
-      // 2. Expand Dev group
-      const devGroup = screen.getByRole('button', { name: /Dev group/i });
-      fireEvent.click(devGroup);
-
-      // 3. Sessions should be visible
-      expect(screen.getByText('Frontend')).toBeInTheDocument();
-      expect(screen.getByText('Backend')).toBeInTheDocument();
-
-      // 4. Select Backend
+      // 3. Select Backend
       const backendCard = screen.getByRole('button', { name: /Backend session/i });
       fireEvent.click(backendCard);
 

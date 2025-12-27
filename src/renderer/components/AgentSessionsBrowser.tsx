@@ -7,10 +7,13 @@ import { SessionActivityGraph, type ActivityEntry } from './SessionActivityGraph
 import { SessionListItem } from './SessionListItem';
 import { ToolCallCard, getToolName } from './ToolCallCard';
 import { formatSize, formatNumber, formatTokens, formatRelativeTime } from '../utils/formatters';
-import { useSessionViewer, type ClaudeSession } from '../hooks/useSessionViewer';
-import { useSessionPagination } from '../hooks/useSessionPagination';
-import { useFilteredAndSortedSessions } from '../hooks/useFilteredAndSortedSessions';
-import { useClickOutside } from '../hooks';
+import {
+  useSessionViewer,
+  useSessionPagination,
+  useFilteredAndSortedSessions,
+  useClickOutside,
+  type ClaudeSession,
+} from '../hooks';
 
 type SearchMode = 'title' | 'user' | 'assistant' | 'all';
 
@@ -336,7 +339,7 @@ export function AgentSessionsBrowser({
     }
 
     cancelRename();
-  }, [activeSession?.projectRoot, agentId, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab, updateSession]);
+  }, [activeSession?.projectRoot, agentId, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab, updateSession, setViewingSession]);
 
   // Auto-view session when activeAgentSessionId is provided (e.g., from history panel click)
   useEffect(() => {

@@ -113,6 +113,9 @@ export const MODAL_PRIORITIES = {
   /** Auto Run lightbox (above expanded modal so Escape closes it first) */
   AUTORUN_LIGHTBOX: 715,
 
+  /** Auto Run reset tasks confirmation modal */
+  AUTORUN_RESET_TASKS: 712,
+
   /** Quick actions command palette (Cmd+K) */
   QUICK_ACTION: 700,
 
