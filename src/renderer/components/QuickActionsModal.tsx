@@ -6,6 +6,7 @@ import { useLayerStack } from '../contexts/LayerStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { gitService } from '../services/git';
+import { getOpenSpecCommand } from '../services/openspec';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import type { WizardStep } from './Wizard/WizardContext';
 import { useListNavigation } from '../hooks';
@@ -99,6 +100,8 @@ interface QuickActionsModalProps {
   onCloseOtherTabs?: () => void;
   onCloseTabsLeft?: () => void;
   onCloseTabsRight?: () => void;
+  // OpenSpec commands
+  onInjectOpenSpecPrompt?: (prompt: string) => void;
 }
 
 export function QuickActionsModal(props: QuickActionsModalProps) {
@@ -118,7 +121,8 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     hasActiveSessionCapability, onOpenMergeSession, onOpenSendToAgent, onOpenCreatePR,
     onSummarizeAndContinue, canSummarizeActiveTab,
     autoRunSelectedDocument, autoRunCompletedTaskCount, onAutoRunResetTasks,
-    onCloseAllTabs, onCloseOtherTabs, onCloseTabsLeft, onCloseTabsRight
+    onCloseAllTabs, onCloseOtherTabs, onCloseTabsLeft, onCloseTabsRight,
+    onInjectOpenSpecPrompt
   } = props;
 
   const [search, setSearch] = useState('');
@@ -400,6 +404,69 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     ...(onNewGroupChat && sessions.filter(s => s.toolType !== 'terminal').length >= 2 ? [{ id: 'newGroupChat', label: 'New Group Chat', action: () => { onNewGroupChat(); setQuickActionOpen(false); } }] : []),
     ...(activeGroupChatId && onCloseGroupChat ? [{ id: 'closeGroupChat', label: 'Close Group Chat', action: () => { onCloseGroupChat(); setQuickActionOpen(false); } }] : []),
     ...(activeGroupChatId && onDeleteGroupChat && groupChats ? [{ id: 'deleteGroupChat', label: `Remove Group Chat: ${groupChats.find(c => c.id === activeGroupChatId)?.name || 'Group Chat'}`, shortcut: shortcuts.killInstance, action: () => { onDeleteGroupChat(activeGroupChatId); setQuickActionOpen(false); } }] : []),
+    // OpenSpec commands - inject prompt when selected
+    ...(onInjectOpenSpecPrompt ? [
+      {
+        id: 'openspec-proposal',
+        label: 'OpenSpec: Create Proposal',
+        subtext: 'Create a new change proposal',
+        action: async () => {
+          const cmd = await getOpenSpecCommand('/openspec.proposal');
+          if (cmd) {
+            onInjectOpenSpecPrompt(cmd.prompt);
+          }
+          setQuickActionOpen(false);
+        }
+      },
+      {
+        id: 'openspec-apply',
+        label: 'OpenSpec: Apply Changes',
+        subtext: 'Apply an approved change proposal',
+        action: async () => {
+          const cmd = await getOpenSpecCommand('/openspec.apply');
+          if (cmd) {
+            onInjectOpenSpecPrompt(cmd.prompt);
+          }
+          setQuickActionOpen(false);
+        }
+      },
+      {
+        id: 'openspec-archive',
+        label: 'OpenSpec: Archive Change',
+        subtext: 'Archive a completed change',
+        action: async () => {
+          const cmd = await getOpenSpecCommand('/openspec.archive');
+          if (cmd) {
+            onInjectOpenSpecPrompt(cmd.prompt);
+          }
+          setQuickActionOpen(false);
+        }
+      },
+      {
+        id: 'openspec-implement',
+        label: 'OpenSpec: Generate Auto Run',
+        subtext: 'Generate Auto Run document from proposal',
+        action: async () => {
+          const cmd = await getOpenSpecCommand('/openspec.implement');
+          if (cmd) {
+            onInjectOpenSpecPrompt(cmd.prompt);
+          }
+          setQuickActionOpen(false);
+        }
+      },
+      {
+        id: 'openspec-help',
+        label: 'OpenSpec: Help',
+        subtext: 'Show OpenSpec workflow help',
+        action: async () => {
+          const cmd = await getOpenSpecCommand('/openspec.help');
+          if (cmd) {
+            onInjectOpenSpecPrompt(cmd.prompt);
+          }
+          setQuickActionOpen(false);
+        }
+      }
+    ] : []),
     // Debug commands - only visible when user types "debug"
     { id: 'debugResetBusy', label: 'Debug: Reset Busy State', subtext: 'Clear stuck thinking/busy state for all sessions', action: () => {
       // Reset all sessions and tabs to idle state

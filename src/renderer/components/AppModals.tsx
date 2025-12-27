@@ -746,6 +746,8 @@ export interface AppUtilityModalsProps {
   autoRunSelectedDocument: string | null;
   autoRunCompletedTaskCount: number;
   onAutoRunResetTasks: () => void;
+  // OpenSpec commands
+  onInjectOpenSpecPrompt?: (prompt: string) => void;
 
   // LightboxModal
   lightboxImage: string | null;
@@ -908,6 +910,7 @@ export function AppUtilityModals({
   autoRunSelectedDocument,
   autoRunCompletedTaskCount,
   onAutoRunResetTasks,
+  onInjectOpenSpecPrompt,
   // LightboxModal
   lightboxImage,
   lightboxImages,
@@ -1046,6 +1049,7 @@ export function AppUtilityModals({
           autoRunSelectedDocument={autoRunSelectedDocument}
           autoRunCompletedTaskCount={autoRunCompletedTaskCount}
           onAutoRunResetTasks={onAutoRunResetTasks}
+          onInjectOpenSpecPrompt={onInjectOpenSpecPrompt}
         />
       )}
 
@@ -1719,6 +1723,7 @@ export interface AppModalsProps {
   autoRunSelectedDocument: string | null;
   autoRunCompletedTaskCount: number;
   onAutoRunResetTasks: () => void;
+  onInjectOpenSpecPrompt?: (prompt: string) => void;
   lightboxImage: string | null;
   lightboxImages: string[];
   stagedImages: string[];
@@ -1981,6 +1986,7 @@ export function AppModals(props: AppModalsProps) {
     autoRunSelectedDocument,
     autoRunCompletedTaskCount,
     onAutoRunResetTasks,
+    onInjectOpenSpecPrompt,
     lightboxImage,
     lightboxImages,
     stagedImages,
@@ -2261,6 +2267,7 @@ export function AppModals(props: AppModalsProps) {
         autoRunSelectedDocument={autoRunSelectedDocument}
         autoRunCompletedTaskCount={autoRunCompletedTaskCount}
         onAutoRunResetTasks={onAutoRunResetTasks}
+        onInjectOpenSpecPrompt={onInjectOpenSpecPrompt}
         lightboxImage={lightboxImage}
         lightboxImages={lightboxImages}
         stagedImages={stagedImages}
