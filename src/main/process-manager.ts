@@ -273,6 +273,9 @@ export class ProcessManager extends EventEmitter {
   spawn(config: ProcessConfig): { pid: number; success: boolean } {
     const { sessionId, toolType, cwd, command, args, requiresPty, prompt, shell, shellArgs, shellEnvVars, images, imageArgs, contextWindow, customEnvVars, noPromptSeparator } = config;
 
+    // Detect Windows early for logging decisions throughout the function
+    const isWindows = process.platform === 'win32';
+
     // For batch mode with images, use stream-json mode and send message via stdin
     // For batch mode without images, append prompt to args with -- separator (unless noPromptSeparator is true)
     const hasImages = images && images.length > 0;
@@ -320,16 +323,26 @@ export class ProcessManager extends EventEmitter {
       finalArgs = args;
     }
 
-    logger.debug('[ProcessManager] spawn() config', 'ProcessManager', {
+    // Log spawn config - use INFO level on Windows for easier debugging
+    const spawnConfigLogFn = isWindows ? logger.info.bind(logger) : logger.debug.bind(logger);
+    spawnConfigLogFn('[ProcessManager] spawn() config', 'ProcessManager', {
       sessionId,
       toolType,
+      platform: process.platform,
       hasPrompt: !!prompt,
+      promptLength: prompt?.length,
+      // On Windows, log first/last 100 chars of prompt to help debug truncation issues
+      promptPreview: prompt && isWindows ? {
+        first100: prompt.substring(0, 100),
+        last100: prompt.substring(Math.max(0, prompt.length - 100)),
+      } : undefined,
       hasImages,
       hasImageArgs: !!imageArgs,
       tempImageFilesCount: tempImageFiles.length,
-      promptValue: prompt,
-      baseArgs: args,
-      finalArgs
+      command,
+      commandHasExtension: path.extname(command).length > 0,
+      baseArgsCount: args.length,
+      finalArgsCount: finalArgs.length,
     });
 
     // Determine if this should use a PTY:
@@ -477,7 +490,7 @@ export class ProcessManager extends EventEmitter {
         // Electron's main process may have a limited PATH that doesn't include
         // user-installed binaries like node, which is needed for #!/usr/bin/env node scripts
         const env = { ...process.env };
-        const isWindows = process.platform === 'win32';
+        // isWindows is already defined at function scope
         const home = os.homedir();
 
         // Platform-specific standard paths
@@ -596,16 +609,22 @@ export class ProcessManager extends EventEmitter {
               }
               return arg;
             });
-            logger.debug('[ProcessManager] Escaped args for Windows shell', 'ProcessManager', {
+            // Use INFO level on Windows to ensure this appears in logs for debugging
+            logger.info('[ProcessManager] Escaped args for Windows shell', 'ProcessManager', {
               originalArgsCount: finalArgs.length,
               escapedArgsCount: spawnArgs.length,
-              // Log first 200 chars of each arg for debugging
-              argsPreview: spawnArgs.map(a => a.substring(0, 200)),
+              // Log the escaped prompt arg specifically (usually the last arg)
+              escapedPromptArgLength: spawnArgs[spawnArgs.length - 1]?.length,
+              escapedPromptArgPreview: spawnArgs[spawnArgs.length - 1]?.substring(0, 200),
+              // Log if any args were modified
+              argsModified: finalArgs.some((arg, i) => arg !== spawnArgs[i]),
             });
           }
         }
 
-        logger.debug('[ProcessManager] About to spawn with shell option', 'ProcessManager', {
+        // Use INFO level on Windows for visibility
+        const spawnLogFn = isWindows ? logger.info.bind(logger) : logger.debug.bind(logger);
+        spawnLogFn('[ProcessManager] About to spawn with shell option', 'ProcessManager', {
           sessionId,
           spawnCommand,
           useShell,
@@ -613,6 +632,8 @@ export class ProcessManager extends EventEmitter {
           argsCount: spawnArgs.length,
           // Log prompt arg length if present (last arg after '--')
           promptArgLength: prompt ? spawnArgs[spawnArgs.length - 1]?.length : undefined,
+          // Log the full command that will be executed (for debugging)
+          fullCommandPreview: `${spawnCommand} ${spawnArgs.slice(0, 5).join(' ')}${spawnArgs.length > 5 ? ' ...' : ''}`,
         });
 
         const childProcess = spawn(spawnCommand, spawnArgs, {

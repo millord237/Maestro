@@ -643,6 +643,10 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('logger:newLog', handler);
       return () => ipcRenderer.removeListener('logger:newLog', handler);
     },
+    // File logging (enabled by default on Windows for debugging)
+    getLogFilePath: () => ipcRenderer.invoke('logger:getLogFilePath') as Promise<string>,
+    isFileLoggingEnabled: () => ipcRenderer.invoke('logger:isFileLoggingEnabled') as Promise<boolean>,
+    enableFileLogging: () => ipcRenderer.invoke('logger:enableFileLogging') as Promise<void>,
   },
 
   // Claude Code sessions API

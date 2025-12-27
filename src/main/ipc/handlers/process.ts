@@ -98,16 +98,27 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 
       // Get agent definition to access config options and argument builders
       const agent = await agentDetector.getAgent(config.toolType);
-      logger.debug(`Spawn config received`, LOG_CONTEXT, {
+      // Use INFO level on Windows for better visibility in logs
+      const isWindows = process.platform === 'win32';
+      const logFn = isWindows ? logger.info.bind(logger) : logger.debug.bind(logger);
+      logFn(`Spawn config received`, LOG_CONTEXT, {
+        platform: process.platform,
         configToolType: config.toolType,
         configCommand: config.command,
         agentId: agent?.id,
         agentCommand: agent?.command,
         agentPath: agent?.path,
+        agentPathExtension: agent?.path ? require('path').extname(agent.path) : 'none',
         hasAgentSessionId: !!config.agentSessionId,
         hasPrompt: !!config.prompt,
         promptLength: config.prompt?.length,
-        promptValue: config.prompt,
+        // On Windows, show prompt preview to help debug truncation issues
+        promptPreview: config.prompt && isWindows ? {
+          first50: config.prompt.substring(0, 50),
+          last50: config.prompt.substring(Math.max(0, config.prompt.length - 50)),
+          containsHash: config.prompt.includes('#'),
+          containsNewline: config.prompt.includes('\n'),
+        } : undefined,
       });
       let finalArgs = buildAgentArgs(agent, {
         baseArgs: config.args,

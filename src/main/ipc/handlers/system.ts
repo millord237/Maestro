@@ -284,6 +284,21 @@ export function registerSystemHandlers(deps: SystemHandlerDependencies): void {
     return logger.getMaxLogBuffer();
   });
 
+  // Get the path to the debug log file (useful for Windows debugging)
+  ipcMain.handle('logger:getLogFilePath', async () => {
+    return logger.getLogFilePath();
+  });
+
+  // Check if file logging is enabled
+  ipcMain.handle('logger:isFileLoggingEnabled', async () => {
+    return logger.isFileLoggingEnabled();
+  });
+
+  // Enable file logging (automatically enabled on Windows)
+  ipcMain.handle('logger:enableFileLogging', async () => {
+    logger.enableFileLogging();
+  });
+
   // ============ Sync (Custom Storage Location) Handlers ============
 
   // List of settings files that should be migrated

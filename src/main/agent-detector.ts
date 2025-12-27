@@ -265,8 +265,25 @@ export class AgentDetector {
       });
     }
 
-    const availableAgents = agents.filter(a => a.available).map(a => a.name);
-    logger.info(`Agent detection complete. Available: ${availableAgents.join(', ') || 'none'}`, 'AgentDetector');
+    const availableAgents = agents.filter(a => a.available);
+    const isWindows = process.platform === 'win32';
+
+    // On Windows, log detailed path info to help debug shell execution issues
+    if (isWindows) {
+      logger.info(`Agent detection complete (Windows)`, 'AgentDetector', {
+        platform: process.platform,
+        agents: availableAgents.map(a => ({
+          id: a.id,
+          name: a.name,
+          path: a.path,
+          pathExtension: a.path ? path.extname(a.path) : 'none',
+          // .exe = direct execution, .cmd = requires shell
+          willUseShell: a.path ? (a.path.toLowerCase().endsWith('.cmd') || a.path.toLowerCase().endsWith('.bat') || !path.extname(a.path)) : true,
+        })),
+      });
+    } else {
+      logger.info(`Agent detection complete. Available: ${availableAgents.map(a => a.name).join(', ') || 'none'}`, 'AgentDetector');
+    }
 
     this.cachedAgents = agents;
     return agents;
