@@ -21,6 +21,7 @@ import { needsSessionRecovery, initiateSessionRecovery } from './group-chat/sess
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
+import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
 
 // ============================================================================
@@ -148,6 +149,9 @@ interface MaestroSettings {
   // Web interface custom port
   webInterfaceUseCustomPort: boolean;
   webInterfaceCustomPort: number;
+  // SSH remote execution
+  sshRemotes: SshRemoteConfig[];
+  defaultSshRemoteId: string | null;
 }
 
 const store = new Store<MaestroSettings>({
@@ -168,6 +172,8 @@ const store = new Store<MaestroSettings>({
     webAuthToken: null,
     webInterfaceUseCustomPort: false,
     webInterfaceCustomPort: 8080,
+    sshRemotes: [],
+    defaultSshRemoteId: null,
   },
 });
 
