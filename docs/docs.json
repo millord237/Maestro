@@ -1,11 +1,97 @@
 {
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
   "name": "Maestro",
-  "logo": "/build/icon.png",
+  "description": "Maestro hones fractured attention into focused intent.",
+  "logo": {
+    "light": "/build/icon.png",
+    "dark": "/build/icon.png",
+    "href": "https://runmaestro.ai"
+  },
   "favicon": "/build/icon.ico",
-  "navigation": [
-    {
-      "group": "Overview",
-      "pages": ["index"]
+  "colors": {
+    "primary": "#0EA5E9",
+    "light": "#F8FAFC",
+    "dark": "#0F172A"
+  },
+  "navigation": {
+    "dropdowns": [
+      {
+        "dropdown": "Docs",
+        "icon": "book",
+        "description": "Everything you need to use Maestro",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "index",
+              "about/overview",
+              "features",
+              "screenshots"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "installation",
+              "getting-started"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "general-usage",
+              "keyboard-shortcuts",
+              "slash-commands",
+              "git-worktrees",
+              "group-chat",
+              "autorun-playbooks",
+              "context-management",
+              "achievements"
+            ]
+          },
+          {
+            "group": "CLI & Providers",
+            "pages": [
+              "cli",
+              "provider-nuances"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "configuration",
+              "remote-access",
+              "troubleshooting",
+              "contributing",
+              "license"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/SrBsykvG"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/pedramamini/Maestro"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://github.com/pedramamini/maestro/releases"
     }
-  ]
+  },
+  "footer": {
+    "socials": {
+      "discord": "https://discord.gg/SrBsykvG",
+      "github": "https://github.com/pedramamini/Maestro"
+    }
+  }
 }
