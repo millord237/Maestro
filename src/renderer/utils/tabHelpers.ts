@@ -229,11 +229,7 @@ export function closeTab(session: Session, tabId: string, showUnreadOnly = false
       inputValue: '',
       stagedImages: [],
       createdAt: Date.now(),
-      state: 'idle',
-      // Inherit saveToHistory and showThinking from the closed tab
-      // to preserve user's preferences when closing the last tab
-      saveToHistory: tabToClose.saveToHistory ?? true,
-      showThinking: tabToClose.showThinking ?? false
+      state: 'idle'
     };
     updatedTabs = [freshTab];
     newActiveTabId = freshTab.id;

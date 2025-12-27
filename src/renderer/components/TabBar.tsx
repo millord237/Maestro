@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2 } from 'lucide-react';
 import type { AITab, Theme } from '../types';
@@ -628,10 +628,8 @@ function Tab({
  * TabBar component for displaying AI session tabs.
  * Shows tabs for each Claude Code conversation within a Maestro session.
  * Appears only in AI mode (hidden in terminal mode).
- *
- * PERFORMANCE: Memoized to prevent re-renders when parent state changes but props are the same.
  */
-function TabBarInner({
+export function TabBar({
   tabs,
   activeTabId,
   theme,
@@ -933,6 +931,3 @@ function TabBarInner({
     </div>
   );
 }
-
-// PERFORMANCE: Export memoized version to prevent unnecessary re-renders
-export const TabBar = memo(TabBarInner);
