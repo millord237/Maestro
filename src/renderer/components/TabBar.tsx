@@ -53,6 +53,10 @@ interface TabProps {
   onSendToAgent?: () => void;
   /** Handler to summarize and continue in a new tab */
   onSummarizeAndContinue?: () => void;
+  /** Handler to copy context to clipboard */
+  onCopyContext?: () => void;
+  /** Handler to export tab as HTML */
+  onExportHtml?: () => void;
   /** Handler to close other tabs */
   onCloseOthers?: () => void;
   /** Handler to close tabs to the left */
@@ -134,6 +138,8 @@ function Tab({
   onMergeWith,
   onSendToAgent,
   onSummarizeAndContinue,
+  onCopyContext,
+  onExportHtml,
   onCloseOthers,
   onCloseLeft,
   onCloseRight,
@@ -670,8 +676,8 @@ export function TabBar({
   // Can always close tabs - closing the last one creates a fresh new tab
   const canClose = true;
 
-  // Count unread tabs for the filter toggle tooltip
-  const unreadCount = tabs.filter(t => t.hasUnread).length;
+  // Count unread tabs for the filter toggle tooltip (reserved for future use)
+  const _unreadCount = tabs.filter(t => t.hasUnread).length;
 
   // Filter tabs based on unread filter state
   // When filter is on, show: unread tabs + active tab + tabs with drafts
@@ -722,16 +728,6 @@ export function TabBar({
       onRequestRename(tabId);
     }
   }, [onRequestRename]);
-
-  // Count unread tabs for the filter toggle tooltip
-  const unreadCount = tabs.filter(t => t.hasUnread).length;
-
-  // Filter tabs based on unread filter state
-  // When filter is on, show: unread tabs + active tab + tabs with drafts
-  // The active tab disappears from the filtered list when user navigates away from it
-  const displayedTabs = showUnreadOnly
-    ? tabs.filter(t => t.hasUnread || t.id === activeTabId || hasDraft(t))
-    : tabs;
 
   // Check if tabs overflow the container (need sticky + button)
   useEffect(() => {
@@ -893,6 +889,8 @@ export function TabBar({
               onMergeWith={onMergeWith && tab.agentSessionId ? () => onMergeWith(tab.id) : undefined}
               onSendToAgent={onSendToAgent && tab.agentSessionId ? () => onSendToAgent(tab.id) : undefined}
               onSummarizeAndContinue={onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5 ? () => onSummarizeAndContinue(tab.id) : undefined}
+              onCopyContext={onCopyContext && (tab.logs?.length ?? 0) >= 1 ? () => onCopyContext(tab.id) : undefined}
+              onExportHtml={onExportHtml ? () => onExportHtml(tab.id) : undefined}
               onCloseOthers={() => handleCloseOthers(tab.id)}
               onCloseLeft={() => handleCloseLeft(tab.id)}
               onCloseRight={() => handleCloseRight(tab.id)}

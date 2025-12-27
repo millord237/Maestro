@@ -53,6 +53,9 @@ vi.mock('../../../../main/utils/logger', () => ({
     getLogLevel: vi.fn(),
     setMaxLogBuffer: vi.fn(),
     getMaxLogBuffer: vi.fn(),
+    getLogFilePath: vi.fn(),
+    isFileLoggingEnabled: vi.fn(),
+    enableFileLogging: vi.fn(),
     on: vi.fn(),
   },
 }));
@@ -214,6 +217,9 @@ describe('system IPC handlers', () => {
         'logger:getLogLevel',
         'logger:setMaxLogBuffer',
         'logger:getMaxLogBuffer',
+        'logger:getLogFilePath',
+        'logger:isFileLoggingEnabled',
+        'logger:enableFileLogging',
         // Sync handlers
         'sync:getDefaultPath',
         'sync:getSettings',
@@ -819,6 +825,37 @@ describe('system IPC handlers', () => {
       const result = await handler!({} as any);
 
       expect(result).toBe(1000);
+    });
+  });
+
+  describe('logger:getLogFilePath', () => {
+    it('should return log file path', async () => {
+      vi.mocked(logger.getLogFilePath).mockReturnValue('/tmp/maestro-debug.log');
+
+      const handler = handlers.get('logger:getLogFilePath');
+      const result = await handler!({} as any);
+
+      expect(result).toBe('/tmp/maestro-debug.log');
+    });
+  });
+
+  describe('logger:isFileLoggingEnabled', () => {
+    it('should return file logging status', async () => {
+      vi.mocked(logger.isFileLoggingEnabled).mockReturnValue(true);
+
+      const handler = handlers.get('logger:isFileLoggingEnabled');
+      const result = await handler!({} as any);
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('logger:enableFileLogging', () => {
+    it('should enable file logging', async () => {
+      const handler = handlers.get('logger:enableFileLogging');
+      await handler!({} as any);
+
+      expect(logger.enableFileLogging).toHaveBeenCalled();
     });
   });
 

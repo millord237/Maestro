@@ -6,7 +6,7 @@
  */
 
 // Debounce and throttle utilities
-export { useDebouncedValue, useThrottledCallback } from './useThrottle';
+export { useDebouncedValue, useThrottledCallback, useDebouncedCallback } from './useThrottle';
 
 // Debounced session persistence
 export { useDebouncedPersistence, DEFAULT_DEBOUNCE_DELAY } from './useDebouncedPersistence';

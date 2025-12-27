@@ -611,6 +611,14 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
             }
 
             // Substitute template variables in the system prompt
+            console.log('[useInputProcessing] Template substitution context:', {
+              sessionId: freshSession.id,
+              sessionName: freshSession.name,
+              autoRunFolderPath: freshSession.autoRunFolderPath,
+              fullPath: freshSession.fullPath,
+              cwd: freshSession.cwd,
+              parentSessionId: freshSession.parentSessionId,
+            });
             const substitutedSystemPrompt = substituteTemplateVariables(maestroSystemPrompt, {
               session: freshSession,
               gitBranch,

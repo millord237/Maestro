@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, startTransition, useRef, useCallback } from 'react';
 import { Terminal, Cpu, Keyboard, ImageIcon, X, ArrowUp, Eye, History, File, Folder, GitBranch, Tag, PenLine, Brain } from 'lucide-react';
 import type { Session, Theme, BatchRunState } from '../types';
 import type { TabCompletionSuggestion, TabCompletionFilter } from '../hooks';
@@ -649,49 +649,47 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
               onChange={e => {
                 const value = e.target.value;
                 const cursorPosition = e.target.selectionStart || 0;
+
+                // CRITICAL: Update input value immediately for responsive typing
                 setInputValue(value);
 
-                // Show slash command autocomplete when typing /
-                // Close when there's a space or newline (user is adding arguments or multiline content)
-                // Always show for built-in and custom commands, regardless of agent capability
-                if (value.startsWith('/') && !value.includes(' ') && !value.includes('\n')) {
-                  // Only reset selection when modal first opens, not on every keystroke
-                  if (!slashCommandOpen) {
-                    setSelectedSlashCommandIndex(0);
-                  }
-                  setSlashCommandOpen(true);
-                  // Clamp selection if filtered list shrinks (handled by safeSelectedIndex in render)
-                } else {
-                  setSlashCommandOpen(false);
-                }
-
-                // @ mention file completion (AI mode only)
-                // PERFORMANCE: Quick check with lastIndexOf before doing detailed scan
-                if (!isTerminalMode && setAtMentionOpen && setAtMentionFilter && setAtMentionStartIndex && setSelectedAtMentionIndex) {
-                  // Quick check: if no @ in the text before cursor, skip the detailed scan
-                  const textBeforeCursor = value.substring(0, cursorPosition);
-                  const lastAtPos = textBeforeCursor.lastIndexOf('@');
-
-                  if (lastAtPos === -1) {
-                    // No @ at all before cursor
-                    setAtMentionOpen(false);
+                // PERFORMANCE: Use startTransition for non-urgent UI updates
+                // This allows React to interrupt these updates if more keystrokes come in
+                startTransition(() => {
+                  // Show slash command autocomplete when typing /
+                  // Close when there's a space or newline (user is adding arguments or multiline content)
+                  if (value.startsWith('/') && !value.includes(' ') && !value.includes('\n')) {
+                    if (!slashCommandOpen) {
+                      setSelectedSlashCommandIndex(0);
+                    }
+                    setSlashCommandOpen(true);
                   } else {
-                    // Check if this @ could be a valid mention trigger
-                    // It must be at start or after whitespace, and text after it must not contain spaces
-                    const isValidTrigger = lastAtPos === 0 || /\s/.test(value[lastAtPos - 1]);
-                    const textAfterAt = value.substring(lastAtPos + 1, cursorPosition);
-                    const hasSpaceAfterAt = textAfterAt.includes(' ');
+                    setSlashCommandOpen(false);
+                  }
 
-                    if (isValidTrigger && !hasSpaceAfterAt) {
-                      setAtMentionOpen(true);
-                      setAtMentionFilter(textAfterAt);
-                      setAtMentionStartIndex(lastAtPos);
-                      setSelectedAtMentionIndex(0);
-                    } else {
+                  // @ mention file completion (AI mode only)
+                  if (!isTerminalMode && setAtMentionOpen && setAtMentionFilter && setAtMentionStartIndex && setSelectedAtMentionIndex) {
+                    const textBeforeCursor = value.substring(0, cursorPosition);
+                    const lastAtPos = textBeforeCursor.lastIndexOf('@');
+
+                    if (lastAtPos === -1) {
                       setAtMentionOpen(false);
+                    } else {
+                      const isValidTrigger = lastAtPos === 0 || /\s/.test(value[lastAtPos - 1]);
+                      const textAfterAt = value.substring(lastAtPos + 1, cursorPosition);
+                      const hasSpaceAfterAt = textAfterAt.includes(' ');
+
+                      if (isValidTrigger && !hasSpaceAfterAt) {
+                        setAtMentionOpen(true);
+                        setAtMentionFilter(textAfterAt);
+                        setAtMentionStartIndex(lastAtPos);
+                        setSelectedAtMentionIndex(0);
+                      } else {
+                        setAtMentionOpen(false);
+                      }
                     }
                   }
-                }
+                });
 
                 // PERFORMANCE: Auto-grow logic deferred to next animation frame
                 // This prevents layout thrashing from blocking the keystroke handling

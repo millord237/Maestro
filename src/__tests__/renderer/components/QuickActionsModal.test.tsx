@@ -108,6 +108,9 @@ const createMockSession = (overrides: Partial<Session> = {}): Session => ({
   fileTree: [],
   fileExplorerExpanded: [],
   messageQueue: [],
+  aiTabs: [{ id: 'tab-1', name: 'Tab 1', logs: [] }],
+  activeTabId: 'tab-1',
+  closedTabHistory: [],
   ...overrides,
 });
 

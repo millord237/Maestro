@@ -80,3 +80,68 @@ export function useThrottledCallback<T extends (...args: unknown[]) => void>(
 
   return throttled;
 }
+
+/**
+ * Returns a debounced callback that only executes after the specified
+ * delay has passed without being called again.
+ *
+ * Useful for search input, filter updates, and other cases where you
+ * want to wait for user to stop typing before processing.
+ *
+ * @param callback - The callback to debounce
+ * @param delay - Delay in milliseconds before executing
+ * @returns Debounced callback and flush function
+ */
+export function useDebouncedCallback<T extends (...args: unknown[]) => void>(
+  callback: T,
+  delay: number
+): { debouncedCallback: T; flush: () => void; cancel: () => void } {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callbackRef = useRef(callback);
+  const pendingArgsRef = useRef<Parameters<T> | null>(null);
+
+  // Keep callback ref up to date
+  callbackRef.current = callback;
+
+  const cancel = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    pendingArgsRef.current = null;
+  }, []);
+
+  const flush = useCallback(() => {
+    if (timeoutRef.current && pendingArgsRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      callbackRef.current(...pendingArgsRef.current);
+      pendingArgsRef.current = null;
+    }
+  }, []);
+
+  const debouncedCallback = useCallback((...args: Parameters<T>) => {
+    pendingArgsRef.current = args;
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      callbackRef.current(...args);
+      timeoutRef.current = null;
+      pendingArgsRef.current = null;
+    }, delay);
+  }, [delay]) as T;
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return { debouncedCallback, flush, cancel };
+}

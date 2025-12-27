@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionList } from './components/SessionList';
 import { RightPanel, RightPanelHandle } from './components/RightPanel';
@@ -363,6 +363,12 @@ function MaestroConsoleInner() {
     commandHistoryFilter, setCommandHistoryFilter,
     commandHistorySelectedIndex, setCommandHistorySelectedIndex,
   } = useInputContext();
+
+  // PERFORMANCE: Defer filter values to allow typing to stay responsive
+  // The suggestions will trail slightly behind the input, but typing won't lag
+  const deferredAtMentionFilter = useDeferredValue(atMentionFilter);
+  const deferredTabCompletionFilter = useDeferredValue(tabCompletionFilter);
+  const deferredCommandHistoryFilter = useDeferredValue(commandHistoryFilter);
 
   // UI State
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
@@ -3322,21 +3328,22 @@ function MaestroConsoleInner() {
 
   // Tab completion suggestions (must be after inputValue is defined)
   // PERF: Depend on specific session properties, not the entire activeSession object
+  // PERFORMANCE: Use deferred filter values for suggestions to keep typing responsive
   const tabCompletionSuggestions = useMemo(() => {
     if (!tabCompletionOpen || !activeSessionId || activeSessionInputMode !== 'terminal') {
       return [];
     }
-    return getTabCompletionSuggestions(inputValue, tabCompletionFilter);
-  }, [tabCompletionOpen, activeSessionId, activeSessionInputMode, inputValue, tabCompletionFilter, getTabCompletionSuggestions]);
+    return getTabCompletionSuggestions(inputValue, deferredTabCompletionFilter);
+  }, [tabCompletionOpen, activeSessionId, activeSessionInputMode, inputValue, deferredTabCompletionFilter, getTabCompletionSuggestions]);
 
   // @ mention suggestions for AI mode
-  // PERF: Depend on specific session properties, not the entire activeSession object
+  // PERF: Use deferred filter to allow typing to stay responsive
   const atMentionSuggestions = useMemo(() => {
     if (!atMentionOpen || !activeSessionId || activeSessionInputMode !== 'ai') {
       return [];
     }
-    return getAtMentionSuggestions(atMentionFilter);
-  }, [atMentionOpen, activeSessionId, activeSessionInputMode, atMentionFilter, getAtMentionSuggestions]);
+    return getAtMentionSuggestions(deferredAtMentionFilter);
+  }, [atMentionOpen, activeSessionId, activeSessionInputMode, deferredAtMentionFilter, getAtMentionSuggestions]);
 
   // Sync file tree selection to match tab completion suggestion
   // This highlights the corresponding file/folder in the right panel when navigating tab completion
@@ -6289,6 +6296,14 @@ function MaestroConsoleInner() {
           }
 
           // Substitute template variables in the system prompt
+          console.log('[processQueuedItem] Template substitution context:', {
+            sessionId: session.id,
+            sessionName: session.name,
+            autoRunFolderPath: session.autoRunFolderPath,
+            fullPath: session.fullPath,
+            cwd: session.cwd,
+            parentSessionId: session.parentSessionId,
+          });
           const substitutedSystemPrompt = substituteTemplateVariables(maestroSystemPrompt, {
             session,
             gitBranch,
@@ -8198,106 +8213,6 @@ function MaestroConsoleInner() {
       </div>
       )}
 
-          }}
-          onToggleTabShowThinking={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.activeTabId) {
-              setSessions(prev => prev.map(s => {
-                if (s.id !== activeSession.id) return s;
-                return {
-                  ...s,
-                  aiTabs: s.aiTabs.map(tab => {
-                    if (tab.id !== s.activeTabId) return tab;
-                    // When turning OFF, clear any thinking/tool logs
-                    if (tab.showThinking) {
-                      return {
-                        ...tab,
-                        showThinking: false,
-                        logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
-                      };
-                    }
-                    return { ...tab, showThinking: true };
-                  })
-                };
-              }));
-            }
-          }}
-          onOpenTabSwitcher={() => {
-            if (activeSession?.inputMode === 'ai' && activeSession.aiTabs) {
-              setTabSwitcherOpen(true);
-            }
-          }}
-          setPlaygroundOpen={setPlaygroundOpen}
-          onRefreshGitFileState={async () => {
-            if (activeSessionId) {
-              // Refresh file tree, branches/tags, and history
-              await refreshGitFileState(activeSessionId);
-              // Also refresh git info in main panel header (branch, ahead/behind, uncommitted)
-              await mainPanelRef.current?.refreshGitInfo();
-              setSuccessFlashNotification('Files, Git, History Refreshed');
-              setTimeout(() => setSuccessFlashNotification(null), 2000);
-            }
-          }}
-          onDebugReleaseQueuedItem={() => {
-            if (!activeSession || activeSession.executionQueue.length === 0) return;
-            const [nextItem, ...remainingQueue] = activeSession.executionQueue;
-            // Update state to remove item from queue
-            setSessions(prev => prev.map(s => {
-              if (s.id !== activeSessionId) return s;
-              return { ...s, executionQueue: remainingQueue };
-            }));
-            // Process the item
-            processQueuedItem(activeSessionId, nextItem);
-            console.log('[Debug] Released queued item:', nextItem);
-          }}
-          markdownEditMode={markdownEditMode}
-          onToggleMarkdownEditMode={() => setMarkdownEditMode(!markdownEditMode)}
-          setUpdateCheckModalOpen={setUpdateCheckModalOpen}
-          openWizard={openWizardModal}
-          wizardGoToStep={wizardGoToStep}
-          setDebugWizardModalOpen={setDebugWizardModalOpen}
-          setDebugPackageModalOpen={setDebugPackageModalOpen}
-          startTour={() => {
-            setTourFromWizard(false);
-            setTourOpen(true);
-          }}
-          setFuzzyFileSearchOpen={setFuzzyFileSearchOpen}
-          onEditAgent={(session) => {
-            setEditAgentSession(session);
-            setEditAgentModalOpen(true);
-          }}
-          groupChats={groupChats}
-          onNewGroupChat={() => setShowNewGroupChatModal(true)}
-          onOpenGroupChat={handleOpenGroupChat}
-          onCloseGroupChat={handleCloseGroupChat}
-          onDeleteGroupChat={deleteGroupChatWithConfirmation}
-          activeGroupChatId={activeGroupChatId}
-          hasActiveSessionCapability={hasActiveSessionCapability}
-          onOpenMergeSession={() => setMergeSessionModalOpen(true)}
-          onOpenSendToAgent={() => setSendToAgentModalOpen(true)}
-          onOpenCreatePR={(session) => {
-            setCreatePRSession(session);
-            setCreatePRModalOpen(true);
-          }}
-          onSummarizeAndContinue={() => handleSummarizeAndContinue()}
-          canSummarizeActiveTab={activeSession ? canSummarize(activeSession.contextUsage) : false}
-          onToggleRemoteControl={async () => {
-            await toggleGlobalLive();
-            // Show flash notification based on the NEW state (opposite of current)
-            if (isLiveMode) {
-              // Was live, now offline
-              setSuccessFlashNotification('Remote Control: OFFLINE — See indicator at top of left panel');
-            } else {
-              // Was offline, now live
-              setSuccessFlashNotification('Remote Control: LIVE — See LIVE indicator at top of left panel for QR code');
-            }
-            setTimeout(() => setSuccessFlashNotification(null), 4000);
-          }}
-          onCloseAllTabs={handleCloseAllTabs}
-          onCloseOtherTabs={handleCloseOtherTabs}
-          onCloseTabsLeft={handleCloseTabsLeft}
-          onCloseTabsRight={handleCloseTabsRight}
-        />
-      )}
       {lightboxImage && (
         <LightboxModal
           image={lightboxImage}
@@ -8396,7 +8311,6 @@ function MaestroConsoleInner() {
           onClose={() => setUpdateCheckModalOpen(false)}
         />
       )}
->>>>>>> 402b706b (MAESTRO: Wire up tab close handlers to QuickActionsModal (Phases 3-4))
 
       {/* --- DEBUG PACKAGE MODAL --- */}
       <DebugPackageModal
