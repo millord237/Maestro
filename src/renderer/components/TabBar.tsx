@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2, Clipboard, Download } from 'lucide-react';
+import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2 } from 'lucide-react';
 import type { AITab, Theme } from '../types';
 import { hasDraft } from '../utils/tabHelpers';
 
@@ -53,10 +53,18 @@ interface TabProps {
   onSendToAgent?: () => void;
   /** Handler to summarize and continue in a new tab */
   onSummarizeAndContinue?: () => void;
-  /** Handler to copy conversation context to clipboard */
-  onCopyContext?: () => void;
-  /** Handler to export tab as HTML */
-  onExportHtml?: () => void;
+  /** Handler to close other tabs */
+  onCloseOthers?: () => void;
+  /** Handler to close tabs to the left */
+  onCloseLeft?: () => void;
+  /** Handler to close tabs to the right */
+  onCloseRight?: () => void;
+  /** Is this the first tab? */
+  isFirstTab?: boolean;
+  /** Is this the last tab? */
+  isLastTab?: boolean;
+  /** Is this the only tab? */
+  hasOnlyOneTab?: boolean;
   shortcutHint?: number | null;
   registerRef?: (el: HTMLDivElement | null) => void;
   hasDraft?: boolean;
@@ -126,8 +134,12 @@ function Tab({
   onMergeWith,
   onSendToAgent,
   onSummarizeAndContinue,
-  onCopyContext,
-  onExportHtml,
+  onCloseOthers,
+  onCloseLeft,
+  onCloseRight,
+  isFirstTab,
+  isLastTab,
+  hasOnlyOneTab,
   shortcutHint,
   registerRef,
   hasDraft
@@ -147,9 +159,10 @@ function Tab({
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    // Only show overlay for tabs with an established Claude session
-    // New/empty tabs don't have a session yet, so star/rename don't apply
-    if (!tab.agentSessionId) return;
+    // Only show overlay if there's something meaningful to show:
+    // - Tabs with sessions: always show (for session actions)
+    // - Tabs without sessions: only show if there are multiple tabs (for close actions)
+    if (!tab.agentSessionId && hasOnlyOneTab) return;
 
     // Open overlay after delay
     hoverTimeoutRef.current = setTimeout(() => {
@@ -238,15 +251,21 @@ function Tab({
     setOverlayOpen(false);
   };
 
-  const handleCopyContextClick = (e: React.MouseEvent) => {
+  const handleCloseOthersClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onCopyContext?.();
+    onCloseOthers?.();
     setOverlayOpen(false);
   };
 
-  const handleExportHtmlClick = (e: React.MouseEvent) => {
+  const handleCloseLeftClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onExportHtml?.();
+    onCloseLeft?.();
+    setOverlayOpen(false);
+  };
+
+  const handleCloseRightClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCloseRight?.();
     setOverlayOpen(false);
   };
 
@@ -393,31 +412,31 @@ function Tab({
             setIsHovered(false);
           }}
         >
-          {/* Header with session name and ID */}
-          <div
-            className="border-b"
-            style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
-          >
-            {/* Session name display */}
-            {tab.name && (
-              <div
-                className="px-3 py-2 text-sm font-medium"
-                style={{ color: theme.colors.textMain }}
-              >
-                {tab.name}
-              </div>
-            )}
+          {/* Header with session name and ID - only show for tabs with sessions */}
+          {tab.agentSessionId && (
+            <div
+              className="border-b"
+              style={{ backgroundColor: theme.colors.bgActivity, borderColor: theme.colors.border }}
+            >
+              {/* Session name display */}
+              {tab.name && (
+                <div
+                  className="px-3 py-2 text-sm font-medium"
+                  style={{ color: theme.colors.textMain }}
+                >
+                  {tab.name}
+                </div>
+              )}
 
-            {/* Session ID display */}
-            {tab.agentSessionId && (
+              {/* Session ID display */}
               <div
                 className="px-3 py-2 text-[10px] font-mono"
                 style={{ color: theme.colors.textDim }}
               >
                 {tab.agentSessionId}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="p-1">
@@ -448,23 +467,29 @@ function Tab({
               </button>
             )}
 
-            <button
-              onClick={handleRenameClick}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
-              style={{ color: theme.colors.textMain }}
-            >
-              <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-              Rename Tab
-            </button>
+            {/* Rename button - only show for tabs with established session */}
+            {tab.agentSessionId && (
+              <button
+                onClick={handleRenameClick}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Edit2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                Rename Tab
+              </button>
+            )}
 
-            <button
-              onClick={handleMarkUnreadClick}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
-              style={{ color: theme.colors.textMain }}
-            >
-              <Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-              Mark as Unread
-            </button>
+            {/* Mark as Unread button - only show for tabs with established session */}
+            {tab.agentSessionId && (
+              <button
+                onClick={handleMarkUnreadClick}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Mail className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                Mark as Unread
+              </button>
+            )}
 
             {/* Export as HTML - only show if tab has logs */}
             {(tab.logs?.length ?? 0) >= 1 && onExportHtml && (
@@ -530,6 +555,61 @@ function Tab({
                 Context: Send to Agent
               </button>
             )}
+
+            {/* Tab Close Actions Section - divider and close options */}
+            <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+
+            {/* Close Tab - disabled if only one tab */}
+            <button
+              onClick={handleCloseClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                hasOnlyOneTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={hasOnlyOneTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close
+            </button>
+
+            {/* Close Others - disabled if only one tab */}
+            <button
+              onClick={handleCloseOthersClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                hasOnlyOneTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={hasOnlyOneTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Others
+            </button>
+
+            {/* Close Tabs to the Left - disabled if first tab */}
+            <button
+              onClick={handleCloseLeftClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                isFirstTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={isFirstTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Tabs to the Left
+            </button>
+
+            {/* Close Tabs to the Right - disabled if last tab */}
+            <button
+              onClick={handleCloseRightClick}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                isLastTab ? 'opacity-40 cursor-default' : 'hover:bg-white/10'
+              }`}
+              style={{ color: theme.colors.textMain }}
+              disabled={isLastTab}
+            >
+              <X className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+              Close Tabs to the Right
+            </button>
           </div>
         </div>,
         document.body
@@ -590,6 +670,16 @@ export function TabBar({
   // Can always close tabs - closing the last one creates a fresh new tab
   const canClose = true;
 
+  // Count unread tabs for the filter toggle tooltip
+  const unreadCount = tabs.filter(t => t.hasUnread).length;
+
+  // Filter tabs based on unread filter state
+  // When filter is on, show: unread tabs + active tab + tabs with drafts
+  // The active tab disappears from the filtered list when user navigates away from it
+  const displayedTabs = showUnreadOnly
+    ? tabs.filter(t => t.hasUnread || t.id === activeTabId || hasDraft(t))
+    : tabs;
+
   const handleDragStart = useCallback((tabId: string, e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', tabId);
@@ -634,7 +724,7 @@ export function TabBar({
   }, [onRequestRename]);
 
   // Count unread tabs for the filter toggle tooltip
-  const _unreadCount = tabs.filter(t => t.hasUnread).length;
+  const unreadCount = tabs.filter(t => t.hasUnread).length;
 
   // Filter tabs based on unread filter state
   // When filter is on, show: unread tabs + active tab + tabs with drafts
@@ -662,6 +752,47 @@ export function TabBar({
       window.removeEventListener('resize', checkOverflow);
     };
   }, [tabs.length, displayedTabs.length]);
+
+  const handleCloseOthers = useCallback((tabId: string) => {
+    // Close all VISIBLE tabs except the specified one
+    displayedTabs.forEach(tab => {
+      if (tab.id !== tabId) {
+        onTabClose(tab.id);
+      }
+    });
+    // Set the specified tab as active if it wasn't already
+    if (activeTabId !== tabId) {
+      onTabSelect(tabId);
+    }
+  }, [displayedTabs, activeTabId, onTabClose, onTabSelect]);
+
+  const handleCloseLeft = useCallback((tabId: string) => {
+    // Find position in VISIBLE tabs
+    const clickedTabIndex = displayedTabs.findIndex(t => t.id === tabId);
+    // Close all VISIBLE tabs to the left of the clicked tab
+    for (let i = 0; i < clickedTabIndex; i++) {
+      onTabClose(displayedTabs[i].id);
+    }
+    // Set the clicked tab as active if the active tab was to the left
+    const activeTabIndex = displayedTabs.findIndex(t => t.id === activeTabId);
+    if (activeTabIndex < clickedTabIndex) {
+      onTabSelect(tabId);
+    }
+  }, [displayedTabs, activeTabId, onTabClose, onTabSelect]);
+
+  const handleCloseRight = useCallback((tabId: string) => {
+    // Find position in VISIBLE tabs
+    const clickedTabIndex = displayedTabs.findIndex(t => t.id === tabId);
+    // Close all VISIBLE tabs to the right of the clicked tab
+    for (let i = displayedTabs.length - 1; i > clickedTabIndex; i--) {
+      onTabClose(displayedTabs[i].id);
+    }
+    // Set the clicked tab as active if the active tab was to the right
+    const activeTabIndex = displayedTabs.findIndex(t => t.id === activeTabId);
+    if (activeTabIndex > clickedTabIndex) {
+      onTabSelect(tabId);
+    }
+  }, [displayedTabs, activeTabId, onTabClose, onTabSelect]);
 
   return (
     <div
@@ -728,6 +859,12 @@ export function TabBar({
         // Show separator between inactive tabs (not adjacent to active tab)
         const showSeparator = index > 0 && !isActive && !isPrevActive;
 
+        // Calculate position info for close actions (within visible tabs)
+        const displayedTabIndex = displayedTabs.findIndex(t => t.id === tab.id);
+        const isFirstTab = displayedTabIndex === 0;
+        const isLastTab = displayedTabIndex === displayedTabs.length - 1;
+        const hasOnlyOneTab = displayedTabs.length === 1;
+
         return (
           <React.Fragment key={tab.id}>
             {showSeparator && (
@@ -756,8 +893,12 @@ export function TabBar({
               onMergeWith={onMergeWith && tab.agentSessionId ? () => onMergeWith(tab.id) : undefined}
               onSendToAgent={onSendToAgent && tab.agentSessionId ? () => onSendToAgent(tab.id) : undefined}
               onSummarizeAndContinue={onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5 ? () => onSummarizeAndContinue(tab.id) : undefined}
-              onCopyContext={onCopyContext && (tab.logs?.length ?? 0) >= 1 ? () => onCopyContext(tab.id) : undefined}
-              onExportHtml={onExportHtml && (tab.logs?.length ?? 0) >= 1 ? () => onExportHtml(tab.id) : undefined}
+              onCloseOthers={() => handleCloseOthers(tab.id)}
+              onCloseLeft={() => handleCloseLeft(tab.id)}
+              onCloseRight={() => handleCloseRight(tab.id)}
+              isFirstTab={isFirstTab}
+              isLastTab={isLastTab}
+              hasOnlyOneTab={hasOnlyOneTab}
               shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
               hasDraft={hasDraft(tab)}
               registerRef={(el) => {
@@ -789,7 +930,6 @@ export function TabBar({
           <Plus className="w-4 h-4" />
         </button>
       </div>
-
     </div>
   );
 }
