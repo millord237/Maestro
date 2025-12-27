@@ -41,6 +41,19 @@ The command palette is your gateway to nearly every action in Maestro. Press `Cm
 | Toggle Markdown Raw/Preview | `Cmd+E` | `Ctrl+E` |
 | Insert Checkbox (Auto Run) | `Cmd+L` | `Ctrl+L` |
 
+## AI Tab Shortcuts
+
+These shortcuts work in AI Terminal mode and affect the current tab:
+
+| Action | macOS | Windows/Linux |
+|--------|-------|---------------|
+| Toggle History | `Cmd+S` | `Ctrl+S` |
+| Toggle Read-Only Mode | `Cmd+R` | `Ctrl+R` |
+| Toggle Show Thinking | `Cmd+Shift+K` | `Ctrl+Shift+K` |
+| Open Image Carousel | `Cmd+Y` | `Ctrl+Y` |
+
+Toggle states are saved per-tab. See [Input Toggles](./general-usage#input-toggles) for details on configuring defaults.
+
 ## Input & Output
 
 | Action | Key |
@@ -111,20 +124,42 @@ In AI mode, use `@` to reference files in your prompts:
 | Scroll | `Up/Down Arrow` | `Up/Down Arrow` |
 | Close | `Esc` | `Esc` |
 
-*Most shortcuts are customizable in Settings > Shortcuts*
+## Customizing Shortcuts
+
+Most shortcuts can be remapped to fit your workflow:
+
+1. Open **Settings** (`Cmd+,` / `Ctrl+,`) → **Shortcuts** tab
+2. Find the action you want to remap
+3. Click the current key binding (shows the shortcut like `⌘ K` or `Ctrl+K`)
+4. Press your desired key combination
+5. The new binding is saved immediately
+
+**Tips:**
+- Press `Esc` while recording to cancel without changing the shortcut
+- Modifier keys alone (Cmd, Ctrl, Alt, Shift) won't register — you need a final key
+- Some shortcuts are fixed and cannot be remapped (like `Esc` to close modals)
+- Conflicting shortcuts will override the previous binding
+
+**Resetting shortcuts:** There's currently no "reset to default" button — if you need to restore defaults, you can find the original bindings in this documentation or delete the shortcuts from your settings file.
 
 ## Keyboard Mastery
 
-Maestro tracks your keyboard shortcut usage and rewards you for becoming a power user. As you use more shortcuts, you'll level up through the mastery ranks:
+Maestro tracks your keyboard shortcut usage and rewards you for becoming a power user. As you discover and use more shortcuts, you'll level up through 5 mastery levels:
 
-| Level | Threshold | Name | Description |
-|-------|-----------|------|-------------|
-| 0 | 0% | **Beginner** | Just starting out |
-| 1 | 25% | **Student** | Learning the basics |
-| 2 | 50% | **Performer** | Getting comfortable |
-| 3 | 75% | **Virtuoso** | Almost there |
-| 4 | 100% | **Keyboard Maestro** | Complete mastery |
+| Level | Title | Shortcuts Used |
+|:-----:|-------|----------------|
+| 0 | **Novice** | 0-19% |
+| 1 | **Apprentice** | 20-39% |
+| 2 | **Journeyman** | 40-59% |
+| 3 | **Expert** | 60-79% |
+| 4 | **Master** | 80-100% |
 
-When you reach a new level, you'll see a celebration with confetti. Your progress is tracked in the Shortcuts Help modal (`Cmd+/` or `Ctrl+/`), which shows your current mastery percentage and hints at shortcuts you haven't tried yet.
+**Tracking your progress:**
+- Your current mastery level is shown in the **status bar** at the bottom of the window
+- Hover over the keyboard icon to see which shortcuts you've used and which remain to be discovered
+- Open the **Shortcuts Help** modal (`Cmd+/` / `Ctrl+/`) to see your mastery percentage and get hints
+- When you reach a new level, you'll see a celebration with confetti
 
 **Why keyboard shortcuts matter:** Using shortcuts keeps you in flow state, reduces context switching, and dramatically speeds up your workflow. Maestro is designed for keyboard-first operation — the less you reach for the mouse, the faster you'll work.
+
+Keyboard Mastery is separate from [Conductor Ranks](./achievements), which track cumulative Auto Run time. Both systems reward you for mastering different aspects of Maestro.

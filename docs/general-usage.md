@@ -52,6 +52,61 @@ The Prompt Composer provides:
 
 When you're done editing, click **Send** or press the displayed shortcut to send your message. The composer closes automatically and your prompt is sent to the AI.
 
+## Input Toggles
+
+The AI input box includes three toggle buttons that control session behavior:
+
+![Input Toggles](./screenshots/input-toggles.png)
+
+| Toggle | Shortcut | Description |
+|--------|----------|-------------|
+| **History** | `Cmd+S` / `Ctrl+S` | Save a synopsis of each completion to the [History panel](./history) |
+| **Read-only** | `Cmd+R` / `Ctrl+R` | Enable plan/read-only mode — AI can read but not modify files |
+| **Thinking** | `Cmd+Shift+K` / `Ctrl+Shift+K` | Show streaming thinking/reasoning as the AI works |
+
+**Per-tab persistence:** Each toggle state is saved per tab. If you enable Thinking on one tab, it stays enabled for that tab even when you switch away and back.
+
+### Configuring Defaults
+
+Set the default state for new tabs in **Settings** (`Cmd+,` / `Ctrl+,`) → **General**:
+
+![Input Toggle Defaults](./screenshots/input-toggles-defaults.png)
+
+| Setting | Description |
+|---------|-------------|
+| **Enable "History" by default** | New tabs save synopses to History automatically |
+| **Enable "Thinking" by default** | New tabs show thinking/reasoning content by default |
+
+### Send Key Configuration
+
+Configure how messages are sent in each mode:
+
+| Mode | Options | Description |
+|------|---------|-------------|
+| **AI Interaction Mode** | `Enter` or `Cmd+Enter` | Choose your preferred send key for AI conversations |
+| **Terminal Mode** | `Enter` or `Cmd+Enter` | Choose your preferred send key for shell commands |
+
+- When set to `Cmd+Enter` / `Ctrl+Enter`, pressing `Enter` alone creates a new line (for multi-line input)
+- When set to `Enter`, use `Shift+Enter` for new lines
+- The current send key is displayed in the input box (e.g., "⌘ + Enter")
+- **Per-tab override:** Click the send key indicator in the input box to toggle between modes for that tab
+
+## Image Carousel
+
+When working with image attachments, use the **Image Carousel** to view, manage, and remove images.
+
+**To open the Image Carousel:**
+- Press `Cmd+Y` / `Ctrl+Y`, or
+- Click the image icon in the input box when images are attached
+
+**Carousel controls:**
+- **Arrow keys** — Navigate between images
+- **Delete** or **Backspace** — Remove the currently selected image
+- **Click the X** — Remove an image by clicking its remove button
+- **Esc** — Close the carousel
+
+Images can be attached via drag-and-drop, paste, or the attachment button. The carousel shows all images queued for the current message.
+
 ## Output Filtering
 
 Search and filter AI output with include/exclude modes, regex support, and per-response local filters.
@@ -64,6 +119,6 @@ The command interpreter can be focused for a clean, terminal-only experience whe
 
 ## Session Management
 
-Browse, star, rename, and resume past sessions. The Session Explorer (`Cmd+Shift+L`) shows all conversations for an agent with search, filtering, and quick actions.
+Browse, star, rename, and resume past sessions. The Session Explorer (`Cmd+Shift+L` / `Ctrl+Shift+L`) shows all conversations for an agent with search, filtering, and quick actions.
 
 ![Session tracking](./screenshots/session-tracking.png)

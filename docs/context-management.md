@@ -26,7 +26,7 @@ Right-click any tab to access the full range of context management options:
 Export any tab conversation as a self-contained HTML file:
 
 1. Right-click the tab → **Context: Copy to Clipboard**
-2. Or use **Command Palette** (`Cmd+K`) → "Export tab to HTML"
+2. Or use **Command Palette** (`Cmd+K` / `Ctrl+K`) → "Export tab to HTML"
 
 The exported HTML file includes:
 - **Full conversation history** with all messages
@@ -44,6 +44,44 @@ Context management lets you combine or transfer conversation history between ses
 - **Compact & continue** — Compress your context to stay within token limits while preserving key information
 - **Merge sessions** — Combine context from multiple conversations into one
 - **Transfer to other agents** — Send your context to a different AI agent (e.g., Claude Code → Codex)
+
+## Context Window Warnings
+
+As your conversation grows, Maestro monitors context window usage and displays warnings when you're approaching limits.
+
+![Context Warning Banner](./screenshots/context-warnings.png)
+
+The warning banner appears below the input box showing:
+- Current context usage percentage
+- **Compact & Continue** button for one-click context compression
+
+### Why Context Usage Matters
+
+**Operating near context limits degrades AI performance.** When context reaches ~80% capacity or higher:
+
+- The AI loses access to earlier parts of your conversation
+- Important decisions, code changes, and context get pushed out
+- Response quality drops as the model struggles to maintain coherence
+- You may experience more hallucinations and forgotten instructions
+
+For best results, **compact your context before reaching 60-70% usage** — don't wait for the red warning.
+
+### Configuring Warnings
+
+Customize warning thresholds in **Settings** (`Cmd+,` / `Ctrl+,`) → **General** → **Context Window Warnings**:
+
+![Context Warning Configuration](./screenshots/context-warnings-config.png)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Show context consumption warnings** | Enabled | Toggle warning banners on/off |
+| **Yellow warning threshold** | 60% | Early warning — good time to consider compacting |
+| **Red warning threshold** | 80% | Critical — compact immediately to avoid degradation |
+
+**Recommended thresholds:**
+- Set yellow to **50-60%** if you prefer earlier warnings
+- Set red to **70-80%** — going higher risks quality degradation
+- Lower both thresholds if you frequently work on complex tasks that require the AI to remember many details
 
 ## Compact & Continue
 

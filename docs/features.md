@@ -16,8 +16,8 @@ icon: sparkles
 
 ## Core Features
 
-- 🔄 **Dual-Mode Sessions** - Each agent has both an AI Terminal and Command Terminal. Switch seamlessly between AI conversation and shell commands with `Cmd+J`.
-- ⌨️ **[Keyboard-First Design](./keyboard-shortcuts)** - Full keyboard control with customizable shortcuts and [mastery tracking](./achievements) that rewards you for leveling up. `Cmd+K` quick actions, rapid agent switching, and focus management designed for flow state.
+- 🔄 **Dual-Mode Sessions** - Each agent has both an AI Terminal and Command Terminal. Switch seamlessly between AI conversation and shell commands with `Cmd+J` / `Ctrl+J`.
+- ⌨️ **[Keyboard-First Design](./keyboard-shortcuts)** - Full keyboard control with customizable shortcuts and [mastery tracking](./achievements) that rewards you for leveling up. `Cmd+K` / `Ctrl+K` quick actions, rapid agent switching, and focus management designed for flow state.
 - 📋 **Session Discovery** - Automatically discovers and imports all Claude Code sessions, including conversations from before Maestro was installed. Browse, search, star, rename, and resume any session.
 - 🔀 **Git Integration** - Automatic repo detection, branch display, diff viewer, commit logs, and git-aware file completion. Work with git without leaving the app.
 - 📁 **[File Explorer](./general-usage)** - Browse project files with syntax highlighting, markdown preview, and image viewing. Reference files in prompts with `@` mentions.

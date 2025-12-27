@@ -16,7 +16,7 @@ Maestro can sync settings, sessions, and groups across multiple devices by stori
 
 **Setup:**
 
-1. Open **Settings** (`Cmd+,`) → **General** tab
+1. Open **Settings** (`Cmd+,` / `Ctrl+,`) → **General** tab
 2. Scroll to **Storage Location**
 3. Click **Choose Folder...** and select a synced folder:
    - **iCloud Drive**: `~/Library/Mobile Documents/com~apple~CloudDocs/Maestro`
