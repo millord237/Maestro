@@ -271,6 +271,7 @@ function MaestroConsoleInner() {
     audioFeedbackCommand, setAudioFeedbackCommand,
     toastDuration, setToastDuration,
     checkForUpdatesOnStartup, setCheckForUpdatesOnStartup,
+    enableBetaUpdates, setEnableBetaUpdates,
     crashReportingEnabled, setCrashReportingEnabled,
     shortcuts, setShortcuts,
     tabShortcuts, setTabShortcuts,
@@ -1080,13 +1081,20 @@ function MaestroConsoleInner() {
    
   }, [sessionsLoaded]); // Only run once when sessions are loaded
 
+  // Sync beta updates setting to electron-updater when it changes
+  useEffect(() => {
+    if (settingsLoaded) {
+      window.maestro.updates.setAllowPrerelease(enableBetaUpdates);
+    }
+  }, [settingsLoaded, enableBetaUpdates]);
+
   // Check for updates on startup if enabled
   useEffect(() => {
     if (settingsLoaded && checkForUpdatesOnStartup) {
       // Delay to let the app fully initialize
       const timer = setTimeout(async () => {
         try {
-          const result = await window.maestro.updates.check();
+          const result = await window.maestro.updates.check(enableBetaUpdates);
           if (result.updateAvailable && !result.error) {
             setUpdateCheckModalOpen(true);
           }
@@ -1096,7 +1104,7 @@ function MaestroConsoleInner() {
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [settingsLoaded, checkForUpdatesOnStartup]);
+  }, [settingsLoaded, checkForUpdatesOnStartup, enableBetaUpdates]);
 
   // Load spec-kit commands on startup
   useEffect(() => {
@@ -9375,6 +9383,8 @@ function MaestroConsoleInner() {
         setToastDuration={setToastDuration}
         checkForUpdatesOnStartup={checkForUpdatesOnStartup}
         setCheckForUpdatesOnStartup={setCheckForUpdatesOnStartup}
+        enableBetaUpdates={enableBetaUpdates}
+        setEnableBetaUpdates={setEnableBetaUpdates}
         crashReportingEnabled={crashReportingEnabled}
         setCrashReportingEnabled={setCrashReportingEnabled}
         customAICommands={customAICommands}

@@ -190,6 +190,8 @@ export interface UseSettingsReturn {
   // Update settings
   checkForUpdatesOnStartup: boolean;
   setCheckForUpdatesOnStartup: (value: boolean) => void;
+  enableBetaUpdates: boolean;
+  setEnableBetaUpdates: (value: boolean) => void;
 
   // Crash reporting settings
   crashReportingEnabled: boolean;
@@ -331,6 +333,7 @@ export function useSettings(): UseSettingsReturn {
 
   // Update Config
   const [checkForUpdatesOnStartup, setCheckForUpdatesOnStartupState] = useState(true); // Default: on
+  const [enableBetaUpdates, setEnableBetaUpdatesState] = useState(false); // Default: off (stable only)
 
   // Crash Reporting Config
   const [crashReportingEnabled, setCrashReportingEnabledState] = useState(true); // Default: on (opt-out)
@@ -544,6 +547,11 @@ export function useSettings(): UseSettingsReturn {
   const setCheckForUpdatesOnStartup = useCallback((value: boolean) => {
     setCheckForUpdatesOnStartupState(value);
     window.maestro.settings.set('checkForUpdatesOnStartup', value);
+  }, []);
+
+  const setEnableBetaUpdates = useCallback((value: boolean) => {
+    setEnableBetaUpdatesState(value);
+    window.maestro.settings.set('enableBetaUpdates', value);
   }, []);
 
   const setCrashReportingEnabled = useCallback((value: boolean) => {
@@ -1090,6 +1098,7 @@ export function useSettings(): UseSettingsReturn {
       const savedAudioFeedbackCommand = await window.maestro.settings.get('audioFeedbackCommand');
       const savedToastDuration = await window.maestro.settings.get('toastDuration');
       const savedCheckForUpdatesOnStartup = await window.maestro.settings.get('checkForUpdatesOnStartup');
+      const savedEnableBetaUpdates = await window.maestro.settings.get('enableBetaUpdates');
       const savedCrashReportingEnabled = await window.maestro.settings.get('crashReportingEnabled');
       const savedLogViewerSelectedLevels = await window.maestro.settings.get('logViewerSelectedLevels');
       const savedCustomAICommands = await window.maestro.settings.get('customAICommands');
@@ -1138,6 +1147,7 @@ export function useSettings(): UseSettingsReturn {
       if (savedAudioFeedbackCommand !== undefined) setAudioFeedbackCommandState(savedAudioFeedbackCommand as string);
       if (savedToastDuration !== undefined) setToastDurationState(savedToastDuration as number);
       if (savedCheckForUpdatesOnStartup !== undefined) setCheckForUpdatesOnStartupState(savedCheckForUpdatesOnStartup as boolean);
+      if (savedEnableBetaUpdates !== undefined) setEnableBetaUpdatesState(savedEnableBetaUpdates as boolean);
       if (savedCrashReportingEnabled !== undefined) setCrashReportingEnabledState(savedCrashReportingEnabled as boolean);
       if (savedLogViewerSelectedLevels !== undefined) setLogViewerSelectedLevelsState(savedLogViewerSelectedLevels as string[]);
 
@@ -1401,6 +1411,8 @@ export function useSettings(): UseSettingsReturn {
     setToastDuration,
     checkForUpdatesOnStartup,
     setCheckForUpdatesOnStartup,
+    enableBetaUpdates,
+    setEnableBetaUpdates,
     crashReportingEnabled,
     setCrashReportingEnabled,
     logViewerSelectedLevels,
@@ -1487,6 +1499,7 @@ export function useSettings(): UseSettingsReturn {
     audioFeedbackCommand,
     toastDuration,
     checkForUpdatesOnStartup,
+    enableBetaUpdates,
     crashReportingEnabled,
     logViewerSelectedLevels,
     shortcuts,
@@ -1530,6 +1543,7 @@ export function useSettings(): UseSettingsReturn {
     setAudioFeedbackCommand,
     setToastDuration,
     setCheckForUpdatesOnStartup,
+    setEnableBetaUpdates,
     setCrashReportingEnabled,
     setLogViewerSelectedLevels,
     setShortcuts,

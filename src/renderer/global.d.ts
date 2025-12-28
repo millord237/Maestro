@@ -840,7 +840,7 @@ interface MaestroAPI {
   };
   // Updates API
   updates: {
-    check: () => Promise<{
+    check: (includePrerelease?: boolean) => Promise<{
       currentVersion: string;
       latestVersion: string;
       updateAvailable: boolean;
@@ -870,6 +870,7 @@ interface MaestroAPI {
       progress?: { percent: number; bytesPerSecond: number; total: number; transferred: number };
       error?: string;
     }) => void) => () => void;
+    setAllowPrerelease: (allow: boolean) => Promise<void>;
   };
   // Debug Package API
   debug: {

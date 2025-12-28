@@ -4,6 +4,7 @@ import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import ReactMarkdown from 'react-markdown';
 import { Modal } from './ui/Modal';
+import { useSettings } from '../hooks';
 
 interface Release {
   tag_name: string;
@@ -41,6 +42,9 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [expandedReleases, setExpandedReleases] = useState<Set<string>>(new Set());
 
+  // Get beta updates setting
+  const { enableBetaUpdates } = useSettings();
+
   // Auto-updater state
   const [downloadStatus, setDownloadStatus] = useState<UpdateStatus>({ status: 'idle' });
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -48,7 +52,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
   // Check for updates on mount
   useEffect(() => {
     checkForUpdates();
-  }, []);
+  }, [enableBetaUpdates]);
 
   // Subscribe to update status changes
   useEffect(() => {
@@ -65,7 +69,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
     setLoading(true);
     setDownloadError(null);
     try {
-      const updateResult = await window.maestro.updates.check();
+      const updateResult = await window.maestro.updates.check(enableBetaUpdates);
       setResult(updateResult);
       // Auto-expand if only 1 version behind, otherwise keep all collapsed
       if (updateResult.updateAvailable && updateResult.releases.length === 1) {
