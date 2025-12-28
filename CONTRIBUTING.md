@@ -925,6 +925,29 @@ mintlify dev
 
 This starts a local server at `http://localhost:3000` with hot reload.
 
+### MCP Server
+
+Maestro provides a hosted MCP (Model Context Protocol) server that allows AI applications to search the documentation:
+
+**Server URL:** `https://docs.runmaestro.ai/mcp`
+
+**Available Tools:**
+- `SearchMaestro` - Search the Maestro knowledge base for documentation, code examples, and guides
+
+To connect from Claude Desktop or Claude Code, add to your MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "maestro": {
+      "url": "https://docs.runmaestro.ai/mcp"
+    }
+  }
+}
+```
+
+See [MCP Server documentation](https://docs.runmaestro.ai/mcp-server) for full details.
+
 ### Deployment
 
 Documentation is automatically deployed when changes to `docs/` are pushed to `main`. Mintlify handles the build and hosting.

@@ -131,6 +131,7 @@ Full documentation and usage guide available at **[docs.runmaestro.ai](https://d
 - [Git Worktrees](https://docs.runmaestro.ai/git-worktrees)
 - [Keyboard Shortcuts](https://docs.runmaestro.ai/keyboard-shortcuts)
 - [Context Management](https://docs.runmaestro.ai/context-management)
+- [MCP Server](https://docs.runmaestro.ai/mcp-server) - Connect AI apps to Maestro docs
 - [Troubleshooting](https://docs.runmaestro.ai/troubleshooting)
 
 ## Community

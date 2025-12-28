@@ -122,6 +122,7 @@ src/
 | Modify file linking | `src/renderer/utils/remarkFileLinks.ts` (remark plugin for `[[wiki]]` and path links) |
 | Add documentation page | `docs/*.md`, `docs/docs.json` (navigation) |
 | Add documentation screenshot | `docs/screenshots/` (PNG, kebab-case naming) |
+| MCP server integration | See [MCP Server docs](https://docs.runmaestro.ai/mcp-server) |
 
 ## Core Patterns
 
@@ -677,3 +678,25 @@ firstAutoRunCompleted: boolean  // Triggers celebration modal
 ### Modal Escape Not Working
 1. Register with layer stack (don't handle Escape locally)
 2. Check priority is set correctly
+
+## MCP Server
+
+Maestro provides a hosted MCP (Model Context Protocol) server for AI applications to search the documentation.
+
+**Server URL:** `https://docs.runmaestro.ai/mcp`
+
+**Available Tools:**
+- `SearchMaestro` - Search the Maestro knowledge base for documentation, code examples, API references, and guides
+
+**Connect from Claude Desktop/Code:**
+```json
+{
+  "mcpServers": {
+    "maestro": {
+      "url": "https://docs.runmaestro.ai/mcp"
+    }
+  }
+}
+```
+
+See [MCP Server documentation](https://docs.runmaestro.ai/mcp-server) for full details.
