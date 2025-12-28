@@ -1,6 +1,8 @@
 ---
-description: Execute OpenSpec tasks using Maestro's Auto Run feature with optional git worktree support for parallel implementation.
+description: Convert OpenSpec tasks to Maestro Auto Run documents for automated implementation.
 ---
+
+You are an expert at converting OpenSpec change proposals into actionable Maestro Auto Run documents.
 
 ## User Input
 
@@ -8,217 +10,113 @@ description: Execute OpenSpec tasks using Maestro's Auto Run feature with option
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding (if not empty).
+The user input may contain:
+- A change ID (e.g., `001-add-auth`, `feature-search`)
+- A path to an OpenSpec change directory
+- Empty (you should scan for changes in `openspec/changes/`)
 
-## Overview
+## Your Task
 
-This command bridges OpenSpec with Maestro's Auto Run feature. It converts your OpenSpec tasks into Auto Run documents that Maestro can execute autonomously, enabling automated implementation with parallel execution support.
+1. **Locate the OpenSpec change** in `openspec/changes/<change-id>/`
+2. **Read the `tasks.md`** file (and optionally `proposal.md` for context)
+3. **Generate Auto Run documents** using the format below
+4. **Save to `Auto Run Docs/`** folder
 
-## Implementation Workflow
+## Critical Requirements
 
-### Step 1: Locate Your OpenSpec Change
+Each Auto Run document MUST:
 
-Your OpenSpec change is located at:
-```
-openspec/changes/<change-id>/
-├── proposal.md    # What and why
-├── tasks.md       # Implementation checklist
-├── design.md      # Optional: technical decisions
-└── specs/         # Spec deltas
-```
+1. **Be Completely Self-Contained**: Each phase must be executable without ANY user input during execution. The AI should be able to start and complete each phase entirely on its own.
 
-Verify the change exists and tasks are ready:
-```bash
-openspec show <change-id>
-```
+2. **Deliver Working Progress**: By the end of each phase, there should be something tangible that works - testable code, runnable features, or verifiable changes.
 
-### Step 2: Review Before Converting
+3. **Reference OpenSpec Context**: Include links to the proposal and relevant spec files so the executing AI understands the full context.
 
-Before converting to Auto Run:
+4. **Preserve Task IDs**: Keep the original task identifiers (T001, T002, etc.) from OpenSpec for traceability.
 
-1. **Confirm proposal is approved** - Don't automate unapproved changes
-2. **Review tasks.md** - Understand what will be executed
-3. **Check for dependencies** - Note which tasks must run sequentially
+## Document Format
 
-### Step 3: Convert to Auto Run Document
-
-Create an Auto Run document from your OpenSpec tasks:
-
-1. **Read `tasks.md`** from the change directory
-2. **Group tasks by phase** (Setup, Core, Testing, etc.)
-3. **Convert to Auto Run checkbox format**
-4. **Save to `Auto Run Docs/`** with descriptive filename
-
-**Auto Run Document Format:**
+Each Auto Run document MUST follow this exact format:
 
 ```markdown
-# [Change Title] - Implementation Tasks
+# Phase XX: [Brief Title]
 
-## Context
+[One paragraph describing what this phase accomplishes and why it matters]
 
-This document implements OpenSpec change: `<change-id>`
+## OpenSpec Context
 
-**Proposal:** openspec/changes/<change-id>/proposal.md
-**Design:** openspec/changes/<change-id>/design.md (if exists)
+- **Change ID:** <change-id>
+- **Proposal:** openspec/changes/<change-id>/proposal.md
+- **Design:** openspec/changes/<change-id>/design.md (if exists)
 
-## Phase 1: Setup
+## Tasks
 
-- [ ] T001 Initial configuration
-- [ ] T002 Database migrations
+- [ ] T001 First specific task to complete
+- [ ] T002 Second specific task to complete
+- [ ] Continue with more tasks...
 
-## Phase 2: Core Implementation
+## Completion
 
-- [ ] T003 Main feature implementation
-- [ ] T004 Supporting functionality
-
-## Phase 3: Testing & Documentation
-
-- [ ] T005 Add unit tests
-- [ ] T006 Update documentation
-
-## Completion Checklist
-
-After all tasks complete:
-- [ ] Run `openspec validate <change-id> --strict`
-- [ ] Review changes and create PR
-- [ ] After deployment, run `/openspec.archive`
+- [ ] Verify all changes work as expected
+- [ ] Run `openspec validate <change-id>` (if available)
 ```
 
-### Step 4: Configure Auto Run
+## Task Writing Guidelines
 
-1. **Open the Right Bar** in Maestro (`Cmd/Ctrl + B`)
-2. **Select the "Auto Run" tab**
-3. **Set the Auto Run folder** to `Auto Run Docs/`
-4. **Select your generated document** from the list
+Each task should be:
+- **Specific**: Not "set up the feature" but "Create UserAuthService class with login/logout methods"
+- **Actionable**: Clear what needs to be done
+- **Verifiable**: You can tell when it's complete
+- **Autonomous**: Can be done without asking the user questions
 
-### Step 5: Start Automated Implementation
+Preserve any markers from the original tasks.md:
+- `[P]` = Parallelizable (can run with other `[P]` tasks)
+- Task IDs (T001, T002, etc.) for traceability
 
-Auto Run will:
-- Read each task from the document
-- Execute tasks sequentially (respecting phase order)
-- Mark tasks as completed (`[x]`) with implementation notes
-- Handle parallel tasks when marked with `[P]`
+## Phase Guidelines
 
-**To start:** Click "Run" or press `Cmd/Ctrl + Enter` in the Auto Run panel.
+- **Phase 1**: Foundation + Setup (dependencies, configuration, scaffolding)
+- **Phase 2-N**: Feature implementation by logical grouping
+- Each phase should build on the previous
+- Keep phases focused (5-15 tasks typically)
+- Group related tasks that share context
 
-## Advanced: Parallel Implementation with Git Worktrees
+## Output Format
 
-For larger changes with independent components, use git worktrees to implement multiple phases in parallel.
+Create each document as a file in the `Auto Run Docs/` folder with this naming pattern:
 
-### What are Worktrees?
-
-Git worktrees let you have multiple working directories for the same repository:
-- Multiple AI agents working on different branches simultaneously
-- Isolated changes that won't conflict during development
-- Easy merging when components are complete
-
-### Setting Up Parallel Implementation
-
-1. **Identify Independent Phases**: Look for phases that don't depend on each other
-
-2. **Enable Worktree Mode in Auto Run**:
-   - Toggle the worktree option in the Auto Run panel
-   - Maestro creates an isolated working directory for each session
-   - Each session gets its own feature branch
-
-3. **Assign Phases to Sessions**:
-   ```
-   Session 1: Phase 1 (Setup) + Phase 2a (Core API)
-   Session 2: Phase 2b (Core UI) - if independent from API
-   Session 3: Phase 3 (Testing) - after Phases 2a and 2b merge
-   ```
-
-4. **Merge When Complete**:
-   - Each session commits to its feature branch
-   - Use Maestro's git integration to merge branches
-   - Resolve any conflicts before final merge
-
-### Worktree Commands
-
-Maestro handles worktrees automatically, but for reference:
-
-```bash
-# Create a worktree for a feature branch
-git worktree add ../openspec-<change-id>-worktree <branch-name>
-
-# List existing worktrees
-git worktree list
-
-# Remove a worktree when done
-git worktree remove ../openspec-<change-id>-worktree
+```
+Auto Run Docs/OpenSpec-<change-id>-Phase-01-[Description].md
+Auto Run Docs/OpenSpec-<change-id>-Phase-02-[Description].md
 ```
 
-## Task Markers
+## Execution Steps
 
-Auto Run understands these markers from OpenSpec:
+1. **Find the OpenSpec change**:
+   - If change ID provided, look in `openspec/changes/<change-id>/`
+   - If no ID, list available changes in `openspec/changes/` and ask user to select
 
-| Marker | Meaning |
-|--------|---------|
-| `- [ ]` | Incomplete task |
-| `- [x]` | Completed task |
-| `[P]` | Parallelizable (can run with other `[P]` tasks) |
-| `T001` | Task identifier (preserves OpenSpec numbering) |
+2. **Read the source files**:
+   - `tasks.md` - The implementation checklist (REQUIRED)
+   - `proposal.md` - Context about what and why (recommended)
+   - `design.md` - Technical decisions if exists (optional)
 
-**Example:**
-```markdown
-- [ ] T001 Setup project structure
-- [ ] T002 [P] Configure database connection
-- [ ] T003 [P] Configure cache layer
-- [ ] T004 Integrate database and cache
-```
+3. **Analyze and group tasks**:
+   - Identify logical phases (setup, core features, testing, etc.)
+   - Preserve task dependencies (non-`[P]` tasks run sequentially)
+   - Keep related tasks together in the same phase
 
-Tasks T002 and T003 can run in parallel, but T004 waits for both to complete.
+4. **Generate Auto Run documents**:
+   - One document per phase
+   - Use the exact format with BEGIN/END markers
+   - Include OpenSpec context in each document
 
-## Best Practices
+5. **Save the documents**:
+   - Files go to `Auto Run Docs/` folder
+   - Filename pattern: `OpenSpec-<change-id>-Phase-XX-[Description].md`
 
-1. **Complete Setup Phase First**: Always complete Phase 1 before parallelizing later phases
+## Now Execute
 
-2. **Respect Dependencies**: Tasks without `[P]` should run sequentially
+Read the OpenSpec change (from user input or by scanning `openspec/changes/`) and generate the Auto Run documents. Start with Phase 1 (setup/foundation), then create additional phases as needed.
 
-3. **Validate After Each Phase**: Run `openspec validate` to catch issues early
-
-4. **Keep Tasks Atomic**: Each task should be independently testable
-
-5. **Reference Specs**: Include links to relevant spec files for context
-
-6. **Document Decisions**: Add notes when implementation deviates from original plan
-
-## Integration with OpenSpec Workflow
-
-After Auto Run completes all tasks:
-
-1. **Run validation:**
-   ```bash
-   openspec validate <change-id> --strict
-   ```
-
-2. **Create pull request** with all changes
-
-3. **After deployment**, archive the change:
-   ```bash
-   openspec archive <change-id> --yes
-   ```
-
-## Troubleshooting
-
-### Tasks Not Executing
-
-- Check Auto Run is pointed to the correct document
-- Verify tasks use proper checkbox format `- [ ]`
-- Ensure no syntax errors in the markdown
-
-### Worktree Conflicts
-
-- Merge main branch into worktree before starting
-- Keep worktree branches short-lived
-- Clean up worktrees promptly after merging
-
-### Validation Failures
-
-- Review spec deltas match implementation
-- Ensure all scenarios are satisfied
-- Check for missing requirements
-
----
-
-*This implement command is a Maestro-specific addition to the OpenSpec workflow.*
+If no change ID is provided and multiple changes exist, list them and ask which one to implement.
