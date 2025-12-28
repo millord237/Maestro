@@ -592,7 +592,7 @@ contextBridge.exposeInMainWorld('maestro', {
 
   // Updates API
   updates: {
-    check: () => ipcRenderer.invoke('updates:check') as Promise<{
+    check: (includePrerelease?: boolean) => ipcRenderer.invoke('updates:check', includePrerelease) as Promise<{
       currentVersion: string;
       latestVersion: string;
       updateAvailable: boolean;
@@ -627,6 +627,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('updates:status', handler);
       return () => ipcRenderer.removeListener('updates:status', handler);
     },
+    // Set whether to allow prerelease updates (for electron-updater)
+    setAllowPrerelease: (allow: boolean) => ipcRenderer.invoke('updates:setAllowPrerelease', allow) as Promise<void>,
   },
 
   // Logger API
