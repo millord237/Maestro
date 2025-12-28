@@ -6,74 +6,54 @@
 
 > Maestro hones fractured attention into focused intent.
 
-Maestro is a cross-platform desktop app for orchestrating your fleet of AI coding agents. Built for power users who live on the keyboard and rarely touch the mouse.
+Maestro is a cross-platform desktop app for orchestrating your fleet of AI agents and projects. It's a high-velocity solution for hackers who are juggling multiple projects in parallel. Designed for power users who live on the keyboard and rarely touch the mouse.
 
-<p align="center">
-  <img src="docs/screenshots/main-screen.png" alt="Maestro Main Screen" width="800">
-</p>
+Collaborate with AI to create detailed specification documents, then let Auto Run execute them automatically, each task in a fresh session with clean context. Allowing for long-running unattended sessions, my current record is nearly 24 hours of continuous runtime.
 
-Run multiple agents in parallel with a Linear/Superhuman-level responsive interface. Currently supporting **Claude Code**, **OpenAI Codex**, and **OpenCode** with plans for additional agentic coding tools based on user demand.
+Run multiple agents in parallel with a Linear/Superhuman-level responsive interface. Currently supporting **Claude Code**, **OpenAI Codex**, and **OpenCode** with plans for additional agentic coding tools (Aider, Gemini CLI, Qwen3 Coder) based on user demand.
 
-## Power Features
+<div align="center">
+  <a href="https://youtu.be/fmwwTOg7cyA?si=dJ89K54tGflKa5G4">
+    <img src="https://github.com/user-attachments/assets/deaf601d-1898-4ede-bf5a-42e46874ebb3"
+         alt="Maestro Video Thumbnail"
+         width="650" />
+  </a>
 
-### Auto Run & Playbooks
-Batch-process markdown checklists through AI agents. Create task documents with checkboxes, and Maestro works through them automatically—spawning fresh AI sessions for each task with clean context. Save configurations as playbooks for repeatable workflows, run in loops, and track everything in history.
+  <div>
+    <a href="https://youtu.be/fmwwTOg7cyA?si=VOkjO6oYjCSQvM0A">~27m Walkthrough and Demo</a>
+    &nbsp;|&nbsp;
+    <a href="https://youtu.be/3wX5Q1I0sgI?si=oJkJDxgAWUvBXX4D">~6m Onboarding Demo</a>
+  </div>
+</div>
 
-<p align="center">
-  <img src="docs/screenshots/autorun-1.png" alt="Auto Run" width="400">
-</p>
+## Features
 
-[Learn more about Auto Run](https://docs.runmaestro.ai/autorun-playbooks)
+### Power Features
 
-### Git Worktrees
-Run AI agents in parallel on isolated branches. Create worktree sub-agents from the git branch menu, each operating in their own directory. Work interactively in the main repo while sub-agents process tasks independently—then create PRs with one click.
+- 🌳 **[Git Worktrees](https://docs.runmaestro.ai/git-worktrees)** - Run AI agents in parallel on isolated branches. Create worktree sub-agents from the git branch menu, each operating in their own directory. Work interactively in the main repo while sub-agents process tasks independently—then create PRs with one click. True parallel development without conflicts.
+- 🤖 **[Auto Run & Playbooks](https://docs.runmaestro.ai/autorun-playbooks)** - File-system-based task runner that batch-processes markdown checklists through AI agents. Create playbooks for repeatable workflows, run in loops, and track progress with full history. Each task gets its own AI session for clean conversation context.
+- 💬 **[Group Chat](https://docs.runmaestro.ai/group-chat)** - Coordinate multiple AI agents in a single conversation. A moderator AI orchestrates discussions, routing questions to the right agents and synthesizing their responses for cross-project questions and architecture discussions.
+- 🌐 **[Mobile Remote Control](https://docs.runmaestro.ai/remote-access)** - Built-in web server with QR code access. Monitor and control all your agents from your phone. Supports local network access and remote tunneling via Cloudflare for access from anywhere.
+- 💻 **[Command Line Interface](https://docs.runmaestro.ai/cli)** - Full CLI (`maestro-cli`) for headless operation. List agents/groups, run playbooks from cron jobs or CI/CD pipelines, with human-readable or JSONL output for scripting.
+- 🚀 **Multi-Agent Management** - Run unlimited agents and terminal sessions in parallel. Each agent has its own workspace, conversation history, and isolated context.
+- 📬 **Message Queueing** - Queue messages while AI is busy; they're sent automatically when the agent becomes ready. Never lose a thought.
 
-<p align="center">
-  <img src="docs/screenshots/git-worktrees.png" alt="Git Worktrees" width="400">
-</p>
+### Core Features
 
-[Learn more about Git Worktrees](https://docs.runmaestro.ai/git-worktrees)
+- 🔄 **Dual-Mode Sessions** - Each agent has both an AI Terminal and Command Terminal. Switch seamlessly between AI conversation and shell commands with `Cmd+J`.
+- ⌨️ **[Keyboard-First Design](https://docs.runmaestro.ai/keyboard-shortcuts)** - Full keyboard control with customizable shortcuts and [mastery tracking](https://docs.runmaestro.ai/keyboard-shortcuts#keyboard-mastery) that rewards you for leveling up. `Cmd+K` quick actions, rapid agent switching, and focus management designed for flow state.
+- 📋 **Session Discovery** - Automatically discovers and imports existing sessions from all supported providers, including conversations from before Maestro was installed. Browse, search, star, rename, and resume any session.
+- 🔀 **Git Integration** - Automatic repo detection, branch display, diff viewer, commit logs, and git-aware file completion. Work with git without leaving the app.
+- 📁 **[File Explorer](https://docs.runmaestro.ai/general-usage#file-explorer-and-preview)** - Browse project files with syntax highlighting, markdown preview, and image viewing. Reference files in prompts with `@` mentions.
+- 🔍 **[Powerful Output Filtering](https://docs.runmaestro.ai/general-usage#output-filtering)** - Search and filter AI output with include/exclude modes, regex support, and per-response local filters.
+- ⚡ **[Slash Commands](https://docs.runmaestro.ai/slash-commands)** - Extensible command system with autocomplete. Create custom commands with template variables for your workflows.
+- 💾 **Draft Auto-Save** - Never lose work. Drafts are automatically saved and restored per session.
+- 🔊 **Speakable Notifications** - Audio alerts with text-to-speech announcements when agents complete tasks.
+- 🎨 **[Beautiful Themes](THEMES.md)** - 12 themes including Dracula, Monokai, Nord, Tokyo Night, GitHub Light, and more.
+- 💰 **Cost Tracking** - Real-time token usage and cost tracking per session and globally.
+- 🏆 **[Achievements](https://docs.runmaestro.ai/achievements)** - Level up from Apprentice to Titan of the Baton based on cumulative Auto Run time. 11 conductor-themed ranks to unlock.
 
-### Group Chat
-Coordinate multiple AI agents in a single conversation. A moderator AI orchestrates discussions, routing questions to the right agents and synthesizing their responses for cross-project questions and architecture discussions.
-
-<p align="center">
-  <img src="docs/screenshots/group-chat.png" alt="Group Chat" width="800">
-</p>
-
-[Learn more about Group Chat](https://docs.runmaestro.ai/group-chat)
-
-### Remote Access
-Built-in web server with QR code access. Monitor and control all your agents from your phone. Supports local network access and remote tunneling via Cloudflare for access from anywhere—no account required.
-
-<p align="center">
-  <img src="docs/screenshots/mobile-chat.png" alt="Mobile Interface" width="300">
-</p>
-
-[Learn more about Remote Access](https://docs.runmaestro.ai/remote-access)
-
-### Command Line Interface
-Full CLI (`maestro-cli`) for headless operation. List agents/groups, run playbooks from cron jobs or CI/CD pipelines, with human-readable or JSONL output for scripting.
-
-[Learn more about the CLI](https://docs.runmaestro.ai/cli)
-
-## Core Features
-
-| Feature | Description |
-|---------|-------------|
-| **Multi-Agent Management** | Run unlimited agents in parallel with isolated workspaces and conversation histories |
-| **Dual-Mode Sessions** | Switch between AI Terminal and Command Terminal with `Cmd+J` |
-| **Keyboard-First Design** | Full keyboard control with customizable shortcuts and [mastery tracking](https://docs.runmaestro.ai/achievements) |
-| **Session Discovery** | Automatically discovers existing sessions from all supported providers |
-| **Git Integration** | Branch display, diff viewer, commit logs, and git-aware file completion |
-| **File Explorer** | Browse files with syntax highlighting, markdown preview, and `@` mentions |
-| **Message Queueing** | Queue messages while AI is busy; they're sent when the agent is ready |
-| **Output Filtering** | Search and filter with include/exclude modes and regex support |
-| **Slash Commands** | Extensible command system with autocomplete, [template variables](https://docs.runmaestro.ai/slash-commands) and spec-kit support.|
-| **Audio Notifications** | Text-to-speech announcements when agents complete tasks |
-| **Cost Tracking** | Real-time token usage and cost monitoring |
-| **12 Beautiful Themes** | Dracula, Monokai, Nord, Tokyo Night, GitHub Light, and more |
-| **Achievements** | [11 conductor-themed ranks](https://docs.runmaestro.ai/achievements) based on cumulative Auto Run time |
+> **Note**: Maestro supports Claude Code, OpenAI Codex, and OpenCode. Support for additional agents (Aider, Gemini CLI, Qwen3 Coder) may be added in future releases based on community demand.
 
 ## Quick Start
 
@@ -89,6 +69,14 @@ cd Maestro
 npm install
 npm run dev
 ```
+
+### Requirements
+
+- At least one supported AI coding agent installed and authenticated:
+  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) - Anthropic's AI coding assistant
+  - [OpenAI Codex](https://github.com/openai/codex) - OpenAI's coding agent
+  - [OpenCode](https://github.com/sst/opencode) - Open-source AI coding assistant
+- Git (optional, for git-aware features)
 
 ### Essential Keyboard Shortcuts
 
