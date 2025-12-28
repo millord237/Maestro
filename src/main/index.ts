@@ -59,6 +59,7 @@ if (isDevelopment && !DEMO_MODE && !process.env.USE_PROD_DATA) {
 // ============================================================================
 const bootstrapStore = new Store<BootstrapSettings>({
   name: 'maestro-bootstrap',
+  cwd: app.getPath('userData'), // Explicit path after dev mode adjustment
   defaults: {},
 });
 
@@ -95,6 +96,7 @@ const syncPath = getSyncPath() || app.getPath('userData');
 // Check if crash reporting is enabled (default: true for opt-out behavior)
 const crashReportingStore = new Store<{ crashReportingEnabled: boolean }>({
   name: 'maestro-settings',
+  cwd: syncPath, // Use same path as main settings store
 });
 const crashReportingEnabled = crashReportingStore.get('crashReportingEnabled', true);
 
