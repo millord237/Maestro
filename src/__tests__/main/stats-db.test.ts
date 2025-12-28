@@ -3691,3 +3691,504 @@ describe('Aggregation queries return correct calculations', () => {
     });
   });
 });
+
+/**
+ * Cross-platform database path resolution tests
+ *
+ * Tests verify that the stats database file is created at the correct
+ * platform-appropriate path on macOS, Windows, and Linux. Electron's
+ * app.getPath('userData') returns:
+ *
+ * - macOS: ~/Library/Application Support/Maestro/
+ * - Windows: %APPDATA%\Maestro\ (e.g., C:\Users\<user>\AppData\Roaming\Maestro\)
+ * - Linux: ~/.config/Maestro/
+ *
+ * The stats database is always created at {userData}/stats.db
+ */
+describe('Cross-platform database path resolution (macOS, Windows, Linux)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastDbPath = null;
+    mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+    mockDb.prepare.mockReturnValue(mockStatement);
+    mockStatement.run.mockReturnValue({ changes: 1 });
+    mockFsExistsSync.mockReturnValue(true);
+    mockFsMkdirSync.mockClear();
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  describe('macOS path resolution', () => {
+    it('should use macOS-style userData path: ~/Library/Application Support/Maestro/', async () => {
+      // Simulate macOS userData path
+      const macOsUserData = '/Users/testuser/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(macOsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(macOsUserData, 'stats.db'));
+    });
+
+    it('should handle macOS path with spaces in Application Support', async () => {
+      const macOsUserData = '/Users/testuser/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(macOsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      const dbPath = db.getDbPath();
+      expect(dbPath).toContain('Application Support');
+      expect(dbPath).toContain('stats.db');
+    });
+
+    it('should handle macOS username with special characters', async () => {
+      const macOsUserData = '/Users/test.user-name/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(macOsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(macOsUserData, 'stats.db'));
+    });
+
+    it('should resolve to absolute path on macOS', async () => {
+      const macOsUserData = '/Users/testuser/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(macOsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      expect(path.isAbsolute(db.getDbPath())).toBe(true);
+    });
+  });
+
+  describe('Windows path resolution', () => {
+    it('should use Windows-style userData path: %APPDATA%\\Maestro\\', async () => {
+      // Simulate Windows userData path
+      const windowsUserData = 'C:\\Users\\TestUser\\AppData\\Roaming\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(windowsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // path.join will use the platform's native separator
+      expect(lastDbPath).toBe(path.join(windowsUserData, 'stats.db'));
+    });
+
+    it('should handle Windows path with drive letter', async () => {
+      const windowsUserData = 'D:\\Users\\TestUser\\AppData\\Roaming\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(windowsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      const dbPath = db.getDbPath();
+      expect(dbPath).toContain('stats.db');
+      // The path should start with a drive letter pattern when on Windows
+      // or be a proper path when joined
+    });
+
+    it('should handle Windows username with spaces', async () => {
+      const windowsUserData = 'C:\\Users\\Test User\\AppData\\Roaming\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(windowsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(windowsUserData, 'stats.db'));
+    });
+
+    it('should handle Windows UNC paths (network drives)', async () => {
+      const windowsUncPath = '\\\\NetworkDrive\\SharedFolder\\AppData\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(windowsUncPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(windowsUncPath, 'stats.db'));
+    });
+
+    it('should handle portable Windows installation path', async () => {
+      // Portable apps might use a different structure
+      const portablePath = 'E:\\PortableApps\\Maestro\\Data';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(portablePath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(portablePath, 'stats.db'));
+    });
+  });
+
+  describe('Linux path resolution', () => {
+    it('should use Linux-style userData path: ~/.config/Maestro/', async () => {
+      // Simulate Linux userData path
+      const linuxUserData = '/home/testuser/.config/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(linuxUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(linuxUserData, 'stats.db'));
+    });
+
+    it('should handle Linux XDG_CONFIG_HOME override', async () => {
+      // Custom XDG_CONFIG_HOME might result in different path
+      const customConfigHome = '/custom/config/path/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(customConfigHome);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(customConfigHome, 'stats.db'));
+    });
+
+    it('should handle Linux username with underscore', async () => {
+      const linuxUserData = '/home/test_user/.config/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(linuxUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(linuxUserData, 'stats.db'));
+    });
+
+    it('should resolve to absolute path on Linux', async () => {
+      const linuxUserData = '/home/testuser/.config/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(linuxUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      expect(path.isAbsolute(db.getDbPath())).toBe(true);
+    });
+
+    it('should handle Linux Snap/Flatpak sandboxed paths', async () => {
+      // Snap packages have a different path structure
+      const snapPath = '/home/testuser/snap/maestro/current/.config/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(snapPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(snapPath, 'stats.db'));
+    });
+  });
+
+  describe('path.join cross-platform behavior', () => {
+    it('should use path.join to combine userData and stats.db', async () => {
+      const testUserData = '/test/user/data';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(testUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      // path.join should be used (not string concatenation)
+      expect(db.getDbPath()).toBe(path.join(testUserData, 'stats.db'));
+    });
+
+    it('should handle trailing slash in userData path', async () => {
+      const userDataWithSlash = '/test/user/data/';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(userDataWithSlash);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      // path.join normalizes trailing slashes
+      const dbPath = db.getDbPath();
+      expect(dbPath.endsWith('stats.db')).toBe(true);
+      // Should not have double slashes
+      expect(dbPath).not.toContain('//');
+    });
+
+    it('should result in stats.db as the basename on all platforms', async () => {
+      const testUserData = '/any/path/structure';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(testUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      expect(path.basename(db.getDbPath())).toBe('stats.db');
+    });
+
+    it('should result in userData directory as the parent', async () => {
+      const testUserData = '/any/path/structure';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(testUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      expect(path.dirname(db.getDbPath())).toBe(testUserData);
+    });
+  });
+
+  describe('directory creation cross-platform', () => {
+    it('should create directory on macOS if it does not exist', async () => {
+      mockFsExistsSync.mockReturnValue(false);
+      const macOsUserData = '/Users/testuser/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(macOsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(mockFsMkdirSync).toHaveBeenCalledWith(macOsUserData, { recursive: true });
+    });
+
+    it('should create directory on Windows if it does not exist', async () => {
+      mockFsExistsSync.mockReturnValue(false);
+      const windowsUserData = 'C:\\Users\\TestUser\\AppData\\Roaming\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(windowsUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(mockFsMkdirSync).toHaveBeenCalledWith(windowsUserData, { recursive: true });
+    });
+
+    it('should create directory on Linux if it does not exist', async () => {
+      mockFsExistsSync.mockReturnValue(false);
+      const linuxUserData = '/home/testuser/.config/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(linuxUserData);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(mockFsMkdirSync).toHaveBeenCalledWith(linuxUserData, { recursive: true });
+    });
+
+    it('should use recursive option for deeply nested paths', async () => {
+      mockFsExistsSync.mockReturnValue(false);
+      const deepPath = '/very/deep/nested/path/structure/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(deepPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(mockFsMkdirSync).toHaveBeenCalledWith(deepPath, { recursive: true });
+    });
+  });
+
+  describe('edge cases for path resolution', () => {
+    it('should handle unicode characters in path', async () => {
+      const unicodePath = '/Users/用户名/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(unicodePath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(unicodePath, 'stats.db'));
+    });
+
+    it('should handle emoji in path (macOS supports this)', async () => {
+      const emojiPath = '/Users/test/Documents/🎵Music/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(emojiPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(emojiPath, 'stats.db'));
+    });
+
+    it('should handle very long paths (approaching Windows MAX_PATH)', async () => {
+      // Windows MAX_PATH is 260 characters by default
+      const longPath = '/very' + '/long'.repeat(50) + '/path/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(longPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      const dbPath = db.getDbPath();
+      expect(dbPath.endsWith('stats.db')).toBe(true);
+    });
+
+    it('should handle path with single quotes', async () => {
+      const quotedPath = "/Users/O'Brien/Library/Application Support/Maestro";
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(quotedPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(quotedPath, 'stats.db'));
+    });
+
+    it('should handle path with double quotes (Windows allows this)', async () => {
+      // Note: Double quotes aren't typically valid in Windows paths but path.join handles them
+      const quotedPath = 'C:\\Users\\Test"User\\AppData\\Roaming\\Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(quotedPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      const dbPath = db.getDbPath();
+      expect(path.basename(dbPath)).toBe('stats.db');
+    });
+
+    it('should handle path with ampersand', async () => {
+      const ampersandPath = '/Users/Smith & Jones/Library/Application Support/Maestro';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(ampersandPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      expect(lastDbPath).toBe(path.join(ampersandPath, 'stats.db'));
+    });
+  });
+
+  describe('consistency across platform simulations', () => {
+    it('should always produce a path ending with stats.db regardless of platform', async () => {
+      const platforms = [
+        '/Users/mac/Library/Application Support/Maestro',
+        'C:\\Users\\Windows\\AppData\\Roaming\\Maestro',
+        '/home/linux/.config/Maestro',
+      ];
+
+      for (const platformPath of platforms) {
+        vi.resetModules();
+        const { app } = await import('electron');
+        vi.mocked(app.getPath).mockReturnValue(platformPath);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+
+        expect(path.basename(db.getDbPath())).toBe('stats.db');
+      }
+    });
+
+    it('should always initialize successfully regardless of platform path format', async () => {
+      const platforms = [
+        '/Users/mac/Library/Application Support/Maestro',
+        'C:\\Users\\Windows\\AppData\\Roaming\\Maestro',
+        '/home/linux/.config/Maestro',
+      ];
+
+      for (const platformPath of platforms) {
+        vi.resetModules();
+        vi.clearAllMocks();
+        mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+        mockDb.prepare.mockReturnValue(mockStatement);
+        mockFsExistsSync.mockReturnValue(true);
+
+        const { app } = await import('electron');
+        vi.mocked(app.getPath).mockReturnValue(platformPath);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        expect(db.isReady()).toBe(true);
+      }
+    });
+
+    it('should pass correct directory to mkdirSync on all platforms', async () => {
+      const platforms = [
+        '/Users/mac/Library/Application Support/Maestro',
+        'C:\\Users\\Windows\\AppData\\Roaming\\Maestro',
+        '/home/linux/.config/Maestro',
+      ];
+
+      for (const platformPath of platforms) {
+        vi.resetModules();
+        vi.clearAllMocks();
+        mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+        mockDb.prepare.mockReturnValue(mockStatement);
+        mockFsExistsSync.mockReturnValue(false);
+        mockFsMkdirSync.mockClear();
+
+        const { app } = await import('electron');
+        vi.mocked(app.getPath).mockReturnValue(platformPath);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        expect(mockFsMkdirSync).toHaveBeenCalledWith(platformPath, { recursive: true });
+      }
+    });
+  });
+
+  describe('electron app.getPath integration', () => {
+    it('should call app.getPath with "userData" argument', async () => {
+      const { app } = await import('electron');
+
+      const { StatsDB } = await import('../../main/stats-db');
+      new StatsDB();
+
+      expect(app.getPath).toHaveBeenCalledWith('userData');
+    });
+
+    it('should respect the value returned by app.getPath', async () => {
+      const customPath = '/custom/electron/user/data/path';
+      const { app } = await import('electron');
+      vi.mocked(app.getPath).mockReturnValue(customPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      expect(db.getDbPath()).toBe(path.join(customPath, 'stats.db'));
+    });
+
+    it('should use userData path at construction time (not lazily)', async () => {
+      const { app } = await import('electron');
+      const initialPath = '/initial/path';
+      vi.mocked(app.getPath).mockReturnValue(initialPath);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      // Change the mock after construction
+      vi.mocked(app.getPath).mockReturnValue('/different/path');
+
+      // Should still use the initial path
+      expect(db.getDbPath()).toBe(path.join(initialPath, 'stats.db'));
+    });
+  });
+});
