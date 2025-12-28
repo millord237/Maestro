@@ -8520,6 +8520,29 @@ function MaestroConsoleInner() {
         />
       )}
 
+      {/* --- GIST PUBLISH MODAL --- */}
+      {gistPublishModalOpen && previewFile && (
+        <GistPublishModal
+          theme={theme}
+          filename={previewFile.name}
+          content={previewFile.content}
+          onClose={() => setGistPublishModalOpen(false)}
+          onSuccess={(gistUrl, isPublic) => {
+            // Copy the gist URL to clipboard
+            navigator.clipboard.writeText(gistUrl);
+            // Show a toast notification
+            addToast({
+              type: 'success',
+              title: 'Gist Published',
+              message: `${isPublic ? 'Public' : 'Secret'} gist created! URL copied to clipboard.`,
+              duration: 5000,
+              actionUrl: gistUrl,
+              actionLabel: 'Open Gist',
+            });
+          }}
+        />
+      )}
+
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
 
       {/* --- EMPTY STATE VIEW (when no sessions) --- */}
