@@ -274,7 +274,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
       setRenameInstanceModalOpen(true);
       setQuickActionOpen(false);
     } }] : []),
-    ...(activeSession && onEditAgent ? [{ id: 'editAgent', label: `Edit Agent: ${activeSession.name}`, action: () => {
+    ...(activeSession && onEditAgent ? [{ id: 'editAgent', label: `Edit Agent: ${activeSession.name}`, shortcut: shortcuts.agentSettings, action: () => {
       onEditAgent(activeSession);
       setQuickActionOpen(false);
     } }] : []),

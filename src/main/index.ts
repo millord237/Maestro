@@ -37,6 +37,10 @@ interface BootstrapSettings {
 // ============================================================================
 const isDevelopment = process.env.NODE_ENV === 'development';
 
+// Capture the production data path before any modification
+// Used for stores that should be shared between dev and prod (e.g., agent configs)
+const productionDataPath = app.getPath('userData');
+
 // Demo mode: use a separate data directory for fresh demos
 if (DEMO_MODE) {
   app.setPath('userData', DEMO_DATA_PATH);
@@ -190,9 +194,12 @@ interface AgentConfigsData {
   configs: Record<string, Record<string, any>>; // agentId -> config key-value pairs
 }
 
+// Agent configs are ALWAYS stored in the production path, even in dev mode
+// This ensures agent paths, custom args, and env vars are shared between dev and prod
+// (They represent machine-level configuration, not session/project data)
 const agentConfigsStore = new Store<AgentConfigsData>({
   name: 'maestro-agent-configs',
-  cwd: syncPath, // Use iCloud/custom sync path if configured
+  cwd: productionDataPath,
   defaults: {
     configs: {},
   },

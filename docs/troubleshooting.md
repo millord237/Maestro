@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting & Support
 description: System logs, process monitor, debug packages, and how to get help with Maestro.
-icon: life-buoy
+icon: life-ring
 ---
 
 ## System Logs

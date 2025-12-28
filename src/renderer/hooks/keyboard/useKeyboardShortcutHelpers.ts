@@ -86,7 +86,14 @@ export function useKeyboardShortcutHelpers(
     // Use e.code to get the physical key pressed instead
     if (altPressed && e.code) {
       const codeKey = e.code.replace('Key', '').toLowerCase();
-      return codeKey === mainKey;
+      // Map e.code values to key characters for punctuation keys
+      const codeToKey: Record<string, string> = {
+        'comma': ',', 'period': '.', 'slash': '/', 'backslash': '\\',
+        'bracketleft': '[', 'bracketright': ']', 'semicolon': ';',
+        'quote': "'", 'backquote': '`', 'minus': '-', 'equal': '=',
+      };
+      const mappedKey = codeToKey[codeKey] || codeKey;
+      return mappedKey === mainKey;
     }
 
     return key === mainKey;
@@ -125,7 +132,14 @@ export function useKeyboardShortcutHelpers(
     // Use e.code to get the physical key pressed instead
     if (altPressed && e.code) {
       const codeKey = e.code.replace('Key', '').toLowerCase();
-      return codeKey === mainKey;
+      // Map e.code values to key characters for punctuation keys
+      const codeToKey: Record<string, string> = {
+        'comma': ',', 'period': '.', 'slash': '/', 'backslash': '\\',
+        'bracketleft': '[', 'bracketright': ']', 'semicolon': ';',
+        'quote': "'", 'backquote': '`', 'minus': '-', 'equal': '=',
+      };
+      const mappedKey = codeToKey[codeKey] || codeKey;
+      return mappedKey === mainKey;
     }
 
     return key === mainKey;
