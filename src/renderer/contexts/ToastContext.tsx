@@ -110,9 +110,12 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
 
     // Speak toast via TTS if audio feedback is enabled and command is configured
     if (audioEnabled && audioCommand) {
+      console.log('[ToastContext] Triggering TTS with message:', toast.message, 'command:', audioCommand);
       window.maestro.notification.speak(toast.message, audioCommand).catch(err => {
         console.error('[ToastContext] Failed to speak toast:', err);
       });
+    } else {
+      console.log('[ToastContext] TTS skipped - enabled:', audioEnabled, 'command:', audioCommand);
     }
 
     // Show OS notification if enabled

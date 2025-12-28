@@ -32,6 +32,31 @@ interface BootstrapSettings {
   iCloudSyncEnabled?: boolean; // Legacy - kept for backwards compatibility during migration
 }
 
+// ============================================================================
+// Data Directory Configuration (MUST happen before any Store initialization)
+// ============================================================================
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// Demo mode: use a separate data directory for fresh demos
+if (DEMO_MODE) {
+  app.setPath('userData', DEMO_DATA_PATH);
+  console.log(`[DEMO MODE] Using data directory: ${DEMO_DATA_PATH}`);
+}
+
+// Development mode: use a separate data directory to allow running alongside production
+// This prevents database lock conflicts (e.g., Service Worker storage)
+// Set USE_PROD_DATA=1 to use the production data directory instead (requires closing production app)
+if (isDevelopment && !DEMO_MODE && !process.env.USE_PROD_DATA) {
+  const devDataPath = path.join(app.getPath('userData'), '..', 'maestro-dev');
+  app.setPath('userData', devDataPath);
+  console.log(`[DEV MODE] Using data directory: ${devDataPath}`);
+} else if (isDevelopment && process.env.USE_PROD_DATA) {
+  console.log(`[DEV MODE] Using production data directory: ${app.getPath('userData')}`);
+}
+
+// ============================================================================
+// Store Initialization (after userData path is configured)
+// ============================================================================
 const bootstrapStore = new Store<BootstrapSettings>({
   name: 'maestro-bootstrap',
   defaults: {},
@@ -62,12 +87,11 @@ function getSyncPath(): string | undefined {
 }
 
 // Get the sync path once at startup
-const syncPath = getSyncPath();
+// If no custom sync path, use the (potentially modified) userData path
+const syncPath = getSyncPath() || app.getPath('userData');
 
-// Initialize Sentry for crash reporting (before app.ready)
+// Initialize Sentry for crash reporting
 // Only enable in production - skip during development to avoid noise from hot-reload artifacts
-const isDevelopment = process.env.NODE_ENV === 'development';
-
 // Check if crash reporting is enabled (default: true for opt-out behavior)
 const crashReportingStore = new Store<{ crashReportingEnabled: boolean }>({
   name: 'maestro-settings',
@@ -91,23 +115,6 @@ if (crashReportingEnabled && !isDevelopment) {
       return event;
     },
   });
-}
-
-// Demo mode: use a separate data directory for fresh demos
-if (DEMO_MODE) {
-  app.setPath('userData', DEMO_DATA_PATH);
-  console.log(`[DEMO MODE] Using data directory: ${DEMO_DATA_PATH}`);
-}
-
-// Development mode: use a separate data directory to allow running alongside production
-// This prevents database lock conflicts (e.g., Service Worker storage)
-// Set USE_PROD_DATA=1 to use the production data directory instead (requires closing production app)
-if (isDevelopment && !DEMO_MODE && !process.env.USE_PROD_DATA) {
-  const devDataPath = path.join(app.getPath('userData'), '..', 'maestro-dev');
-  app.setPath('userData', devDataPath);
-  console.log(`[DEV MODE] Using data directory: ${devDataPath}`);
-} else if (isDevelopment && process.env.USE_PROD_DATA) {
-  console.log(`[DEV MODE] Using production data directory: ${app.getPath('userData')}`);
 }
 
 // Type definitions
@@ -1405,8 +1412,17 @@ function setupIpcHandlers() {
             logger.error('TTS stdin error', 'TTS', { error: String(err), code: errorCode });
           }
         });
-        child.stdin.write(text);
-        child.stdin.end();
+        console.log('[TTS Main] Writing to stdin:', text);
+        child.stdin.write(text, 'utf8', (err) => {
+          if (err) {
+            console.error('[TTS Main] stdin write error:', err);
+          } else {
+            console.log('[TTS Main] stdin write completed, ending stream');
+          }
+          child.stdin!.end();
+        });
+      } else {
+        console.error('[TTS Main] No stdin available on child process');
       }
 
       child.on('error', (err) => {

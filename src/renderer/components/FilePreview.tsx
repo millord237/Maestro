@@ -756,9 +756,9 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         }
       }
 
-      // Update match count
+      // Update match count - only reset index if it's truly out of bounds and not already 0
       setTotalMatches(allRanges.length);
-      if (allRanges.length > 0 && currentMatchIndex >= allRanges.length) {
+      if (allRanges.length > 0 && currentMatchIndex >= allRanges.length && currentMatchIndex !== 0) {
         setCurrentMatchIndex(0);
       }
 
