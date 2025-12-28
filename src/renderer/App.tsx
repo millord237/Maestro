@@ -7858,7 +7858,10 @@ function MaestroConsoleInner() {
     summarizeAndContinue: handleSummarizeAndContinue,
 
     // Keyboard mastery gamification
-    recordShortcutUsage, onKeyboardMasteryLevelUp
+    recordShortcutUsage, onKeyboardMasteryLevelUp,
+
+    // Edit agent modal
+    setEditAgentSession, setEditAgentModalOpen
 
   };
 

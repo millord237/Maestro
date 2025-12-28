@@ -79,7 +79,8 @@
               "achievements",
               "keyboard-shortcuts",
               "troubleshooting"
-            ]
+            ],
+            "icon": "life-ring"
           }
         ]
       }
