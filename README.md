@@ -8,7 +8,9 @@
 
 Maestro is a cross-platform desktop app for orchestrating your fleet of AI coding agents. Built for power users who live on the keyboard and rarely touch the mouse.
 
-<img src="docs/screenshots/main-screen.png" alt="Maestro Main Screen" width="800">
+<p align="center">
+  <img src="docs/screenshots/main-screen.png" alt="Maestro Main Screen" width="800">
+</p>
 
 Run multiple agents in parallel with a Linear/Superhuman-level responsive interface. Currently supporting **Claude Code**, **OpenAI Codex**, and **OpenCode** with plans for additional agentic coding tools based on user demand.
 
@@ -17,28 +19,36 @@ Run multiple agents in parallel with a Linear/Superhuman-level responsive interf
 ### Auto Run & Playbooks
 Batch-process markdown checklists through AI agents. Create task documents with checkboxes, and Maestro works through them automatically—spawning fresh AI sessions for each task with clean context. Save configurations as playbooks for repeatable workflows, run in loops, and track everything in history.
 
-<img src="docs/screenshots/autorun-1.png" alt="Auto Run" width="400">
+<p align="center">
+  <img src="docs/screenshots/autorun-1.png" alt="Auto Run" width="400">
+</p>
 
 [Learn more about Auto Run](https://docs.runmaestro.ai/autorun-playbooks)
 
 ### Git Worktrees
 Run AI agents in parallel on isolated branches. Create worktree sub-agents from the git branch menu, each operating in their own directory. Work interactively in the main repo while sub-agents process tasks independently—then create PRs with one click.
 
-<img src="docs/screenshots/git-worktrees.png" alt="Git Worktrees" width="400">
+<p align="center">
+  <img src="docs/screenshots/git-worktrees.png" alt="Git Worktrees" width="400">
+</p>
 
 [Learn more about Git Worktrees](https://docs.runmaestro.ai/git-worktrees)
 
 ### Group Chat
 Coordinate multiple AI agents in a single conversation. A moderator AI orchestrates discussions, routing questions to the right agents and synthesizing their responses for cross-project questions and architecture discussions.
 
-<img src="docs/screenshots/group-chat.png" alt="Group Chat" width="800">
+<p align="center">
+  <img src="docs/screenshots/group-chat.png" alt="Group Chat" width="800">
+</p>
 
 [Learn more about Group Chat](https://docs.runmaestro.ai/group-chat)
 
 ### Remote Access
 Built-in web server with QR code access. Monitor and control all your agents from your phone. Supports local network access and remote tunneling via Cloudflare for access from anywhere—no account required.
 
-<img src="docs/screenshots/mobile-chat.png" alt="Mobile Interface" width="300">
+<p align="center">
+  <img src="docs/screenshots/mobile-chat.png" alt="Mobile Interface" width="300">
+</p>
 
 [Learn more about Remote Access](https://docs.runmaestro.ai/remote-access)
 
@@ -96,15 +106,21 @@ npm run dev
 
 ## Screenshots
 
-<img src="docs/screenshots/cmd-k-1.png" alt="Command Palette" width="800">
+<p align="center">
+  <img src="docs/screenshots/cmd-k-1.png" alt="Command Palette" width="800">
+</p>
 
 *Quick Actions palette for rapid navigation*
 
-<img src="docs/screenshots/git-diff.png" alt="Git Diff Viewer" width="800">
+<p align="center">
+  <img src="docs/screenshots/git-diff.png" alt="Git Diff Viewer" width="800">
+</p>
 
 *Side-by-side diff viewer with syntax highlighting*
 
-<img src="docs/screenshots/themes.png" alt="Themes" width="800">
+<p align="center">
+  <img src="docs/screenshots/themes.png" alt="Themes" width="800">
+</p>
 
 *12 beautiful themes to match your style*
 
