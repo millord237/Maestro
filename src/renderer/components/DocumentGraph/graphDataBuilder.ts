@@ -69,15 +69,17 @@ export interface GraphData {
 }
 
 /**
- * Internal parsed file data with content and links
+ * Internal parsed file data (content is NOT stored to minimize memory usage)
+ *
+ * File content is parsed on-the-fly and immediately discarded after extracting
+ * links and stats. This is the "lazy load" optimization - content is only read
+ * when building the graph, not kept in memory.
  */
 interface ParsedFile {
   /** Relative path from root (normalized) */
   relativePath: string;
   /** Full file path */
   fullPath: string;
-  /** Raw file content */
-  content: string;
   /** File size in bytes */
   fileSize: number;
   /** Parsed links from the file */
@@ -154,10 +156,12 @@ async function parseFile(rootPath: string, relativePath: string): Promise<Parsed
     // Compute document statistics
     const stats = computeDocumentStats(content, relativePath, fileSize);
 
+    // Note: We intentionally do NOT store 'content' in the returned object.
+    // The content has been parsed for links and stats, and is no longer needed.
+    // This "lazy load" approach minimizes memory usage by discarding content immediately.
     return {
       relativePath,
       fullPath,
-      content,
       fileSize,
       internalLinks,
       externalLinks,
