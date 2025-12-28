@@ -6,8 +6,6 @@ icon: git-pull-request
 
 OpenSpec is a spec-driven development tool from [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) that ensures alignment between humans and AI coding assistants before any code is written. Maestro bundles these workflow commands and keeps them updated automatically.
 
-![OpenSpec Commands in Settings](./screenshots/openspec-commands.png)
-
 ## OpenSpec vs. Spec-Kit
 
 Maestro offers two complementary spec-driven development tools:
