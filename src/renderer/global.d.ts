@@ -549,6 +549,11 @@ interface MaestroAPI {
   };
   dialog: {
     selectFolder: () => Promise<string | null>;
+    saveFile: (options: {
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+      title?: string;
+    }) => Promise<string | null>;
   };
   fonts: {
     detect: () => Promise<string[]>;

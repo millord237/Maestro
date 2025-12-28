@@ -44,11 +44,21 @@ const mockGetAggregation = vi.fn();
 const mockExportCsv = vi.fn();
 const mockOnStatsUpdate = vi.fn(() => vi.fn()); // Returns unsubscribe function
 
+// Mock dialog and fs API
+const mockSaveFile = vi.fn();
+const mockWriteFile = vi.fn();
+
 const mockMaestro = {
   stats: {
     getAggregation: mockGetAggregation,
     exportCsv: mockExportCsv,
     onStatsUpdate: mockOnStatsUpdate,
+  },
+  dialog: {
+    saveFile: mockSaveFile,
+  },
+  fs: {
+    writeFile: mockWriteFile,
   },
 };
 
@@ -105,6 +115,8 @@ describe('UsageDashboardModal', () => {
     vi.clearAllMocks();
     mockGetAggregation.mockResolvedValue(createSampleData());
     mockExportCsv.mockResolvedValue('date,count\n2024-01-15,25');
+    mockSaveFile.mockResolvedValue(null); // User cancels by default
+    mockWriteFile.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -393,7 +405,7 @@ describe('UsageDashboardModal', () => {
   });
 
   describe('CSV Export', () => {
-    it('calls exportCsv when export button is clicked', async () => {
+    it('shows save dialog when export button is clicked', async () => {
       render(
         <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
       );
@@ -402,24 +414,52 @@ describe('UsageDashboardModal', () => {
         expect(screen.getByText('Export CSV')).toBeInTheDocument();
       });
 
-      // Mock the document.createElement and URL APIs before clicking
-      const originalCreateElement = document.createElement.bind(document);
-      const mockAnchor = {
-        href: '',
-        download: '',
-        click: vi.fn(),
-        style: {},
-      };
-      vi.spyOn(document, 'createElement').mockImplementation((tag) => {
-        if (tag === 'a') {
-          return mockAnchor as unknown as HTMLAnchorElement;
-        }
-        return originalCreateElement(tag);
+      fireEvent.click(screen.getByText('Export CSV'));
+
+      await waitFor(() => {
+        expect(mockSaveFile).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+            title: 'Export Usage Data',
+          })
+        );
       });
-      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockReturnValue(mockAnchor as any);
-      const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockReturnValue(mockAnchor as any);
-      const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
-      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    });
+
+    it('does not export if user cancels save dialog', async () => {
+      mockSaveFile.mockResolvedValue(null); // User cancels
+
+      render(
+        <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Export CSV')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Export CSV'));
+
+      await waitFor(() => {
+        expect(mockSaveFile).toHaveBeenCalled();
+      });
+
+      // exportCsv should not be called if user cancelled
+      expect(mockExportCsv).not.toHaveBeenCalled();
+    });
+
+    it('exports CSV to selected file location', async () => {
+      const testFilePath = '/path/to/export.csv';
+      const csvContent = 'id,sessionId,agentType,source,startTime,duration\n"1","test","claude-code","user","2024-01-15","1000"';
+      mockSaveFile.mockResolvedValue(testFilePath);
+      mockExportCsv.mockResolvedValue(csvContent);
+
+      render(
+        <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Export CSV')).toBeInTheDocument();
+      });
 
       fireEvent.click(screen.getByText('Export CSV'));
 
@@ -427,11 +467,33 @@ describe('UsageDashboardModal', () => {
         expect(mockExportCsv).toHaveBeenCalledWith('week');
       });
 
-      // Cleanup spies
-      appendChildSpy.mockRestore();
-      removeChildSpy.mockRestore();
-      createObjectURLSpy.mockRestore();
-      revokeObjectURLSpy.mockRestore();
+      await waitFor(() => {
+        expect(mockWriteFile).toHaveBeenCalledWith(testFilePath, csvContent);
+      });
+    });
+
+    it('handles export error gracefully', async () => {
+      const testFilePath = '/path/to/export.csv';
+      mockSaveFile.mockResolvedValue(testFilePath);
+      mockExportCsv.mockRejectedValue(new Error('Export failed'));
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      render(
+        <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Export CSV')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Export CSV'));
+
+      await waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith('Failed to export CSV:', expect.any(Error));
+      });
+
+      consoleSpy.mockRestore();
     });
   });
 

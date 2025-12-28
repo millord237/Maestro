@@ -178,17 +178,22 @@ export function UsageDashboardModal({
   const handleExport = async () => {
     setIsExporting(true);
     try {
+      // Show save dialog to let user choose file location
+      const defaultFilename = `maestro-usage-${timeRange}-${new Date().toISOString().split('T')[0]}.csv`;
+      const filePath = await window.maestro.dialog.saveFile({
+        defaultPath: defaultFilename,
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        title: 'Export Usage Data',
+      });
+
+      // User cancelled the dialog
+      if (!filePath) {
+        return;
+      }
+
+      // Get CSV data and write to selected file
       const csv = await window.maestro.stats.exportCsv(timeRange);
-      // Create and download file
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `maestro-usage-${timeRange}-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await window.maestro.fs.writeFile(filePath, csv);
     } catch (err) {
       console.error('Failed to export CSV:', err);
     } finally {

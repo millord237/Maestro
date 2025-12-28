@@ -331,6 +331,7 @@ const mockMaestro = {
   },
   dialog: {
     selectFolder: vi.fn().mockResolvedValue(null),
+    saveFile: vi.fn().mockResolvedValue(null),
   },
   shells: {
     detect: vi.fn().mockResolvedValue([]),

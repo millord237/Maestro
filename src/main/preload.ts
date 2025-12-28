@@ -550,6 +550,11 @@ contextBridge.exposeInMainWorld('maestro', {
   // Dialog API
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+    saveFile: (options: {
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+      title?: string;
+    }) => ipcRenderer.invoke('dialog:saveFile', options),
   },
 
   // Font API
