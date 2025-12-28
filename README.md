@@ -24,7 +24,7 @@ Batch-process markdown checklists through AI agents. Create task documents with 
 ### Git Worktrees
 Run AI agents in parallel on isolated branches. Create worktree sub-agents from the git branch menu, each operating in their own directory. Work interactively in the main repo while sub-agents process tasks independently—then create PRs with one click.
 
-<img src="docs/screenshots/git-worktree-list.png" alt="Git Worktrees" width="400">
+<img src="docs/screenshots/git-worktrees.png" alt="Git Worktrees" width="400">
 
 [Learn more about Git Worktrees](https://docs.runmaestro.ai/git-worktrees)
 
