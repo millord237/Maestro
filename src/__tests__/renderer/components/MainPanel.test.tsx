@@ -991,7 +991,7 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
 
-      expect(screen.getByText('Stopping...')).toBeInTheDocument();
+      expect(screen.getByText('Stopping')).toBeInTheDocument();
     });
 
     it('should call onStopBatchRun directly when Auto button is clicked', () => {
@@ -1048,7 +1048,7 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} onStopBatchRun={onStopBatchRun} />);
 
-      fireEvent.click(screen.getByText('Stopping...'));
+      fireEvent.click(screen.getByText('Stopping'));
 
       expect(onStopBatchRun).not.toHaveBeenCalled();
     });
@@ -1057,7 +1057,7 @@ describe('MainPanel', () => {
       render(<MainPanel {...defaultProps} currentSessionBatchState={null} />);
 
       expect(screen.queryByText('Auto')).not.toBeInTheDocument();
-      expect(screen.queryByText('Stopping...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Stopping')).not.toBeInTheDocument();
     });
 
     it('should not display Auto mode button when currentSessionBatchState is undefined', () => {
@@ -1201,7 +1201,7 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
 
-      const button = screen.getByText('Stopping...').closest('button');
+      const button = screen.getByText('Stopping').closest('button');
       expect(button).toBeDisabled();
     });
 
@@ -1282,7 +1282,7 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
 
-      const button = screen.getByText('Stopping...').closest('button');
+      const button = screen.getByText('Stopping').closest('button');
       expect(button).toHaveAttribute('title', 'Stopping after current task...');
     });
 
@@ -1390,7 +1390,7 @@ describe('MainPanel', () => {
 
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
 
-      const button = screen.getByText('Stopping...').closest('button');
+      const button = screen.getByText('Stopping').closest('button');
       expect(button).toHaveClass('cursor-not-allowed');
     });
 

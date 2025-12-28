@@ -501,68 +501,77 @@ export function AchievementCard({ theme, autoRunStats, globalStats, usageStats, 
       ctx.lineWidth = 3;
       ctx.stroke();
 
-      // Add a larger trophy badge in the bottom-right corner - MAXIMUM BRIGHTNESS
+      // Add Maestro wand badge in the bottom-right corner
       const badgeRadius = 18;
       const badgeX = iconX + iconRadius - 6;
       const badgeY = iconY + iconRadius - 6;
 
-      // Draw badge background - bright gold circle
+      // Draw badge background - purple/accent gradient
       ctx.beginPath();
       ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
-      const trophyBadgeGradient = ctx.createRadialGradient(badgeX - 4, badgeY - 4, 0, badgeX, badgeY, badgeRadius);
-      trophyBadgeGradient.addColorStop(0, '#FFFF99');
-      trophyBadgeGradient.addColorStop(0.4, '#FFE135');
-      trophyBadgeGradient.addColorStop(1, '#FFD700');
-      ctx.fillStyle = trophyBadgeGradient;
+      const wandBadgeGradient = ctx.createRadialGradient(badgeX - 4, badgeY - 4, 0, badgeX, badgeY, badgeRadius);
+      wandBadgeGradient.addColorStop(0, '#C4B5FD');  // Light purple center
+      wandBadgeGradient.addColorStop(0.5, '#A78BFA');  // Medium purple
+      wandBadgeGradient.addColorStop(1, '#8B5CF6');  // Accent purple edge
+      ctx.fillStyle = wandBadgeGradient;
       ctx.fill();
-      ctx.strokeStyle = '#FFFF66';
+      ctx.strokeStyle = '#DDD6FE';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Draw trophy shape manually with BRIGHT GOLD (not emoji)
-      const ts = badgeRadius * 0.55;  // trophy scale
-      ctx.fillStyle = '#1a1a2e';  // Dark color for contrast on gold background
+      // Draw Maestro wand shape
+      const ws = badgeRadius * 0.5;  // wand scale
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      // Wand stick (diagonal line)
       ctx.beginPath();
-      // Cup body
-      ctx.moveTo(badgeX - ts * 0.6, badgeY - ts * 0.5);
-      ctx.quadraticCurveTo(badgeX - ts * 0.7, badgeY + ts * 0.1, badgeX - ts * 0.3, badgeY + ts * 0.4);
-      ctx.lineTo(badgeX + ts * 0.3, badgeY + ts * 0.4);
-      ctx.quadraticCurveTo(badgeX + ts * 0.7, badgeY + ts * 0.1, badgeX + ts * 0.6, badgeY - ts * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      // Stem
-      ctx.fillRect(badgeX - ts * 0.12, badgeY + ts * 0.4, ts * 0.24, ts * 0.3);
-      // Base
-      ctx.fillRect(badgeX - ts * 0.35, badgeY + ts * 0.65, ts * 0.7, ts * 0.15);
+      ctx.moveTo(badgeX + ws * 0.5, badgeY + ws * 0.5);
+      ctx.lineTo(badgeX - ws * 0.4, badgeY - ws * 0.4);
+      ctx.stroke();
+      // Sparkle at tip (star shape)
+      const starX = badgeX - ws * 0.5;
+      const starY = badgeY - ws * 0.5;
+      const starSize = ws * 0.4;
+      ctx.lineWidth = 1.5;
+      // Vertical line
+      ctx.beginPath();
+      ctx.moveTo(starX, starY - starSize);
+      ctx.lineTo(starX, starY + starSize);
+      ctx.stroke();
+      // Horizontal line
+      ctx.beginPath();
+      ctx.moveTo(starX - starSize, starY);
+      ctx.lineTo(starX + starSize, starY);
+      ctx.stroke();
+      // Diagonal lines (smaller)
+      ctx.beginPath();
+      ctx.moveTo(starX - starSize * 0.7, starY - starSize * 0.7);
+      ctx.lineTo(starX + starSize * 0.7, starY + starSize * 0.7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(starX + starSize * 0.7, starY - starSize * 0.7);
+      ctx.lineTo(starX - starSize * 0.7, starY + starSize * 0.7);
+      ctx.stroke();
     } else {
-      // Default trophy icon - MAXIMUM BRIGHTNESS gold circle
+      // Default trophy icon with purple gradient background
       ctx.beginPath();
       ctx.arc(iconX, iconY, iconRadius, 0, Math.PI * 2);
-      const defaultTrophyGradient = ctx.createRadialGradient(iconX - 10, iconY - 10, 0, iconX, iconY, iconRadius);
-      defaultTrophyGradient.addColorStop(0, '#FFFF99');
-      defaultTrophyGradient.addColorStop(0.4, '#FFE135');
-      defaultTrophyGradient.addColorStop(1, '#FFD700');
-      ctx.fillStyle = defaultTrophyGradient;
+      const defaultGradient = ctx.createRadialGradient(iconX - 10, iconY - 10, 0, iconX, iconY, iconRadius);
+      defaultGradient.addColorStop(0, '#C4B5FD');  // Light purple center
+      defaultGradient.addColorStop(0.5, '#A78BFA');  // Medium purple
+      defaultGradient.addColorStop(1, '#8B5CF6');  // Accent purple edge
+      ctx.fillStyle = defaultGradient;
       ctx.fill();
-      ctx.strokeStyle = '#FFFF66';
+      ctx.strokeStyle = '#DDD6FE';
       ctx.lineWidth = 3;
       ctx.stroke();
 
-      // Draw trophy shape manually with dark color for contrast (not emoji)
-      const ts = iconRadius * 0.55;
-      ctx.fillStyle = '#1a1a2e';
-      ctx.beginPath();
-      // Cup body
-      ctx.moveTo(iconX - ts * 0.6, iconY - ts * 0.5);
-      ctx.quadraticCurveTo(iconX - ts * 0.7, iconY + ts * 0.1, iconX - ts * 0.3, iconY + ts * 0.4);
-      ctx.lineTo(iconX + ts * 0.3, iconY + ts * 0.4);
-      ctx.quadraticCurveTo(iconX + ts * 0.7, iconY + ts * 0.1, iconX + ts * 0.6, iconY - ts * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      // Stem
-      ctx.fillRect(iconX - ts * 0.12, iconY + ts * 0.4, ts * 0.24, ts * 0.3);
-      // Base
-      ctx.fillRect(iconX - ts * 0.35, iconY + ts * 0.65, ts * 0.7, ts * 0.15);
+      // Trophy emoji
+      ctx.font = '38px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🏆', iconX, iconY + 2);
     }
 
     // Title - show display name if personalized, otherwise generic title

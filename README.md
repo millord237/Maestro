@@ -95,6 +95,12 @@ npm run dev
 ## Screenshots
 
 <p align="center">
+  <img src="docs/screenshots/main-screen.png" alt="Maestro Main Screen" width="800">
+</p>
+
+*Main screen with multiple agents and conversation*
+
+<p align="center">
   <img src="docs/screenshots/cmd-k-1.png" alt="Command Palette" width="800">
 </p>
 
