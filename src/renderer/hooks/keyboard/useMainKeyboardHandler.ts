@@ -97,7 +97,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         // Allow system utility shortcuts (Alt+Cmd+L for logs, Alt+Cmd+P for processes) even when modals are open
         // NOTE: Must use e.code for Alt key combos on macOS because e.key produces special characters (e.g., Alt+P = π)
         const codeKeyLower = e.code?.replace('Key', '').toLowerCase() || '';
-        const isSystemUtilShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (codeKeyLower === 'l' || codeKeyLower === 'p');
+        const isSystemUtilShortcut = e.altKey && (e.metaKey || e.ctrlKey) && (codeKeyLower === 'l' || codeKeyLower === 'p' || codeKeyLower === 'u');
         // Allow session jump shortcuts (Alt+Cmd+NUMBER) even when modals are open
         // NOTE: Must use e.code for Alt key combos on macOS because e.key produces special characters
         const isSessionJumpShortcut = e.altKey && (e.metaKey || e.ctrlKey) && /^Digit[0-9]$/.test(e.code || '');
@@ -334,6 +334,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         e.preventDefault();
         ctx.setProcessMonitorOpen(true);
         trackShortcut('processMonitor');
+      }
+      else if (ctx.isShortcut(e, 'usageDashboard')) {
+        e.preventDefault();
+        ctx.setUsageDashboardOpen(true);
+        trackShortcut('usageDashboard');
       }
       else if (ctx.isShortcut(e, 'jumpToBottom')) {
         e.preventDefault();

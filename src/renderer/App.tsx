@@ -155,6 +155,8 @@ function MaestroConsoleInner() {
     logViewerOpen, setLogViewerOpen,
     // Process Monitor
     processMonitorOpen, setProcessMonitorOpen,
+    // Usage Dashboard
+    usageDashboardOpen, setUsageDashboardOpen,
     // Keyboard Mastery Celebration
     pendingKeyboardMasteryLevel, setPendingKeyboardMasteryLevel,
     // Playground Panel
@@ -7922,7 +7924,7 @@ function MaestroConsoleInner() {
     setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
     setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
     setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveAgentSessionId,
-    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
+    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, setUsageDashboardOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
@@ -8326,6 +8328,7 @@ function MaestroConsoleInner() {
         setAboutModalOpen={setAboutModalOpen}
         setLogViewerOpen={setLogViewerOpen}
         setProcessMonitorOpen={setProcessMonitorOpen}
+        setUsageDashboardOpen={setUsageDashboardOpen}
         setActiveRightTab={setActiveRightTab}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}

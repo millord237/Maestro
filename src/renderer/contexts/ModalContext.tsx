@@ -96,6 +96,10 @@ export interface ModalContextValue {
   processMonitorOpen: boolean;
   setProcessMonitorOpen: (open: boolean) => void;
 
+  // Usage Dashboard
+  usageDashboardOpen: boolean;
+  setUsageDashboardOpen: (open: boolean) => void;
+
   // Keyboard Mastery Celebration
   pendingKeyboardMasteryLevel: number | null;
   setPendingKeyboardMasteryLevel: (level: number | null) => void;
@@ -315,6 +319,9 @@ export function ModalProvider({ children }: ModalProviderProps) {
   // Process Monitor
   const [processMonitorOpen, setProcessMonitorOpen] = useState(false);
 
+  // Usage Dashboard
+  const [usageDashboardOpen, setUsageDashboardOpen] = useState(false);
+
   // Keyboard Mastery Celebration
   const [pendingKeyboardMasteryLevel, setPendingKeyboardMasteryLevel] = useState<number | null>(null);
 
@@ -505,6 +512,10 @@ export function ModalProvider({ children }: ModalProviderProps) {
     processMonitorOpen,
     setProcessMonitorOpen,
 
+    // Usage Dashboard
+    usageDashboardOpen,
+    setUsageDashboardOpen,
+
     // Keyboard Mastery Celebration
     pendingKeyboardMasteryLevel,
     setPendingKeyboardMasteryLevel,
@@ -681,6 +692,8 @@ export function ModalProvider({ children }: ModalProviderProps) {
     logViewerOpen,
     // Process Monitor
     processMonitorOpen,
+    // Usage Dashboard
+    usageDashboardOpen,
     // Keyboard Mastery Celebration
     pendingKeyboardMasteryLevel,
     // Playground Panel

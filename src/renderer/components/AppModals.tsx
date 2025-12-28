@@ -710,6 +710,7 @@ export interface AppUtilityModalsProps {
   setAboutModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setActiveRightTab: (tab: RightPanelTab) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
@@ -880,6 +881,7 @@ export function AppUtilityModals({
   setAboutModalOpen,
   setLogViewerOpen,
   setProcessMonitorOpen,
+  setUsageDashboardOpen,
   setActiveRightTab,
   setAgentSessionsOpen,
   setActiveAgentSessionId,
@@ -1024,6 +1026,7 @@ export function AppUtilityModals({
           setAboutModalOpen={setAboutModalOpen}
           setLogViewerOpen={setLogViewerOpen}
           setProcessMonitorOpen={setProcessMonitorOpen}
+          setUsageDashboardOpen={setUsageDashboardOpen}
           setActiveRightTab={setActiveRightTab}
           setAgentSessionsOpen={setAgentSessionsOpen}
           setActiveAgentSessionId={setActiveAgentSessionId}
@@ -1707,6 +1710,7 @@ export interface AppModalsProps {
   setAboutModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setActiveRightTab: (tab: RightPanelTab) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
@@ -1977,6 +1981,7 @@ export function AppModals(props: AppModalsProps) {
     setAboutModalOpen,
     setLogViewerOpen,
     setProcessMonitorOpen,
+    setUsageDashboardOpen,
     setActiveRightTab,
     setAgentSessionsOpen,
     setActiveAgentSessionId,
@@ -2264,6 +2269,7 @@ export function AppModals(props: AppModalsProps) {
         setAboutModalOpen={setAboutModalOpen}
         setLogViewerOpen={setLogViewerOpen}
         setProcessMonitorOpen={setProcessMonitorOpen}
+        setUsageDashboardOpen={setUsageDashboardOpen}
         setActiveRightTab={setActiveRightTab}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}
