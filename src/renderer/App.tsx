@@ -8647,6 +8647,7 @@ function MaestroConsoleInner() {
             setUpdateCheckModalOpen={setUpdateCheckModalOpen}
             setLogViewerOpen={setLogViewerOpen}
             setProcessMonitorOpen={setProcessMonitorOpen}
+            setUsageDashboardOpen={setUsageDashboardOpen}
             toggleGroup={toggleGroup}
             handleDragStart={handleDragStart}
             handleDragOver={handleDragOver}

@@ -567,7 +567,11 @@ export function UsageDashboardModal({
         </div>
 
         {/* Main Content */}
-        <div ref={contentRef} className="flex-1 overflow-y-auto scrollbar-thin p-6">
+        <div
+          ref={contentRef}
+          className="flex-1 overflow-y-auto scrollbar-thin p-6"
+          style={{ backgroundColor: theme.colors.bgMain }}
+        >
           {loading && !data ? (
             <DashboardSkeleton
               theme={theme}
