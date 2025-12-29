@@ -156,6 +156,109 @@ body {
   }
 }
 
+/* Usage Dashboard - New data indicator animations */
+@keyframes pulse-fade {
+  0% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Usage Dashboard - Skeleton loading animation */
+@keyframes skeleton-shimmer {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.3;
+  }
+}
+
+/* Usage Dashboard - View mode transition animations */
+@keyframes dashboard-content-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashboard-content-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* Usage Dashboard - Staggered card entrance animation */
+@keyframes dashboard-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Usage Dashboard - Chart section enter animation */
+@keyframes dashboard-section-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Usage Dashboard animation utility classes */
+.dashboard-content-enter {
+  animation: dashboard-content-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.dashboard-card-enter {
+  animation: dashboard-card-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+.dashboard-section-enter {
+  animation: dashboard-section-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
 .animate-in {
   animation: fade-in 0.2s ease-in;
 }
@@ -264,6 +367,44 @@ body {
   background-color: rgba(0, 0, 0, 0.85);
 }
 
+/* Document Graph - Search highlight animation for matching nodes */
+@keyframes search-highlight-glow {
+  0% {
+    box-shadow: 0 0 0 3px var(--search-highlight-color, rgba(99, 102, 241, 0.4)), 0 4px 12px var(--search-shadow-color, rgba(99, 102, 241, 0.2));
+  }
+  50% {
+    box-shadow: 0 0 0 5px var(--search-highlight-color, rgba(99, 102, 241, 0.25)), 0 4px 16px var(--search-shadow-color, rgba(99, 102, 241, 0.3));
+  }
+  100% {
+    box-shadow: 0 0 0 3px var(--search-highlight-color, rgba(99, 102, 241, 0.4)), 0 4px 12px var(--search-shadow-color, rgba(99, 102, 241, 0.2));
+  }
+}
+
+.search-highlight {
+  animation: search-highlight-glow 2s ease-in-out infinite;
+}
+
+/* React Flow - Document Graph edge hover styling */
+/* Subtle glow effect on edge hover */
+.react-flow__edge-path {
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px var(--edge-hover-color, currentColor));
+  stroke-width: 2.5;
+}
+
+/* Edge path styling for better visibility */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3;
+}
+
+/* Smooth step edge marker hover effect */
+.react-flow__edge:hover .react-flow__edge-textwrapper {
+  opacity: 1;
+}
+
 /* Reduced motion preference - accessibility best practice */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse,
@@ -277,5 +418,36 @@ body {
   .transition-opacity,
   .transition-transform {
     transition: none !important;
+  }
+
+  /* Disable React Flow edge animations */
+  .react-flow__edge-path {
+    transition: none !important;
+  }
+
+  /* Disable new data indicator animations */
+  [data-testid="new-data-indicator"],
+  [data-testid="new-data-indicator"] span {
+    animation: none !important;
+  }
+
+  /* Disable skeleton loading animations */
+  [data-testid="skeleton-box"],
+  [data-testid="skeleton-circle"] {
+    animation: none !important;
+  }
+
+  /* Disable Usage Dashboard state transition animations */
+  .dashboard-content-enter,
+  .dashboard-card-enter,
+  .dashboard-section-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Disable Document Graph search highlight animations */
+  .search-highlight {
+    animation: none !important;
   }
 }

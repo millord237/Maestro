@@ -56,6 +56,7 @@ vi.mock('lucide-react', () => ({
   Compass: () => <span data-testid="icon-compass" />,
   Globe: () => <span data-testid="icon-globe" />,
   BookOpen: () => <span data-testid="icon-book-open" />,
+  BarChart3: () => <span data-testid="icon-bar-chart" />,
 }));
 
 // Mock gitService
@@ -112,6 +113,7 @@ const defaultShortcuts: Record<string, Shortcut> = {
   settings: { keys: ['meta', ','], description: 'Settings' },
   systemLogs: { keys: ['meta', 'shift', 'l'], description: 'System logs' },
   processMonitor: { keys: ['meta', 'shift', 'p'], description: 'Process monitor' },
+  usageDashboard: { keys: ['alt', 'meta', 'u'], description: 'Usage dashboard' },
   toggleSidebar: { keys: ['meta', 'b'], description: 'Toggle sidebar' },
 };
 
@@ -178,6 +180,7 @@ const createDefaultProps = (overrides: Partial<Parameters<typeof SessionList>[0]
   setAboutModalOpen: vi.fn(),
   setLogViewerOpen: vi.fn(),
   setProcessMonitorOpen: vi.fn(),
+  setUsageDashboardOpen: vi.fn(),
   toggleGroup: vi.fn(),
   handleDragStart: vi.fn(),
   handleDragOver: vi.fn(),

@@ -49,6 +49,7 @@ interface QuickActionsModalProps {
   setAboutModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
   setGitDiffPreview: (diff: string | null) => void;
@@ -119,7 +120,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     setCreateGroupModalOpen,
     setLeftSidebarOpen, setRightPanelOpen, setActiveRightTab, toggleInputMode,
     deleteSession, addNewSession, setSettingsModalOpen, setSettingsTab,
-    setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen,
+    setShortcutsHelpOpen, setAboutModalOpen, setLogViewerOpen, setProcessMonitorOpen, setUsageDashboardOpen,
     setAgentSessionsOpen, setActiveAgentSessionId, setGitDiffPreview, setGitLogOpen,
     onRenameTab, onToggleReadOnlyMode, onToggleTabShowThinking, onOpenTabSwitcher, tabShortcuts, isAiMode, setPlaygroundOpen, onRefreshGitFileState,
     onDebugReleaseQueuedItem, markdownEditMode, onToggleMarkdownEditMode, setUpdateCheckModalOpen, openWizard, wizardGoToStep: _wizardGoToStep, setDebugWizardModalOpen, setDebugPackageModalOpen, startTour, setFuzzyFileSearchOpen, onEditAgent,
@@ -335,6 +336,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     ...(startTour ? [{ id: 'tour', label: 'Start Introductory Tour', subtext: 'Take a guided tour of the interface', action: () => { startTour(); setQuickActionOpen(false); } }] : []),
     { id: 'logs', label: 'View System Logs', shortcut: shortcuts.systemLogs, action: () => { setLogViewerOpen(true); setQuickActionOpen(false); } },
     { id: 'processes', label: 'View System Processes', shortcut: shortcuts.processMonitor, action: () => { setProcessMonitorOpen(true); setQuickActionOpen(false); } },
+    { id: 'usageDashboard', label: 'Usage Dashboard', shortcut: shortcuts.usageDashboard, action: () => { setUsageDashboardOpen(true); setQuickActionOpen(false); } },
     ...(activeSession && hasActiveSessionCapability?.('supportsSessionStorage') ? [{ id: 'agentSessions', label: `View Agent Sessions for ${activeSession.name}`, shortcut: shortcuts.agentSessions, action: () => { setActiveAgentSessionId(null); setAgentSessionsOpen(true); setQuickActionOpen(false); } }] : []),
     ...(isAiMode && canSummarizeActiveTab && onSummarizeAndContinue ? [{ id: 'summarizeAndContinue', label: 'Context: Compact', shortcut: tabShortcuts?.summarizeAndContinue, subtext: 'Compact context into a fresh tab', action: () => { onSummarizeAndContinue(); setQuickActionOpen(false); } }] : []),
     ...(activeSession && hasActiveSessionCapability?.('supportsContextMerge') && onOpenMergeSession ? [{ id: 'mergeSession', label: 'Context: Merge Into', shortcut: shortcuts.mergeSession, subtext: 'Merge current context into another session', action: () => { onOpenMergeSession(); setQuickActionOpen(false); } }] : []),

@@ -48,6 +48,7 @@ import { AboutModal } from './AboutModal';
 import { ShortcutsHelpModal } from './ShortcutsHelpModal';
 import { UpdateCheckModal } from './UpdateCheckModal';
 import { ProcessMonitor } from './ProcessMonitor';
+import { UsageDashboardModal } from './UsageDashboard';
 
 // Confirmation Modal Components
 import { ConfirmModal } from './ConfirmModal';
@@ -138,6 +139,14 @@ export interface AppInfoModalsProps {
   groupChats: GroupChat[];
   onNavigateToSession: (sessionId: string, tabId?: string) => void;
   onNavigateToGroupChat: (groupChatId: string) => void;
+
+  // Usage Dashboard Modal
+  usageDashboardOpen: boolean;
+  onCloseUsageDashboard: () => void;
+  /** Default time range for the Usage Dashboard from settings */
+  defaultStatsTimeRange?: 'day' | 'week' | 'month' | 'year' | 'all';
+  /** Enable colorblind-friendly colors for dashboard charts */
+  colorBlindMode?: boolean;
 }
 
 /**
@@ -148,6 +157,7 @@ export interface AppInfoModalsProps {
  * - AboutModal: Shows app info and stats
  * - UpdateCheckModal: Shows update status
  * - ProcessMonitor: Shows running processes
+ * - UsageDashboardModal: Shows usage analytics and visualizations
  *
  * NOTE: LogViewer is intentionally excluded - it's a content replacement component
  * that needs to be positioned in the flex layout, not an overlay modal.
@@ -181,6 +191,11 @@ export function AppInfoModals({
   groupChats,
   onNavigateToSession,
   onNavigateToGroupChat,
+  // Usage Dashboard Modal
+  usageDashboardOpen,
+  onCloseUsageDashboard,
+  defaultStatsTimeRange,
+  colorBlindMode,
 }: AppInfoModalsProps) {
   return (
     <>
@@ -228,6 +243,17 @@ export function AppInfoModals({
           onClose={onCloseProcessMonitor}
           onNavigateToSession={onNavigateToSession}
           onNavigateToGroupChat={onNavigateToGroupChat}
+        />
+      )}
+
+      {/* --- USAGE DASHBOARD MODAL --- */}
+      {usageDashboardOpen && (
+        <UsageDashboardModal
+          isOpen={usageDashboardOpen}
+          onClose={onCloseUsageDashboard}
+          theme={theme}
+          defaultTimeRange={defaultStatsTimeRange}
+          colorBlindMode={colorBlindMode}
         />
       )}
     </>
@@ -710,6 +736,7 @@ export interface AppUtilityModalsProps {
   setAboutModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setActiveRightTab: (tab: RightPanelTab) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
@@ -880,6 +907,7 @@ export function AppUtilityModals({
   setAboutModalOpen,
   setLogViewerOpen,
   setProcessMonitorOpen,
+  setUsageDashboardOpen,
   setActiveRightTab,
   setAgentSessionsOpen,
   setActiveAgentSessionId,
@@ -1024,6 +1052,7 @@ export function AppUtilityModals({
           setAboutModalOpen={setAboutModalOpen}
           setLogViewerOpen={setLogViewerOpen}
           setProcessMonitorOpen={setProcessMonitorOpen}
+          setUsageDashboardOpen={setUsageDashboardOpen}
           setActiveRightTab={setActiveRightTab}
           setAgentSessionsOpen={setAgentSessionsOpen}
           setActiveAgentSessionId={setActiveAgentSessionId}
@@ -1604,6 +1633,12 @@ export interface AppModalsProps {
   onCloseProcessMonitor: () => void;
   onNavigateToSession: (sessionId: string, tabId?: string) => void;
   onNavigateToGroupChat: (groupChatId: string) => void;
+  usageDashboardOpen: boolean;
+  onCloseUsageDashboard: () => void;
+  /** Default time range for the Usage Dashboard from settings */
+  defaultStatsTimeRange?: 'day' | 'week' | 'month' | 'year' | 'all';
+  /** Enable colorblind-friendly colors for dashboard charts */
+  colorBlindMode?: boolean;
 
   // --- AppConfirmModals props ---
   confirmModalOpen: boolean;
@@ -1707,6 +1742,7 @@ export interface AppModalsProps {
   setAboutModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setActiveRightTab: (tab: RightPanelTab) => void;
   setAgentSessionsOpen: (open: boolean) => void;
   setActiveAgentSessionId: (id: string | null) => void;
@@ -1897,6 +1933,10 @@ export function AppModals(props: AppModalsProps) {
     onCloseProcessMonitor,
     onNavigateToSession,
     onNavigateToGroupChat,
+    usageDashboardOpen,
+    onCloseUsageDashboard,
+    defaultStatsTimeRange,
+    colorBlindMode,
     // Confirm modals
     confirmModalOpen,
     confirmModalMessage,
@@ -1977,6 +2017,7 @@ export function AppModals(props: AppModalsProps) {
     setAboutModalOpen,
     setLogViewerOpen,
     setProcessMonitorOpen,
+    setUsageDashboardOpen,
     setActiveRightTab,
     setAgentSessionsOpen,
     setActiveAgentSessionId,
@@ -2148,6 +2189,10 @@ export function AppModals(props: AppModalsProps) {
         groupChats={groupChats}
         onNavigateToSession={onNavigateToSession}
         onNavigateToGroupChat={onNavigateToGroupChat}
+        usageDashboardOpen={usageDashboardOpen}
+        onCloseUsageDashboard={onCloseUsageDashboard}
+        defaultStatsTimeRange={defaultStatsTimeRange}
+        colorBlindMode={colorBlindMode}
       />
 
       {/* Confirmation Modals */}
@@ -2264,6 +2309,7 @@ export function AppModals(props: AppModalsProps) {
         setAboutModalOpen={setAboutModalOpen}
         setLogViewerOpen={setLogViewerOpen}
         setProcessMonitorOpen={setProcessMonitorOpen}
+        setUsageDashboardOpen={setUsageDashboardOpen}
         setActiveRightTab={setActiveRightTab}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}

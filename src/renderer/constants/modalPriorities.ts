@@ -173,6 +173,12 @@ export const MODAL_PRIORITIES = {
   /** Process monitor modal */
   PROCESS_MONITOR: 550,
 
+  /** Document Graph modal */
+  DOCUMENT_GRAPH: 545,
+
+  /** Usage Dashboard modal */
+  USAGE_DASHBOARD: 540,
+
   /** System log viewer overlay */
   LOG_VIEWER: 500,
 

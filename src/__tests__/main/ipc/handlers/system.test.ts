@@ -25,6 +25,7 @@ vi.mock('electron', () => ({
   },
   dialog: {
     showOpenDialog: vi.fn(),
+    showSaveDialog: vi.fn(),
   },
   shell: {
     openExternal: vi.fn(),
@@ -199,6 +200,7 @@ describe('system IPC handlers', () => {
       const expectedChannels = [
         // Dialog handlers
         'dialog:selectFolder',
+        'dialog:saveFile',
         // Font handlers
         'fonts:detect',
         // Shell handlers
@@ -295,6 +297,70 @@ describe('system IPC handlers', () => {
 
       expect(result).toBeNull();
       expect(dialog.showOpenDialog).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dialog:saveFile', () => {
+    it('should open save dialog and return selected path', async () => {
+      vi.mocked(dialog.showSaveDialog).mockResolvedValue({
+        canceled: false,
+        filePath: '/path/to/save/file.csv',
+      });
+
+      const handler = handlers.get('dialog:saveFile');
+      const options = {
+        defaultPath: 'export.csv',
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        title: 'Export Data',
+      };
+      const result = await handler!({} as any, options);
+
+      expect(dialog.showSaveDialog).toHaveBeenCalledWith(mockMainWindow, {
+        defaultPath: 'export.csv',
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        title: 'Export Data',
+      });
+      expect(result).toBe('/path/to/save/file.csv');
+    });
+
+    it('should return null when dialog is cancelled', async () => {
+      vi.mocked(dialog.showSaveDialog).mockResolvedValue({
+        canceled: true,
+        filePath: undefined,
+      });
+
+      const handler = handlers.get('dialog:saveFile');
+      const result = await handler!({} as any, { defaultPath: 'test.csv' });
+
+      expect(result).toBeNull();
+    });
+
+    it('should use default title when not provided', async () => {
+      vi.mocked(dialog.showSaveDialog).mockResolvedValue({
+        canceled: false,
+        filePath: '/path/to/file.csv',
+      });
+
+      const handler = handlers.get('dialog:saveFile');
+      await handler!({} as any, { defaultPath: 'test.csv' });
+
+      expect(dialog.showSaveDialog).toHaveBeenCalledWith(mockMainWindow, {
+        defaultPath: 'test.csv',
+        filters: undefined,
+        title: 'Save File',
+      });
+    });
+
+    it('should return null when no main window available', async () => {
+      deps.getMainWindow = () => null;
+      handlers.clear();
+      registerSystemHandlers(deps);
+
+      const handler = handlers.get('dialog:saveFile');
+      const result = await handler!({} as any, { defaultPath: 'test.csv' });
+
+      expect(result).toBeNull();
+      expect(dialog.showSaveDialog).not.toHaveBeenCalled();
     });
   });
 

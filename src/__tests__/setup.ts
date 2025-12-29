@@ -179,6 +179,11 @@ const mockMaestro = {
       createdAt: '2024-01-01T00:00:00.000Z',
       modifiedAt: '2024-01-15T12:30:00.000Z',
     }),
+    directorySize: vi.fn().mockResolvedValue({
+      totalSize: 1024000,
+      fileCount: 50,
+      folderCount: 10,
+    }),
     homeDir: vi.fn().mockResolvedValue('/home/testuser'),
   },
   agents: {
@@ -331,6 +336,7 @@ const mockMaestro = {
   },
   dialog: {
     selectFolder: vi.fn().mockResolvedValue(null),
+    saveFile: vi.fn().mockResolvedValue(null),
   },
   shells: {
     detect: vi.fn().mockResolvedValue([]),
@@ -345,6 +351,26 @@ const mockMaestro = {
     setCustomPath: vi.fn().mockResolvedValue(undefined),
     migrateStorage: vi.fn().mockResolvedValue({ success: true, migratedCount: 0 }),
     resetToDefault: vi.fn().mockResolvedValue({ success: true }),
+  },
+  stats: {
+    recordQuery: vi.fn().mockResolvedValue({ success: true }),
+    getAggregation: vi.fn().mockResolvedValue({
+      totalQueries: 0,
+      totalDuration: 0,
+      avgDuration: 0,
+      byAgent: {},
+      bySource: { user: 0, auto: 0 },
+      byDay: [],
+    }),
+    exportCsv: vi.fn().mockResolvedValue(''),
+    onStatsUpdate: vi.fn().mockReturnValue(() => {}),
+    getDatabaseSize: vi.fn().mockResolvedValue(1024 * 1024), // 1MB mock
+    clearOldData: vi.fn().mockResolvedValue({
+      success: true,
+      deletedQueryEvents: 0,
+      deletedAutoRunSessions: 0,
+      deletedAutoRunTasks: 0,
+    }),
   },
 };
 

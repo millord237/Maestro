@@ -92,6 +92,9 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       sessionCustomEnvVars?: Record<string, string>; // Session-specific env vars
       sessionCustomModel?: string;    // Session-specific model selection
       sessionCustomContextWindow?: number; // Session-specific context window size
+      // Stats tracking options
+      querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
+      tabId?: string; // Tab ID for multi-tab tracking
     }) => {
       const processManager = requireProcessManager(getProcessManager);
       const agentDetector = requireDependency(getAgentDetector, 'Agent detector');
@@ -216,6 +219,8 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         customEnvVars: effectiveCustomEnvVars, // Pass custom env vars (session-level or agent-level)
         imageArgs: agent?.imageArgs,     // Function to build image CLI args (for Codex, OpenCode)
         noPromptSeparator: agent?.noPromptSeparator, // OpenCode doesn't support '--' before prompt
+        // Stats tracking: use cwd as projectPath if not explicitly provided
+        projectPath: config.cwd,
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {

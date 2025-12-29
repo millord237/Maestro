@@ -53,6 +53,32 @@ Run multiple agents in parallel with a Linear/Superhuman-level responsive interf
 - 💰 **Cost Tracking** - Real-time token usage and cost tracking per session and globally.
 - 🏆 **[Achievements](https://docs.runmaestro.ai/achievements)** - Level up from Apprentice to Titan of the Baton based on cumulative Auto Run time. 11 conductor-themed ranks to unlock.
 
+### Analytics & Visualization
+
+- 📊 **Usage Dashboard** - Comprehensive analytics for tracking AI usage patterns across all sessions. View aggregated statistics with multiple time ranges (day, week, month, year, all time), compare agent performance, analyze user vs. Auto Run activity distribution, and explore activity heatmaps. Includes CSV export, real-time updates, and configurable colorblind-friendly palettes. Access via `Opt+Cmd+U` (macOS) / `Alt+Ctrl+U` (Windows/Linux) or the Command K menu.
+- 🕸️ **Document Graph** - Visual knowledge graph of your markdown documentation. Automatically discovers internal `[[wiki-links]]` and `[markdown](links)`, visualizes document relationships with interactive nodes and edges. Toggle between force-directed and hierarchical layouts, search/filter documents, navigate via keyboard, and track external link references. Includes mini-map, legend, and pagination for large directories. Access from the File Explorer context menu or Command K menu.
+
+#### Keyboard Shortcuts for Analytics Features
+
+**Usage Dashboard** (`Opt+Cmd+U` / `Alt+Ctrl+U`):
+| Action | Key |
+|--------|-----|
+| Navigate view tabs | Arrow Left/Right/Up/Down |
+| Move between sections | Tab / Shift+Tab |
+| Jump to first/last section | Home / End |
+| Close dashboard | Escape |
+
+**Document Graph** (Command K → "Document Graph"):
+| Action | Key |
+|--------|-----|
+| Navigate to connected node | Arrow Up/Down/Left/Right |
+| Cycle through connections | Tab |
+| Open selected document/link | Enter |
+| Close graph | Escape |
+| Search documents | Focus search input, type query |
+
+Additional interactions: Drag nodes to reposition, scroll to zoom, use mini-map for overview.
+
 > **Note**: Maestro supports Claude Code, OpenAI Codex, and OpenCode. Support for additional agents (Aider, Gemini CLI, Qwen3 Coder) may be added in future releases based on community demand.
 
 ## Quick Start
@@ -88,6 +114,7 @@ npm run dev
 | Previous/Next Agent | `Cmd+[` / `Cmd+]` | `Ctrl+[` / `Ctrl+]` |
 | Toggle Sidebar | `Cmd+B` | `Ctrl+B` |
 | New Tab | `Cmd+T` | `Ctrl+T` |
+| Usage Dashboard | `Opt+Cmd+U` | `Alt+Ctrl+U` |
 | All Shortcuts | `Cmd+/` | `Ctrl+/` |
 
 [Full keyboard shortcut reference](https://docs.runmaestro.ai/keyboard-shortcuts)

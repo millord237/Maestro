@@ -58,6 +58,10 @@ interface ProcessConfig {
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
   customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
   noPromptSeparator?: boolean; // If true, don't add '--' before the prompt (e.g., OpenCode doesn't support it)
+  // Stats tracking options
+  querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
+  tabId?: string; // Tab ID for multi-tab tracking
+  projectPath?: string; // Project path for stats tracking
 }
 
 interface ManagedProcess {
@@ -92,6 +96,10 @@ interface ManagedProcess {
     reasoningTokens: number;
   };
   usageIsCumulative?: boolean;
+  // Stats tracking fields
+  querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
+  tabId?: string; // Tab ID for multi-tab tracking
+  projectPath?: string; // Project path for stats tracking
 }
 
 /**
@@ -694,6 +702,10 @@ export class ProcessManager extends EventEmitter {
           tempImageFiles: tempImageFiles.length > 0 ? tempImageFiles : undefined, // Temp files to clean up on exit
           command,
           args: finalArgs,
+          // Stats tracking fields (for batch mode queries)
+          querySource: config.querySource,
+          tabId: config.tabId,
+          projectPath: config.projectPath,
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -1088,6 +1100,26 @@ export class ProcessManager extends EventEmitter {
           // Clean up temp image files if any
           if (managedProcess.tempImageFiles && managedProcess.tempImageFiles.length > 0) {
             cleanupTempFiles(managedProcess.tempImageFiles);
+          }
+
+          // Emit query-complete event for batch mode processes (for stats tracking)
+          // This allows the IPC layer to record query events with timing data
+          if (isBatchMode && managedProcess.querySource) {
+            const duration = Date.now() - managedProcess.startTime;
+            this.emit('query-complete', sessionId, {
+              sessionId,
+              agentType: toolType,
+              source: managedProcess.querySource,
+              startTime: managedProcess.startTime,
+              duration,
+              projectPath: managedProcess.projectPath,
+              tabId: managedProcess.tabId,
+            });
+            logger.debug('[ProcessManager] Query complete event emitted', 'ProcessManager', {
+              sessionId,
+              duration,
+              source: managedProcess.querySource,
+            });
           }
 
           this.emit('exit', sessionId, code || 0);

@@ -24,6 +24,7 @@ import { TourOverlay } from './components/Wizard/tour';
 import { CONDUCTOR_BADGES, getBadgeForTime } from './constants/conductorBadges';
 import { EmptyStateView } from './components/EmptyStateView';
 import { MarketplaceModal } from './components/MarketplaceModal';
+import { DocumentGraphView } from './components/DocumentGraph/DocumentGraphView';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -155,6 +156,8 @@ function MaestroConsoleInner() {
     logViewerOpen, setLogViewerOpen,
     // Process Monitor
     processMonitorOpen, setProcessMonitorOpen,
+    // Usage Dashboard
+    usageDashboardOpen, setUsageDashboardOpen,
     // Keyboard Mastery Celebration
     pendingKeyboardMasteryLevel, setPendingKeyboardMasteryLevel,
     // Playground Panel
@@ -295,6 +298,13 @@ function MaestroConsoleInner() {
 
     keyboardMasteryStats, recordShortcutUsage, acknowledgeKeyboardMasteryLevel, getUnacknowledgedKeyboardMasteryLevel,
 
+    // Document Graph & Stats settings
+    colorBlindMode,
+    defaultStatsTimeRange,
+    documentGraphShowExternalLinks,
+    documentGraphMaxNodes,
+    documentGraphLayoutMode,
+
   } = settings;
 
   // --- KEYBOARD SHORTCUT HELPERS ---
@@ -390,6 +400,9 @@ function MaestroConsoleInner() {
   const [flatFileList, setFlatFileList] = useState<any[]>([]);
   const [fileTreeFilter, setFileTreeFilter] = useState('');
   const [fileTreeFilterOpen, setFileTreeFilterOpen] = useState(false);
+  const [isGraphViewOpen, setIsGraphViewOpen] = useState(false);
+  // File path to focus on when opening the Document Graph (relative to session.cwd)
+  const [graphFocusFilePath, setGraphFocusFilePath] = useState<string | undefined>(undefined);
 
   // GitHub CLI availability (for gist publishing)
   const [ghCliAvailable, setGhCliAvailable] = useState(false);
@@ -7922,7 +7935,7 @@ function MaestroConsoleInner() {
     setQuickActionOpen, cycleSession, toggleInputMode, setShortcutsHelpOpen, setSettingsModalOpen,
     setSettingsTab, setActiveRightTab, handleSetActiveRightTab, setActiveFocus, setBookmarksCollapsed, setGroups,
     setSelectedSidebarIndex, setActiveSessionId, handleViewGitDiff, setGitLogOpen, setActiveAgentSessionId,
-    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
+    setAgentSessionsOpen, setLogViewerOpen, setProcessMonitorOpen, setUsageDashboardOpen, logsEndRef, inputRef, terminalOutputRef, sidebarContainerRef,
     setSessions, createTab, closeTab, reopenClosedTab, getActiveTab, setRenameTabId, setRenameTabInitialName,
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
@@ -8246,6 +8259,10 @@ function MaestroConsoleInner() {
         onCloseProcessMonitor={handleCloseProcessMonitor}
         onNavigateToSession={handleProcessMonitorNavigateToSession}
         onNavigateToGroupChat={handleProcessMonitorNavigateToGroupChat}
+        usageDashboardOpen={usageDashboardOpen}
+        onCloseUsageDashboard={() => setUsageDashboardOpen(false)}
+        defaultStatsTimeRange={defaultStatsTimeRange}
+        colorBlindMode={colorBlindMode}
         // AppConfirmModals props
         confirmModalOpen={confirmModalOpen}
         confirmModalMessage={confirmModalMessage}
@@ -8326,6 +8343,7 @@ function MaestroConsoleInner() {
         setAboutModalOpen={setAboutModalOpen}
         setLogViewerOpen={setLogViewerOpen}
         setProcessMonitorOpen={setProcessMonitorOpen}
+        setUsageDashboardOpen={setUsageDashboardOpen}
         setActiveRightTab={setActiveRightTab}
         setAgentSessionsOpen={setAgentSessionsOpen}
         setActiveAgentSessionId={setActiveAgentSessionId}
@@ -8544,6 +8562,34 @@ function MaestroConsoleInner() {
         />
       )}
 
+      {/* --- DOCUMENT GRAPH VIEW --- */}
+      <DocumentGraphView
+        isOpen={isGraphViewOpen}
+        onClose={() => setIsGraphViewOpen(false)}
+        theme={theme}
+        rootPath={activeSession?.cwd ?? ''}
+        onDocumentOpen={(filePath) => {
+          // Open the document in file preview
+          const fullPath = `${activeSession?.cwd ?? ''}/${filePath}`;
+          window.maestro.fs.readFile(fullPath).then((content) => {
+            if (content !== null) {
+              setPreviewFile({ name: filePath.split('/').pop() || filePath, content, path: fullPath });
+            }
+          });
+          setIsGraphViewOpen(false);
+        }}
+        onExternalLinkOpen={(url) => {
+          // Open external URL in default browser
+          window.maestro.shell.openExternal(url);
+        }}
+        focusFilePath={graphFocusFilePath}
+        onFocusFileConsumed={() => setGraphFocusFilePath(undefined)}
+        savedLayoutMode={documentGraphLayoutMode}
+        onLayoutModeChange={settings.setDocumentGraphLayoutMode}
+        defaultShowExternalLinks={documentGraphShowExternalLinks}
+        defaultMaxNodes={documentGraphMaxNodes}
+      />
+
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
 
       {/* --- EMPTY STATE VIEW (when no sessions) --- */}
@@ -8601,6 +8647,7 @@ function MaestroConsoleInner() {
             setUpdateCheckModalOpen={setUpdateCheckModalOpen}
             setLogViewerOpen={setLogViewerOpen}
             setProcessMonitorOpen={setProcessMonitorOpen}
+            setUsageDashboardOpen={setUsageDashboardOpen}
             toggleGroup={toggleGroup}
             handleDragStart={handleDragStart}
             handleDragOver={handleDragOver}
@@ -9462,6 +9509,12 @@ function MaestroConsoleInner() {
               } catch (error) {
                 console.error('[onFileClick] Failed to read file:', error);
               }
+            }}
+            isGraphViewOpen={isGraphViewOpen}
+            onOpenGraphView={() => setIsGraphViewOpen(true)}
+            onFocusFileInGraph={(relativePath: string) => {
+              setGraphFocusFilePath(relativePath);
+              setIsGraphViewOpen(true);
             }}
           />
         </ErrorBoundary>

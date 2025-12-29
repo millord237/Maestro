@@ -278,6 +278,24 @@ export interface UseSettingsReturn {
   recordShortcutUsage: (shortcutId: string) => { newLevel: number | null };
   acknowledgeKeyboardMasteryLevel: (level: number) => void;
   getUnacknowledgedKeyboardMasteryLevel: () => number | null;
+
+  // Accessibility settings
+  colorBlindMode: boolean;
+  setColorBlindMode: (value: boolean) => void;
+
+  // Document Graph settings
+  documentGraphLayoutMode: 'force' | 'hierarchical';
+  setDocumentGraphLayoutMode: (value: 'force' | 'hierarchical') => void;
+  documentGraphShowExternalLinks: boolean;
+  setDocumentGraphShowExternalLinks: (value: boolean) => void;
+  documentGraphMaxNodes: number;
+  setDocumentGraphMaxNodes: (value: number) => void;
+
+  // Stats settings
+  statsCollectionEnabled: boolean;
+  setStatsCollectionEnabled: (value: boolean) => void;
+  defaultStatsTimeRange: 'day' | 'week' | 'month' | 'year' | 'all';
+  setDefaultStatsTimeRange: (value: 'day' | 'week' | 'month' | 'year' | 'all') => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -385,6 +403,18 @@ export function useSettings(): UseSettingsReturn {
   useEffect(() => {
     keyboardMasteryStatsRef.current = keyboardMasteryStats;
   }, [keyboardMasteryStats]);
+
+  // Accessibility settings
+  const [colorBlindMode, setColorBlindModeState] = useState(false);
+
+  // Document Graph settings
+  const [documentGraphLayoutMode, setDocumentGraphLayoutModeState] = useState<'force' | 'hierarchical'>('force');
+  const [documentGraphShowExternalLinks, setDocumentGraphShowExternalLinksState] = useState(false); // Default: false
+  const [documentGraphMaxNodes, setDocumentGraphMaxNodesState] = useState(200); // Default: 200
+
+  // Stats settings
+  const [statsCollectionEnabled, setStatsCollectionEnabledState] = useState(true); // Default: enabled
+  const [defaultStatsTimeRange, setDefaultStatsTimeRangeState] = useState<'day' | 'week' | 'month' | 'year' | 'all'>('week'); // Default: week
 
   // Wrapper functions that persist to electron-store
   // PERF: All wrapped in useCallback to prevent re-renders
@@ -1062,6 +1092,44 @@ export function useSettings(): UseSettingsReturn {
     return null;
   }, [keyboardMasteryStats.lastAcknowledgedLevel, keyboardMasteryStats.currentLevel]);
 
+  // Colorblind mode toggle
+  const setColorBlindMode = useCallback((value: boolean) => {
+    setColorBlindModeState(value);
+    window.maestro.settings.set('colorBlindMode', value);
+  }, []);
+
+  // Document Graph layout mode
+  const setDocumentGraphLayoutMode = useCallback((value: 'force' | 'hierarchical') => {
+    setDocumentGraphLayoutModeState(value);
+    window.maestro.settings.set('documentGraphLayoutMode', value);
+  }, []);
+
+  // Document Graph show external links
+  const setDocumentGraphShowExternalLinks = useCallback((value: boolean) => {
+    setDocumentGraphShowExternalLinksState(value);
+    window.maestro.settings.set('documentGraphShowExternalLinks', value);
+  }, []);
+
+  // Document Graph max nodes
+  const setDocumentGraphMaxNodes = useCallback((value: number) => {
+    // Clamp value between 50 and 1000
+    const clampedValue = Math.max(50, Math.min(1000, value));
+    setDocumentGraphMaxNodesState(clampedValue);
+    window.maestro.settings.set('documentGraphMaxNodes', clampedValue);
+  }, []);
+
+  // Stats collection enabled
+  const setStatsCollectionEnabled = useCallback((value: boolean) => {
+    setStatsCollectionEnabledState(value);
+    window.maestro.settings.set('statsCollectionEnabled', value);
+  }, []);
+
+  // Default stats time range
+  const setDefaultStatsTimeRange = useCallback((value: 'day' | 'week' | 'month' | 'year' | 'all') => {
+    setDefaultStatsTimeRangeState(value);
+    window.maestro.settings.set('defaultStatsTimeRange', value);
+  }, []);
+
   // Load settings from electron-store on mount
   useEffect(() => {
     console.log('[Settings] useEffect triggered, about to call loadSettings');
@@ -1119,6 +1187,12 @@ export function useSettings(): UseSettingsReturn {
       const savedWebInterfaceCustomPort = await window.maestro.settings.get('webInterfaceCustomPort');
       const savedContextManagementSettings = await window.maestro.settings.get('contextManagementSettings');
       const savedKeyboardMasteryStats = await window.maestro.settings.get('keyboardMasteryStats');
+      const savedColorBlindMode = await window.maestro.settings.get('colorBlindMode');
+      const savedDocumentGraphLayoutMode = await window.maestro.settings.get('documentGraphLayoutMode');
+      const savedDocumentGraphShowExternalLinks = await window.maestro.settings.get('documentGraphShowExternalLinks');
+      const savedDocumentGraphMaxNodes = await window.maestro.settings.get('documentGraphMaxNodes');
+      const savedStatsCollectionEnabled = await window.maestro.settings.get('statsCollectionEnabled');
+      const savedDefaultStatsTimeRange = await window.maestro.settings.get('defaultStatsTimeRange');
 
       if (savedEnterToSendAI !== undefined) setEnterToSendAIState(savedEnterToSendAI as boolean);
       if (savedEnterToSendTerminal !== undefined) setEnterToSendTerminalState(savedEnterToSendTerminal as boolean);
@@ -1338,6 +1412,37 @@ export function useSettings(): UseSettingsReturn {
         setKeyboardMasteryStatsState({ ...DEFAULT_KEYBOARD_MASTERY_STATS, ...(savedKeyboardMasteryStats as Partial<KeyboardMasteryStats>) });
       }
 
+      // Accessibility settings
+      if (savedColorBlindMode !== undefined) setColorBlindModeState(savedColorBlindMode as boolean);
+
+      // Document Graph settings
+      if (savedDocumentGraphLayoutMode !== undefined) {
+        const validModes = ['force', 'hierarchical'];
+        if (validModes.includes(savedDocumentGraphLayoutMode as string)) {
+          setDocumentGraphLayoutModeState(savedDocumentGraphLayoutMode as 'force' | 'hierarchical');
+        }
+      }
+      if (savedDocumentGraphShowExternalLinks !== undefined) {
+        setDocumentGraphShowExternalLinksState(savedDocumentGraphShowExternalLinks as boolean);
+      }
+      if (savedDocumentGraphMaxNodes !== undefined) {
+        const maxNodes = savedDocumentGraphMaxNodes as number;
+        if (typeof maxNodes === 'number' && maxNodes >= 50 && maxNodes <= 1000) {
+          setDocumentGraphMaxNodesState(maxNodes);
+        }
+      }
+
+      // Stats settings
+      if (savedStatsCollectionEnabled !== undefined) {
+        setStatsCollectionEnabledState(savedStatsCollectionEnabled as boolean);
+      }
+      if (savedDefaultStatsTimeRange !== undefined) {
+        const validTimeRanges = ['day', 'week', 'month', 'year', 'all'];
+        if (validTimeRanges.includes(savedDefaultStatsTimeRange as string)) {
+          setDefaultStatsTimeRangeState(savedDefaultStatsTimeRange as 'day' | 'week' | 'month' | 'year' | 'all');
+        }
+      }
+
       } catch (error) {
         console.error('[Settings] Failed to load settings:', error);
       } finally {
@@ -1474,6 +1579,18 @@ export function useSettings(): UseSettingsReturn {
     recordShortcutUsage,
     acknowledgeKeyboardMasteryLevel,
     getUnacknowledgedKeyboardMasteryLevel,
+    colorBlindMode,
+    setColorBlindMode,
+    documentGraphLayoutMode,
+    setDocumentGraphLayoutMode,
+    documentGraphShowExternalLinks,
+    setDocumentGraphShowExternalLinks,
+    documentGraphMaxNodes,
+    setDocumentGraphMaxNodes,
+    statsCollectionEnabled,
+    setStatsCollectionEnabled,
+    defaultStatsTimeRange,
+    setDefaultStatsTimeRange,
   }), [
     // State values
     settingsLoaded,
@@ -1591,5 +1708,17 @@ export function useSettings(): UseSettingsReturn {
     recordShortcutUsage,
     acknowledgeKeyboardMasteryLevel,
     getUnacknowledgedKeyboardMasteryLevel,
+    colorBlindMode,
+    setColorBlindMode,
+    documentGraphLayoutMode,
+    setDocumentGraphLayoutMode,
+    documentGraphShowExternalLinks,
+    setDocumentGraphShowExternalLinks,
+    documentGraphMaxNodes,
+    setDocumentGraphMaxNodes,
+    statsCollectionEnabled,
+    setStatsCollectionEnabled,
+    defaultStatsTimeRange,
+    setDefaultStatsTimeRange,
   ]);
 }

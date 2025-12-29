@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database } from 'lucide-react';
 import { useSettings } from '../hooks';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
@@ -229,7 +229,22 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
   const { isOpen, onClose, theme, themes, initialTab } = props;
 
   // Context management settings from useSettings hook
-  const { contextManagementSettings, updateContextManagementSettings } = useSettings();
+  const {
+    contextManagementSettings,
+    updateContextManagementSettings,
+    // Document Graph settings
+    documentGraphShowExternalLinks,
+    setDocumentGraphShowExternalLinks,
+    documentGraphMaxNodes,
+    setDocumentGraphMaxNodes,
+    documentGraphLayoutMode,
+    setDocumentGraphLayoutMode,
+    // Stats settings
+    statsCollectionEnabled,
+    setStatsCollectionEnabled,
+    defaultStatsTimeRange,
+    setDefaultStatsTimeRange,
+  } = useSettings();
 
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands'>('general');
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -253,6 +268,17 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
   const [syncMigrating, setSyncMigrating] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncMigratedCount, setSyncMigratedCount] = useState<number | null>(null);
+
+  // Stats data management state
+  const [statsDbSize, setStatsDbSize] = useState<number | null>(null);
+  const [statsClearing, setStatsClearing] = useState(false);
+  const [statsClearResult, setStatsClearResult] = useState<{
+    success: boolean;
+    deletedQueryEvents: number;
+    deletedAutoRunSessions: number;
+    deletedAutoRunTasks: number;
+    error?: string;
+  } | null>(null);
 
   // Layer stack integration
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -282,6 +308,16 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
         console.error('Failed to load sync settings:', err);
         setSyncError('Failed to load storage settings');
       });
+
+      // Load stats database size
+      window.maestro.stats.getDatabaseSize().then((size) => {
+        setStatsDbSize(size);
+      }).catch((err) => {
+        console.error('Failed to load stats database size:', err);
+      });
+
+      // Reset stats clear state
+      setStatsClearResult(null);
     }
   }, [isOpen, initialTab]);
 
@@ -1280,6 +1316,277 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                         background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} 100%)`,
                       }}
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Data Management */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Database className="w-3 h-3" />
+                  Usage & Stats
+                </label>
+                <div
+                  className="p-3 rounded border space-y-3"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  {/* Enable/Disable Stats Collection */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm" style={{ color: theme.colors.textMain }}>Enable stats collection</p>
+                      <p className="text-xs opacity-50 mt-0.5">Track queries and Auto Run sessions for the dashboard.</p>
+                    </div>
+                    <button
+                      onClick={() => setStatsCollectionEnabled(!statsCollectionEnabled)}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${
+                        statsCollectionEnabled ? '' : ''
+                      }`}
+                      style={{
+                        backgroundColor: statsCollectionEnabled ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={statsCollectionEnabled}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          statsCollectionEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Default Time Range */}
+                  <div>
+                    <label className="block text-xs opacity-60 mb-2">Default dashboard time range</label>
+                    <select
+                      value={defaultStatsTimeRange}
+                      onChange={(e) => setDefaultStatsTimeRange(e.target.value as 'day' | 'week' | 'month' | 'year' | 'all')}
+                      className="w-full p-2 rounded border bg-transparent outline-none text-sm"
+                      style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                    >
+                      <option value="day">Last 24 hours</option>
+                      <option value="week">Last 7 days</option>
+                      <option value="month">Last 30 days</option>
+                      <option value="year">Last 365 days</option>
+                      <option value="all">All time</option>
+                    </select>
+                    <p className="text-xs opacity-50 mt-1">
+                      Time range shown when opening the Usage Dashboard.
+                    </p>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t" style={{ borderColor: theme.colors.border }} />
+
+                  {/* Database Size Display */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: theme.colors.textDim }}>Database size</span>
+                    <span className="text-sm font-mono" style={{ color: theme.colors.textMain }}>
+                      {statsDbSize !== null
+                        ? (statsDbSize / 1024 / 1024).toFixed(2) + ' MB'
+                        : 'Loading...'}
+                    </span>
+                  </div>
+
+                  {/* Clear Old Data Dropdown */}
+                  <div>
+                    <label className="block text-xs opacity-60 mb-2">Clear stats older than...</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        id="clear-stats-period"
+                        className="flex-1 p-2 rounded border bg-transparent outline-none text-sm"
+                        style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                        defaultValue=""
+                        disabled={statsClearing}
+                      >
+                        <option value="" disabled>Select a time period</option>
+                        <option value="7">7 days</option>
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="180">6 months</option>
+                        <option value="365">1 year</option>
+                      </select>
+                      <button
+                        onClick={async () => {
+                          const select = document.getElementById('clear-stats-period') as HTMLSelectElement;
+                          const days = parseInt(select.value, 10);
+                          if (!days || isNaN(days)) {
+                            return; // No selection
+                          }
+                          setStatsClearing(true);
+                          setStatsClearResult(null);
+                          try {
+                            const result = await window.maestro.stats.clearOldData(days);
+                            setStatsClearResult(result);
+                            if (result.success) {
+                              // Refresh database size
+                              const newSize = await window.maestro.stats.getDatabaseSize();
+                              setStatsDbSize(newSize);
+                            }
+                          } catch (err) {
+                            console.error('Failed to clear old stats:', err);
+                            setStatsClearResult({
+                              success: false,
+                              deletedQueryEvents: 0,
+                              deletedAutoRunSessions: 0,
+                              deletedAutoRunTasks: 0,
+                              error: err instanceof Error ? err.message : 'Unknown error',
+                            });
+                          } finally {
+                            setStatsClearing(false);
+                          }
+                        }}
+                        disabled={statsClearing}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                        style={{
+                          backgroundColor: theme.colors.error + '20',
+                          color: theme.colors.error,
+                          border: `1px solid ${theme.colors.error}40`,
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {statsClearing ? 'Clearing...' : 'Clear'}
+                      </button>
+                    </div>
+                    <p className="text-xs opacity-50 mt-2">
+                      Remove old query events, Auto Run sessions, and tasks from the stats database.
+                    </p>
+                  </div>
+
+                  {/* Clear Result Feedback */}
+                  {statsClearResult && (
+                    <div
+                      className="p-2 rounded text-xs flex items-start gap-2"
+                      style={{
+                        backgroundColor: statsClearResult.success
+                          ? theme.colors.success + '20'
+                          : theme.colors.error + '20',
+                        color: statsClearResult.success ? theme.colors.success : theme.colors.error,
+                      }}
+                    >
+                      {statsClearResult.success ? (
+                        <>
+                          <Check className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                          <span>
+                            Cleared {statsClearResult.deletedQueryEvents + statsClearResult.deletedAutoRunSessions + statsClearResult.deletedAutoRunTasks} records
+                            ({statsClearResult.deletedQueryEvents} queries, {statsClearResult.deletedAutoRunSessions} sessions, {statsClearResult.deletedAutoRunTasks} tasks)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                          <span>{statsClearResult.error || 'Failed to clear stats data'}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Document Graph Settings */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Sparkles className="w-3 h-3" />
+                  Document Graph
+                </label>
+                <div
+                  className="p-3 rounded border space-y-3"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  {/* Default Layout Mode */}
+                  <div>
+                    <label className="block text-xs opacity-60 mb-2">Default layout mode</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setDocumentGraphLayoutMode('force')}
+                        className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                          documentGraphLayoutMode === 'force' ? 'ring-2' : ''
+                        }`}
+                        style={{
+                          backgroundColor: documentGraphLayoutMode === 'force'
+                            ? theme.colors.accent + '20'
+                            : theme.colors.bgActivity,
+                          color: documentGraphLayoutMode === 'force'
+                            ? theme.colors.accent
+                            : theme.colors.textDim,
+                          borderColor: documentGraphLayoutMode === 'force'
+                            ? theme.colors.accent
+                            : 'transparent',
+                        }}
+                      >
+                        Force-Directed
+                      </button>
+                      <button
+                        onClick={() => setDocumentGraphLayoutMode('hierarchical')}
+                        className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                          documentGraphLayoutMode === 'hierarchical' ? 'ring-2' : ''
+                        }`}
+                        style={{
+                          backgroundColor: documentGraphLayoutMode === 'hierarchical'
+                            ? theme.colors.accent + '20'
+                            : theme.colors.bgActivity,
+                          color: documentGraphLayoutMode === 'hierarchical'
+                            ? theme.colors.accent
+                            : theme.colors.textDim,
+                          borderColor: documentGraphLayoutMode === 'hierarchical'
+                            ? theme.colors.accent
+                            : 'transparent',
+                        }}
+                      >
+                        Hierarchical
+                      </button>
+                    </div>
+                    <p className="text-xs opacity-50 mt-1">
+                      Layout algorithm used when opening the Document Graph.
+                    </p>
+                  </div>
+
+                  {/* Show External Links */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm" style={{ color: theme.colors.textMain }}>Show external links by default</p>
+                      <p className="text-xs opacity-50 mt-0.5">Display external website links as nodes. Can be toggled in the graph view.</p>
+                    </div>
+                    <button
+                      onClick={() => setDocumentGraphShowExternalLinks(!documentGraphShowExternalLinks)}
+                      className="relative w-10 h-5 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: documentGraphShowExternalLinks ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={documentGraphShowExternalLinks}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          documentGraphShowExternalLinks ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Max Nodes */}
+                  <div>
+                    <label className="block text-xs opacity-60 mb-2">Maximum nodes to display</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={50}
+                        max={1000}
+                        step={50}
+                        value={documentGraphMaxNodes}
+                        onChange={(e) => setDocumentGraphMaxNodes(Number(e.target.value))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, ${theme.colors.accent} 0%, ${theme.colors.accent} ${((documentGraphMaxNodes - 50) / 950) * 100}%, ${theme.colors.bgActivity} ${((documentGraphMaxNodes - 50) / 950) * 100}%, ${theme.colors.bgActivity} 100%)`,
+                        }}
+                      />
+                      <span className="text-sm font-mono w-12 text-right" style={{ color: theme.colors.textMain }}>
+                        {documentGraphMaxNodes}
+                      </span>
+                    </div>
+                    <p className="text-xs opacity-50 mt-1">
+                      Limits initial graph size for performance. Use &quot;Load more&quot; to show additional nodes.
+                    </p>
                   </div>
                 </div>
               </div>

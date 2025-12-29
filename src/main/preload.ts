@@ -16,6 +16,9 @@ interface ProcessConfig {
   readOnlyMode?: boolean;   // For read-only/plan mode (uses agent's readOnlyArgs)
   modelId?: string;         // For model selection (uses agent's modelArgs builder)
   yoloMode?: boolean;       // For YOLO/full-access mode (uses agent's yoloModeArgs)
+  // Stats tracking options
+  querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
+  tabId?: string; // Tab ID for multi-tab tracking
 }
 
 /**
@@ -547,6 +550,11 @@ contextBridge.exposeInMainWorld('maestro', {
   // Dialog API
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+    saveFile: (options: {
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+      title?: string;
+    }) => ipcRenderer.invoke('dialog:saveFile', options),
   },
 
   // Font API
@@ -1216,6 +1224,31 @@ contextBridge.exposeInMainWorld('maestro', {
     previewPackage: () => ipcRenderer.invoke('debug:previewPackage'),
   },
 
+  // Document Graph API (file watching for graph visualization)
+  documentGraph: {
+    watchFolder: (rootPath: string) =>
+      ipcRenderer.invoke('documentGraph:watchFolder', rootPath),
+    unwatchFolder: (rootPath: string) =>
+      ipcRenderer.invoke('documentGraph:unwatchFolder', rootPath),
+    onFilesChanged: (handler: (data: {
+      rootPath: string;
+      changes: Array<{
+        filePath: string;
+        eventType: 'add' | 'change' | 'unlink';
+      }>;
+    }) => void) => {
+      const wrappedHandler = (_event: Electron.IpcRendererEvent, data: {
+        rootPath: string;
+        changes: Array<{
+          filePath: string;
+          eventType: 'add' | 'change' | 'unlink';
+        }>;
+      }) => handler(data);
+      ipcRenderer.on('documentGraph:filesChanged', wrappedHandler);
+      return () => ipcRenderer.removeListener('documentGraph:filesChanged', wrappedHandler);
+    },
+  },
+
   // Group Chat API (multi-agent coordination)
   groupChat: {
     // Storage
@@ -1375,6 +1408,137 @@ contextBridge.exposeInMainWorld('maestro', {
     cancelQuit: () => {
       ipcRenderer.send('app:quitCancelled');
     },
+  },
+
+  // Stats API (usage tracking and analytics)
+  stats: {
+    // Record a query event (interactive conversation turn)
+    recordQuery: (event: {
+      sessionId: string;
+      agentType: string;
+      source: 'user' | 'auto';
+      startTime: number;
+      duration: number;
+      projectPath?: string;
+      tabId?: string;
+    }) => ipcRenderer.invoke('stats:record-query', event) as Promise<string>,
+
+    // Start an Auto Run session (returns session ID)
+    startAutoRun: (session: {
+      sessionId: string;
+      agentType: string;
+      documentPath?: string;
+      startTime: number;
+      tasksTotal?: number;
+      projectPath?: string;
+    }) => ipcRenderer.invoke('stats:start-autorun', session) as Promise<string>,
+
+    // End an Auto Run session (update duration and completed count)
+    endAutoRun: (id: string, duration: number, tasksCompleted: number) =>
+      ipcRenderer.invoke('stats:end-autorun', id, duration, tasksCompleted) as Promise<boolean>,
+
+    // Record an Auto Run task completion
+    recordAutoTask: (task: {
+      autoRunSessionId: string;
+      sessionId: string;
+      agentType: string;
+      taskIndex: number;
+      taskContent?: string;
+      startTime: number;
+      duration: number;
+      success: boolean;
+    }) => ipcRenderer.invoke('stats:record-task', task) as Promise<string>,
+
+    // Get query events with time range and optional filters
+    getStats: (
+      range: 'day' | 'week' | 'month' | 'year' | 'all',
+      filters?: {
+        agentType?: string;
+        source?: 'user' | 'auto';
+        projectPath?: string;
+        sessionId?: string;
+      }
+    ) =>
+      ipcRenderer.invoke('stats:get-stats', range, filters) as Promise<
+        Array<{
+          id: string;
+          sessionId: string;
+          agentType: string;
+          source: 'user' | 'auto';
+          startTime: number;
+          duration: number;
+          projectPath?: string;
+          tabId?: string;
+        }>
+      >,
+
+    // Get Auto Run sessions within a time range
+    getAutoRunSessions: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:get-autorun-sessions', range) as Promise<
+        Array<{
+          id: string;
+          sessionId: string;
+          agentType: string;
+          documentPath?: string;
+          startTime: number;
+          duration: number;
+          tasksTotal?: number;
+          tasksCompleted?: number;
+          projectPath?: string;
+        }>
+      >,
+
+    // Get tasks for a specific Auto Run session
+    getAutoRunTasks: (autoRunSessionId: string) =>
+      ipcRenderer.invoke('stats:get-autorun-tasks', autoRunSessionId) as Promise<
+        Array<{
+          id: string;
+          autoRunSessionId: string;
+          sessionId: string;
+          agentType: string;
+          taskIndex: number;
+          taskContent?: string;
+          startTime: number;
+          duration: number;
+          success: boolean;
+        }>
+      >,
+
+    // Get aggregated stats for dashboard display
+    getAggregation: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:get-aggregation', range) as Promise<{
+        totalQueries: number;
+        totalDuration: number;
+        avgDuration: number;
+        byAgent: Record<string, { count: number; duration: number }>;
+        bySource: { user: number; auto: number };
+        byDay: Array<{ date: string; count: number; duration: number }>;
+      }>,
+
+    // Export query events to CSV
+    exportCsv: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:export-csv', range) as Promise<string>,
+
+    // Subscribe to stats updates (for real-time dashboard refresh)
+    onStatsUpdate: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('stats:updated', handler);
+      return () => ipcRenderer.removeListener('stats:updated', handler);
+    },
+
+    // Clear old stats data (older than specified number of days)
+    clearOldData: (olderThanDays: number) =>
+      ipcRenderer.invoke('stats:clear-old-data', olderThanDays) as Promise<{
+        success: boolean;
+        deletedQueryEvents: number;
+        deletedAutoRunSessions: number;
+        deletedAutoRunTasks: number;
+        error?: string;
+      }>,
+
+    // Get database size in bytes
+    getDatabaseSize: () =>
+      ipcRenderer.invoke('stats:get-database-size') as Promise<number>,
   },
 
   // Leaderboard API (runmaestro.ai integration)
@@ -1674,6 +1838,100 @@ export interface MaestroAPI {
     onQuitConfirmationRequest: (callback: () => void) => () => void;
     confirmQuit: () => void;
     cancelQuit: () => void;
+  };
+  stats: {
+    recordQuery: (event: {
+      sessionId: string;
+      agentType: string;
+      source: 'user' | 'auto';
+      startTime: number;
+      duration: number;
+      projectPath?: string;
+      tabId?: string;
+    }) => Promise<string>;
+    startAutoRun: (session: {
+      sessionId: string;
+      agentType: string;
+      documentPath?: string;
+      startTime: number;
+      tasksTotal?: number;
+      projectPath?: string;
+    }) => Promise<string>;
+    endAutoRun: (id: string, duration: number, tasksCompleted: number) => Promise<boolean>;
+    recordAutoTask: (task: {
+      autoRunSessionId: string;
+      sessionId: string;
+      agentType: string;
+      taskIndex: number;
+      taskContent?: string;
+      startTime: number;
+      duration: number;
+      success: boolean;
+    }) => Promise<string>;
+    getStats: (
+      range: 'day' | 'week' | 'month' | 'year' | 'all',
+      filters?: {
+        agentType?: string;
+        source?: 'user' | 'auto';
+        projectPath?: string;
+        sessionId?: string;
+      }
+    ) => Promise<
+      Array<{
+        id: string;
+        sessionId: string;
+        agentType: string;
+        source: 'user' | 'auto';
+        startTime: number;
+        duration: number;
+        projectPath?: string;
+        tabId?: string;
+      }>
+    >;
+    getAutoRunSessions: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<
+      Array<{
+        id: string;
+        sessionId: string;
+        agentType: string;
+        documentPath?: string;
+        startTime: number;
+        duration: number;
+        tasksTotal?: number;
+        tasksCompleted?: number;
+        projectPath?: string;
+      }>
+    >;
+    getAutoRunTasks: (autoRunSessionId: string) => Promise<
+      Array<{
+        id: string;
+        autoRunSessionId: string;
+        sessionId: string;
+        agentType: string;
+        taskIndex: number;
+        taskContent?: string;
+        startTime: number;
+        duration: number;
+        success: boolean;
+      }>
+    >;
+    getAggregation: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<{
+      totalQueries: number;
+      totalDuration: number;
+      avgDuration: number;
+      byAgent: Record<string, { count: number; duration: number }>;
+      bySource: { user: number; auto: number };
+      byDay: Array<{ date: string; count: number; duration: number }>;
+    }>;
+    exportCsv: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<string>;
+    onStatsUpdate: (callback: () => void) => () => void;
+    clearOldData: (olderThanDays: number) => Promise<{
+      success: boolean;
+      deletedQueryEvents: number;
+      deletedAutoRunSessions: number;
+      deletedAutoRunTasks: number;
+      error?: string;
+    }>;
+    getDatabaseSize: () => Promise<number>;
   };
   updates: {
     check: () => Promise<{
@@ -2057,6 +2315,17 @@ export interface MaestroAPI {
     restoreBackup: (folderPath: string, filename: string) => Promise<{ success: boolean; error?: string }>;
     deleteBackups: (folderPath: string) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
     createWorkingCopy: (folderPath: string, filename: string, loopNumber: number) => Promise<{ workingCopyPath: string; originalPath: string }>;
+  };
+  documentGraph: {
+    watchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    unwatchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    onFilesChanged: (handler: (data: {
+      rootPath: string;
+      changes: Array<{
+        filePath: string;
+        eventType: 'add' | 'change' | 'unlink';
+      }>;
+    }) => void) => () => void;
   };
   playbooks: {
     list: (sessionId: string) => Promise<{

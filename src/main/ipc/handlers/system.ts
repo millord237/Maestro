@@ -84,6 +84,34 @@ export function registerSystemHandlers(deps: SystemHandlerDependencies): void {
     return result.filePaths[0];
   });
 
+  // File save dialog
+  ipcMain.handle(
+    'dialog:saveFile',
+    async (
+      _event,
+      options: {
+        defaultPath?: string;
+        filters?: Array<{ name: string; extensions: string[] }>;
+        title?: string;
+      }
+    ) => {
+      const mainWindow = getMainWindow();
+      if (!mainWindow) return null;
+
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: options.defaultPath,
+        filters: options.filters,
+        title: options.title ?? 'Save File',
+      });
+
+      if (result.canceled || !result.filePath) {
+        return null;
+      }
+
+      return result.filePath;
+    }
+  );
+
   // ============ Font Detection Handlers ============
 
   // Font detection

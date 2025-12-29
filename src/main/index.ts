@@ -12,7 +12,8 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
-import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, registerStatsHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
+import { initializeStatsDB, closeStatsDB, getStatsDB } from './stats-db';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
 import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, setGetAgentConfigCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState, respawnParticipantWithRecovery } from './group-chat/group-chat-router';
 import { updateParticipant, loadGroupChat, updateGroupChat } from './group-chat/group-chat-storage';
@@ -762,6 +763,18 @@ app.whenReady().then(async () => {
     logger.warn('Continuing without history - history features will be unavailable', 'Startup');
   }
 
+  // Initialize stats database for usage tracking
+  logger.info('Initializing stats database', 'Startup');
+  try {
+    initializeStatsDB();
+    logger.info('Stats database initialized', 'Startup');
+  } catch (error) {
+    // Stats initialization failed - log error but continue with app startup
+    // Stats will be unavailable but the app will still function
+    logger.error(`Failed to initialize stats database: ${error}`, 'Startup');
+    logger.warn('Continuing without stats - usage tracking will be unavailable', 'Startup');
+  }
+
   // Set up IPC handlers
   logger.debug('Setting up IPC handlers', 'Startup');
   setupIpcHandlers();
@@ -867,6 +880,10 @@ app.on('before-quit', (event) => {
   webServer?.stop().catch(err => {
     logger.error(`Error stopping web server: ${err}`, 'Shutdown');
   });
+
+  // Close stats database
+  logger.info('Closing stats database', 'Shutdown');
+  closeStatsDB();
 
   logger.info('Shutdown complete', 'Shutdown');
 });
@@ -1078,6 +1095,12 @@ function setupIpcHandlers() {
   // Register Marketplace handlers for fetching and importing playbooks
   registerMarketplaceHandlers({
     app,
+  });
+
+  // Register Stats handlers for usage tracking
+  registerStatsHandlers({
+    getMainWindow: () => mainWindow,
+    settingsStore: store,
   });
 
   // Set up callback for group chat router to lookup sessions for auto-add @mentions
@@ -2602,6 +2625,45 @@ function setupProcessListeners() {
         recoverable: agentError.recoverable,
       });
       mainWindow?.webContents.send('agent:error', sessionId, agentError);
+    });
+
+    // Handle query-complete events for stats tracking
+    // This is emitted when a batch mode AI query completes (user or auto)
+    processManager.on('query-complete', (_sessionId: string, queryData: {
+      sessionId: string;
+      agentType: string;
+      source: 'user' | 'auto';
+      startTime: number;
+      duration: number;
+      projectPath?: string;
+      tabId?: string;
+    }) => {
+      try {
+        const db = getStatsDB();
+        if (db.isReady()) {
+          const id = db.insertQueryEvent({
+            sessionId: queryData.sessionId,
+            agentType: queryData.agentType,
+            source: queryData.source,
+            startTime: queryData.startTime,
+            duration: queryData.duration,
+            projectPath: queryData.projectPath,
+            tabId: queryData.tabId,
+          });
+          logger.debug(`Recorded query event: ${id}`, '[Stats]', {
+            sessionId: queryData.sessionId,
+            agentType: queryData.agentType,
+            source: queryData.source,
+            duration: queryData.duration,
+          });
+          // Broadcast stats update to renderer for real-time dashboard refresh
+          mainWindow?.webContents.send('stats:updated');
+        }
+      } catch (error) {
+        logger.error(`Failed to record query event: ${error}`, '[Stats]', {
+          sessionId: queryData.sessionId,
+        });
+      }
     });
   }
 }

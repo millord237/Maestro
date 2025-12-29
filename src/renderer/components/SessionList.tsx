@@ -3,7 +3,7 @@ import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, ChevronUp, X, Keyboard,
   Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, Info, GitBranch, Bot, Clock,
   ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe,
-  GitPullRequest, BookOpen
+  GitPullRequest, BookOpen, BarChart3
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Session, Group, Theme, Shortcut, AutoRunStats, GroupChat, GroupChatState, SettingsTab, FocusArea } from '../types';
@@ -349,6 +349,7 @@ interface HamburgerMenuContentProps {
   setSettingsTab: (tab: SettingsTab) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   setUpdateCheckModalOpen: (open: boolean) => void;
   setAboutModalOpen: (open: boolean) => void;
   setMenuOpen: (open: boolean) => void;
@@ -364,6 +365,7 @@ function HamburgerMenuContent({
   setSettingsTab,
   setLogViewerOpen,
   setProcessMonitorOpen,
+  setUsageDashboardOpen,
   setUpdateCheckModalOpen,
   setAboutModalOpen,
   setMenuOpen,
@@ -448,6 +450,19 @@ function HamburgerMenuContent({
         </div>
         <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
           {formatShortcutKeys(shortcuts.processMonitor.keys)}
+        </span>
+      </button>
+      <button
+        onClick={() => { setUsageDashboardOpen(true); setMenuOpen(false); }}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+      >
+        <BarChart3 className="w-5 h-5" style={{ color: theme.colors.accent }} />
+        <div className="flex-1">
+          <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Usage Dashboard</div>
+          <div className="text-xs" style={{ color: theme.colors.textDim }}>View usage analytics</div>
+        </div>
+        <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}>
+          {formatShortcutKeys(shortcuts.usageDashboard.keys)}
         </span>
       </button>
       <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
@@ -678,6 +693,7 @@ interface SessionListProps {
   setUpdateCheckModalOpen: (open: boolean) => void;
   setLogViewerOpen: (open: boolean) => void;
   setProcessMonitorOpen: (open: boolean) => void;
+  setUsageDashboardOpen: (open: boolean) => void;
   toggleGroup: (groupId: string) => void;
   handleDragStart: (sessionId: string) => void;
   handleDragOver: (e: React.DragEvent) => void;
@@ -763,7 +779,7 @@ function SessionListInner(props: SessionListProps) {
     bookmarksCollapsed, setBookmarksCollapsed,
     ungroupedCollapsed, setUngroupedCollapsed,
     setActiveFocus, setActiveSessionId, setLeftSidebarOpen, setLeftSidebarWidthState,
-    setShortcutsHelpOpen, setSettingsModalOpen, setSettingsTab, setAboutModalOpen, setUpdateCheckModalOpen, setLogViewerOpen, setProcessMonitorOpen, toggleGroup,
+    setShortcutsHelpOpen, setSettingsModalOpen, setSettingsTab, setAboutModalOpen, setUpdateCheckModalOpen, setLogViewerOpen, setProcessMonitorOpen, setUsageDashboardOpen, toggleGroup,
     handleDragStart, handleDragOver, handleDropOnGroup, handleDropOnUngrouped,
     finishRenamingGroup, finishRenamingSession, startRenamingGroup,
     startRenamingSession, showConfirmation, setGroups, setSessions, createNewGroup, addNewSession,
@@ -1758,6 +1774,7 @@ function SessionListInner(props: SessionListProps) {
                     setSettingsTab={setSettingsTab}
                     setLogViewerOpen={setLogViewerOpen}
                     setProcessMonitorOpen={setProcessMonitorOpen}
+                    setUsageDashboardOpen={setUsageDashboardOpen}
                     setUpdateCheckModalOpen={setUpdateCheckModalOpen}
                     setAboutModalOpen={setAboutModalOpen}
                     setMenuOpen={setMenuOpen}
@@ -1794,6 +1811,7 @@ function SessionListInner(props: SessionListProps) {
                   setSettingsTab={setSettingsTab}
                   setLogViewerOpen={setLogViewerOpen}
                   setProcessMonitorOpen={setProcessMonitorOpen}
+                  setUsageDashboardOpen={setUsageDashboardOpen}
                   setUpdateCheckModalOpen={setUpdateCheckModalOpen}
                   setAboutModalOpen={setAboutModalOpen}
                   setMenuOpen={setMenuOpen}
