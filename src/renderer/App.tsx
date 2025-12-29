@@ -1376,6 +1376,10 @@ function MaestroConsoleInner() {
         sessionSizeKB?: string;
         sessionId?: string; // Maestro session ID for toast navigation
         tabId?: string; // Tab ID for toast navigation
+        // Stats tracking fields
+        agentType?: string;
+        projectPath?: string;
+        startTime?: number;
       } | null = null;
       let queuedItemToProcess: { sessionId: string; item: QueuedItem } | null = null;
       // Track if we need to run synopsis after completion (for /commit and other AI commands)
@@ -1460,7 +1464,11 @@ function MaestroConsoleInner() {
             response: lastAiLog?.text,
             sessionSizeKB,
             sessionId: actualSessionId, // For toast navigation
-            tabId: completedTab?.id // For toast navigation to specific tab
+            tabId: completedTab?.id, // For toast navigation to specific tab
+            // Stats tracking fields
+            agentType: currentSession.toolType,
+            projectPath: currentSession.cwd,
+            startTime: completedTabData?.thinkingStartTime || currentSession.thinkingStartTime,
           };
 
           // Check if synopsis should be triggered:
@@ -1686,6 +1694,22 @@ function MaestroConsoleInner() {
       }
 
       // Fire side effects AFTER state update (outside the updater function)
+      // Record stats for any completed query (even if we have queued items to process next)
+      if (toastData?.startTime && toastData?.agentType) {
+        window.maestro.stats.recordQuery({
+          sessionId: toastData.sessionId || actualSessionId,
+          agentType: toastData.agentType,
+          source: 'user', // Interactive queries are always user-initiated
+          startTime: toastData.startTime,
+          duration: toastData.duration,
+          projectPath: toastData.projectPath,
+          tabId: toastData.tabId,
+        }).catch(err => {
+          // Don't fail the completion flow if stats recording fails
+          console.warn('[onProcessExit] Failed to record query stats:', err);
+        });
+      }
+
       if (queuedItemToProcess) {
         setTimeout(() => {
           processQueuedItem(queuedItemToProcess!.sessionId, queuedItemToProcess!.item);

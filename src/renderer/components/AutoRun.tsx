@@ -715,8 +715,17 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 
   // Restore scroll position after content changes cause ReactMarkdown to rebuild DOM
   // useLayoutEffect runs synchronously after DOM mutations but before paint
+  // Only track content changes in preview mode to avoid unnecessary work during editing
+  const previewContentRef = useRef(localContent);
   useLayoutEffect(() => {
-    if (mode === 'preview' && previewRef.current && previewScrollPosRef.current > 0) {
+    // Skip if not in preview mode - no DOM to restore scroll on
+    if (mode !== 'preview') {
+      previewContentRef.current = localContent;
+      return;
+    }
+
+    // Only restore scroll if content actually changed while in preview
+    if (previewContentRef.current !== localContent && previewRef.current && previewScrollPosRef.current > 0) {
       // Use requestAnimationFrame to ensure DOM is fully updated
       requestAnimationFrame(() => {
         if (previewRef.current) {
@@ -724,6 +733,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         }
       });
     }
+    previewContentRef.current = localContent;
   }, [localContent, mode, searchOpen, searchQuery]);
 
   // Auto-focus the active element after mode change
@@ -819,22 +829,36 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     }
   }, [mode]);
 
-  // Update match count when search query changes
+  // Debounced search match counting - prevent expensive regex on every keystroke
+  const searchCountTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
+    // Clear any pending count
+    if (searchCountTimeoutRef.current) {
+      clearTimeout(searchCountTimeoutRef.current);
+    }
+
     if (searchQuery.trim()) {
-      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedQuery, 'gi');
-      const matches = localContent.match(regex);
-      const count = matches ? matches.length : 0;
-      setTotalMatches(count);
-      if (count > 0 && currentMatchIndex >= count) {
-        setCurrentMatchIndex(0);
-      }
+      // Debounce the match counting for large documents
+      searchCountTimeoutRef.current = setTimeout(() => {
+        const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedQuery, 'gi');
+        const matches = localContent.match(regex);
+        const count = matches ? matches.length : 0;
+        setTotalMatches(count);
+        if (count > 0 && currentMatchIndex >= count) {
+          setCurrentMatchIndex(0);
+        }
+      }, 150); // Short delay for search responsiveness
     } else {
       setTotalMatches(0);
       setCurrentMatchIndex(0);
     }
-     
+
+    return () => {
+      if (searchCountTimeoutRef.current) {
+        clearTimeout(searchCountTimeoutRef.current);
+      }
+    };
   }, [searchQuery, localContent]);
 
   // Navigate to next search match
@@ -1105,34 +1129,36 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Uses shared utility from markdownConfig.ts
   const proseStyles = useMemo(() => generateAutoRunProseStyles(theme), [theme]);
 
-  // Parse task counts from markdown content
+  // Parse task counts from saved content only (not live during editing)
+  // Updates on: document load, save, and external file changes
   const taskCounts = useMemo(() => {
     const completedRegex = /^[\s]*[-*]\s*\[x\]/gim;
     const uncheckedRegex = /^[\s]*[-*]\s*\[\s\]/gim;
-    const completedMatches = localContent.match(completedRegex) || [];
-    const uncheckedMatches = localContent.match(uncheckedRegex) || [];
+    const completedMatches = savedContent.match(completedRegex) || [];
+    const uncheckedMatches = savedContent.match(uncheckedRegex) || [];
     const completed = completedMatches.length;
     const total = completed + uncheckedMatches.length;
     return { completed, total };
-  }, [localContent]);
+  }, [savedContent]);
 
-  // Count tokens when content changes
+  // Token counting based on saved content only (not live during editing)
+  // Updates on: document load, save, and external file changes
   useEffect(() => {
-    if (!localContent) {
+    if (!savedContent) {
       setTokenCount(null);
       return;
     }
 
     getEncoder()
       .then(encoder => {
-        const tokens = encoder.encode(localContent);
+        const tokens = encoder.encode(savedContent);
         setTokenCount(tokens.length);
       })
       .catch(err => {
         console.error('Failed to count tokens:', err);
         setTokenCount(null);
       });
-  }, [localContent]);
+  }, [savedContent]);
 
   // Callback for when a search match is rendered (used for scrolling to current match)
   const handleMatchRendered = useCallback((index: number, element: HTMLElement) => {
@@ -1174,11 +1200,10 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     return plugins;
   }, [fileTree]);
 
-  // Memoize ReactMarkdown components - only regenerate when dependencies change
-  // Uses shared utility from markdownConfig.ts with custom image renderer
-  const markdownComponents = useMemo(() => {
-    // Create base components with mermaid support and search highlighting
-    const baseComponents = createMarkdownComponents({
+  // Base markdown components - stable unless theme, folderPath, or callbacks change
+  // Separated from search highlighting to prevent rebuilds on every search state change
+  const baseMarkdownComponents = useMemo(() => {
+    const components = createMarkdownComponents({
       theme,
       customLanguageRenderers: {
         mermaid: ({ code, theme: t }) => <MermaidRenderer chart={code} theme={t} />,
@@ -1189,19 +1214,12 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       onExternalLinkClick: (href) => window.maestro.shell.openExternal(href),
       // Provide container ref for anchor link scrolling
       containerRef: previewRef,
-      // Add search highlighting when search is active with matches
-      searchHighlight: searchOpen && searchQuery.trim() && totalMatches > 0
-        ? {
-            query: searchQuery,
-            currentMatchIndex,
-            onMatchRendered: handleMatchRendered,
-          }
-        : undefined,
+      // No search highlighting here - added separately when needed
     });
 
     // Add custom image renderer for AttachmentImage
     return {
-      ...baseComponents,
+      ...components,
       img: ({ src, alt, ...props }: any) => (
         <AttachmentImage
           src={src}
@@ -1213,7 +1231,48 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         />
       ),
     };
-  }, [theme, folderPath, openLightboxByFilename, searchOpen, searchQuery, totalMatches, currentMatchIndex, handleMatchRendered, handleFileClick]);
+  }, [theme, folderPath, openLightboxByFilename, handleFileClick]);
+
+  // Search-highlighted components - only used in preview mode with active search
+  // This allows the base components to remain stable during editing
+  const searchHighlightedComponents = useMemo(() => {
+    // Only create search-highlighted components when actually needed
+    if (!searchOpen || !searchQuery.trim() || totalMatches === 0) {
+      return null;
+    }
+
+    const components = createMarkdownComponents({
+      theme,
+      customLanguageRenderers: {
+        mermaid: ({ code, theme: t }) => <MermaidRenderer chart={code} theme={t} />,
+      },
+      onFileClick: handleFileClick,
+      onExternalLinkClick: (href) => window.maestro.shell.openExternal(href),
+      containerRef: previewRef,
+      searchHighlight: {
+        query: searchQuery,
+        currentMatchIndex,
+        onMatchRendered: handleMatchRendered,
+      },
+    });
+
+    return {
+      ...components,
+      img: ({ src, alt, ...props }: any) => (
+        <AttachmentImage
+          src={src}
+          alt={alt}
+          folderPath={folderPath}
+          theme={theme}
+          onImageClick={openLightboxByFilename}
+          {...props}
+        />
+      ),
+    };
+  }, [theme, folderPath, openLightboxByFilename, handleFileClick, searchOpen, searchQuery, totalMatches, currentMatchIndex, handleMatchRendered]);
+
+  // Use search-highlighted components when available, otherwise use base components
+  const markdownComponents = searchHighlightedComponents || baseMarkdownComponents;
 
   return (
     <div
