@@ -10,6 +10,7 @@ import {
   type GraphNodeData,
   type DocumentNodeData,
   type ExternalLinkNodeData,
+  type ProgressData,
 } from '../../../../renderer/components/DocumentGraph/graphDataBuilder';
 
 // Type definitions for mock file system
@@ -540,6 +541,165 @@ describe('graphDataBuilder', () => {
       for (const node of result.nodes) {
         expect(node.position).toEqual({ x: 0, y: 0 });
       }
+    });
+  });
+
+  describe('progress callback', () => {
+    it('should call onProgress during scanning phase', async () => {
+      const progressCalls: ProgressData[] = [];
+      const onProgress = vi.fn((progress: ProgressData) => {
+        progressCalls.push({ ...progress });
+      });
+
+      await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+        onProgress,
+      });
+
+      // Should have received scanning phase updates
+      const scanningCalls = progressCalls.filter((p) => p.phase === 'scanning');
+      expect(scanningCalls.length).toBeGreaterThan(0);
+
+      // Scanning phase should have current > 0 and total = 0 (unknown during scanning)
+      for (const call of scanningCalls) {
+        expect(call.current).toBeGreaterThan(0);
+        expect(call.total).toBe(0);
+      }
+    });
+
+    it('should call onProgress during parsing phase with current/total', async () => {
+      const progressCalls: ProgressData[] = [];
+      const onProgress = vi.fn((progress: ProgressData) => {
+        progressCalls.push({ ...progress });
+      });
+
+      await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+        onProgress,
+      });
+
+      // Should have received parsing phase updates
+      const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+      expect(parsingCalls.length).toBeGreaterThan(0);
+
+      // Parsing phase should have current <= total and total > 0
+      for (const call of parsingCalls) {
+        expect(call.current).toBeGreaterThan(0);
+        expect(call.total).toBeGreaterThan(0);
+        expect(call.current).toBeLessThanOrEqual(call.total);
+      }
+    });
+
+    it('should include currentFile in parsing phase progress', async () => {
+      const progressCalls: ProgressData[] = [];
+      const onProgress = vi.fn((progress: ProgressData) => {
+        progressCalls.push({ ...progress });
+      });
+
+      await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+        onProgress,
+      });
+
+      // All parsing phase calls should have a currentFile
+      const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+      for (const call of parsingCalls) {
+        expect(call.currentFile).toBeDefined();
+        expect(call.currentFile).toMatch(/\.md$/);
+      }
+    });
+
+    it('should report progress incrementally during parsing', async () => {
+      mockReadDir.mockImplementation((path: string) => {
+        if (path === '/test') {
+          return Promise.resolve([
+            { name: 'a.md', isDirectory: false, path: '/test/a.md' },
+            { name: 'b.md', isDirectory: false, path: '/test/b.md' },
+            { name: 'c.md', isDirectory: false, path: '/test/c.md' },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      mockReadFile.mockImplementation((path: string) => {
+        const name = path.split('/').pop()?.replace('.md', '').toUpperCase();
+        return Promise.resolve(`# ${name}`);
+      });
+
+      mockStat.mockResolvedValue({ size: 10, createdAt: '', modifiedAt: '' });
+
+      const progressCalls: ProgressData[] = [];
+      const onProgress = vi.fn((progress: ProgressData) => {
+        progressCalls.push({ ...progress });
+      });
+
+      await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+        onProgress,
+      });
+
+      // Should have 3 parsing calls (one per file)
+      const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+      expect(parsingCalls).toHaveLength(3);
+
+      // Should increment from 1 to 3
+      expect(parsingCalls[0].current).toBe(1);
+      expect(parsingCalls[0].total).toBe(3);
+      expect(parsingCalls[1].current).toBe(2);
+      expect(parsingCalls[2].current).toBe(3);
+    });
+
+    it('should work without onProgress callback', async () => {
+      // Should not throw when onProgress is not provided
+      const result = await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+      });
+
+      expect(result.nodes.length).toBeGreaterThan(0);
+    });
+
+    it('should report correct total when maxNodes limits files', async () => {
+      mockReadDir.mockImplementation((path: string) => {
+        if (path === '/test') {
+          return Promise.resolve([
+            { name: 'a.md', isDirectory: false, path: '/test/a.md' },
+            { name: 'b.md', isDirectory: false, path: '/test/b.md' },
+            { name: 'c.md', isDirectory: false, path: '/test/c.md' },
+            { name: 'd.md', isDirectory: false, path: '/test/d.md' },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      mockReadFile.mockImplementation((path: string) => {
+        const name = path.split('/').pop()?.replace('.md', '').toUpperCase();
+        return Promise.resolve(`# ${name}`);
+      });
+
+      mockStat.mockResolvedValue({ size: 10, createdAt: '', modifiedAt: '' });
+
+      const progressCalls: ProgressData[] = [];
+      const onProgress = vi.fn((progress: ProgressData) => {
+        progressCalls.push({ ...progress });
+      });
+
+      await buildGraphData({
+        rootPath: '/test',
+        includeExternalLinks: false,
+        maxNodes: 2, // Only process 2 files
+        onProgress,
+      });
+
+      // Parsing phase should show 2 files to process, not 4
+      const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+      expect(parsingCalls).toHaveLength(2);
+      expect(parsingCalls[0].total).toBe(2);
+      expect(parsingCalls[1].total).toBe(2);
     });
   });
 });

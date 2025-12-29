@@ -6,7 +6,7 @@
  * - Controls panel: layout toggle (force/hierarchical), external links toggle, zoom, fit view
  * - Minimap with theme-aware colors
  * - Background pattern (dots) with theme colors
- * - Loading and empty states
+ * - Loading and empty states with progress indicator for large directories
  * - Theme-aware styling throughout
  *
  * Performance optimizations:
@@ -15,6 +15,11 @@
  * - Debounced graph rebuilds: when settings change (e.g., external links toggle),
  *   the graph rebuild is debounced by 300ms to prevent rapid rebuilds from
  *   multiple quick toggle clicks or rapid settings changes
+ *
+ * Progress Indicator:
+ * - During scanning phase: shows count of directories scanned
+ * - During parsing phase: shows X of Y documents with progress bar
+ * - Shows current file being parsed (truncated) for user feedback
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -40,7 +45,7 @@ import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
 import { useDebouncedCallback } from '../../hooks/utils';
 import { DocumentNode } from './DocumentNode';
 import { ExternalLinkNode } from './ExternalLinkNode';
-import { buildGraphData, GraphNodeData } from './graphDataBuilder';
+import { buildGraphData, GraphNodeData, ProgressData } from './graphDataBuilder';
 import { NodeContextMenu } from './NodeContextMenu';
 import {
   applyForceLayout,
@@ -108,6 +113,7 @@ function DocumentGraphViewInner({
   const [layoutType, setLayoutType] = useState<LayoutType>('force');
   const [includeExternalLinks, setIncludeExternalLinks] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ProgressData | null>(null);
 
   // Pagination state for large directories
   const [totalDocuments, setTotalDocuments] = useState(0);
@@ -240,11 +246,19 @@ function DocumentGraphViewInner({
   );
 
   /**
+   * Handle progress updates from graphDataBuilder
+   */
+  const handleProgress = useCallback((progressData: ProgressData) => {
+    setProgress(progressData);
+  }, []);
+
+  /**
    * Load and build graph data
    */
   const loadGraphData = useCallback(async (resetPagination = true) => {
     setLoading(true);
     setError(null);
+    setProgress(null);
 
     // Reset maxNodes when doing a fresh load
     if (resetPagination) {
@@ -256,6 +270,7 @@ function DocumentGraphViewInner({
         rootPath,
         includeExternalLinks,
         maxNodes: resetPagination ? DEFAULT_MAX_NODES : maxNodes,
+        onProgress: handleProgress,
       });
 
       // Update pagination state
@@ -288,7 +303,7 @@ function DocumentGraphViewInner({
     } finally {
       setLoading(false);
     }
-  }, [rootPath, includeExternalLinks, maxNodes, applyLayout, injectThemeIntoNodes, setNodes, setEdges, fitView]);
+  }, [rootPath, includeExternalLinks, maxNodes, applyLayout, injectThemeIntoNodes, setNodes, setEdges, fitView, handleProgress]);
 
   /**
    * Debounced version of loadGraphData for settings changes.
@@ -732,9 +747,42 @@ function DocumentGraphViewInner({
           {loading ? (
             <div className="h-full flex flex-col items-center justify-center gap-4">
               <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.accent }} />
-              <p className="text-sm" style={{ color: theme.colors.textDim }}>
-                Scanning documents...
-              </p>
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-sm" style={{ color: theme.colors.textDim }}>
+                  {progress ? (
+                    progress.phase === 'scanning'
+                      ? `Scanning directories... (${progress.current} scanned)`
+                      : `Parsing documents... ${progress.current} of ${progress.total}`
+                  ) : (
+                    'Initializing...'
+                  )}
+                </p>
+                {/* Progress bar for parsing phase */}
+                {progress && progress.phase === 'parsing' && progress.total > 0 && (
+                  <div
+                    className="w-48 h-1.5 rounded-full overflow-hidden"
+                    style={{ backgroundColor: `${theme.colors.accent}20` }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-150 ease-out"
+                      style={{
+                        backgroundColor: theme.colors.accent,
+                        width: `${Math.round((progress.current / progress.total) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                {/* Current file being parsed (truncated) */}
+                {progress && progress.phase === 'parsing' && progress.currentFile && (
+                  <p
+                    className="text-xs max-w-sm truncate"
+                    style={{ color: theme.colors.textDim, opacity: 0.7 }}
+                    title={progress.currentFile}
+                  >
+                    {progress.currentFile}
+                  </p>
+                )}
+              </div>
             </div>
           ) : error ? (
             <div

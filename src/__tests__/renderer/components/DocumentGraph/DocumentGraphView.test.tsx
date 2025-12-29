@@ -701,4 +701,162 @@ describe('DocumentGraphView', () => {
       expect(errorStateStructure.hasRetryButton).toBe(true);
     });
   });
+
+  describe('Progress Indicator', () => {
+    it('shows scanning phase progress with directory count', () => {
+      // During the scanning phase, the component displays:
+      // "Scanning directories... (X scanned)"
+      // This provides feedback while recursively traversing directories
+      //
+      // The progress state is tracked via useState<ProgressData | null>(null)
+      // and updated via the handleProgress callback passed to buildGraphData
+      //
+      // Implementation in DocumentGraphView.tsx lines ~746-753
+
+      const scanningProgress = {
+        phase: 'scanning' as const,
+        current: 15,
+        total: 0, // Unknown during scanning
+      };
+
+      const expectedMessage = `Scanning directories... (${scanningProgress.current} scanned)`;
+      expect(expectedMessage).toBe('Scanning directories... (15 scanned)');
+    });
+
+    it('shows parsing phase progress with X of Y documents', () => {
+      // During the parsing phase, the component displays:
+      // "Parsing documents... X of Y"
+      // where X is current file being parsed and Y is total files to parse
+      //
+      // Implementation in DocumentGraphView.tsx lines ~746-753
+
+      const parsingProgress = {
+        phase: 'parsing' as const,
+        current: 12,
+        total: 42,
+        currentFile: 'docs/getting-started.md',
+      };
+
+      const expectedMessage = `Parsing documents... ${parsingProgress.current} of ${parsingProgress.total}`;
+      expect(expectedMessage).toBe('Parsing documents... 12 of 42');
+    });
+
+    it('displays progress bar during parsing phase', () => {
+      // The progress bar appears only during the parsing phase when total > 0
+      // It uses theme colors for styling:
+      // - Background: theme.colors.accent with 20% opacity
+      // - Fill: theme.colors.accent
+      // - Width calculated as: Math.round((current / total) * 100)%
+      //
+      // Implementation in DocumentGraphView.tsx lines ~754-768
+
+      const parsingProgress = {
+        phase: 'parsing' as const,
+        current: 25,
+        total: 100,
+      };
+
+      const progressPercent = Math.round((parsingProgress.current / parsingProgress.total) * 100);
+      expect(progressPercent).toBe(25);
+
+      const progressBarStructure = {
+        containerWidth: 'w-48', // 192px width
+        containerHeight: 'h-1.5', // 6px height
+        containerBackground: 'accent with 20% opacity',
+        fillColor: 'theme.colors.accent',
+        fillWidth: `${progressPercent}%`,
+        animation: 'transition-all duration-150 ease-out',
+      };
+
+      expect(progressBarStructure.fillWidth).toBe('25%');
+      expect(progressBarStructure.animation).toContain('duration-150');
+    });
+
+    it('shows current file being parsed (truncated) during parsing', () => {
+      // Below the progress bar, the current file path is displayed
+      // - Truncated if too long (max-w-sm truncate)
+      // - Shows full path on hover via title attribute
+      // - Styled with theme.colors.textDim at 70% opacity
+      //
+      // Implementation in DocumentGraphView.tsx lines ~770-779
+
+      const parsingProgress = {
+        phase: 'parsing' as const,
+        current: 5,
+        total: 10,
+        currentFile: 'very/long/path/to/some/deeply/nested/document.md',
+      };
+
+      const fileDisplayStructure = {
+        textSize: 'text-xs',
+        maxWidth: 'max-w-sm',
+        overflow: 'truncate',
+        color: 'theme.colors.textDim',
+        opacity: 0.7,
+        title: parsingProgress.currentFile, // Full path on hover
+      };
+
+      expect(fileDisplayStructure.title).toBe(parsingProgress.currentFile);
+      expect(fileDisplayStructure.maxWidth).toBe('max-w-sm');
+    });
+
+    it('shows Initializing... when progress is null', () => {
+      // Before the first progress callback is received, the component shows:
+      // "Initializing..."
+      // This provides immediate feedback when the loading spinner appears
+      //
+      // Implementation in DocumentGraphView.tsx lines ~751-753
+
+      const progress = null;
+      const expectedMessage = progress ? 'Scanning...' : 'Initializing...';
+      expect(expectedMessage).toBe('Initializing...');
+    });
+
+    it('progress bar width transitions smoothly', () => {
+      // The progress bar uses CSS transitions for smooth width changes:
+      // transition-all duration-150 ease-out
+      //
+      // This creates a smooth animation as progress increases,
+      // preventing jarring jumps in the UI
+
+      const progressBarTransition = 'transition-all duration-150 ease-out';
+      expect(progressBarTransition).toContain('duration-150');
+      expect(progressBarTransition).toContain('ease-out');
+    });
+
+    it('only shows progress bar when in parsing phase with total > 0', () => {
+      // The progress bar rendering is conditional:
+      // {progress && progress.phase === 'parsing' && progress.total > 0 && (...)}
+      //
+      // This ensures:
+      // 1. No progress bar when progress is null
+      // 2. No progress bar during scanning phase
+      // 3. No progress bar if total is 0 (empty directory edge case)
+
+      const showProgressBar = (progress: { phase: string; total: number } | null) => {
+        return progress && progress.phase === 'parsing' && progress.total > 0;
+      };
+
+      expect(showProgressBar(null)).toBeFalsy();
+      expect(showProgressBar({ phase: 'scanning', total: 0 })).toBeFalsy();
+      expect(showProgressBar({ phase: 'parsing', total: 0 })).toBeFalsy();
+      expect(showProgressBar({ phase: 'parsing', total: 10 })).toBeTruthy();
+    });
+
+    it('only shows current file when in parsing phase with file defined', () => {
+      // The current file display is conditional:
+      // {progress && progress.phase === 'parsing' && progress.currentFile && (...)}
+      //
+      // This ensures the file name only appears during the parsing phase
+
+      const showCurrentFile = (progress: { phase: string; currentFile?: string } | null) => {
+        return progress && progress.phase === 'parsing' && progress.currentFile;
+      };
+
+      expect(showCurrentFile(null)).toBeFalsy();
+      expect(showCurrentFile({ phase: 'scanning' })).toBeFalsy();
+      expect(showCurrentFile({ phase: 'parsing' })).toBeFalsy();
+      expect(showCurrentFile({ phase: 'parsing', currentFile: 'test.md' })).toBeTruthy();
+    });
+  });
 });

@@ -12,6 +12,25 @@ import { parseMarkdownLinks, ExternalLink } from '../../utils/markdownLinkParser
 import { computeDocumentStats, DocumentStats } from '../../utils/documentStats';
 
 /**
+ * Progress callback data for reporting scan/parse progress
+ */
+export interface ProgressData {
+  /** Current phase of the build process */
+  phase: 'scanning' | 'parsing';
+  /** Number of files processed so far */
+  current: number;
+  /** Total number of files to process (known after scanning phase) */
+  total: number;
+  /** Current file being processed (during parsing phase) */
+  currentFile?: string;
+}
+
+/**
+ * Progress callback function type
+ */
+export type ProgressCallback = (progress: ProgressData) => void;
+
+/**
  * Options for building the graph data
  */
 export interface BuildOptions {
@@ -23,6 +42,8 @@ export interface BuildOptions {
   maxNodes?: number;
   /** Number of nodes to skip (for pagination/load more) */
   offset?: number;
+  /** Optional callback for progress updates during scanning and parsing */
+  onProgress?: ProgressCallback;
 }
 
 /**
@@ -93,14 +114,29 @@ interface ParsedFile {
 /**
  * Recursively scan a directory for all markdown files
  * @param rootPath - Root directory to scan
+ * @param onProgress - Optional callback for progress updates (reports number of directories scanned)
  * @returns Array of file paths relative to root
  */
-async function scanMarkdownFiles(rootPath: string): Promise<string[]> {
+async function scanMarkdownFiles(
+  rootPath: string,
+  onProgress?: ProgressCallback
+): Promise<string[]> {
   const markdownFiles: string[] = [];
+  let directoriesScanned = 0;
 
   async function scanDir(currentPath: string, relativePath: string): Promise<void> {
     try {
       const entries = await window.maestro.fs.readDir(currentPath);
+      directoriesScanned++;
+
+      // Report scanning progress (total unknown during scanning, so use current as estimate)
+      if (onProgress) {
+        onProgress({
+          phase: 'scanning',
+          current: directoriesScanned,
+          total: 0, // Unknown during scanning
+        });
+      }
 
       for (const entry of entries) {
         // Skip hidden files and directories
@@ -180,10 +216,10 @@ async function parseFile(rootPath: string, relativePath: string): Promise<Parsed
  * @returns GraphData with nodes and edges for React Flow
  */
 export async function buildGraphData(options: BuildOptions): Promise<GraphData> {
-  const { rootPath, includeExternalLinks, maxNodes, offset = 0 } = options;
+  const { rootPath, includeExternalLinks, maxNodes, offset = 0, onProgress } = options;
 
   // Step 1: Scan for all markdown files
-  const markdownPaths = await scanMarkdownFiles(rootPath);
+  const markdownPaths = await scanMarkdownFiles(rootPath, onProgress);
   const totalDocuments = markdownPaths.length;
 
   // Step 2: Apply pagination if maxNodes is set
@@ -194,7 +230,19 @@ export async function buildGraphData(options: BuildOptions): Promise<GraphData> 
 
   // Step 3: Parse the files we're processing
   const parsedFiles: ParsedFile[] = [];
-  for (const relativePath of pathsToProcess) {
+  for (let i = 0; i < pathsToProcess.length; i++) {
+    const relativePath = pathsToProcess[i];
+
+    // Report parsing progress
+    if (onProgress) {
+      onProgress({
+        phase: 'parsing',
+        current: i + 1,
+        total: pathsToProcess.length,
+        currentFile: relativePath,
+      });
+    }
+
     const parsed = await parseFile(rootPath, relativePath);
     if (parsed) {
       parsedFiles.push(parsed);
