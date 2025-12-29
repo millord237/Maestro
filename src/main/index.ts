@@ -96,6 +96,11 @@ function getSyncPath(): string | undefined {
 // If no custom sync path, use the current userData path (dev or prod depending on mode)
 const syncPath = getSyncPath() || app.getPath('userData');
 
+// Log the paths being used for debugging session persistence issues
+console.log(`[STARTUP] userData path: ${app.getPath('userData')}`);
+console.log(`[STARTUP] syncPath (sessions/settings): ${syncPath}`);
+console.log(`[STARTUP] productionDataPath (agent configs): ${productionDataPath}`);
+
 // Initialize Sentry for crash reporting
 // Only enable in production - skip during development to avoid noise from hot-reload artifacts
 // Check if crash reporting is enabled (default: true for opt-out behavior)

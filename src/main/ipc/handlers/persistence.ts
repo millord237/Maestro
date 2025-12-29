@@ -105,7 +105,9 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
 
   // Sessions persistence
   ipcMain.handle('sessions:getAll', async () => {
-    return sessionsStore.get('sessions', []);
+    const sessions = sessionsStore.get('sessions', []);
+    console.log(`[sessions:getAll] Loaded ${sessions.length} sessions from store path: ${(sessionsStore as any).path}`);
+    return sessions;
   });
 
   ipcMain.handle('sessions:setAll', async (_, sessions: any[]) => {
