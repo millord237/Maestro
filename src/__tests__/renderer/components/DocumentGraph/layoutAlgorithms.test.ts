@@ -837,4 +837,338 @@ describe('layoutAlgorithms', () => {
       });
     });
   });
+
+  describe('Circular Reference Handling', () => {
+    /**
+     * These tests verify that both force and hierarchical layout algorithms
+     * correctly handle circular references (A→B→C→A) without infinite loops.
+     *
+     * Key scenarios tested:
+     * 1. Simple circular chain (A→B→C→A)
+     * 2. Complex multi-cycle graphs
+     * 3. Self-referential links (A→A)
+     * 4. Bidirectional links (A↔B)
+     * 5. Large circular graphs (stress test)
+     */
+
+    describe('applyForceLayout with circular references', () => {
+      it('should handle simple circular chain (A→B→C→A) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+          createDocumentNode('doc-c'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-c'),
+          createEdge('doc-c', 'doc-a'), // Completes the cycle
+        ];
+
+        const result = applyForceLayout(nodes, edges);
+
+        // Should complete without hanging
+        expect(result).toHaveLength(3);
+
+        // All nodes should have valid positions
+        for (const node of result) {
+          expect(node.position).toBeDefined();
+          expect(typeof node.position.x).toBe('number');
+          expect(typeof node.position.y).toBe('number');
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle self-referential link (A→A) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [createDocumentNode('doc-a')];
+        const edges: Edge[] = [createEdge('doc-a', 'doc-a')]; // Self-loop
+
+        const result = applyForceLayout(nodes, edges);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].position).toBeDefined();
+        expect(Number.isFinite(result[0].position.x)).toBe(true);
+        expect(Number.isFinite(result[0].position.y)).toBe(true);
+      });
+
+      it('should handle bidirectional links (A↔B) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-a'), // Bidirectional
+        ];
+
+        const result = applyForceLayout(nodes, edges);
+
+        expect(result).toHaveLength(2);
+        // Both nodes should have valid positions
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle complex multi-cycle graph without infinite loop', () => {
+        // Graph with multiple overlapping cycles:
+        // A→B→C→A (cycle 1)
+        // B→D→E→B (cycle 2)
+        // C→E     (connecting the cycles)
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+          createDocumentNode('doc-c'),
+          createDocumentNode('doc-d'),
+          createDocumentNode('doc-e'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-c'),
+          createEdge('doc-c', 'doc-a'), // Cycle 1
+          createEdge('doc-b', 'doc-d'),
+          createEdge('doc-d', 'doc-e'),
+          createEdge('doc-e', 'doc-b'), // Cycle 2
+          createEdge('doc-c', 'doc-e'), // Cross-connection
+        ];
+
+        const result = applyForceLayout(nodes, edges);
+
+        expect(result).toHaveLength(5);
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle large circular chain (50 nodes) without infinite loop or timeout', () => {
+        const nodeCount = 50;
+        const nodes: Node<GraphNodeData>[] = Array.from({ length: nodeCount }, (_, i) =>
+          createDocumentNode(`doc-${i}`)
+        );
+        // Create circular chain: 0→1→2→...→49→0
+        const edges: Edge[] = Array.from({ length: nodeCount }, (_, i) =>
+          createEdge(`doc-${i}`, `doc-${(i + 1) % nodeCount}`)
+        );
+
+        const startTime = Date.now();
+        const result = applyForceLayout(nodes, edges);
+        const elapsed = Date.now() - startTime;
+
+        expect(result).toHaveLength(nodeCount);
+        // Should complete in reasonable time (less than 5 seconds)
+        expect(elapsed).toBeLessThan(5000);
+
+        // Verify all positions are valid
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle fully connected graph (all-to-all cycles) without infinite loop', () => {
+        // Every node connects to every other node (including self)
+        const nodeCount = 5;
+        const nodes: Node<GraphNodeData>[] = Array.from({ length: nodeCount }, (_, i) =>
+          createDocumentNode(`doc-${i}`)
+        );
+        const edges: Edge[] = [];
+        for (let i = 0; i < nodeCount; i++) {
+          for (let j = 0; j < nodeCount; j++) {
+            edges.push(createEdge(`doc-${i}`, `doc-${j}`));
+          }
+        }
+
+        const result = applyForceLayout(nodes, edges);
+
+        expect(result).toHaveLength(nodeCount);
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+    });
+
+    describe('applyHierarchicalLayout with circular references', () => {
+      it('should handle simple circular chain (A→B→C→A) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+          createDocumentNode('doc-c'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-c'),
+          createEdge('doc-c', 'doc-a'), // Completes the cycle
+        ];
+
+        const result = applyHierarchicalLayout(nodes, edges);
+
+        // Should complete without hanging
+        expect(result).toHaveLength(3);
+
+        // All nodes should have valid positions
+        for (const node of result) {
+          expect(node.position).toBeDefined();
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle self-referential link (A→A) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [createDocumentNode('doc-a')];
+        const edges: Edge[] = [createEdge('doc-a', 'doc-a')]; // Self-loop
+
+        const result = applyHierarchicalLayout(nodes, edges);
+
+        expect(result).toHaveLength(1);
+        expect(Number.isFinite(result[0].position.x)).toBe(true);
+        expect(Number.isFinite(result[0].position.y)).toBe(true);
+      });
+
+      it('should handle bidirectional links (A↔B) without infinite loop', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-a'), // Bidirectional
+        ];
+
+        const result = applyHierarchicalLayout(nodes, edges);
+
+        expect(result).toHaveLength(2);
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should handle large circular chain (50 nodes) without infinite loop or timeout', () => {
+        const nodeCount = 50;
+        const nodes: Node<GraphNodeData>[] = Array.from({ length: nodeCount }, (_, i) =>
+          createDocumentNode(`doc-${i}`)
+        );
+        // Create circular chain: 0→1→2→...→49→0
+        const edges: Edge[] = Array.from({ length: nodeCount }, (_, i) =>
+          createEdge(`doc-${i}`, `doc-${(i + 1) % nodeCount}`)
+        );
+
+        const startTime = Date.now();
+        const result = applyHierarchicalLayout(nodes, edges);
+        const elapsed = Date.now() - startTime;
+
+        expect(result).toHaveLength(nodeCount);
+        // Should complete in reasonable time (less than 5 seconds)
+        expect(elapsed).toBeLessThan(5000);
+
+        // Verify all positions are valid
+        for (const node of result) {
+          expect(Number.isFinite(node.position.x)).toBe(true);
+          expect(Number.isFinite(node.position.y)).toBe(true);
+        }
+      });
+
+      it('should apply correct layout direction even with cycles', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+          createDocumentNode('doc-c'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-c'),
+          createEdge('doc-c', 'doc-a'),
+        ];
+
+        const tbResult = applyHierarchicalLayout(nodes, edges, { rankDirection: 'TB' });
+        const lrResult = applyHierarchicalLayout(nodes, edges, { rankDirection: 'LR' });
+
+        // Both layouts should complete successfully
+        expect(tbResult).toHaveLength(3);
+        expect(lrResult).toHaveLength(3);
+
+        // Layouts should produce different arrangements
+        // (at least one pair of nodes should have different relative positions)
+        const tbPositions = tbResult.map((n) => ({ id: n.id, ...n.position }));
+        const lrPositions = lrResult.map((n) => ({ id: n.id, ...n.position }));
+
+        // Sort by ID to compare corresponding nodes
+        tbPositions.sort((a, b) => a.id.localeCompare(b.id));
+        lrPositions.sort((a, b) => a.id.localeCompare(b.id));
+
+        // At least some positions should differ between TB and LR layouts
+        let hasDifferentPosition = false;
+        for (let i = 0; i < 3; i++) {
+          if (tbPositions[i].x !== lrPositions[i].x || tbPositions[i].y !== lrPositions[i].y) {
+            hasDifferentPosition = true;
+            break;
+          }
+        }
+        expect(hasDifferentPosition).toBe(true);
+      });
+    });
+
+    describe('Edge cases with circular references', () => {
+      it('should handle graph that is entirely cycles (no tree structure)', () => {
+        // Two separate cycles with no connection
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a1'),
+          createDocumentNode('doc-a2'),
+          createDocumentNode('doc-b1'),
+          createDocumentNode('doc-b2'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a1', 'doc-a2'),
+          createEdge('doc-a2', 'doc-a1'), // Cycle A
+          createEdge('doc-b1', 'doc-b2'),
+          createEdge('doc-b2', 'doc-b1'), // Cycle B
+        ];
+
+        const forceResult = applyForceLayout(nodes, edges);
+        const hierarchicalResult = applyHierarchicalLayout(nodes, edges);
+
+        expect(forceResult).toHaveLength(4);
+        expect(hierarchicalResult).toHaveLength(4);
+      });
+
+      it('should handle cycle with mixed internal and external links', () => {
+        const nodes: Node<GraphNodeData>[] = [
+          createDocumentNode('doc-a'),
+          createDocumentNode('doc-b'),
+          createExternalNode('github.com'),
+        ];
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-b'),
+          createEdge('doc-b', 'doc-a'), // Cycle
+          createEdge('doc-a', 'ext-github.com', 'external'),
+          createEdge('doc-b', 'ext-github.com', 'external'),
+        ];
+
+        const forceResult = applyForceLayout(nodes, edges);
+        const hierarchicalResult = applyHierarchicalLayout(nodes, edges);
+
+        expect(forceResult).toHaveLength(3);
+        expect(hierarchicalResult).toHaveLength(3);
+      });
+
+      it('should handle triple self-loop (A→A→A→A)', () => {
+        const nodes: Node<GraphNodeData>[] = [createDocumentNode('doc-a')];
+        // Multiple self-edges (possible in some markdown documents)
+        const edges: Edge[] = [
+          createEdge('doc-a', 'doc-a'),
+          { id: 'doc-a-doc-a-2', source: 'doc-a', target: 'doc-a', type: 'default' },
+          { id: 'doc-a-doc-a-3', source: 'doc-a', target: 'doc-a', type: 'default' },
+        ];
+
+        const forceResult = applyForceLayout(nodes, edges);
+        const hierarchicalResult = applyHierarchicalLayout(nodes, edges);
+
+        expect(forceResult).toHaveLength(1);
+        expect(hierarchicalResult).toHaveLength(1);
+      });
+    });
+  });
 });
