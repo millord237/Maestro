@@ -1224,6 +1224,31 @@ contextBridge.exposeInMainWorld('maestro', {
     previewPackage: () => ipcRenderer.invoke('debug:previewPackage'),
   },
 
+  // Document Graph API (file watching for graph visualization)
+  documentGraph: {
+    watchFolder: (rootPath: string) =>
+      ipcRenderer.invoke('documentGraph:watchFolder', rootPath),
+    unwatchFolder: (rootPath: string) =>
+      ipcRenderer.invoke('documentGraph:unwatchFolder', rootPath),
+    onFilesChanged: (handler: (data: {
+      rootPath: string;
+      changes: Array<{
+        filePath: string;
+        eventType: 'add' | 'change' | 'unlink';
+      }>;
+    }) => void) => {
+      const wrappedHandler = (_event: Electron.IpcRendererEvent, data: {
+        rootPath: string;
+        changes: Array<{
+          filePath: string;
+          eventType: 'add' | 'change' | 'unlink';
+        }>;
+      }) => handler(data);
+      ipcRenderer.on('documentGraph:filesChanged', wrappedHandler);
+      return () => ipcRenderer.removeListener('documentGraph:filesChanged', wrappedHandler);
+    },
+  },
+
   // Group Chat API (multi-agent coordination)
   groupChat: {
     // Storage
@@ -2268,6 +2293,17 @@ export interface MaestroAPI {
     restoreBackup: (folderPath: string, filename: string) => Promise<{ success: boolean; error?: string }>;
     deleteBackups: (folderPath: string) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
     createWorkingCopy: (folderPath: string, filename: string, loopNumber: number) => Promise<{ workingCopyPath: string; originalPath: string }>;
+  };
+  documentGraph: {
+    watchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    unwatchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    onFilesChanged: (handler: (data: {
+      rootPath: string;
+      changes: Array<{
+        filePath: string;
+        eventType: 'add' | 'change' | 'unlink';
+      }>;
+    }) => void) => () => void;
   };
   playbooks: {
     list: (sessionId: string) => Promise<{

@@ -1491,6 +1491,18 @@ interface MaestroAPI {
     // Subscribe to stats updates (for real-time dashboard refresh)
     onStatsUpdate: (callback: () => void) => () => void;
   };
+  // Document Graph API (file watching for graph visualization)
+  documentGraph: {
+    watchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    unwatchFolder: (rootPath: string) => Promise<{ success: boolean; error?: string }>;
+    onFilesChanged: (handler: (data: {
+      rootPath: string;
+      changes: Array<{
+        filePath: string;
+        eventType: 'add' | 'change' | 'unlink';
+      }>;
+    }) => void) => () => void;
+  };
 }
 
 declare global {

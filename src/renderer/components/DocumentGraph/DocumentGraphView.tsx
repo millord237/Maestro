@@ -350,6 +350,36 @@ function DocumentGraphViewInner({
     }
   }, [isOpen]);
 
+  // Set up file watcher for real-time updates when modal is open
+  useEffect(() => {
+    if (!isOpen || !rootPath) return;
+
+    // Start watching the directory
+    window.maestro.documentGraph.watchFolder(rootPath).catch((err) => {
+      console.error('Failed to start document graph file watcher:', err);
+    });
+
+    // Subscribe to file change events
+    const unsubscribe = window.maestro.documentGraph.onFilesChanged((data) => {
+      // Only process events for our root path
+      if (data.rootPath !== rootPath) return;
+
+      // Log the changes for debugging
+      console.log('[DocumentGraph] Files changed:', data.changes.length, 'files');
+
+      // Trigger a debounced graph rebuild
+      debouncedLoadGraphData();
+    });
+
+    // Cleanup: stop watching and unsubscribe when modal closes or rootPath changes
+    return () => {
+      unsubscribe();
+      window.maestro.documentGraph.unwatchFolder(rootPath).catch((err) => {
+        console.error('Failed to stop document graph file watcher:', err);
+      });
+    };
+  }, [isOpen, rootPath, debouncedLoadGraphData]);
+
   // Re-apply theme when it changes
   useEffect(() => {
     if (!loading && nodes.length > 0) {
