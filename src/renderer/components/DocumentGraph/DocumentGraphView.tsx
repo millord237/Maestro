@@ -721,6 +721,216 @@ function DocumentGraphViewInner({
   }, []);
 
   /**
+   * Get connected nodes for a given node ID
+   * Returns nodes that are connected via edges (both source and target connections)
+   */
+  const getConnectedNodes = useCallback(
+    (nodeId: string): Node<GraphNodeData>[] => {
+      const connectedIds = new Set<string>();
+
+      edges.forEach((edge) => {
+        if (edge.source === nodeId) {
+          connectedIds.add(edge.target);
+        }
+        if (edge.target === nodeId) {
+          connectedIds.add(edge.source);
+        }
+      });
+
+      return nodes.filter((n) => connectedIds.has(n.id));
+    },
+    [nodes, edges]
+  );
+
+  /**
+   * Find the best node to navigate to based on direction from current selection
+   * Uses spatial positioning to determine which connected node is most appropriate
+   */
+  const findNodeInDirection = useCallback(
+    (currentNode: Node<GraphNodeData>, direction: 'up' | 'down' | 'left' | 'right'): Node<GraphNodeData> | null => {
+      const connectedNodes = getConnectedNodes(currentNode.id);
+      if (connectedNodes.length === 0) return null;
+
+      const currentX = currentNode.position.x;
+      const currentY = currentNode.position.y;
+
+      // Filter nodes based on direction and find the closest one
+      let candidates: Array<{ node: Node<GraphNodeData>; distance: number }> = [];
+
+      connectedNodes.forEach((node) => {
+        const dx = node.position.x - currentX;
+        const dy = node.position.y - currentY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Determine if this node is in the right direction
+        // Use a 45-degree cone for each direction
+        let isInDirection = false;
+
+        switch (direction) {
+          case 'up':
+            // Node is above: dy < 0 and |dy| > |dx|
+            isInDirection = dy < 0 && Math.abs(dy) >= Math.abs(dx);
+            break;
+          case 'down':
+            // Node is below: dy > 0 and |dy| > |dx|
+            isInDirection = dy > 0 && Math.abs(dy) >= Math.abs(dx);
+            break;
+          case 'left':
+            // Node is to the left: dx < 0 and |dx| > |dy|
+            isInDirection = dx < 0 && Math.abs(dx) >= Math.abs(dy);
+            break;
+          case 'right':
+            // Node is to the right: dx > 0 and |dx| > |dy|
+            isInDirection = dx > 0 && Math.abs(dx) >= Math.abs(dy);
+            break;
+        }
+
+        if (isInDirection) {
+          candidates.push({ node, distance });
+        }
+      });
+
+      // If no candidates in the exact direction, check all connected nodes
+      // This ensures navigation always works even if nodes aren't perfectly aligned
+      if (candidates.length === 0) {
+        // Fallback: find the node with the best score in the general direction
+        connectedNodes.forEach((node) => {
+          const dx = node.position.x - currentX;
+          const dy = node.position.y - currentY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          // Score based on direction preference
+          let score = distance;
+          switch (direction) {
+            case 'up':
+              if (dy < 0) score = distance * 0.5; // Prefer upward
+              break;
+            case 'down':
+              if (dy > 0) score = distance * 0.5; // Prefer downward
+              break;
+            case 'left':
+              if (dx < 0) score = distance * 0.5; // Prefer leftward
+              break;
+            case 'right':
+              if (dx > 0) score = distance * 0.5; // Prefer rightward
+              break;
+          }
+
+          candidates.push({ node, distance: score });
+        });
+      }
+
+      // Return the closest candidate
+      if (candidates.length === 0) return null;
+
+      candidates.sort((a, b) => a.distance - b.distance);
+      return candidates[0].node;
+    },
+    [getConnectedNodes]
+  );
+
+  /**
+   * Navigate to a node and select it
+   */
+  const navigateToNode = useCallback(
+    (node: Node<GraphNodeData>) => {
+      // Select the node
+      setSelectedNodeId(node.id);
+      setSelectedNodeData(node.data as GraphNodeData & { theme: Theme });
+
+      // Update React Flow's selection state by updating the node's selected property
+      setNodes((nds) =>
+        nds.map((n) => ({
+          ...n,
+          selected: n.id === node.id,
+        }))
+      );
+
+      // Center the view on the newly selected node
+      const nodeWidth = node.type === 'documentNode' ? 280 : 160;
+      const nodeHeight = node.type === 'documentNode' ? 120 : 50;
+      const centerX = node.position.x + nodeWidth / 2;
+      const centerY = node.position.y + nodeHeight / 2;
+      const zoom = getZoom() || 1;
+      setCenter(centerX, centerY, { zoom, duration: 200 });
+    },
+    [setNodes, setCenter, getZoom]
+  );
+
+  /**
+   * Handle keyboard navigation within the graph
+   */
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      // Don't handle if focus is in the search input
+      if (document.activeElement === searchInputRef.current) {
+        return;
+      }
+
+      // Handle arrow key navigation when a node is selected
+      if (selectedNodeId && nodes.length > 0) {
+        const currentNode = nodes.find((n) => n.id === selectedNodeId);
+        if (!currentNode) return;
+
+        let targetNode: Node<GraphNodeData> | null = null;
+
+        switch (event.key) {
+          case 'ArrowUp':
+            event.preventDefault();
+            targetNode = findNodeInDirection(currentNode, 'up');
+            break;
+          case 'ArrowDown':
+            event.preventDefault();
+            targetNode = findNodeInDirection(currentNode, 'down');
+            break;
+          case 'ArrowLeft':
+            event.preventDefault();
+            targetNode = findNodeInDirection(currentNode, 'left');
+            break;
+          case 'ArrowRight':
+            event.preventDefault();
+            targetNode = findNodeInDirection(currentNode, 'right');
+            break;
+          case 'Enter':
+            // Open the selected node on Enter
+            event.preventDefault();
+            if (currentNode.data.nodeType === 'document' && onDocumentOpen) {
+              onDocumentOpen(currentNode.data.filePath);
+            } else if (currentNode.data.nodeType === 'external' && onExternalLinkOpen) {
+              const urls = currentNode.data.urls;
+              if (urls.length > 0) {
+                onExternalLinkOpen(urls[0]);
+              }
+            }
+            return;
+          case 'Tab':
+            // Tab cycles through connected nodes
+            if (!event.shiftKey) {
+              event.preventDefault();
+              const connectedNodes = getConnectedNodes(currentNode.id);
+              if (connectedNodes.length > 0) {
+                // Find current index among connected nodes (if any)
+                const currentIndex = connectedNodes.findIndex((n) => n.id === selectedNodeId);
+                const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % connectedNodes.length;
+                targetNode = connectedNodes[nextIndex];
+              }
+            }
+            break;
+        }
+
+        if (targetNode) {
+          navigateToNode(targetNode);
+        }
+      } else if (event.key === 'Tab' && !event.shiftKey && nodes.length > 0) {
+        // If no node is selected and Tab is pressed, select the first node
+        event.preventDefault();
+        navigateToNode(nodes[0]);
+      }
+    },
+    [selectedNodeId, nodes, findNodeInDirection, navigateToNode, getConnectedNodes, onDocumentOpen, onExternalLinkOpen]
+  );
+
+  /**
    * Handle node double-click for opening documents/links
    */
   const handleNodeDoubleClick = useCallback(
@@ -1032,6 +1242,7 @@ function DocumentGraphViewInner({
           maxHeight: '950px',
         }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div
@@ -1382,7 +1593,7 @@ function DocumentGraphViewInner({
               </button>
             )}
           </div>
-          <span style={{ opacity: 0.7 }}>Double-click to open • Right-click for menu • Drag to move • Scroll to zoom • Esc to close</span>
+          <span style={{ opacity: 0.7 }}>Arrow keys to navigate • Enter to open • Tab to cycle • Drag to move • Scroll to zoom • Esc to close</span>
         </div>
       </div>
     </div>
