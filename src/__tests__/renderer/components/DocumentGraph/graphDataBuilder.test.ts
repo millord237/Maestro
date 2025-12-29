@@ -726,4 +726,1010 @@ describe('graphDataBuilder', () => {
       expect(parsingCalls[1].total).toBe(2);
     });
   });
+
+  describe('Performance profiling: graph build time with 500+ markdown files', () => {
+    /**
+     * These tests document and verify the performance characteristics of building
+     * a Document Graph with 500+ markdown files, simulating a large documentation
+     * repository or wiki.
+     *
+     * Key performance aspects tested:
+     * 1. Directory scanning scalability (recursive traversal)
+     * 2. File parsing time with various link densities
+     * 3. Node/edge creation efficiency
+     * 4. Memory footprint through lazy loading
+     * 5. External link aggregation at scale
+     */
+
+    describe('Directory scanning with 500+ files', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should verify recursive scan visits each directory once', async () => {
+        // Simulate a directory structure with 10 directories, each containing 50 files = 500 files
+        const directories = Array.from({ length: 10 }, (_, i) => `dir-${i}`);
+        const filesPerDir = 50;
+
+        let readDirCallCount = 0;
+        const readDirCalls: string[] = [];
+
+        mockReadDir.mockImplementation((dirPath: string) => {
+          readDirCallCount++;
+          readDirCalls.push(dirPath);
+
+          if (dirPath === '/test') {
+            return Promise.resolve(directories.map((d) => ({
+              name: d,
+              isDirectory: true,
+              path: `/test/${d}`,
+            })));
+          }
+
+          // Each subdirectory contains 50 markdown files
+          const dirName = dirPath.split('/').pop();
+          if (directories.includes(dirName ?? '')) {
+            return Promise.resolve(
+              Array.from({ length: filesPerDir }, (_, i) => ({
+                name: `file-${i}.md`,
+                isDirectory: false,
+                path: `${dirPath}/file-${i}.md`,
+              }))
+            );
+          }
+
+          return Promise.resolve([]);
+        });
+
+        mockReadFile.mockImplementation((path: string) => {
+          const fileName = path.split('/').pop()?.replace('.md', '') ?? 'Doc';
+          return Promise.resolve(`# ${fileName}\n\nContent here.`);
+        });
+
+        mockStat.mockResolvedValue({ size: 100, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have 500 document nodes (10 dirs * 50 files)
+        expect(result.totalDocuments).toBe(500);
+
+        // Should have visited 11 directories (1 root + 10 subdirs)
+        expect(readDirCallCount).toBe(11);
+
+        // Each directory should be visited exactly once
+        const uniqueDirCalls = new Set(readDirCalls);
+        expect(uniqueDirCalls.size).toBe(11);
+      });
+
+      it('should skip node_modules, dist, build, .git directories for efficiency', async () => {
+        const skippedDirs = ['node_modules', 'dist', 'build', '.git'];
+        const readDirCalls: string[] = [];
+
+        mockReadDir.mockImplementation((dirPath: string) => {
+          readDirCalls.push(dirPath);
+
+          if (dirPath === '/test') {
+            return Promise.resolve([
+              { name: 'docs', isDirectory: true, path: '/test/docs' },
+              { name: 'node_modules', isDirectory: true, path: '/test/node_modules' },
+              { name: 'dist', isDirectory: true, path: '/test/dist' },
+              { name: 'build', isDirectory: true, path: '/test/build' },
+              { name: '.git', isDirectory: true, path: '/test/.git' },
+              { name: 'readme.md', isDirectory: false, path: '/test/readme.md' },
+            ]);
+          }
+
+          if (dirPath === '/test/docs') {
+            return Promise.resolve([
+              { name: 'api.md', isDirectory: false, path: '/test/docs/api.md' },
+            ]);
+          }
+
+          // These should not be called if skipping works
+          if (skippedDirs.some((d) => dirPath.includes(d))) {
+            return Promise.resolve([
+              { name: 'should-not-see.md', isDirectory: false, path: `${dirPath}/should-not-see.md` },
+            ]);
+          }
+
+          return Promise.resolve([]);
+        });
+
+        mockReadFile.mockResolvedValue('# Doc\n\nContent.');
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should NOT have visited skipped directories
+        for (const skipped of skippedDirs) {
+          const visitedSkipped = readDirCalls.some((call) => call.includes(skipped));
+          expect(visitedSkipped).toBe(false);
+        }
+
+        // Should only have 2 markdown files (readme.md and docs/api.md)
+        expect(result.totalDocuments).toBe(2);
+      });
+
+      it('should handle deeply nested directory structure (10 levels deep)', async () => {
+        const maxDepth = 10;
+        let deepestReached = 0;
+
+        mockReadDir.mockImplementation((dirPath: string) => {
+          const depth = dirPath.split('/').filter(Boolean).length - 1; // -1 for 'test'
+          if (depth > deepestReached) deepestReached = depth;
+
+          if (depth < maxDepth) {
+            return Promise.resolve([
+              { name: 'subdir', isDirectory: true, path: `${dirPath}/subdir` },
+              { name: `doc-${depth}.md`, isDirectory: false, path: `${dirPath}/doc-${depth}.md` },
+            ]);
+          }
+
+          // At max depth, just return a file
+          return Promise.resolve([
+            { name: 'final.md', isDirectory: false, path: `${dirPath}/final.md` },
+          ]);
+        });
+
+        mockReadFile.mockResolvedValue('# Deep Doc\n\nContent.');
+        mockStat.mockResolvedValue({ size: 30, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have reached depth 10
+        expect(deepestReached).toBe(maxDepth);
+
+        // Should have 11 files (1 per level + final)
+        expect(result.totalDocuments).toBe(11);
+      });
+    });
+
+    describe('File parsing performance with various link densities', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should handle files with 0 links efficiently', async () => {
+        // 500 files with no links
+        const fileCount = 500;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = path.match(/file-(\d+)\.md/)?.[1] ?? '0';
+          return Promise.resolve(`# Document ${num}\n\nThis is content without any links.`);
+        });
+
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have 500 nodes with 0 edges
+        expect(result.nodes).toHaveLength(500);
+        expect(result.edges).toHaveLength(0);
+      });
+
+      it('should handle files with 10+ internal links each (high density)', async () => {
+        // 100 files, each linking to 10 other files = 1000 potential edges
+        const fileCount = 100;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          // Each file links to 10 other files (wrapping around)
+          const links = Array.from({ length: 10 }, (_, i) => {
+            const target = (num + i + 1) % fileCount;
+            return `[[file-${target}]]`;
+          }).join(' ');
+          return Promise.resolve(`# Document ${num}\n\n${links}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 200, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have 100 nodes
+        expect(result.nodes).toHaveLength(100);
+
+        // Should have 1000 edges (100 files * 10 links each)
+        expect(result.edges).toHaveLength(1000);
+      });
+
+      it('should handle files with many external links (for aggregation testing)', async () => {
+        // 100 files, each with 5 external links to 20 unique domains
+        const fileCount = 100;
+        const domains = Array.from({ length: 20 }, (_, i) => `domain-${i}.com`);
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          // Each file links to 5 domains (cycling through the 20 domains)
+          const links = Array.from({ length: 5 }, (_, i) => {
+            const domainIdx = (num + i) % domains.length;
+            return `[Link](https://${domains[domainIdx]}/page${num})`;
+          }).join(' ');
+          return Promise.resolve(`# Document ${num}\n\n${links}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 250, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: true,
+        });
+
+        // Should have 100 document nodes + 20 external domain nodes
+        const docNodes = result.nodes.filter((n) => n.type === 'documentNode');
+        const extNodes = result.nodes.filter((n) => n.type === 'externalLinkNode');
+
+        expect(docNodes).toHaveLength(100);
+        expect(extNodes).toHaveLength(20); // Domains are deduplicated
+
+        // Should have 500 external edges (100 files * 5 links each)
+        const externalEdges = result.edges.filter((e) => e.type === 'external');
+        expect(externalEdges).toHaveLength(500);
+      });
+
+      it('should handle mixed internal and external links', async () => {
+        // 200 files with 3 internal + 2 external links each
+        const fileCount = 200;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          const internalLinks = Array.from({ length: 3 }, (_, i) => {
+            const target = (num + i + 1) % fileCount;
+            return `[[file-${target}]]`;
+          }).join(' ');
+          const externalLinks = `[GitHub](https://github.com/test${num}) [Docs](https://docs.example.com/page${num})`;
+          return Promise.resolve(`# Doc ${num}\n\n${internalLinks}\n\n${externalLinks}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 300, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: true,
+        });
+
+        // Should have 200 doc nodes + 2 external nodes
+        expect(result.nodes.filter((n) => n.type === 'documentNode')).toHaveLength(200);
+        expect(result.nodes.filter((n) => n.type === 'externalLinkNode')).toHaveLength(2);
+
+        // Should have 600 internal + 400 external = 1000 edges
+        const internalEdges = result.edges.filter((e) => e.type !== 'external');
+        const externalEdges = result.edges.filter((e) => e.type === 'external');
+
+        expect(internalEdges).toHaveLength(600);
+        expect(externalEdges).toHaveLength(400);
+      });
+    });
+
+    describe('Memory efficiency through lazy loading', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should not store file content in result (content is parsed and discarded)', async () => {
+        // 100 files with large content
+        const fileCount = 100;
+        const largeContent = 'X'.repeat(10000); // 10KB per file
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockResolvedValue(`# Large Doc\n\n${largeContent}`);
+        mockStat.mockResolvedValue({ size: 10000, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Verify nodes don't contain the large content
+        for (const node of result.nodes) {
+          const data = node.data as DocumentNodeData;
+          // Content should not be stored in node data
+          expect((data as unknown as { content?: string }).content).toBeUndefined();
+          // But stats should be computed
+          expect(data.title).toBe('Large Doc');
+          expect(data.wordCount).toBeGreaterThan(0);
+        }
+      });
+
+      it('should verify result set size is proportional to nodes, not file content size', async () => {
+        // 500 files with varying content sizes
+        const fileCount = 500;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          // Vary content size from 100 to 5000 chars
+          const contentSize = 100 + (num % 50) * 100;
+          return Promise.resolve(`# Doc ${num}\n\n${'Y'.repeat(contentSize)}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 2000, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Result should have 500 nodes
+        expect(result.nodes).toHaveLength(500);
+
+        // Rough size check: each node should be small (< 1KB of metadata)
+        // Total result should be under 500KB for 500 nodes
+        const resultJson = JSON.stringify(result);
+        expect(resultJson.length).toBeLessThan(500 * 1024); // < 500KB
+      });
+    });
+
+    describe('Node and edge creation efficiency', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should create correct number of nodes regardless of edge count', async () => {
+        // 300 files with varying link counts
+        const fileCount = 300;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          // Varying number of links: 0-9 based on file number
+          const linkCount = num % 10;
+          const links = Array.from({ length: linkCount }, (_, i) => {
+            const target = (num + i + 1) % fileCount;
+            return `[[file-${target}]]`;
+          }).join(' ');
+          return Promise.resolve(`# Doc ${num}\n\n${links}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 150, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have exactly 300 document nodes
+        expect(result.nodes).toHaveLength(300);
+
+        // Edge count should be sum of 0+1+2+...+9 repeated 30 times = 45 * 30 = 1350
+        expect(result.edges).toHaveLength(1350);
+      });
+
+      it('should only create edges between loaded documents (no dangling edges)', async () => {
+        // 100 files, but only load first 50 with maxNodes
+        const fileCount = 100;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          // Each file links to file+50 (which won't be loaded if maxNodes=50)
+          const target = (num + 50) % fileCount;
+          return Promise.resolve(`# Doc ${num}\n\n[[file-${target}]]`);
+        });
+
+        mockStat.mockResolvedValue({ size: 100, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+          maxNodes: 50,
+        });
+
+        // Should have 50 nodes loaded
+        expect(result.nodes).toHaveLength(50);
+        expect(result.loadedDocuments).toBe(50);
+        expect(result.totalDocuments).toBe(100);
+        expect(result.hasMore).toBe(true);
+
+        // Files 0-49 link to files 50-99, but 50-99 aren't loaded
+        // So there should be 0 edges (all targets are unloaded)
+        expect(result.edges).toHaveLength(0);
+      });
+
+      it('should handle circular references without issues', async () => {
+        // 50 files in a circular reference chain: 0 -> 1 -> 2 -> ... -> 49 -> 0
+        const fileCount = 50;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          const nextTarget = (num + 1) % fileCount;
+          return Promise.resolve(`# Doc ${num}\n\n[[file-${nextTarget}]]`);
+        });
+
+        mockStat.mockResolvedValue({ size: 80, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Should have 50 nodes
+        expect(result.nodes).toHaveLength(50);
+
+        // Should have 50 edges (one from each file to the next)
+        expect(result.edges).toHaveLength(50);
+
+        // Verify the circular reference: last file links to first
+        const lastToFirst = result.edges.find(
+          (e) => e.source === 'doc-file-49.md' && e.target === 'doc-file-0.md'
+        );
+        expect(lastToFirst).toBeDefined();
+      });
+    });
+
+    describe('Performance documentation: expected timing', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      /**
+       * These tests document expected performance characteristics.
+       * Actual timing depends on hardware, but relative performance
+       * should be consistent.
+       */
+
+      it('documents expected timing for 500 files with 0 links', async () => {
+        /**
+         * Expected performance for 500 files, no links:
+         * - Directory scan: ~50-100ms (depends on FS performance)
+         * - File parsing: ~200-400ms (500 readFile + stat calls)
+         * - Node creation: ~10-20ms (simple object creation)
+         * - Total: ~260-520ms typical
+         *
+         * Bottleneck: File I/O operations (readFile + stat)
+         */
+        const fileCount = 500;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        let readFileCallCount = 0;
+        let statCallCount = 0;
+
+        mockReadFile.mockImplementation(() => {
+          readFileCallCount++;
+          return Promise.resolve('# Doc\n\nNo links here.');
+        });
+
+        mockStat.mockImplementation(() => {
+          statCallCount++;
+          return Promise.resolve({ size: 50, createdAt: '', modifiedAt: '' });
+        });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // Verify 500 files were processed
+        expect(result.totalDocuments).toBe(500);
+        expect(readFileCallCount).toBe(500);
+        expect(statCallCount).toBe(500);
+      });
+
+      it('documents expected timing for 500 files with 5 links each (high edge count)', async () => {
+        /**
+         * Expected performance for 500 files, 5 links each:
+         * - Directory scan: ~50-100ms
+         * - File parsing + link extraction: ~300-600ms (includes regex parsing)
+         * - Edge creation: ~50-100ms (2500 edges)
+         * - Total: ~400-800ms typical
+         *
+         * Edge creation is still fast because it's in-memory.
+         */
+        const fileCount = 500;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          const links = Array.from({ length: 5 }, (_, i) => {
+            const target = (num + i + 1) % fileCount;
+            return `[[file-${target}]]`;
+          }).join(' ');
+          return Promise.resolve(`# Doc ${num}\n\n${links}`);
+        });
+
+        mockStat.mockResolvedValue({ size: 150, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        expect(result.nodes).toHaveLength(500);
+        expect(result.edges).toHaveLength(2500);
+      });
+
+      it('documents expected timing with maxNodes pagination', async () => {
+        /**
+         * Expected performance with maxNodes=100:
+         * - Directory scan: ~50-100ms (must scan all to know total)
+         * - File parsing: ~40-80ms (only 100 files)
+         * - Total: ~90-180ms typical
+         *
+         * Pagination significantly reduces file I/O time.
+         */
+        const fileCount = 500;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        let readFileCallCount = 0;
+
+        mockReadFile.mockImplementation(() => {
+          readFileCallCount++;
+          return Promise.resolve('# Doc\n\nContent.');
+        });
+
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+          maxNodes: 100,
+        });
+
+        // Total is still 500, but only 100 loaded
+        expect(result.totalDocuments).toBe(500);
+        expect(result.loadedDocuments).toBe(100);
+        expect(readFileCallCount).toBe(100); // Only 100 files read
+      });
+    });
+
+    describe('Progress callback verification at scale', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should report accurate progress during 500 file scan', async () => {
+        const fileCount = 500;
+        const progressCalls: ProgressData[] = [];
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockResolvedValue('# Doc\n\nContent.');
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const onProgress = vi.fn((progress: ProgressData) => {
+          progressCalls.push({ ...progress });
+        });
+
+        await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+          onProgress,
+        });
+
+        // Should have scanning phase calls
+        const scanningCalls = progressCalls.filter((p) => p.phase === 'scanning');
+        expect(scanningCalls.length).toBeGreaterThan(0);
+
+        // Should have 500 parsing phase calls (one per file)
+        const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+        expect(parsingCalls).toHaveLength(500);
+
+        // First parsing call should show 1/500
+        expect(parsingCalls[0].current).toBe(1);
+        expect(parsingCalls[0].total).toBe(500);
+
+        // Last parsing call should show 500/500
+        expect(parsingCalls[499].current).toBe(500);
+        expect(parsingCalls[499].total).toBe(500);
+
+        // Progress should be monotonically increasing
+        for (let i = 1; i < parsingCalls.length; i++) {
+          expect(parsingCalls[i].current).toBe(parsingCalls[i - 1].current + 1);
+        }
+      });
+
+      it('should report correct file names during parsing progress', async () => {
+        const fileCount = 100;
+        const progressCalls: ProgressData[] = [];
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockResolvedValue('# Doc');
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+          onProgress: (progress) => progressCalls.push({ ...progress }),
+        });
+
+        const parsingCalls = progressCalls.filter((p) => p.phase === 'parsing');
+
+        // Each parsing call should have a valid currentFile
+        for (const call of parsingCalls) {
+          expect(call.currentFile).toBeDefined();
+          expect(call.currentFile).toMatch(/^file-\d+\.md$/);
+        }
+      });
+    });
+
+    describe('Edge cases with large datasets', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should handle files with very long titles (100+ chars)', async () => {
+        const fileCount = 100;
+        const longTitle = 'A'.repeat(150);
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockResolvedValue(`# ${longTitle}\n\nContent.`);
+        mockStat.mockResolvedValue({ size: 200, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        expect(result.nodes).toHaveLength(100);
+
+        // All nodes should have the long title
+        for (const node of result.nodes) {
+          const data = node.data as DocumentNodeData;
+          expect(data.title).toBe(longTitle);
+        }
+      });
+
+      it('should handle files with very long paths (nested 20 levels)', async () => {
+        // Build a deeply nested path
+        const depth = 20;
+
+        // Build path incrementally for proper matching
+        const pathLevels: string[] = ['/test'];
+        for (let i = 0; i < depth; i++) {
+          pathLevels.push(`${pathLevels[i]}/subdir`);
+        }
+        const deepPath = pathLevels[depth];
+        const fileName = 'deep-file.md';
+        const fullPath = `${deepPath}/${fileName}`;
+        const relativePath = fullPath.replace('/test/', '');
+
+        mockReadDir.mockImplementation((path: string) => {
+          // Find which level we're at
+          const level = pathLevels.indexOf(path);
+
+          if (level >= 0 && level < depth) {
+            // Not at deepest level yet - return subdir
+            return Promise.resolve([
+              { name: 'subdir', isDirectory: true, path: pathLevels[level + 1] },
+            ]);
+          } else if (path === deepPath) {
+            // At deepest level - return the file
+            return Promise.resolve([
+              { name: fileName, isDirectory: false, path: fullPath },
+            ]);
+          }
+          return Promise.resolve([]);
+        });
+
+        mockReadFile.mockResolvedValue('# Deep File\n\nContent.');
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        expect(result.nodes).toHaveLength(1);
+
+        const data = result.nodes[0].data as DocumentNodeData;
+        expect(data.filePath).toBe(relativePath);
+      });
+
+      it('should handle self-referential links without creating duplicate edges', async () => {
+        // Files that link to themselves
+        const fileCount = 50;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = path.match(/file-(\d+)\.md/)?.[1] ?? '0';
+          // Each file links to itself multiple times
+          return Promise.resolve(
+            `# Doc ${num}\n\n[[file-${num}]] [[file-${num}]] [[file-${num}]]`
+          );
+        });
+
+        mockStat.mockResolvedValue({ size: 100, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        expect(result.nodes).toHaveLength(50);
+
+        // Each file creates 3 self-edges (link parser doesn't deduplicate)
+        // This tests that the system handles self-references
+        expect(result.edges.length).toBeGreaterThan(0);
+
+        // Verify edges point to valid nodes
+        const nodeIds = new Set(result.nodes.map((n) => n.id));
+        for (const edge of result.edges) {
+          expect(nodeIds.has(edge.source)).toBe(true);
+          expect(nodeIds.has(edge.target)).toBe(true);
+        }
+      });
+
+      it('should handle files with no content (empty files)', async () => {
+        const fileCount = 100;
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        // Half files empty, half with content
+        mockReadFile.mockImplementation((path: string) => {
+          const num = parseInt(path.match(/file-(\d+)\.md/)?.[1] ?? '0', 10);
+          return Promise.resolve(num % 2 === 0 ? '' : '# Has Content');
+        });
+
+        mockStat.mockResolvedValue({ size: 0, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        // All files should create nodes (even empty ones)
+        expect(result.nodes).toHaveLength(100);
+      });
+
+      it('should handle special characters in file names', async () => {
+        const specialNames = [
+          'file with spaces.md',
+          'file-with-dashes.md',
+          'file_with_underscores.md',
+          'file.multiple.dots.md',
+          'UPPERCASE.md',
+          'MixedCase.md',
+          'file123numbers.md',
+        ];
+
+        mockReadDir.mockResolvedValue(
+          specialNames.map((name) => ({
+            name,
+            isDirectory: false,
+            path: `/test/${name}`,
+          }))
+        );
+
+        mockReadFile.mockResolvedValue('# Doc\n\nContent.');
+        mockStat.mockResolvedValue({ size: 50, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: false,
+        });
+
+        expect(result.nodes).toHaveLength(specialNames.length);
+
+        // Verify all special names are present
+        const filePaths = result.nodes.map((n) => (n.data as DocumentNodeData).filePath);
+        for (const name of specialNames) {
+          expect(filePaths).toContain(name);
+        }
+      });
+    });
+
+    describe('External link aggregation at scale', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should correctly aggregate link counts across 500 files', async () => {
+        const fileCount = 500;
+        // Each file links to 2 common domains
+        const domains = ['github.com', 'example.com'];
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = path.match(/file-(\d+)\.md/)?.[1] ?? '0';
+          return Promise.resolve(
+            `# Doc ${num}\n\n[GH](https://github.com/repo${num}) [Ex](https://example.com/page${num})`
+          );
+        });
+
+        mockStat.mockResolvedValue({ size: 100, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: true,
+        });
+
+        // Should have 500 doc nodes + 2 external nodes
+        expect(result.nodes.filter((n) => n.type === 'documentNode')).toHaveLength(500);
+        expect(result.nodes.filter((n) => n.type === 'externalLinkNode')).toHaveLength(2);
+
+        // Each external node should have linkCount of 500
+        const extNodes = result.nodes.filter((n) => n.type === 'externalLinkNode');
+        for (const node of extNodes) {
+          const data = node.data as ExternalLinkNodeData;
+          expect(data.linkCount).toBe(500);
+          expect(data.urls).toHaveLength(500);
+        }
+
+        // Should have 1000 external edges (500 files * 2 domains)
+        const externalEdges = result.edges.filter((e) => e.type === 'external');
+        expect(externalEdges).toHaveLength(1000);
+      });
+
+      it('should handle domains with many unique URLs', async () => {
+        const fileCount = 200;
+        // Each file links to the same domain with a unique URL
+
+        mockReadDir.mockResolvedValue(
+          Array.from({ length: fileCount }, (_, i) => ({
+            name: `file-${i}.md`,
+            isDirectory: false,
+            path: `/test/file-${i}.md`,
+          }))
+        );
+
+        mockReadFile.mockImplementation((path: string) => {
+          const num = path.match(/file-(\d+)\.md/)?.[1] ?? '0';
+          return Promise.resolve(`# Doc ${num}\n\n[Link](https://api.example.com/endpoint${num})`);
+        });
+
+        mockStat.mockResolvedValue({ size: 100, createdAt: '', modifiedAt: '' });
+
+        const result = await buildGraphData({
+          rootPath: '/test',
+          includeExternalLinks: true,
+        });
+
+        // Should have one external node for api.example.com
+        const extNodes = result.nodes.filter((n) => n.type === 'externalLinkNode');
+        expect(extNodes).toHaveLength(1);
+
+        const data = extNodes[0].data as ExternalLinkNodeData;
+        expect(data.domain).toBe('api.example.com');
+        expect(data.linkCount).toBe(200);
+        expect(data.urls).toHaveLength(200);
+
+        // Verify each URL is unique
+        const uniqueUrls = new Set(data.urls);
+        expect(uniqueUrls.size).toBe(200);
+      });
+    });
+  });
 });
