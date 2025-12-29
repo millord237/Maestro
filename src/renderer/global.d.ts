@@ -372,6 +372,11 @@ interface MaestroAPI {
       isDirectory: boolean;
       isFile: boolean;
     }>;
+    directorySize: (dirPath: string) => Promise<{
+      totalSize: number;
+      fileCount: number;
+      folderCount: number;
+    }>;
     fetchImageAsBase64: (url: string) => Promise<string | null>;
   };
   webserver: {

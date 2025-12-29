@@ -1726,8 +1726,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
               </button>
             )}
             {taskCounts.total > 0 && (
-              <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
-                {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
+              <span style={{ color: theme.colors.textDim }}>
+                <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.accent }}>{taskCounts.completed}</span>
+                {' '}of{' '}
+                <span style={{ color: theme.colors.accent }}>{taskCounts.total}</span>
+                {' '}task{taskCounts.total !== 1 ? 's' : ''} completed
               </span>
             )}
             {tokenCount !== null && (

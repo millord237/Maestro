@@ -17,6 +17,15 @@ const AUTO_REFRESH_OPTIONS = [
   { label: 'Every 3 minutes', value: 180 },
 ];
 
+// Helper to format bytes into human-readable format
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 // Flattened node for virtualization
 interface FlattenedNode {
   node: FileNode;
@@ -544,6 +553,31 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Status bar at bottom */}
+      {session.fileTreeStats && (
+        <div
+          className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-1.5 text-xs border-t mt-2"
+          style={{
+            backgroundColor: theme.colors.bgActivity,
+            borderColor: theme.colors.border,
+            color: theme.colors.textDim
+          }}
+        >
+          <span>
+            <span style={{ color: theme.colors.accent }}>{session.fileTreeStats.fileCount.toLocaleString()}</span>
+            <span className="opacity-60"> file{session.fileTreeStats.fileCount !== 1 ? 's' : ''}, </span>
+            <span style={{ color: theme.colors.accent }}>{session.fileTreeStats.folderCount.toLocaleString()}</span>
+            <span className="opacity-60"> folder{session.fileTreeStats.folderCount !== 1 ? 's' : ''}</span>
+          </span>
+          <span>
+            <span className="opacity-60">Size:</span>{' '}
+            <span style={{ color: theme.colors.accent }}>
+              {formatBytes(session.fileTreeStats.totalSize)}
+            </span>
+          </span>
+        </div>
       )}
     </div>
   );

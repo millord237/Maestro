@@ -377,6 +377,11 @@ export interface Session {
   fileExplorerExpanded: string[];
   fileExplorerScrollPos: number;
   fileTreeError?: string;
+  fileTreeStats?: {
+    fileCount: number;
+    folderCount: number;
+    totalSize: number;
+  };
   // Shell state tracking
   shellCwd?: string;
   // Command history (separate for each mode)

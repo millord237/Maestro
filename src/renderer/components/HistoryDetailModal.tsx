@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { X, Bot, User, Copy, Check, CheckCircle, XCircle, Trash2, Clock, Cpu, Zap, Play, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Theme, HistoryEntry } from '../types';
 import type { FileNode } from '../types/fileTree';
@@ -7,6 +7,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { formatElapsedTime } from '../utils/formatters';
 import { stripAnsiCodes } from '../../shared/stringUtils';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { generateTerminalProseStyles } from '../utils/markdownConfig';
 
 // Double checkmark SVG component for validated entries
 const DoubleCheck = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
@@ -65,6 +66,12 @@ export function HistoryDetailModal({
   const [copiedSessionId, setCopiedSessionId] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Generate prose styles for consistent markdown rendering (same as TerminalOutput)
+  const proseStyles = useMemo(
+    () => generateTerminalProseStyles(theme, '.history-detail-content'),
+    [theme]
+  );
 
   // Navigation state
   const canNavigate = filteredEntries && currentIndex !== undefined && onNavigate;
@@ -404,11 +411,12 @@ export function HistoryDetailModal({
           </div>
         )}
 
-        {/* Content */}
+        {/* Content - with prose styles for consistent markdown rendering */}
         <div
-          className="flex-1 overflow-y-auto px-6 py-5 scrollbar-thin"
+          className="history-detail-content flex-1 overflow-y-auto px-6 py-5 scrollbar-thin"
           style={{ color: theme.colors.textMain }}
         >
+          <style>{proseStyles}</style>
           <MarkdownRenderer
             content={cleanResponse}
             theme={theme}

@@ -473,6 +473,12 @@ contextBridge.exposeInMainWorld('maestro', {
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke('fs:writeFile', filePath, content) as Promise<{ success: boolean }>,
     stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
+    directorySize: (dirPath: string) =>
+      ipcRenderer.invoke('fs:directorySize', dirPath) as Promise<{
+        totalSize: number;
+        fileCount: number;
+        folderCount: number;
+      }>,
     fetchImageAsBase64: (url: string) =>
       ipcRenderer.invoke('fs:fetchImageAsBase64', url) as Promise<string | null>,
   },
@@ -1584,6 +1590,11 @@ export interface MaestroAPI {
       modifiedAt: string;
       isDirectory: boolean;
       isFile: boolean;
+    }>;
+    directorySize: (dirPath: string) => Promise<{
+      totalSize: number;
+      fileCount: number;
+      folderCount: number;
     }>;
     fetchImageAsBase64: (url: string) => Promise<string | null>;
   };

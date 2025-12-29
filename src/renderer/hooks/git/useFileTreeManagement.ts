@@ -75,12 +75,25 @@ export function useFileTreeManagement(
     if (!session) return undefined;
 
     try {
+      // Fetch tree and stats in parallel
+      const [newTree, stats] = await Promise.all([
+        loadFileTree(session.cwd),
+        window.maestro.fs.directorySize(session.cwd)
+      ]);
       const oldTree = session.fileTree || [];
-      const newTree = await loadFileTree(session.cwd);
       const changes = compareFileTrees(oldTree, newTree);
 
       setSessions(prev => prev.map(s =>
-        s.id === sessionId ? { ...s, fileTree: newTree, fileTreeError: undefined } : s
+        s.id === sessionId ? {
+          ...s,
+          fileTree: newTree,
+          fileTreeError: undefined,
+          fileTreeStats: {
+            fileCount: stats.fileCount,
+            folderCount: stats.folderCount,
+            totalSize: stats.totalSize
+          }
+        } : s
       ));
 
       return changes;
@@ -91,7 +104,8 @@ export function useFileTreeManagement(
         s.id === sessionId ? {
           ...s,
           fileTree: [],
-          fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`
+          fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`,
+          fileTreeStats: undefined
         } : s
       ));
       return undefined;
@@ -109,9 +123,10 @@ export function useFileTreeManagement(
     const cwd = session.inputMode === 'terminal' ? (session.shellCwd || session.cwd) : session.cwd;
 
     try {
-      // Refresh file tree, git repo status, branches, and tags in parallel
-      const [tree, isGitRepo] = await Promise.all([
+      // Refresh file tree, stats, git repo status, branches, and tags in parallel
+      const [tree, stats, isGitRepo] = await Promise.all([
         loadFileTree(cwd),
+        window.maestro.fs.directorySize(cwd),
         gitService.isRepo(cwd)
       ]);
 
@@ -132,6 +147,11 @@ export function useFileTreeManagement(
           ...s,
           fileTree: tree,
           fileTreeError: undefined,
+          fileTreeStats: {
+            fileCount: stats.fileCount,
+            folderCount: stats.folderCount,
+            totalSize: stats.totalSize
+          },
           isGitRepo,
           gitBranches,
           gitTags,
@@ -149,7 +169,8 @@ export function useFileTreeManagement(
         s.id === sessionId ? {
           ...s,
           fileTree: [],
-          fileTreeError: `Cannot access directory: ${cwd}\n${errorMsg}`
+          fileTreeError: `Cannot access directory: ${cwd}\n${errorMsg}`,
+          fileTreeStats: undefined
         } : s
       ));
     }
@@ -165,9 +186,21 @@ export function useFileTreeManagement(
 
     // Only load if file tree is empty
     if (!session.fileTree || session.fileTree.length === 0) {
-      loadFileTree(session.cwd).then(tree => {
+      Promise.all([
+        loadFileTree(session.cwd),
+        window.maestro.fs.directorySize(session.cwd)
+      ]).then(([tree, stats]) => {
         setSessions(prev => prev.map(s =>
-          s.id === activeSessionId ? { ...s, fileTree: tree, fileTreeError: undefined } : s
+          s.id === activeSessionId ? {
+            ...s,
+            fileTree: tree,
+            fileTreeError: undefined,
+            fileTreeStats: {
+              fileCount: stats.fileCount,
+              folderCount: stats.folderCount,
+              totalSize: stats.totalSize
+            }
+          } : s
         ));
       }).catch(error => {
         console.error('File tree error:', error);
@@ -176,7 +209,8 @@ export function useFileTreeManagement(
           s.id === activeSessionId ? {
             ...s,
             fileTree: [],
-            fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`
+            fileTreeError: `Cannot access directory: ${session.cwd}\n${errorMsg}`,
+            fileTreeStats: undefined
           } : s
         ));
       });

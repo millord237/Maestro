@@ -675,8 +675,8 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     }
   }, [session.id, hasMore, allFilteredEntries.length, filteredEntries]);
 
-  // PERF: Throttle scroll handler to 16ms (~60fps) to reduce layout thrashing
-  const throttledScrollHandler = useThrottledCallback(handleScrollInner, 16);
+  // PERF: Throttle scroll handler to 4ms (~240fps) for smooth scrollbar
+  const throttledScrollHandler = useThrottledCallback(handleScrollInner, 4);
 
   // Wrapper to capture scroll target and call throttled handler
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {

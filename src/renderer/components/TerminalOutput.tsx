@@ -1190,7 +1190,7 @@ export const TerminalOutput = memo(forwardRef<HTMLDivElement, TerminalOutputProp
     );
   }, [collapsedLogs, debouncedSearchQuery]);
 
-  // PERF: Throttle scroll handler to reduce state updates (16ms = ~60fps)
+  // PERF: Throttle scroll handler to reduce state updates (4ms = ~240fps for smooth scrollbar)
   // The actual logic is in handleScrollInner, wrapped with useThrottledCallback
   const handleScrollInner = useCallback(() => {
     if (!scrollContainerRef.current) return;
@@ -1227,7 +1227,7 @@ export const TerminalOutput = memo(forwardRef<HTMLDivElement, TerminalOutputProp
     }
   }, [activeTabId, filteredLogs.length, onScrollPositionChange, onAtBottomChange]);
 
-  const handleScroll = useThrottledCallback(handleScrollInner, 16);
+  const handleScroll = useThrottledCallback(handleScrollInner, 4);
 
   // Restore read state when switching tabs
   useEffect(() => {
