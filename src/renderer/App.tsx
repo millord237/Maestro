@@ -8575,6 +8575,8 @@ function MaestroConsoleInner() {
         }}
         focusFilePath={graphFocusFilePath}
         onFocusFileConsumed={() => setGraphFocusFilePath(undefined)}
+        savedLayoutMode={settings.documentGraphLayoutMode}
+        onLayoutModeChange={settings.setDocumentGraphLayoutMode}
       />
 
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}

@@ -282,6 +282,10 @@ export interface UseSettingsReturn {
   // Accessibility settings
   colorBlindMode: boolean;
   setColorBlindMode: (value: boolean) => void;
+
+  // Document Graph settings
+  documentGraphLayoutMode: 'force' | 'hierarchical';
+  setDocumentGraphLayoutMode: (value: 'force' | 'hierarchical') => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -392,6 +396,9 @@ export function useSettings(): UseSettingsReturn {
 
   // Accessibility settings
   const [colorBlindMode, setColorBlindModeState] = useState(false);
+
+  // Document Graph settings
+  const [documentGraphLayoutMode, setDocumentGraphLayoutModeState] = useState<'force' | 'hierarchical'>('force');
 
   // Wrapper functions that persist to electron-store
   // PERF: All wrapped in useCallback to prevent re-renders
@@ -1075,6 +1082,12 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('colorBlindMode', value);
   }, []);
 
+  // Document Graph layout mode
+  const setDocumentGraphLayoutMode = useCallback((value: 'force' | 'hierarchical') => {
+    setDocumentGraphLayoutModeState(value);
+    window.maestro.settings.set('documentGraphLayoutMode', value);
+  }, []);
+
   // Load settings from electron-store on mount
   useEffect(() => {
     console.log('[Settings] useEffect triggered, about to call loadSettings');
@@ -1133,6 +1146,7 @@ export function useSettings(): UseSettingsReturn {
       const savedContextManagementSettings = await window.maestro.settings.get('contextManagementSettings');
       const savedKeyboardMasteryStats = await window.maestro.settings.get('keyboardMasteryStats');
       const savedColorBlindMode = await window.maestro.settings.get('colorBlindMode');
+      const savedDocumentGraphLayoutMode = await window.maestro.settings.get('documentGraphLayoutMode');
 
       if (savedEnterToSendAI !== undefined) setEnterToSendAIState(savedEnterToSendAI as boolean);
       if (savedEnterToSendTerminal !== undefined) setEnterToSendTerminalState(savedEnterToSendTerminal as boolean);
@@ -1355,6 +1369,14 @@ export function useSettings(): UseSettingsReturn {
       // Accessibility settings
       if (savedColorBlindMode !== undefined) setColorBlindModeState(savedColorBlindMode as boolean);
 
+      // Document Graph settings
+      if (savedDocumentGraphLayoutMode !== undefined) {
+        const validModes = ['force', 'hierarchical'];
+        if (validModes.includes(savedDocumentGraphLayoutMode as string)) {
+          setDocumentGraphLayoutModeState(savedDocumentGraphLayoutMode as 'force' | 'hierarchical');
+        }
+      }
+
       } catch (error) {
         console.error('[Settings] Failed to load settings:', error);
       } finally {
@@ -1493,6 +1515,8 @@ export function useSettings(): UseSettingsReturn {
     getUnacknowledgedKeyboardMasteryLevel,
     colorBlindMode,
     setColorBlindMode,
+    documentGraphLayoutMode,
+    setDocumentGraphLayoutMode,
   }), [
     // State values
     settingsLoaded,
@@ -1612,5 +1636,7 @@ export function useSettings(): UseSettingsReturn {
     getUnacknowledgedKeyboardMasteryLevel,
     colorBlindMode,
     setColorBlindMode,
+    documentGraphLayoutMode,
+    setDocumentGraphLayoutMode,
   ]);
 }

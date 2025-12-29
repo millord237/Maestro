@@ -91,6 +91,10 @@ export interface DocumentGraphViewProps {
   focusFilePath?: string;
   /** Callback when focus file is consumed (cleared after focusing) */
   onFocusFileConsumed?: () => void;
+  /** Saved layout mode preference */
+  savedLayoutMode?: 'force' | 'hierarchical';
+  /** Callback to persist layout mode changes */
+  onLayoutModeChange?: (mode: 'force' | 'hierarchical') => void;
 }
 
 /**
@@ -118,13 +122,15 @@ function DocumentGraphViewInner({
   onExternalLinkOpen,
   focusFilePath,
   onFocusFileConsumed,
+  savedLayoutMode = 'force',
+  onLayoutModeChange,
 }: DocumentGraphViewProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [layoutType, setLayoutType] = useState<LayoutType>('force');
+  const [layoutType, setLayoutType] = useState<LayoutType>(savedLayoutMode);
   const [includeExternalLinks, setIncludeExternalLinks] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeData, setSelectedNodeData] = useState<(GraphNodeData & { theme: Theme }) | null>(null);
@@ -1092,6 +1098,9 @@ function DocumentGraphViewInner({
     const newLayoutType = layoutType === 'force' ? 'hierarchical' : 'force';
     setLayoutType(newLayoutType);
 
+    // Persist the layout mode preference
+    onLayoutModeChange?.(newLayoutType);
+
     // Re-layout with animation if we have nodes
     if (nodes.length > 0 && !isAnimatingRef.current) {
       // Strip theme from nodes for layout calculation
@@ -1130,7 +1139,7 @@ function DocumentGraphViewInner({
         fitView({ padding: 0.1, duration: 300 });
       });
     }
-  }, [layoutType, nodes, edges, animateLayoutTransition, rootPath, fitView]);
+  }, [layoutType, nodes, edges, animateLayoutTransition, rootPath, fitView, onLayoutModeChange]);
 
   /**
    * Handle external links toggle
