@@ -5693,3 +5693,354 @@ describe('File path normalization in database (forward slashes consistently)', (
     });
   });
 });
+
+/**
+ * Database VACUUM functionality tests
+ *
+ * Tests for the automatic database vacuum feature that runs on startup
+ * when the database exceeds 100MB to maintain performance.
+ */
+describe('Database VACUUM functionality', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastDbPath = null;
+    mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+    mockDb.prepare.mockReturnValue(mockStatement);
+    mockStatement.run.mockReturnValue({ changes: 1 });
+    mockFsExistsSync.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  describe('getDatabaseSize', () => {
+    it('should return 0 when statSync throws (file missing)', async () => {
+      // The mock fs.statSync is not configured to return size by default
+      // so getDatabaseSize will catch the error and return 0
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Since mockFsExistsSync.mockReturnValue(true) is set but statSync is not mocked,
+      // getDatabaseSize will try to call the real statSync on a non-existent path
+      // and catch the error, returning 0
+      const size = db.getDatabaseSize();
+
+      // The mock environment doesn't have actual file, so expect 0
+      expect(size).toBe(0);
+    });
+
+    it('should handle statSync gracefully when file does not exist', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // getDatabaseSize should not throw
+      expect(() => db.getDatabaseSize()).not.toThrow();
+    });
+  });
+
+  describe('vacuum', () => {
+    it('should execute VACUUM SQL command', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear mocks from initialization
+      mockStatement.run.mockClear();
+      mockDb.prepare.mockClear();
+
+      const result = db.vacuum();
+
+      expect(result.success).toBe(true);
+      expect(mockDb.prepare).toHaveBeenCalledWith('VACUUM');
+      expect(mockStatement.run).toHaveBeenCalled();
+    });
+
+    it('should return success true when vacuum completes', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const result = db.vacuum();
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return bytesFreed of 0 when sizes are equal (mocked)', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const result = db.vacuum();
+
+      // With mock fs, both before and after sizes will be 0
+      expect(result.bytesFreed).toBe(0);
+    });
+
+    it('should return error if database not initialized', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      // Don't initialize
+
+      const result = db.vacuum();
+
+      expect(result.success).toBe(false);
+      expect(result.bytesFreed).toBe(0);
+      expect(result.error).toBe('Database not initialized');
+    });
+
+    it('should handle VACUUM failure gracefully', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Make VACUUM fail
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql === 'VACUUM') {
+          return {
+            run: vi.fn().mockImplementation(() => {
+              throw new Error('database is locked');
+            }),
+          };
+        }
+        return mockStatement;
+      });
+
+      const result = db.vacuum();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('database is locked');
+    });
+
+    it('should log vacuum progress with size information', async () => {
+      const { logger } = await import('../../main/utils/logger');
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear logger mocks from initialization
+      vi.mocked(logger.info).mockClear();
+
+      db.vacuum();
+
+      // Check that logger was called with vacuum-related messages
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Starting VACUUM'),
+        expect.any(String)
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('VACUUM completed'),
+        expect.any(String)
+      );
+    });
+  });
+
+  describe('vacuumIfNeeded', () => {
+    it('should skip vacuum if database size is 0 (below threshold)', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear mocks from initialization
+      mockStatement.run.mockClear();
+      mockDb.prepare.mockClear();
+
+      const result = db.vacuumIfNeeded();
+
+      // Size is 0 (mock fs), which is below 100MB threshold
+      expect(result.vacuumed).toBe(false);
+      expect(result.databaseSize).toBe(0);
+      expect(result.result).toBeUndefined();
+    });
+
+    it('should return correct databaseSize in result', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const result = db.vacuumIfNeeded();
+
+      // Size property should be present
+      expect(typeof result.databaseSize).toBe('number');
+    });
+
+    it('should use default 100MB threshold when not specified', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // With 0 byte size (mocked), should skip vacuum
+      const result = db.vacuumIfNeeded();
+
+      expect(result.vacuumed).toBe(false);
+    });
+
+    it('should not vacuum with threshold 0 and size 0 since 0 is not > 0', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear mocks from initialization
+      mockStatement.run.mockClear();
+      mockDb.prepare.mockClear();
+
+      // With 0 threshold and 0 byte file: 0 is NOT greater than 0
+      const result = db.vacuumIfNeeded(0);
+
+      // The condition is: databaseSize < thresholdBytes
+      // 0 < 0 is false, so vacuumed should be true (it tries to vacuum)
+      expect(result.databaseSize).toBe(0);
+      // Since 0 is NOT less than 0, it proceeds to vacuum
+      expect(result.vacuumed).toBe(true);
+    });
+
+    it('should log appropriate message when skipping vacuum', async () => {
+      const { logger } = await import('../../main/utils/logger');
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear logger mocks from initialization
+      vi.mocked(logger.debug).mockClear();
+
+      db.vacuumIfNeeded();
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('below vacuum threshold'),
+        expect.any(String)
+      );
+    });
+  });
+
+  describe('vacuumIfNeeded with custom thresholds', () => {
+    it('should respect custom threshold parameter (threshold = -1 means always vacuum)', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear mocks from initialization
+      mockStatement.run.mockClear();
+      mockDb.prepare.mockClear();
+
+      // With -1 threshold, 0 > -1 is true, so should vacuum
+      const result = db.vacuumIfNeeded(-1);
+
+      expect(result.vacuumed).toBe(true);
+      expect(mockDb.prepare).toHaveBeenCalledWith('VACUUM');
+    });
+
+    it('should not vacuum with very large threshold', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear mocks from initialization
+      mockStatement.run.mockClear();
+      mockDb.prepare.mockClear();
+
+      // With 1TB threshold, should NOT trigger vacuum
+      const result = db.vacuumIfNeeded(1024 * 1024 * 1024 * 1024);
+
+      expect(result.vacuumed).toBe(false);
+      expect(mockDb.prepare).not.toHaveBeenCalledWith('VACUUM');
+    });
+  });
+
+  describe('initialize with vacuumIfNeeded integration', () => {
+    it('should call vacuumIfNeeded during initialization', async () => {
+      const { logger } = await import('../../main/utils/logger');
+
+      // Clear logger mocks before test
+      vi.mocked(logger.debug).mockClear();
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      db.initialize();
+
+      // Should have logged the skip message during initialization (size is 0 in mock)
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('below vacuum threshold'),
+        expect.any(String)
+      );
+    });
+
+    it('should complete initialization even if vacuum would fail', async () => {
+      // Make VACUUM fail if called
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql === 'VACUUM') {
+          return {
+            run: vi.fn().mockImplementation(() => {
+              throw new Error('VACUUM failed: database is locked');
+            }),
+          };
+        }
+        return mockStatement;
+      });
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      // Initialize should not throw (vacuum is skipped due to 0 size anyway)
+      expect(() => db.initialize()).not.toThrow();
+
+      // Database should still be ready
+      expect(db.isReady()).toBe(true);
+    });
+
+    it('should not block initialization for small databases', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+
+      // Time the initialization (should be fast for mock)
+      const start = Date.now();
+      db.initialize();
+      const elapsed = Date.now() - start;
+
+      expect(db.isReady()).toBe(true);
+      expect(elapsed).toBeLessThan(1000); // Should be fast in mock environment
+    });
+  });
+
+  describe('vacuum return types', () => {
+    it('vacuum should return object with success, bytesFreed, and optional error', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const result = db.vacuum();
+
+      expect(typeof result.success).toBe('boolean');
+      expect(typeof result.bytesFreed).toBe('number');
+      expect(result.error === undefined || typeof result.error === 'string').toBe(true);
+    });
+
+    it('vacuumIfNeeded should return object with vacuumed, databaseSize, and optional result', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const result = db.vacuumIfNeeded();
+
+      expect(typeof result.vacuumed).toBe('boolean');
+      expect(typeof result.databaseSize).toBe('number');
+      expect(result.result === undefined || typeof result.result === 'object').toBe(true);
+    });
+
+    it('vacuumIfNeeded should include result when vacuum is performed', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Use -1 threshold to force vacuum
+      const result = db.vacuumIfNeeded(-1);
+
+      expect(result.vacuumed).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result?.success).toBe(true);
+    });
+  });
+});

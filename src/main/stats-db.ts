@@ -241,7 +241,8 @@ export class StatsDB {
   }
 
   /**
-   * Initialize the database - create file, tables, and indexes
+   * Initialize the database - create file, tables, and indexes.
+   * Also runs VACUUM if the database exceeds 100MB to maintain performance.
    */
   initialize(): void {
     if (this.initialized) {
@@ -266,6 +267,10 @@ export class StatsDB {
 
       this.initialized = true;
       logger.info(`Stats database initialized at ${this.dbPath}`, LOG_CONTEXT);
+
+      // Run VACUUM if database is large (>100MB) to maintain performance
+      // This is done after initialization to avoid blocking startup for small databases
+      this.vacuumIfNeeded();
     } catch (error) {
       logger.error(`Failed to initialize stats database: ${error}`, LOG_CONTEXT);
       throw error;
@@ -494,6 +499,90 @@ export class StatsDB {
    */
   getDbPath(): string {
     return this.dbPath;
+  }
+
+  /**
+   * Get the database file size in bytes.
+   * Returns 0 if the file doesn't exist or can't be read.
+   */
+  getDatabaseSize(): number {
+    try {
+      const stats = fs.statSync(this.dbPath);
+      return stats.size;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Run VACUUM on the database to reclaim unused space and optimize structure.
+   *
+   * VACUUM rebuilds the database file, repacking it into a minimal amount of disk space.
+   * This is useful after many deletes or updates that leave fragmented space.
+   *
+   * Note: VACUUM requires exclusive access and may take a few seconds for large databases.
+   * It also temporarily requires up to 2x the database size in disk space.
+   *
+   * @returns Object with success status, bytes freed, and any error message
+   */
+  vacuum(): { success: boolean; bytesFreed: number; error?: string } {
+    if (!this.db) {
+      return { success: false, bytesFreed: 0, error: 'Database not initialized' };
+    }
+
+    try {
+      const sizeBefore = this.getDatabaseSize();
+      logger.info(`Starting VACUUM (current size: ${(sizeBefore / 1024 / 1024).toFixed(2)} MB)`, LOG_CONTEXT);
+
+      // Use prepare().run() for VACUUM - consistent with better-sqlite3 patterns
+      this.db.prepare('VACUUM').run();
+
+      const sizeAfter = this.getDatabaseSize();
+      const bytesFreed = sizeBefore - sizeAfter;
+
+      logger.info(
+        `VACUUM completed: ${(sizeBefore / 1024 / 1024).toFixed(2)} MB → ${(sizeAfter / 1024 / 1024).toFixed(2)} MB (freed ${(bytesFreed / 1024 / 1024).toFixed(2)} MB)`,
+        LOG_CONTEXT
+      );
+
+      return { success: true, bytesFreed };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`VACUUM failed: ${errorMessage}`, LOG_CONTEXT);
+      return { success: false, bytesFreed: 0, error: errorMessage };
+    }
+  }
+
+  /**
+   * Conditionally vacuum the database if it exceeds a size threshold.
+   *
+   * This method is designed to be called on app startup to maintain database health.
+   * It only runs VACUUM if the database exceeds the specified threshold (default: 100MB),
+   * avoiding unnecessary work for smaller databases.
+   *
+   * @param thresholdBytes - Size threshold in bytes (default: 100MB = 104857600 bytes)
+   * @returns Object with vacuumed flag, database size, and vacuum result if performed
+   */
+  vacuumIfNeeded(
+    thresholdBytes: number = 100 * 1024 * 1024
+  ): { vacuumed: boolean; databaseSize: number; result?: { success: boolean; bytesFreed: number; error?: string } } {
+    const databaseSize = this.getDatabaseSize();
+
+    if (databaseSize < thresholdBytes) {
+      logger.debug(
+        `Database size (${(databaseSize / 1024 / 1024).toFixed(2)} MB) below vacuum threshold (${(thresholdBytes / 1024 / 1024).toFixed(2)} MB), skipping VACUUM`,
+        LOG_CONTEXT
+      );
+      return { vacuumed: false, databaseSize };
+    }
+
+    logger.info(
+      `Database size (${(databaseSize / 1024 / 1024).toFixed(2)} MB) exceeds vacuum threshold (${(thresholdBytes / 1024 / 1024).toFixed(2)} MB), running VACUUM`,
+      LOG_CONTEXT
+    );
+
+    const result = this.vacuum();
+    return { vacuumed: true, databaseSize, result };
   }
 
   // ============================================================================
