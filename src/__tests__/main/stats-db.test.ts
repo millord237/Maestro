@@ -5056,3 +5056,409 @@ describe('electron-rebuild verification for better-sqlite3', () => {
     });
   });
 });
+
+/**
+ * File path normalization tests
+ *
+ * These tests verify that file paths are normalized to use forward slashes
+ * consistently across platforms. This ensures:
+ * 1. Windows-style paths (backslashes) are converted to forward slashes
+ * 2. Paths stored in the database are platform-independent
+ * 3. Filtering by project path works regardless of input path format
+ * 4. Cross-platform data portability is maintained
+ */
+describe('File path normalization in database (forward slashes consistently)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastDbPath = null;
+    mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+    mockDb.prepare.mockReturnValue(mockStatement);
+    mockStatement.run.mockReturnValue({ changes: 1 });
+    mockStatement.all.mockReturnValue([]);
+    mockFsExistsSync.mockReturnValue(true);
+    mockFsMkdirSync.mockClear();
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  describe('normalizePath utility function', () => {
+    it('should convert Windows backslashes to forward slashes', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\TestUser\\Projects\\MyApp')).toBe('C:/Users/TestUser/Projects/MyApp');
+    });
+
+    it('should preserve Unix-style forward slashes unchanged', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('/Users/testuser/Projects/MyApp')).toBe('/Users/testuser/Projects/MyApp');
+    });
+
+    it('should handle mixed slashes (normalize to forward slashes)', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users/TestUser\\Projects/MyApp')).toBe('C:/Users/TestUser/Projects/MyApp');
+    });
+
+    it('should handle UNC paths (Windows network shares)', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('\\\\NetworkServer\\Share\\Folder\\File.md')).toBe('//NetworkServer/Share/Folder/File.md');
+    });
+
+    it('should return null for null input', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath(null)).toBeNull();
+    });
+
+    it('should return null for undefined input', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath(undefined)).toBeNull();
+    });
+
+    it('should handle empty string', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('')).toBe('');
+    });
+
+    it('should handle path with spaces', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\Test User\\My Documents\\Project')).toBe('C:/Users/Test User/My Documents/Project');
+    });
+
+    it('should handle path with special characters', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\test.user-name\\Projects\\[MyApp]')).toBe('C:/Users/test.user-name/Projects/[MyApp]');
+    });
+
+    it('should handle consecutive backslashes', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\\\Users\\\\TestUser')).toBe('C://Users//TestUser');
+    });
+
+    it('should handle path ending with backslash', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\TestUser\\')).toBe('C:/Users/TestUser/');
+    });
+
+    it('should handle Japanese/CJK characters in path', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\ユーザー\\プロジェクト')).toBe('C:/Users/ユーザー/プロジェクト');
+    });
+  });
+
+  describe('insertQueryEvent path normalization', () => {
+    it('should normalize Windows projectPath to forward slashes', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.insertQueryEvent({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        source: 'user',
+        startTime: Date.now(),
+        duration: 5000,
+        projectPath: 'C:\\Users\\TestUser\\Projects\\MyApp',
+        tabId: 'tab-1',
+      });
+
+      // Verify that the statement was called with normalized path
+      expect(mockStatement.run).toHaveBeenCalledWith(
+        expect.any(String), // id
+        'session-1',
+        'claude-code',
+        'user',
+        expect.any(Number), // startTime
+        5000,
+        'C:/Users/TestUser/Projects/MyApp', // normalized path
+        'tab-1'
+      );
+    });
+
+    it('should preserve Unix projectPath unchanged', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.insertQueryEvent({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        source: 'user',
+        startTime: Date.now(),
+        duration: 5000,
+        projectPath: '/Users/testuser/Projects/MyApp',
+        tabId: 'tab-1',
+      });
+
+      expect(mockStatement.run).toHaveBeenCalledWith(
+        expect.any(String),
+        'session-1',
+        'claude-code',
+        'user',
+        expect.any(Number),
+        5000,
+        '/Users/testuser/Projects/MyApp', // unchanged
+        'tab-1'
+      );
+    });
+
+    it('should store null for undefined projectPath', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.insertQueryEvent({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        source: 'user',
+        startTime: Date.now(),
+        duration: 5000,
+        // projectPath is undefined
+      });
+
+      expect(mockStatement.run).toHaveBeenCalledWith(
+        expect.any(String),
+        'session-1',
+        'claude-code',
+        'user',
+        expect.any(Number),
+        5000,
+        null, // undefined becomes null
+        null
+      );
+    });
+  });
+
+  describe('getQueryEvents filter path normalization', () => {
+    it('should normalize Windows filter projectPath for matching', async () => {
+      // Setup: database returns events with normalized paths
+      mockStatement.all.mockReturnValue([
+        {
+          id: 'event-1',
+          session_id: 'session-1',
+          agent_type: 'claude-code',
+          source: 'user',
+          start_time: Date.now(),
+          duration: 5000,
+          project_path: 'C:/Users/TestUser/Projects/MyApp', // normalized in DB
+          tab_id: 'tab-1',
+        },
+      ]);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Query with Windows-style path (backslashes)
+      const events = db.getQueryEvents('day', {
+        projectPath: 'C:\\Users\\TestUser\\Projects\\MyApp', // Windows style
+      });
+
+      // Verify the prepared statement was called with normalized path
+      expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('project_path = ?'));
+
+      // The filter should be normalized to forward slashes for matching
+      const prepareCallArgs = mockStatement.all.mock.calls[0];
+      expect(prepareCallArgs).toContain('C:/Users/TestUser/Projects/MyApp');
+    });
+
+    it('should preserve Unix filter projectPath unchanged', async () => {
+      mockStatement.all.mockReturnValue([]);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('week', {
+        projectPath: '/Users/testuser/Projects/MyApp',
+      });
+
+      const prepareCallArgs = mockStatement.all.mock.calls[0];
+      expect(prepareCallArgs).toContain('/Users/testuser/Projects/MyApp');
+    });
+  });
+
+  describe('insertAutoRunSession path normalization', () => {
+    it('should normalize Windows documentPath and projectPath', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.insertAutoRunSession({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        documentPath: 'C:\\Users\\TestUser\\Docs\\task.md',
+        startTime: Date.now(),
+        duration: 60000,
+        tasksTotal: 5,
+        tasksCompleted: 3,
+        projectPath: 'C:\\Users\\TestUser\\Projects\\MyApp',
+      });
+
+      expect(mockStatement.run).toHaveBeenCalledWith(
+        expect.any(String),
+        'session-1',
+        'claude-code',
+        'C:/Users/TestUser/Docs/task.md', // normalized documentPath
+        expect.any(Number),
+        60000,
+        5,
+        3,
+        'C:/Users/TestUser/Projects/MyApp' // normalized projectPath
+      );
+    });
+
+    it('should handle null paths correctly', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.insertAutoRunSession({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        startTime: Date.now(),
+        duration: 60000,
+        // documentPath and projectPath are undefined
+      });
+
+      expect(mockStatement.run).toHaveBeenCalledWith(
+        expect.any(String),
+        'session-1',
+        'claude-code',
+        null, // undefined documentPath becomes null
+        expect.any(Number),
+        60000,
+        null,
+        null,
+        null // undefined projectPath becomes null
+      );
+    });
+  });
+
+  describe('updateAutoRunSession path normalization', () => {
+    it('should normalize Windows documentPath on update', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.updateAutoRunSession('auto-run-1', {
+        duration: 120000,
+        documentPath: 'D:\\Projects\\NewDocs\\updated.md',
+      });
+
+      // The SQL should include document_path update with normalized path
+      expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('document_path = ?'));
+      expect(mockStatement.run).toHaveBeenCalled();
+    });
+
+    it('should handle undefined documentPath in update (no change)', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.updateAutoRunSession('auto-run-1', {
+        duration: 120000,
+        tasksCompleted: 5,
+        // documentPath not included
+      });
+
+      // The SQL should NOT include document_path
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const updateCall = prepareCalls.find((call) => call[0]?.includes?.('UPDATE'));
+      if (updateCall) {
+        expect(updateCall[0]).not.toContain('document_path');
+      }
+    });
+  });
+
+  describe('cross-platform path consistency', () => {
+    it('should produce identical normalized paths from Windows and Unix inputs for same logical path', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+
+      const windowsPath = 'C:\\Users\\Test\\project';
+      const unixPath = 'C:/Users/Test/project';
+
+      expect(normalizePath(windowsPath)).toBe(normalizePath(unixPath));
+    });
+
+    it('should allow filtering by either path style and match stored normalized path', async () => {
+      // Setup: database returns events with normalized paths
+      const storedPath = 'C:/Users/TestUser/Projects/MyApp';
+      mockStatement.all.mockReturnValue([
+        {
+          id: 'event-1',
+          session_id: 'session-1',
+          agent_type: 'claude-code',
+          source: 'user',
+          start_time: Date.now(),
+          duration: 5000,
+          project_path: storedPath,
+          tab_id: 'tab-1',
+        },
+      ]);
+
+      const { StatsDB, normalizePath } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Both Windows and Unix style filters should normalize to the same value
+      const windowsFilter = 'C:\\Users\\TestUser\\Projects\\MyApp';
+      const unixFilter = 'C:/Users/TestUser/Projects/MyApp';
+
+      expect(normalizePath(windowsFilter)).toBe(storedPath);
+      expect(normalizePath(unixFilter)).toBe(storedPath);
+    });
+
+    it('should handle Linux paths correctly', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('/home/user/.config/maestro')).toBe('/home/user/.config/maestro');
+    });
+
+    it('should handle macOS Application Support paths correctly', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('/Users/test/Library/Application Support/Maestro')).toBe(
+        '/Users/test/Library/Application Support/Maestro'
+      );
+    });
+  });
+
+  describe('edge cases and special characters', () => {
+    it('should handle paths with unicode characters', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\用户\\项目')).toBe('C:/Users/用户/项目');
+    });
+
+    it('should handle paths with emoji (if supported by filesystem)', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\Test\\📁Projects\\MyApp')).toBe('C:/Users/Test/📁Projects/MyApp');
+    });
+
+    it('should handle very long paths', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      const longPath =
+        'C:\\Users\\TestUser\\' +
+        'VeryLongDirectoryName\\'.repeat(20) +
+        'FinalFile.md';
+      const normalizedPath = normalizePath(longPath);
+      expect(normalizedPath).not.toContain('\\');
+      expect(normalizedPath).toContain('/');
+    });
+
+    it('should handle root paths', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\')).toBe('C:/');
+      expect(normalizePath('/')).toBe('/');
+    });
+
+    it('should handle drive letter only', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('D:')).toBe('D:');
+    });
+
+    it('should handle paths with dots', async () => {
+      const { normalizePath } = await import('../../main/stats-db');
+      expect(normalizePath('C:\\Users\\..\\TestUser\\.hidden\\file.txt')).toBe(
+        'C:/Users/../TestUser/.hidden/file.txt'
+      );
+    });
+  });
+});

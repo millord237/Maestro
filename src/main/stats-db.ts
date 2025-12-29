@@ -53,6 +53,28 @@ function getTimeRangeStart(range: StatsTimeRange): number {
 }
 
 /**
+ * Normalize file paths to use forward slashes consistently across platforms.
+ *
+ * This ensures that paths stored in the database use a consistent format
+ * regardless of the operating system, enabling cross-platform data portability
+ * and consistent filtering by project path.
+ *
+ * - Converts Windows-style backslashes to forward slashes
+ * - Preserves UNC paths (\\server\share → //server/share)
+ * - Handles null/undefined by returning null
+ *
+ * @param filePath - The file path to normalize (may be Windows or Unix style)
+ * @returns The normalized path with forward slashes, or null if input is null/undefined
+ */
+export function normalizePath(filePath: string | null | undefined): string | null {
+  if (filePath == null) {
+    return null;
+  }
+  // Replace all backslashes with forward slashes
+  return filePath.replace(/\\/g, '/');
+}
+
+/**
  * SQL for creating query_events table
  */
 const CREATE_QUERY_EVENTS_SQL = `
@@ -259,7 +281,7 @@ export class StatsDB {
       event.source,
       event.startTime,
       event.duration,
-      event.projectPath ?? null,
+      normalizePath(event.projectPath),
       event.tabId ?? null
     );
 
@@ -287,7 +309,8 @@ export class StatsDB {
     }
     if (filters?.projectPath) {
       sql += ' AND project_path = ?';
-      params.push(filters.projectPath);
+      // Normalize filter path to match stored format
+      params.push(normalizePath(filters.projectPath) ?? '');
     }
     if (filters?.sessionId) {
       sql += ' AND session_id = ?';
@@ -340,12 +363,12 @@ export class StatsDB {
       id,
       session.sessionId,
       session.agentType,
-      session.documentPath ?? null,
+      normalizePath(session.documentPath),
       session.startTime,
       session.duration,
       session.tasksTotal ?? null,
       session.tasksCompleted ?? null,
-      session.projectPath ?? null
+      normalizePath(session.projectPath)
     );
 
     logger.debug(`Inserted Auto Run session ${id}`, LOG_CONTEXT);
@@ -375,7 +398,7 @@ export class StatsDB {
     }
     if (updates.documentPath !== undefined) {
       setClauses.push('document_path = ?');
-      params.push(updates.documentPath ?? null);
+      params.push(normalizePath(updates.documentPath));
     }
 
     if (setClauses.length === 0) {
