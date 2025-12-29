@@ -1348,7 +1348,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                       aria-checked={statsCollectionEnabled}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                           statsCollectionEnabled ? 'translate-x-5' : 'translate-x-0.5'
                         }`}
                       />
@@ -1557,7 +1557,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                       aria-checked={documentGraphShowExternalLinks}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                           documentGraphShowExternalLinks ? 'translate-x-5' : 'translate-x-0.5'
                         }`}
                       />

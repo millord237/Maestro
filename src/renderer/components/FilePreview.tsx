@@ -5,7 +5,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSlug from 'rehype-slug';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, X, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen, AlertTriangle, Share2 } from 'lucide-react';
+import { FileCode, X, Eye, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Loader2, Image, Globe, Save, Edit, FolderOpen, AlertTriangle, Share2, GitGraph } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -63,6 +63,8 @@ interface FilePreviewProps {
   ghCliAvailable?: boolean;
   /** Callback to open gist publish modal */
   onPublishGist?: () => void;
+  /** Callback to open Document Graph focused on this file */
+  onOpenInGraph?: () => void;
 }
 
 // Get language from filename extension
@@ -396,7 +398,7 @@ function remarkHighlight() {
   };
 }
 
-export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdownEditMode, onSave, shortcuts, fileTree, cwd, onFileClick, canGoBack, canGoForward, onNavigateBack, onNavigateForward, backHistory, forwardHistory, onNavigateToIndex, currentHistoryIndex, onOpenFuzzySearch, onShortcutUsed, ghCliAvailable, onPublishGist }: FilePreviewProps) {
+export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdownEditMode, onSave, shortcuts, fileTree, cwd, onFileClick, canGoBack, canGoForward, onNavigateBack, onNavigateForward, backHistory, forwardHistory, onNavigateToIndex, currentHistoryIndex, onOpenFuzzySearch, onShortcutUsed, ghCliAvailable, onPublishGist, onOpenInGraph }: FilePreviewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
@@ -1170,6 +1172,17 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
                 title="Publish as GitHub Gist"
               >
                 <Share2 className="w-4 h-4" />
+              </button>
+            )}
+            {/* Document Graph button - show for markdown files when callback is available */}
+            {isMarkdown && onOpenInGraph && (
+              <button
+                onClick={onOpenInGraph}
+                className="p-2 rounded hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textDim }}
+                title="View in Document Graph"
+              >
+                <GitGraph className="w-4 h-4" />
               </button>
             )}
             <button

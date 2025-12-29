@@ -1445,7 +1445,7 @@ function SessionListInner(props: SessionListProps) {
                             }
                           >
                             <div
-                              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                              className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                                 tunnelStatus === 'connected' ? 'translate-x-5' : 'translate-x-0.5'
                               }`}
                             />
@@ -1515,7 +1515,7 @@ function SessionListInner(props: SessionListProps) {
                             }
                           >
                             <div
-                              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                              className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                                 webInterfaceUseCustomPort ? 'translate-x-5' : 'translate-x-0.5'
                               }`}
                             />

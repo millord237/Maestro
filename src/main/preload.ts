@@ -1566,6 +1566,9 @@ contextBridge.exposeInMainWorld('maestro', {
       keyboardCoveragePercent?: number;
       keyboardKeysUnlocked?: number;
       keyboardTotalKeys?: number;
+      // Delta mode for multi-device aggregation
+      deltaMs?: number;
+      deltaRuns?: number;
     }) => ipcRenderer.invoke('leaderboard:submit', data),
     pollAuthStatus: (clientToken: string) =>
       ipcRenderer.invoke('leaderboard:pollAuthStatus', clientToken),

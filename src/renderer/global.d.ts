@@ -1235,6 +1235,9 @@ interface MaestroAPI {
       keyboardCoveragePercent?: number;
       keyboardKeysUnlocked?: number;
       keyboardTotalKeys?: number;
+      // Delta mode for multi-device aggregation
+      deltaMs?: number;
+      deltaRuns?: number;
     }) => Promise<{
       success: boolean;
       message: string;
@@ -1255,6 +1258,11 @@ interface MaestroAPI {
           previousRank: number | null;
           improved: boolean;
         };
+      };
+      // Server-side totals for multi-device sync
+      serverTotals?: {
+        cumulativeTimeMs: number;
+        totalRuns: number;
       };
     }>;
     pollAuthStatus: (clientToken: string) => Promise<{

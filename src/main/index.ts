@@ -1751,6 +1751,9 @@ function setupIpcHandlers() {
         theme?: string;
         clientToken?: string; // Client-generated token for polling auth status
         authToken?: string;   // Required for confirmed email addresses
+        // Delta mode for multi-device aggregation
+        deltaMs?: number;     // Time in milliseconds to ADD to server-side cumulative total
+        deltaRuns?: number;   // Number of runs to ADD to server-side total runs count
       }
     ): Promise<{
       success: boolean;
@@ -1771,6 +1774,11 @@ function setupIpcHandlers() {
           previousRank: number | null;
           improved: boolean;
         } | null;
+      };
+      // Server-side totals for multi-device sync
+      serverTotals?: {
+        cumulativeTimeMs: number;
+        totalRuns: number;
       };
     }> => {
       try {
@@ -1810,18 +1818,25 @@ function setupIpcHandlers() {
               improved: boolean;
             } | null;
           };
+          // Server-side totals for multi-device sync
+          serverTotals?: {
+            cumulativeTimeMs: number;
+            totalRuns: number;
+          };
         };
 
         if (response.ok) {
           logger.info('Leaderboard submission successful', 'Leaderboard', {
             pendingEmailConfirmation: result.pendingEmailConfirmation,
             ranking: result.ranking,
+            serverTotals: result.serverTotals,
           });
           return {
             success: true,
             message: result.message || 'Submission received',
             pendingEmailConfirmation: result.pendingEmailConfirmation,
             ranking: result.ranking,
+            serverTotals: result.serverTotals,
           };
         } else if (response.status === 401) {
           // Auth token required or invalid

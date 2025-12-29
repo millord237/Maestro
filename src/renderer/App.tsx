@@ -97,6 +97,7 @@ import { getOpenSpecCommands } from './services/openspec';
 // Import prompts and synopsis parsing
 import { autorunSynopsisPrompt, maestroSystemPrompt } from '../prompts';
 import { parseSynopsis } from '../shared/synopsis';
+import { formatRelativeTime } from '../shared/formatters';
 
 // Import types and constants
 // Note: GroupChat, GroupChatState are now imported via GroupChatContext; GroupChatMessage still used locally
@@ -1383,7 +1384,7 @@ function MaestroConsoleInner() {
       } | null = null;
       let queuedItemToProcess: { sessionId: string; item: QueuedItem } | null = null;
       // Track if we need to run synopsis after completion (for /commit and other AI commands)
-      let synopsisData: { sessionId: string; cwd: string; agentSessionId: string; command: string; groupName: string; projectName: string; tabName?: string; tabId?: string; toolType?: ToolType; sessionConfig?: { customPath?: string; customArgs?: string; customEnvVars?: Record<string, string>; customModel?: string; customContextWindow?: number; } } | null = null;
+      let synopsisData: { sessionId: string; cwd: string; agentSessionId: string; command: string; groupName: string; projectName: string; tabName?: string; tabId?: string; lastSynopsisTime?: number; toolType?: ToolType; sessionConfig?: { customPath?: string; customArgs?: string; customEnvVars?: Record<string, string>; customModel?: string; customContextWindow?: number; } } | null = null;
 
       if (isFromAi) {
         const currentSession = sessionsRef.current.find(s => s.id === actualSessionId);
@@ -1489,6 +1490,7 @@ function MaestroConsoleInner() {
               projectName,
               tabName,
               tabId: completedTab?.id,
+              lastSynopsisTime: completedTab?.lastSynopsisTime, // Track when last synopsis was generated
               toolType: currentSession.toolType, // Pass tool type for multi-provider support
               sessionConfig: {
                 customPath: currentSession.customPath,
@@ -1757,8 +1759,17 @@ function MaestroConsoleInner() {
       // Run synopsis in parallel if this was a custom AI command (like /commit)
       // This creates a USER history entry to track the work
       if (synopsisData && spawnBackgroundSynopsisRef.current && addHistoryEntryRef.current) {
-        const SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
+        // Build dynamic prompt based on whether there's a previous synopsis timestamp
+        // This ensures the AI only summarizes work since the last synopsis
+        let SYNOPSIS_PROMPT: string;
+        if (synopsisData.lastSynopsisTime) {
+          const timeAgo = formatRelativeTime(synopsisData.lastSynopsisTime);
+          SYNOPSIS_PROMPT = `Synopsize ONLY the work done since the last synopsis (${timeAgo}). Do not repeat previous work. 2-3 sentences max.`;
+        } else {
+          SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
+        }
         const startTime = Date.now();
+        const synopsisTime = Date.now(); // Capture time for updating lastSynopsisTime
 
         spawnBackgroundSynopsisRef.current(
           synopsisData.sessionId,
@@ -1781,6 +1792,18 @@ function MaestroConsoleInner() {
               projectPath: synopsisData!.cwd,
               sessionName: synopsisData!.tabName,
             });
+
+            // Update lastSynopsisTime on the tab so future synopses know the time window
+            setSessions(prev => prev.map(s => {
+              if (s.id !== synopsisData!.sessionId) return s;
+              return {
+                ...s,
+                aiTabs: s.aiTabs.map(tab => {
+                  if (tab.id !== synopsisData!.tabId) return tab;
+                  return { ...tab, lastSynopsisTime: synopsisTime };
+                }),
+              };
+            }));
 
             // Show toast for synopsis completion
             addToastRef.current({
@@ -3788,6 +3811,9 @@ function MaestroConsoleInner() {
               currentRunMs: info.elapsedTimeMs,
               theme: activeThemeId,
               authToken: leaderboardRegistration.authToken,
+              // Delta mode for multi-device aggregation
+              deltaMs: info.elapsedTimeMs,
+              deltaRuns: 1,
             }).then(result => {
             if (result.success) {
               // Update last submission timestamp
@@ -3979,12 +4005,23 @@ function MaestroConsoleInner() {
     addLogToActiveTab(activeSession.id, pendingLog);
 
     try {
+      // Build dynamic prompt based on whether there's a previous synopsis timestamp
+      // This ensures the AI only summarizes work since the last synopsis
+      let synopsisPrompt: string;
+      if (activeTab.lastSynopsisTime) {
+        const timeAgo = formatRelativeTime(activeTab.lastSynopsisTime);
+        synopsisPrompt = `${autorunSynopsisPrompt}\n\nIMPORTANT: Only synopsize work done since the last synopsis (${timeAgo}). Do not repeat previous work.`;
+      } else {
+        synopsisPrompt = autorunSynopsisPrompt;
+      }
+      const synopsisTime = Date.now(); // Capture time for updating lastSynopsisTime
+
       // Request synopsis from the agent
       const result = await spawnBackgroundSynopsis(
         activeSession.id,
         activeSession.cwd,
         agentSessionId,
-        autorunSynopsisPrompt,
+        synopsisPrompt,
         activeSession.toolType,
         {
           customPath: activeSession.customPath,
@@ -4015,7 +4052,7 @@ function MaestroConsoleInner() {
           usageStats: result.usageStats,
         });
 
-        // Update the pending log with success
+        // Update the pending log with success AND set lastSynopsisTime
         setSessions(prev => prev.map(s => {
           if (s.id !== activeSession.id) return s;
           return {
@@ -4024,6 +4061,7 @@ function MaestroConsoleInner() {
               if (tab.id !== activeTab.id) return tab;
               return {
                 ...tab,
+                lastSynopsisTime: synopsisTime, // Track when this synopsis was generated
                 logs: tab.logs.map(log =>
                   log.id === pendingLog.id
                     ? { ...log, text: `Synopsis saved to history: ${parsed.shortSummary}` }
@@ -9507,6 +9545,16 @@ function MaestroConsoleInner() {
         }}
         ghCliAvailable={ghCliAvailable}
         onPublishGist={() => setGistPublishModalOpen(true)}
+        onOpenInGraph={() => {
+          if (previewFile && activeSession?.fullPath) {
+            // Compute relative path from the preview file
+            const relativePath = previewFile.path.startsWith(activeSession.fullPath)
+              ? previewFile.path.slice(activeSession.fullPath.length + 1)
+              : previewFile.name;
+            setGraphFocusFilePath(relativePath);
+            setIsGraphViewOpen(true);
+          }
+        }}
       />
       )}
 

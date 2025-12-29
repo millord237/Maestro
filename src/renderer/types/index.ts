@@ -310,6 +310,7 @@ export interface AITab {
   state: 'idle' | 'busy';          // Tab-level state for write-mode tracking
   readOnlyMode?: boolean;          // When true, agent operates in plan/read-only mode
   saveToHistory?: boolean;         // When true, synopsis is requested after each completion and saved to History
+  lastSynopsisTime?: number;       // Timestamp of last synopsis generation (for time-window context in prompts)
   showThinking?: boolean;          // When true, show streaming thinking/reasoning content in real-time
   awaitingSessionId?: boolean;     // True when this tab sent a message and is awaiting its session ID
   thinkingStartTime?: number;      // Timestamp when tab started thinking (for elapsed time display)

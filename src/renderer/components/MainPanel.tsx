@@ -223,6 +223,9 @@ interface MainPanelProps {
   // Gist publishing
   ghCliAvailable?: boolean;
   onPublishGist?: () => void;
+
+  // Document Graph
+  onOpenInGraph?: () => void;
 }
 
 // PERFORMANCE: Wrap with React.memo to prevent re-renders when parent (App.tsx) re-renders
@@ -1015,6 +1018,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                 onShortcutUsed={props.onShortcutUsed}
                 ghCliAvailable={props.ghCliAvailable}
                 onPublishGist={props.onPublishGist}
+                onOpenInGraph={props.onOpenInGraph}
               />
             </div>
           ) : (
