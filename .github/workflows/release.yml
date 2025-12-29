@@ -46,11 +46,12 @@ jobs:
           cache: 'npm'
 
       # Linux x64: Install build dependencies for native modules and electron-builder
+      # Requires build-essential for compiling node-pty native module
       - name: Install Linux x64 build dependencies
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm
+          sudo apt-get install -y libarchive-tools rpm build-essential
 
       # Linux ARM64: Install build dependencies for native modules and electron-builder
       # Requires build-essential for compiling node-pty native module
@@ -61,6 +62,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libarchive-tools rpm build-essential ruby ruby-dev rubygems
           sudo gem install --no-document fpm
+
+      # Linux x64: Setup Python 3.11 for node-gyp (Python 3.12+ removed distutils)
+      - name: Setup Python for node-gyp (Linux x64)
+        if: matrix.platform == 'linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       # Linux ARM64: Setup Python 3.11 for node-gyp (Python 3.12+ removed distutils)
       - name: Setup Python for node-gyp (Linux ARM64)
@@ -121,8 +129,29 @@ jobs:
         env:
           npm_config_build_from_source: true
 
-      # Verify native module architecture (Linux ARM64 only)
-      - name: Verify node-pty architecture
+      # Verify native module architecture (Linux x64)
+      - name: Verify node-pty architecture (Linux x64)
+        if: matrix.platform == 'linux'
+        run: |
+          echo "Checking node-pty binary architecture..."
+          PTY_PATH=$(find node_modules/node-pty -name "pty.node" -type f 2>/dev/null | head -1)
+          if [ -n "$PTY_PATH" ]; then
+            file "$PTY_PATH"
+            # Verify it's x64, not ARM64
+            if file "$PTY_PATH" | grep -q "x86-64\|x86_64\|AMD64"; then
+              echo "✓ node-pty is correctly built for x64"
+            else
+              echo "✗ ERROR: node-pty is NOT built for x64!"
+              file "$PTY_PATH"
+              exit 1
+            fi
+          else
+            echo "✗ ERROR: node-pty binary not found!"
+            exit 1
+          fi
+
+      # Verify native module architecture (Linux ARM64)
+      - name: Verify node-pty architecture (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
         run: |
           echo "Checking node-pty binary architecture..."
@@ -265,8 +294,33 @@ jobs:
           # Package with ARM64 target
           npx electron-builder --linux --arm64 --publish never --config.extraMetadata.version="$BUILD_VERSION"
 
-      # Verify pty.node is correctly included in unpacked resources (Linux ARM64 only)
-      - name: Verify pty.node in package
+      # Verify pty.node is correctly included in unpacked resources (Linux x64)
+      - name: Verify pty.node in package (Linux x64)
+        if: matrix.platform == 'linux'
+        run: |
+          echo "Checking for pty.node in unpacked resources..."
+          UNPACKED_DIR="release/linux-unpacked/resources/app.asar.unpacked"
+          PTY_NODE="$UNPACKED_DIR/node_modules/node-pty/build/Release/pty.node"
+          if [ -f "$PTY_NODE" ]; then
+            echo "✓ pty.node found at: $PTY_NODE"
+            file "$PTY_NODE"
+            ls -la "$PTY_NODE"
+            # Double-check architecture
+            if file "$PTY_NODE" | grep -q "x86-64\|x86_64\|AMD64"; then
+              echo "✓ Architecture verified: x64"
+            else
+              echo "✗ WARNING: Architecture mismatch in packaged binary!"
+              file "$PTY_NODE"
+            fi
+          else
+            echo "✗ ERROR: pty.node not found in unpacked resources!"
+            echo "Contents of app.asar.unpacked:"
+            find "$UNPACKED_DIR" -name "*.node" -o -name "pty*" 2>/dev/null || echo "Directory not found"
+            exit 1
+          fi
+
+      # Verify pty.node is correctly included in unpacked resources (Linux ARM64)
+      - name: Verify pty.node in package (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
         run: |
           echo "Checking for pty.node in unpacked resources..."
@@ -276,6 +330,13 @@ jobs:
             echo "✓ pty.node found at: $PTY_NODE"
             file "$PTY_NODE"
             ls -la "$PTY_NODE"
+            # Double-check architecture
+            if file "$PTY_NODE" | grep -q "ARM\|aarch64"; then
+              echo "✓ Architecture verified: ARM64"
+            else
+              echo "✗ WARNING: Architecture mismatch in packaged binary!"
+              file "$PTY_NODE"
+            fi
           else
             echo "✗ ERROR: pty.node not found in unpacked resources!"
             echo "Contents of app.asar.unpacked:"
