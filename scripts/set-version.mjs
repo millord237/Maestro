@@ -8,7 +8,13 @@
  */
 
 import { execFileSync, spawn } from 'child_process';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import process from 'process';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 function getGitHash() {
   try {
@@ -22,8 +28,18 @@ function getGitHash() {
   }
 }
 
+function getPackageVersion() {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+    return packageJson.version;
+  } catch {
+    return 'unknown';
+  }
+}
+
 const gitHash = getGitHash();
-const version = `LOCAL ${gitHash}`;
+const packageVersion = getPackageVersion();
+const version = `${packageVersion} ${gitHash} (local)`;
 
 // Set environment variable
 process.env.VITE_APP_VERSION = version;
