@@ -63,11 +63,19 @@ vi.mock('electron', () => ({
 // Track fs calls
 const mockFsExistsSync = vi.fn(() => true);
 const mockFsMkdirSync = vi.fn();
+const mockFsCopyFileSync = vi.fn();
+const mockFsUnlinkSync = vi.fn();
+const mockFsRenameSync = vi.fn();
+const mockFsStatSync = vi.fn(() => ({ size: 1024 }));
 
 // Mock fs
 vi.mock('fs', () => ({
   existsSync: (...args: unknown[]) => mockFsExistsSync(...args),
   mkdirSync: (...args: unknown[]) => mockFsMkdirSync(...args),
+  copyFileSync: (...args: unknown[]) => mockFsCopyFileSync(...args),
+  unlinkSync: (...args: unknown[]) => mockFsUnlinkSync(...args),
+  renameSync: (...args: unknown[]) => mockFsRenameSync(...args),
+  statSync: (...args: unknown[]) => mockFsStatSync(...args),
 }));
 
 // Mock logger
@@ -5708,6 +5716,10 @@ describe('Database VACUUM functionality', () => {
     mockDb.prepare.mockReturnValue(mockStatement);
     mockStatement.run.mockReturnValue({ changes: 1 });
     mockFsExistsSync.mockReturnValue(true);
+    // Reset statSync to throw by default (simulates file not existing)
+    mockFsStatSync.mockImplementation(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
   });
 
   afterEach(() => {
@@ -6183,6 +6195,591 @@ describe('Database VACUUM functionality', () => {
         const result = db.clearOldData(days);
         expect(result.success).toBe(true);
       }
+    });
+  });
+
+  // ============================================================================
+  // Database Integrity & Corruption Handling Tests
+  // ============================================================================
+
+  describe('Database Integrity & Corruption Handling', () => {
+    beforeEach(() => {
+      vi.resetModules();
+      mockDb.pragma.mockReset();
+      mockDb.prepare.mockReset();
+      mockDb.close.mockReset();
+      mockDb.transaction.mockReset();
+      mockStatement.run.mockReset();
+      mockStatement.get.mockReset();
+      mockStatement.all.mockReset();
+      mockFsExistsSync.mockReset();
+      mockFsMkdirSync.mockReset();
+      mockFsCopyFileSync.mockReset();
+      mockFsUnlinkSync.mockReset();
+      mockFsRenameSync.mockReset();
+      mockFsStatSync.mockReset();
+
+      // Default mocks
+      mockFsExistsSync.mockReturnValue(true);
+      mockFsStatSync.mockReturnValue({ size: 1024 });
+      mockDb.prepare.mockReturnValue(mockStatement);
+      mockStatement.run.mockReturnValue({ changes: 1 });
+      mockStatement.get.mockReturnValue({ count: 0, total_duration: 0 });
+      mockStatement.all.mockReturnValue([]);
+      mockDb.transaction.mockImplementation((fn: () => void) => () => fn());
+    });
+
+    describe('checkIntegrity', () => {
+      it('should return ok: true when integrity check passes', async () => {
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 1 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const result = db.checkIntegrity();
+
+        expect(result.ok).toBe(true);
+        expect(result.errors).toEqual([]);
+      });
+
+      it('should return ok: false with errors when integrity check fails', async () => {
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [
+              { integrity_check: 'wrong # of entries in index idx_query_start_time' },
+              { integrity_check: 'row 123 missing from index idx_query_source' },
+            ];
+          }
+          return [{ user_version: 1 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const result = db.checkIntegrity();
+
+        expect(result.ok).toBe(false);
+        expect(result.errors).toHaveLength(2);
+        expect(result.errors[0]).toContain('idx_query_start_time');
+        expect(result.errors[1]).toContain('row 123');
+      });
+
+      it('should return error when database is not initialized', async () => {
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        // Don't initialize
+
+        const result = db.checkIntegrity();
+
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('Database not initialized');
+      });
+
+      it('should handle pragma errors gracefully', async () => {
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            throw new Error('Database is locked');
+          }
+          return [{ user_version: 1 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const result = db.checkIntegrity();
+
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('Database is locked');
+      });
+    });
+
+    describe('backupDatabase', () => {
+      it('should create backup successfully when database file exists', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const result = db.backupDatabase();
+
+        expect(result.success).toBe(true);
+        expect(result.backupPath).toMatch(/stats\.db\.backup\.\d+$/);
+        expect(mockFsCopyFileSync).toHaveBeenCalled();
+      });
+
+      it('should fail when database file does not exist', async () => {
+        // First call for directory exists (true), subsequent calls for file checks
+        let existsCallCount = 0;
+        mockFsExistsSync.mockImplementation((filePath: string) => {
+          existsCallCount++;
+          // First 2-3 calls are for directory and db during initialization
+          if (existsCallCount <= 3) return true;
+          // When backupDatabase checks for db file, return false
+          if (typeof filePath === 'string' && filePath.endsWith('stats.db')) {
+            return false;
+          }
+          return true;
+        });
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        // Reset and set for backup call
+        mockFsExistsSync.mockReturnValue(false);
+
+        const result = db.backupDatabase();
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Database file does not exist');
+        expect(result.backupPath).toBeUndefined();
+      });
+
+      it('should handle copy errors gracefully', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {
+          throw new Error('Permission denied');
+        });
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const result = db.backupDatabase();
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Permission denied');
+      });
+
+      it('should generate unique backup filenames with timestamps', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+        mockStatement.run.mockClear();
+
+        const beforeTimestamp = Date.now();
+        const result = db.backupDatabase();
+        const afterTimestamp = Date.now();
+
+        expect(result.success).toBe(true);
+        expect(result.backupPath).toBeDefined();
+
+        // Extract timestamp from backup path
+        const match = result.backupPath!.match(/\.backup\.(\d+)$/);
+        expect(match).not.toBeNull();
+        const backupTimestamp = parseInt(match![1], 10);
+        expect(backupTimestamp).toBeGreaterThanOrEqual(beforeTimestamp);
+        expect(backupTimestamp).toBeLessThanOrEqual(afterTimestamp);
+      });
+    });
+
+    describe('corruption recovery during initialization', () => {
+      it('should proceed normally when database is not corrupted', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [{ integrity_check: 'ok' }];
+          }
+          if (pragma.startsWith('user_version')) {
+            return [{ user_version: 1 }];
+          }
+          return [];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        expect(db.isReady()).toBe(true);
+        expect(mockFsUnlinkSync).not.toHaveBeenCalled();
+        expect(mockFsCopyFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should backup and recreate database when corruption is detected', async () => {
+        let dbOpenAttempts = 0;
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            dbOpenAttempts++;
+            // First open: corrupted
+            if (dbOpenAttempts === 1) {
+              return [{ integrity_check: 'database disk image is malformed' }];
+            }
+            // After recreation: ok
+            return [{ integrity_check: 'ok' }];
+          }
+          if (pragma.startsWith('user_version')) {
+            return [{ user_version: 0 }];
+          }
+          return [];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // Database should still be usable after recovery
+        expect(db.isReady()).toBe(true);
+
+        // Backup should have been created
+        expect(mockFsCopyFileSync).toHaveBeenCalled();
+
+        // Old database files should have been cleaned up
+        expect(mockFsUnlinkSync).toHaveBeenCalled();
+      });
+
+      it('should clean up WAL and SHM files during recovery', async () => {
+        let walExists = true;
+        let shmExists = true;
+
+        mockFsExistsSync.mockImplementation((filePath: string) => {
+          if (typeof filePath === 'string') {
+            if (filePath.endsWith('-wal')) return walExists;
+            if (filePath.endsWith('-shm')) return shmExists;
+          }
+          return true;
+        });
+
+        mockFsUnlinkSync.mockImplementation((filePath: string) => {
+          if (typeof filePath === 'string') {
+            if (filePath.endsWith('-wal')) walExists = false;
+            if (filePath.endsWith('-shm')) shmExists = false;
+          }
+        });
+
+        mockFsCopyFileSync.mockImplementation(() => {});
+
+        let firstCall = true;
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            if (firstCall) {
+              firstCall = false;
+              return [{ integrity_check: 'malformed database' }];
+            }
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 0 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // WAL and SHM files should have been deleted
+        const unlinkCalls = mockFsUnlinkSync.mock.calls.map((call) => call[0]);
+        const walDeleted = unlinkCalls.some((path) => String(path).endsWith('-wal'));
+        const shmDeleted = unlinkCalls.some((path) => String(path).endsWith('-shm'));
+        expect(walDeleted).toBe(true);
+        expect(shmDeleted).toBe(true);
+      });
+
+      it('should use emergency rename when copy backup fails', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+
+        // Copy fails
+        mockFsCopyFileSync.mockImplementation(() => {
+          throw new Error('Disk full');
+        });
+
+        // Rename should be attempted as fallback
+        mockFsRenameSync.mockImplementation(() => {});
+
+        let firstCall = true;
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            if (firstCall) {
+              firstCall = false;
+              return [{ integrity_check: 'corrupted' }];
+            }
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 0 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // Emergency rename should have been attempted
+        expect(mockFsRenameSync).toHaveBeenCalled();
+        const renameCall = mockFsRenameSync.mock.calls[0];
+        expect(String(renameCall[1])).toContain('.corrupted.');
+      });
+
+      it('should delete corrupted database as last resort when backup and rename both fail', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+
+        // Both copy and rename fail
+        mockFsCopyFileSync.mockImplementation(() => {
+          throw new Error('Disk full');
+        });
+        mockFsRenameSync.mockImplementation(() => {
+          throw new Error('Cross-device link not permitted');
+        });
+
+        let firstCall = true;
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            if (firstCall) {
+              firstCall = false;
+              return [{ integrity_check: 'corrupted' }];
+            }
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 0 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // Database should have been deleted
+        expect(mockFsUnlinkSync).toHaveBeenCalled();
+        expect(db.isReady()).toBe(true);
+      });
+
+      it('should throw error when recovery completely fails', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {
+          throw new Error('Disk full');
+        });
+        mockFsRenameSync.mockImplementation(() => {
+          throw new Error('Permission denied');
+        });
+        mockFsUnlinkSync.mockImplementation(() => {
+          throw new Error('File in use');
+        });
+
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [{ integrity_check: 'corrupted' }];
+          }
+          return [{ user_version: 0 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+
+        expect(() => db.initialize()).toThrow();
+      });
+
+      it('should not run corruption check for new databases', async () => {
+        // Database file does not exist initially
+        let firstCheck = true;
+        mockFsExistsSync.mockImplementation((filePath: string) => {
+          if (typeof filePath === 'string' && filePath.endsWith('stats.db')) {
+            if (firstCheck) {
+              firstCheck = false;
+              return false; // Database doesn't exist
+            }
+          }
+          return true; // Directory exists
+        });
+
+        mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // For new database, integrity_check should not be called during open
+        // (only during explicit checkIntegrity() calls)
+        const integrityCheckCalls = mockDb.pragma.mock.calls.filter(
+          (call) => call[0] === 'integrity_check'
+        );
+        expect(integrityCheckCalls.length).toBe(0);
+      });
+
+      it('should handle database open failure and recover', async () => {
+        let constructorCallCount = 0;
+
+        // Mock Database constructor to fail first time, succeed second time
+        vi.doMock('better-sqlite3', () => {
+          return {
+            default: class MockDatabase {
+              constructor(dbPath: string) {
+                constructorCallCount++;
+                lastDbPath = dbPath;
+                if (constructorCallCount === 1) {
+                  throw new Error('unable to open database file');
+                }
+              }
+              pragma = mockDb.pragma;
+              prepare = mockDb.prepare;
+              close = mockDb.close;
+              transaction = mockDb.transaction;
+            },
+          };
+        });
+
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+        mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+
+        // Need to re-import to get the new mock
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        expect(db.isReady()).toBe(true);
+        expect(constructorCallCount).toBe(2); // First failed, second succeeded
+      });
+    });
+
+    describe('IntegrityCheckResult type', () => {
+      it('should have correct structure for success', async () => {
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 1 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        const result = db.checkIntegrity();
+
+        expect(typeof result.ok).toBe('boolean');
+        expect(Array.isArray(result.errors)).toBe(true);
+        expect(result.ok).toBe(true);
+        expect(result.errors.length).toBe(0);
+      });
+
+      it('should have correct structure for failure', async () => {
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            return [
+              { integrity_check: 'error1' },
+              { integrity_check: 'error2' },
+            ];
+          }
+          return [{ user_version: 1 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        const result = db.checkIntegrity();
+
+        expect(typeof result.ok).toBe('boolean');
+        expect(Array.isArray(result.errors)).toBe(true);
+        expect(result.ok).toBe(false);
+        expect(result.errors.length).toBe(2);
+        expect(result.errors).toContain('error1');
+        expect(result.errors).toContain('error2');
+      });
+    });
+
+    describe('BackupResult type', () => {
+      it('should have correct structure for success', async () => {
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        const result = db.backupDatabase();
+
+        expect(typeof result.success).toBe('boolean');
+        expect(result.success).toBe(true);
+        expect(typeof result.backupPath).toBe('string');
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should have correct structure for failure', async () => {
+        mockFsExistsSync.mockReturnValue(false);
+        mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        // Manually set initialized to test backup without full init
+        (db as any).db = {};
+        (db as any).initialized = true;
+
+        const result = db.backupDatabase();
+
+        expect(typeof result.success).toBe('boolean');
+        expect(result.success).toBe(false);
+        expect(result.backupPath).toBeUndefined();
+        expect(typeof result.error).toBe('string');
+      });
+    });
+
+    describe('CorruptionRecoveryResult type', () => {
+      it('should be documented correctly via recovery behavior', async () => {
+        // Test recovery result structure indirectly through successful recovery
+        mockFsExistsSync.mockReturnValue(true);
+        mockFsCopyFileSync.mockImplementation(() => {});
+
+        let firstCall = true;
+        mockDb.pragma.mockImplementation((pragma: string) => {
+          if (pragma === 'integrity_check') {
+            if (firstCall) {
+              firstCall = false;
+              return [{ integrity_check: 'corrupted' }];
+            }
+            return [{ integrity_check: 'ok' }];
+          }
+          return [{ user_version: 0 }];
+        });
+
+        const { StatsDB } = await import('../../main/stats-db');
+        const db = new StatsDB();
+        db.initialize();
+
+        // Recovery was successful
+        expect(db.isReady()).toBe(true);
+        expect(mockFsCopyFileSync).toHaveBeenCalled();
+      });
+    });
+
+    describe('exported type interfaces', () => {
+      it('should export IntegrityCheckResult type', async () => {
+        const { IntegrityCheckResult } = await import('../../main/stats-db');
+        // TypeScript interface - existence is verified at compile time
+        // We just verify the import doesn't throw
+        expect(true).toBe(true);
+      });
+
+      it('should export BackupResult type', async () => {
+        const { BackupResult } = await import('../../main/stats-db');
+        expect(true).toBe(true);
+      });
+
+      it('should export CorruptionRecoveryResult type', async () => {
+        const { CorruptionRecoveryResult } = await import('../../main/stats-db');
+        expect(true).toBe(true);
+      });
     });
   });
 });

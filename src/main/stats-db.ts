@@ -50,6 +50,40 @@ import {
 
 const LOG_CONTEXT = '[StatsDB]';
 
+/**
+ * Result of a database integrity check
+ */
+export interface IntegrityCheckResult {
+  /** Whether the database passed the integrity check */
+  ok: boolean;
+  /** Error messages from the integrity check (empty if ok is true) */
+  errors: string[];
+}
+
+/**
+ * Result of a database backup operation
+ */
+export interface BackupResult {
+  /** Whether the backup succeeded */
+  success: boolean;
+  /** Path to the backup file (if success is true) */
+  backupPath?: string;
+  /** Error message (if success is false) */
+  error?: string;
+}
+
+/**
+ * Result of corruption recovery
+ */
+export interface CorruptionRecoveryResult {
+  /** Whether recovery was performed */
+  recovered: boolean;
+  /** Path to the backup of the corrupted database */
+  backupPath?: string;
+  /** Error during recovery (if any) */
+  error?: string;
+}
+
 // ============================================================================
 // Migration System Types
 // ============================================================================
@@ -243,6 +277,13 @@ export class StatsDB {
   /**
    * Initialize the database - create file, tables, and indexes.
    * Also runs VACUUM if the database exceeds 100MB to maintain performance.
+   *
+   * If the database is corrupted, this method will:
+   * 1. Backup the corrupted database file
+   * 2. Delete the corrupted file and any associated WAL/SHM files
+   * 3. Create a fresh database
+   *
+   * The backup is preserved for potential manual recovery with specialized tools.
    */
   initialize(): void {
     if (this.initialized) {
@@ -256,8 +297,20 @@ export class StatsDB {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      // Open database connection
-      this.db = new Database(this.dbPath);
+      // Check if database file exists
+      const dbExists = fs.existsSync(this.dbPath);
+
+      if (dbExists) {
+        // Open with corruption handling for existing databases
+        const db = this.openWithCorruptionHandling();
+        if (!db) {
+          throw new Error('Failed to open or recover database');
+        }
+        this.db = db;
+      } else {
+        // Create new database
+        this.db = new Database(this.dbPath);
+      }
 
       // Enable WAL mode for better concurrent access
       this.db.pragma('journal_mode = WAL');
@@ -583,6 +636,205 @@ export class StatsDB {
 
     const result = this.vacuum();
     return { vacuumed: true, databaseSize, result };
+  }
+
+  // ============================================================================
+  // Database Integrity & Corruption Handling
+  // ============================================================================
+
+  /**
+   * Check the integrity of the database using SQLite's PRAGMA integrity_check.
+   *
+   * This runs a full integrity check on the database, verifying that:
+   * - All pages are accessible
+   * - All indexes are properly formed
+   * - All constraints are satisfied
+   *
+   * For large databases this may take a few seconds.
+   *
+   * @returns Object with ok flag and any error messages
+   */
+  checkIntegrity(): IntegrityCheckResult {
+    if (!this.db) {
+      return { ok: false, errors: ['Database not initialized'] };
+    }
+
+    try {
+      // PRAGMA integrity_check returns 'ok' if the database is valid,
+      // otherwise it returns a list of error messages
+      const result = this.db.pragma('integrity_check') as Array<{ integrity_check: string }>;
+
+      if (result.length === 1 && result[0].integrity_check === 'ok') {
+        return { ok: true, errors: [] };
+      }
+
+      // Collect all error messages
+      const errors = result.map((row) => row.integrity_check);
+      return { ok: false, errors };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { ok: false, errors: [errorMessage] };
+    }
+  }
+
+  /**
+   * Create a backup of the current database file.
+   *
+   * The backup is created with a timestamp suffix to avoid overwriting previous backups.
+   * Format: stats.db.backup.{timestamp}
+   *
+   * @returns Object with success flag, backup path, and any error message
+   */
+  backupDatabase(): BackupResult {
+    try {
+      // Check if the database file exists
+      if (!fs.existsSync(this.dbPath)) {
+        return { success: false, error: 'Database file does not exist' };
+      }
+
+      // Generate backup path with timestamp
+      const timestamp = Date.now();
+      const backupPath = `${this.dbPath}.backup.${timestamp}`;
+
+      // Copy the database file
+      fs.copyFileSync(this.dbPath, backupPath);
+
+      logger.info(`Created database backup at ${backupPath}`, LOG_CONTEXT);
+      return { success: true, backupPath };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to create database backup: ${errorMessage}`, LOG_CONTEXT);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Handle a corrupted database by backing it up and recreating a fresh database.
+   *
+   * This is the nuclear option when the database is unrecoverable:
+   * 1. Close the current database connection
+   * 2. Backup the corrupted database file
+   * 3. Delete the corrupted database file
+   * 4. Create a fresh database
+   *
+   * Note: This will result in loss of historical data, but preserves a backup
+   * that could potentially be recovered with specialized SQLite tools.
+   *
+   * @returns Object with recovery status, backup path, and any error
+   */
+  private recoverFromCorruption(): CorruptionRecoveryResult {
+    logger.warn('Attempting to recover from database corruption...', LOG_CONTEXT);
+
+    try {
+      // Close current connection if open
+      if (this.db) {
+        try {
+          this.db.close();
+        } catch {
+          // Ignore errors closing corrupted database
+        }
+        this.db = null;
+        this.initialized = false;
+      }
+
+      // Backup the corrupted database
+      const backupResult = this.backupDatabase();
+      if (!backupResult.success) {
+        // If backup fails but file exists, try to rename it
+        if (fs.existsSync(this.dbPath)) {
+          const timestamp = Date.now();
+          const emergencyBackupPath = `${this.dbPath}.corrupted.${timestamp}`;
+          try {
+            fs.renameSync(this.dbPath, emergencyBackupPath);
+            logger.warn(`Emergency backup created at ${emergencyBackupPath}`, LOG_CONTEXT);
+          } catch (renameError) {
+            // If we can't even rename, just delete and lose the data
+            logger.error('Failed to backup corrupted database, data will be lost', LOG_CONTEXT);
+            fs.unlinkSync(this.dbPath);
+          }
+        }
+      }
+
+      // Delete WAL and SHM files if they exist (they're associated with the corrupted db)
+      const walPath = `${this.dbPath}-wal`;
+      const shmPath = `${this.dbPath}-shm`;
+      if (fs.existsSync(walPath)) {
+        fs.unlinkSync(walPath);
+      }
+      if (fs.existsSync(shmPath)) {
+        fs.unlinkSync(shmPath);
+      }
+
+      // Delete the main database file if it still exists
+      if (fs.existsSync(this.dbPath)) {
+        fs.unlinkSync(this.dbPath);
+      }
+
+      logger.info('Corrupted database removed, will create fresh database', LOG_CONTEXT);
+
+      return {
+        recovered: true,
+        backupPath: backupResult.backupPath,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to recover from database corruption: ${errorMessage}`, LOG_CONTEXT);
+      return {
+        recovered: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Attempt to open and validate a database, handling corruption if detected.
+   *
+   * This method:
+   * 1. Tries to open the database file
+   * 2. Runs a quick integrity check
+   * 3. If corrupted, backs up and recreates the database
+   * 4. Returns whether the database is now usable
+   *
+   * @returns Database instance if successful, null if unrecoverable
+   */
+  private openWithCorruptionHandling(): Database.Database | null {
+    // First attempt: try to open normally
+    try {
+      const db = new Database(this.dbPath);
+
+      // Quick integrity check on the existing database
+      const result = db.pragma('integrity_check') as Array<{ integrity_check: string }>;
+      if (result.length === 1 && result[0].integrity_check === 'ok') {
+        return db;
+      }
+
+      // Database is corrupted
+      const errors = result.map((row) => row.integrity_check);
+      logger.error(`Database integrity check failed: ${errors.join(', ')}`, LOG_CONTEXT);
+
+      // Close before recovery
+      db.close();
+    } catch (error) {
+      // Failed to open database - likely severely corrupted or locked
+      logger.error(`Failed to open database: ${error}`, LOG_CONTEXT);
+    }
+
+    // Recovery attempt
+    const recoveryResult = this.recoverFromCorruption();
+    if (!recoveryResult.recovered) {
+      logger.error('Database corruption recovery failed', LOG_CONTEXT);
+      return null;
+    }
+
+    // Second attempt: create fresh database
+    try {
+      const db = new Database(this.dbPath);
+      logger.info('Fresh database created after corruption recovery', LOG_CONTEXT);
+      return db;
+    } catch (error) {
+      logger.error(`Failed to create fresh database after recovery: ${error}`, LOG_CONTEXT);
+      return null;
+    }
   }
 
   // ============================================================================
