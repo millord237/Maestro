@@ -175,7 +175,8 @@ export function extractDescription(
 }
 
 /**
- * Compute document statistics from markdown content
+ * Compute document statistics from markdown content.
+ * Handles malformed content gracefully - never throws, always returns valid stats.
  *
  * @param content - The markdown file content
  * @param filePath - The relative path of the file
@@ -187,14 +188,48 @@ export function computeDocumentStats(
   filePath: string,
   fileSize: number
 ): DocumentStats {
-  // Parse front matter using existing utility
-  const { frontMatter } = parseMarkdownLinks(content, filePath);
+  // Handle null/undefined content
+  const safeContent = content ?? '';
+  const safeFilePath = filePath ?? 'unknown.md';
+  const safeFileSize = typeof fileSize === 'number' && !isNaN(fileSize) ? fileSize : 0;
 
-  // Compute stats
-  const title = extractTitle(content, filePath, frontMatter);
-  const lineCount = countLines(content);
-  const wordCount = countWords(content);
-  const size = formatFileSize(fileSize);
+  // Parse front matter using existing utility (already handles errors gracefully)
+  let frontMatter: Record<string, unknown> = {};
+  try {
+    const parsed = parseMarkdownLinks(safeContent, safeFilePath);
+    frontMatter = parsed.frontMatter;
+  } catch (error) {
+    // parseMarkdownLinks should never throw, but defensive coding
+    console.warn(`Unexpected error parsing front matter in ${safeFilePath}:`, error);
+    frontMatter = {};
+  }
+
+  // Compute stats with error handling for each operation
+  let title: string;
+  try {
+    title = extractTitle(safeContent, safeFilePath, frontMatter);
+  } catch (error) {
+    console.warn(`Failed to extract title from ${safeFilePath}:`, error);
+    title = path.basename(safeFilePath, path.extname(safeFilePath));
+  }
+
+  let lineCount: number;
+  try {
+    lineCount = countLines(safeContent);
+  } catch (error) {
+    console.warn(`Failed to count lines in ${safeFilePath}:`, error);
+    lineCount = 0;
+  }
+
+  let wordCount: number;
+  try {
+    wordCount = countWords(safeContent);
+  } catch (error) {
+    console.warn(`Failed to count words in ${safeFilePath}:`, error);
+    wordCount = 0;
+  }
+
+  const size = formatFileSize(safeFileSize);
   const description = extractDescription(frontMatter);
 
   return {
@@ -203,7 +238,7 @@ export function computeDocumentStats(
     wordCount,
     size,
     description,
-    filePath,
+    filePath: safeFilePath,
   };
 }
 

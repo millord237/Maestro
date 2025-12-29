@@ -131,16 +131,28 @@ function parseFrontMatter(content: string): Record<string, unknown> {
  * @returns Normalized relative path from project root, or null if invalid
  */
 function resolveRelativePath(linkPath: string, currentFilePath: string): string | null {
+  // Guard against null/undefined/non-string inputs
+  if (!linkPath || typeof linkPath !== 'string') {
+    return null;
+  }
+
   // Skip URLs, anchors, and mailto links
   if (URL_PATTERN.test(linkPath) || linkPath.startsWith('#') || linkPath.startsWith('mailto:')) {
     return null;
   }
 
   // Get the directory of the current file
-  const currentDir = path.dirname(currentFilePath);
+  const currentDir = path.dirname(currentFilePath || '');
 
   // Decode URL-encoded characters (e.g., %20 -> space)
-  const decodedPath = decodeURIComponent(linkPath);
+  // Wrapped in try-catch to handle malformed URL encoding gracefully
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(linkPath);
+  } catch {
+    // If decodeURIComponent fails (malformed encoding like '%ZZ'), use the original path
+    decodedPath = linkPath;
+  }
 
   // Join and normalize the path
   let resolved = path.join(currentDir, decodedPath);
@@ -160,64 +172,99 @@ function resolveRelativePath(linkPath: string, currentFilePath: string): string 
 }
 
 /**
- * Parse a markdown file's content to extract links and front matter
+ * Parse a markdown file's content to extract links and front matter.
+ * Handles malformed markdown gracefully - never throws, always returns a valid result.
+ *
  * @param content - The markdown file content
  * @param filePath - The relative path of the file (used to resolve relative links)
- * @returns Parsed links and metadata
+ * @returns Parsed links and metadata (empty arrays/object if parsing fails)
  */
 export function parseMarkdownLinks(content: string, filePath: string): ParsedMarkdownLinks {
+  // Return empty result for null/undefined/non-string content
+  if (content === null || content === undefined || typeof content !== 'string') {
+    return {
+      internalLinks: [],
+      externalLinks: [],
+      frontMatter: {},
+    };
+  }
+
   const internalLinks: string[] = [];
   const externalLinks: ExternalLink[] = [];
-  const frontMatter = parseFrontMatter(content);
+
+  // Parse front matter with error handling
+  let frontMatter: Record<string, unknown> = {};
+  try {
+    frontMatter = parseFrontMatter(content);
+  } catch (error) {
+    // Log but don't crash - malformed front matter is common
+    console.warn(`Failed to parse front matter in ${filePath}:`, error);
+    frontMatter = {};
+  }
 
   // Track seen links to avoid duplicates
   const seenInternal = new Set<string>();
   const seenExternal = new Set<string>();
 
   // Parse wiki-style links: [[path]] or [[path|text]]
-  let match;
-  WIKI_LINK_PATTERN.lastIndex = 0;
-  while ((match = WIKI_LINK_PATTERN.exec(content)) !== null) {
-    const linkPath = match[1].trim();
+  // Wrapped in try-catch to handle regex edge cases
+  try {
+    let match;
+    WIKI_LINK_PATTERN.lastIndex = 0;
+    while ((match = WIKI_LINK_PATTERN.exec(content)) !== null) {
+      const linkPath = match[1]?.trim();
+      if (!linkPath) continue;
 
-    // Skip image embeds (handled separately in graph builder if needed)
-    if (linkPath.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i)) {
-      continue;
-    }
+      // Skip image embeds (handled separately in graph builder if needed)
+      if (linkPath.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i)) {
+        continue;
+      }
 
-    // Resolve the path relative to current file
-    const resolved = resolveRelativePath(linkPath, filePath);
-    if (resolved && !seenInternal.has(resolved)) {
-      seenInternal.add(resolved);
-      internalLinks.push(resolved);
+      // Resolve the path relative to current file
+      const resolved = resolveRelativePath(linkPath, filePath);
+      if (resolved && !seenInternal.has(resolved)) {
+        seenInternal.add(resolved);
+        internalLinks.push(resolved);
+      }
     }
+  } catch (error) {
+    // Log wiki link parsing failure but continue with markdown links
+    console.warn(`Failed to parse wiki links in ${filePath}:`, error);
   }
 
   // Parse standard markdown links: [text](url)
-  MARKDOWN_LINK_PATTERN.lastIndex = 0;
-  while ((match = MARKDOWN_LINK_PATTERN.exec(content)) !== null) {
-    const linkUrl = match[2].trim();
+  // Wrapped in try-catch to handle regex edge cases
+  try {
+    let match;
+    MARKDOWN_LINK_PATTERN.lastIndex = 0;
+    while ((match = MARKDOWN_LINK_PATTERN.exec(content)) !== null) {
+      const linkUrl = match[2]?.trim();
+      if (!linkUrl) continue;
 
-    // Check if it's an external URL
-    if (URL_PATTERN.test(linkUrl)) {
-      if (!seenExternal.has(linkUrl)) {
-        seenExternal.add(linkUrl);
-        externalLinks.push({
-          url: linkUrl,
-          domain: extractDomain(linkUrl),
-        });
-      }
-    } else {
-      // Internal link
-      const resolved = resolveRelativePath(linkUrl, filePath);
-      if (resolved && !seenInternal.has(resolved)) {
-        // Only include markdown files as internal links
-        if (resolved.endsWith('.md')) {
-          seenInternal.add(resolved);
-          internalLinks.push(resolved);
+      // Check if it's an external URL
+      if (URL_PATTERN.test(linkUrl)) {
+        if (!seenExternal.has(linkUrl)) {
+          seenExternal.add(linkUrl);
+          externalLinks.push({
+            url: linkUrl,
+            domain: extractDomain(linkUrl),
+          });
+        }
+      } else {
+        // Internal link
+        const resolved = resolveRelativePath(linkUrl, filePath);
+        if (resolved && !seenInternal.has(resolved)) {
+          // Only include markdown files as internal links
+          if (resolved.endsWith('.md')) {
+            seenInternal.add(resolved);
+            internalLinks.push(resolved);
+          }
         }
       }
     }
+  } catch (error) {
+    // Log markdown link parsing failure but return what we have
+    console.warn(`Failed to parse markdown links in ${filePath}:`, error);
   }
 
   return {

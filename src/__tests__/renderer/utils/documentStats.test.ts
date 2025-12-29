@@ -326,4 +326,185 @@ Content
 
     expect(result.filePath).toBe('deeply/nested/path/to/file.md');
   });
+
+  describe('malformed content handling (graceful degradation)', () => {
+    describe('null/undefined/invalid input handling', () => {
+      it('should handle null content without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with null input
+        const result = computeDocumentStats(null, 'doc.md', 100);
+
+        expect(result.title).toBe('doc');
+        expect(result.lineCount).toBe(0);
+        expect(result.wordCount).toBe(0);
+        expect(result.size).toBe('100 B');
+        expect(result.filePath).toBe('doc.md');
+      });
+
+      it('should handle undefined content without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with undefined input
+        const result = computeDocumentStats(undefined, 'doc.md', 100);
+
+        expect(result.title).toBe('doc');
+        expect(result.lineCount).toBe(0);
+        expect(result.wordCount).toBe(0);
+      });
+
+      it('should handle null filePath without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with null input
+        const result = computeDocumentStats('# Test', null, 100);
+
+        // Should use fallback path
+        expect(result.filePath).toBe('unknown.md');
+        expect(result.title).toBe('Test');
+      });
+
+      it('should handle undefined filePath without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with undefined input
+        const result = computeDocumentStats('# Test', undefined, 100);
+
+        expect(result.filePath).toBe('unknown.md');
+      });
+
+      it('should handle NaN fileSize without crashing', () => {
+        const result = computeDocumentStats('# Test', 'doc.md', NaN);
+
+        expect(result.size).toBe('0 B');
+      });
+
+      it('should handle undefined fileSize without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with undefined input
+        const result = computeDocumentStats('# Test', 'doc.md', undefined);
+
+        expect(result.size).toBe('0 B');
+      });
+
+      it('should handle negative fileSize without crashing', () => {
+        const result = computeDocumentStats('# Test', 'doc.md', -500);
+
+        expect(result.size).toBe('0 B');
+      });
+
+      it('should handle all null parameters without crashing', () => {
+        // @ts-expect-error Testing runtime behavior with null inputs
+        const result = computeDocumentStats(null, null, null);
+
+        expect(result.filePath).toBe('unknown.md');
+        expect(result.title).toBe('unknown');
+        expect(result.lineCount).toBe(0);
+        expect(result.wordCount).toBe(0);
+        expect(result.size).toBe('0 B');
+      });
+    });
+
+    describe('binary and special content', () => {
+      it('should handle content with null bytes', () => {
+        const content = '# Title\x00with\x00null\x00bytes';
+        const result = computeDocumentStats(content, 'doc.md', 100);
+
+        // Should not crash
+        expect(result).toBeDefined();
+        expect(result.title).toBeDefined();
+      });
+
+      it('should handle content with control characters', () => {
+        const content = '# Title\x01\x02\x03\x04\x05 with control chars';
+        const result = computeDocumentStats(content, 'doc.md', 100);
+
+        expect(result.title).toBe('Title\x01\x02\x03\x04\x05 with control chars');
+      });
+
+      it('should handle content with only binary data', () => {
+        const content = '\x00\x01\x02\x03\x04\x05\x06\x07';
+        const result = computeDocumentStats(content, 'binary.md', 8);
+
+        // Should not crash, should use filename as title
+        expect(result.title).toBe('binary');
+      });
+
+      it('should handle very long content', () => {
+        const content = 'x'.repeat(1024 * 1024); // 1MB
+        const result = computeDocumentStats(content, 'large.md', 1024 * 1024);
+
+        expect(result.title).toBe('large');
+        expect(result.wordCount).toBe(1); // All one "word"
+        expect(result.lineCount).toBe(1);
+      });
+    });
+
+    describe('malformed front matter', () => {
+      it('should handle corrupted front matter without crashing', () => {
+        const content = `---
+this: is: invalid: yaml
+nested:
+  without: proper
+    indentation
+---
+
+# Title`;
+        const result = computeDocumentStats(content, 'doc.md', 100);
+
+        // Should not crash, title should fall back to heading or filename
+        expect(result).toBeDefined();
+        expect(result.title).toBeDefined();
+      });
+
+      it('should handle front matter with only opening delimiter', () => {
+        const content = `---
+title: Incomplete`;
+        const result = computeDocumentStats(content, 'doc.md', 100);
+
+        // Should not crash
+        expect(result.title).toBe('doc');
+      });
+    });
+
+    describe('edge cases in stats computation', () => {
+      it('should handle content with only newlines', () => {
+        const content = '\n\n\n\n\n';
+        const result = computeDocumentStats(content, 'empty.md', 5);
+
+        expect(result.lineCount).toBe(0);
+        expect(result.wordCount).toBe(0);
+      });
+
+      it('should handle content with only whitespace', () => {
+        const content = '     \t\t\t   \n   \t   ';
+        const result = computeDocumentStats(content, 'whitespace.md', 20);
+
+        expect(result.lineCount).toBe(0);
+        expect(result.wordCount).toBe(0);
+      });
+
+      it('should handle mixed line endings', () => {
+        const content = 'Line1\rLine2\r\nLine3\nLine4';
+        const result = computeDocumentStats(content, 'doc.md', 100);
+
+        // Just checking it doesn't crash - line count may vary based on implementation
+        expect(result).toBeDefined();
+      });
+
+      it('should handle extremely long single line', () => {
+        const content = 'word '.repeat(100000);
+        const result = computeDocumentStats(content, 'doc.md', 500000);
+
+        expect(result.lineCount).toBe(1);
+        expect(result.wordCount).toBe(100000);
+      });
+
+      it('should handle content with Unicode characters', () => {
+        const content = '# 日本語タイトル\n\n中文内容 和 한국어';
+        const result = computeDocumentStats(content, 'unicode.md', 100);
+
+        expect(result.title).toBe('日本語タイトル');
+        expect(result.wordCount).toBeGreaterThan(0);
+      });
+
+      it('should handle content with emojis', () => {
+        const content = '# 🎉 Celebration 🎊\n\n🚀 Rocket 🌟 Star';
+        const result = computeDocumentStats(content, 'emoji.md', 100);
+
+        expect(result.title).toBe('🎉 Celebration 🎊');
+      });
+    });
+  });
 });
