@@ -159,9 +159,8 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
     return agentData.find((d) => d.agent === hoveredAgent) || null;
   }, [hoveredAgent, agentData]);
 
-  // Bar height and spacing
+  // Bar height (gap defined in inline styles)
   const barHeight = 28;
-  const barGap = 8;
 
   return (
     <div

@@ -702,7 +702,7 @@ function DocumentGraphViewInner({
       }));
       setNodes(themedNodes);
     }
-  }, [theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [theme]);
 
   // Update search matching state when searchQuery changes
   useEffect(() => {
@@ -724,7 +724,7 @@ function DocumentGraphViewInner({
       });
       setNodes(updatedNodes);
     }
-  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
   /**
    * Handle selection change - track selected node for edge highlighting and breadcrumb
@@ -776,7 +776,7 @@ function DocumentGraphViewInner({
       const currentY = currentNode.position.y;
 
       // Filter nodes based on direction and find the closest one
-      let candidates: Array<{ node: Node<GraphNodeData>; distance: number }> = [];
+      const candidates: Array<{ node: Node<GraphNodeData>; distance: number }> = [];
 
       connectedNodes.forEach((node) => {
         const dx = node.position.x - currentX;
@@ -1119,8 +1119,8 @@ function DocumentGraphViewInner({
     if (nodes.length > 0 && !isAnimatingRef.current) {
       // Strip theme from nodes for layout calculation
       const currentNodes = nodes.map((node) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { theme: _, ...data } = node.data as GraphNodeData & { theme: Theme };
+        const { theme: _theme, ...data } = node.data as GraphNodeData & { theme: Theme };
+        void _theme; // Strip theme from layout calculations
         return {
           ...node,
           data: data as GraphNodeData,
@@ -1168,8 +1168,8 @@ function DocumentGraphViewInner({
   const handleNodeDragStop = useCallback(() => {
     // Strip theme from nodes before saving
     const nodesToSave = nodes.map((node) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { theme: _, ...data } = node.data as GraphNodeData & { theme: Theme };
+      const { theme: _theme, ...data } = node.data as GraphNodeData & { theme: Theme };
+      void _theme; // Strip theme from saved positions
       return {
         ...node,
         data: data as GraphNodeData,
@@ -1205,8 +1205,8 @@ function DocumentGraphViewInner({
 
     // Strip theme from nodes for layout calculation
     const currentNodes = nodes.map((node) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { theme: _, ...data } = node.data as GraphNodeData & { theme: Theme };
+      const { theme: _theme, ...data } = node.data as GraphNodeData & { theme: Theme };
+      void _theme; // Strip theme from layout calculations
       return {
         ...node,
         data: data as GraphNodeData,

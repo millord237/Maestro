@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { format, parseISO, startOfWeek, addDays, differenceInWeeks, subWeeks, isAfter, isBefore, isSameDay } from 'date-fns';
+import { format, startOfWeek, addDays, differenceInWeeks, subWeeks, isAfter } from 'date-fns';
 import type { Theme } from '../../types';
 import type { StatsTimeRange, StatsAggregation } from '../../hooks/useStats';
 import { COLORBLIND_HEATMAP_SCALE } from '../../constants/colorblindPalettes';

@@ -237,7 +237,7 @@ async function parseFile(rootPath: string, relativePath: string): Promise<Parsed
     const isLargeFile = fileSize > LARGE_FILE_THRESHOLD;
 
     // Read file content
-    let content = await window.maestro.fs.readFile(fullPath);
+    const content = await window.maestro.fs.readFile(fullPath);
     if (content === null || content === undefined) {
       return null;
     }

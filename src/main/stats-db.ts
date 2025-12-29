@@ -760,7 +760,7 @@ export class StatsDB {
           try {
             fs.renameSync(this.dbPath, emergencyBackupPath);
             logger.warn(`Emergency backup created at ${emergencyBackupPath}`, LOG_CONTEXT);
-          } catch (renameError) {
+          } catch {
             // If we can't even rename, just delete and lose the data
             logger.error('Failed to backup corrupted database, data will be lost', LOG_CONTEXT);
             fs.unlinkSync(this.dbPath);

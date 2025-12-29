@@ -125,8 +125,11 @@ export const RightPanel = memo(forwardRef<RightPanelHandle, RightPanelProps>(fun
     onJumpToAgentSession, onResumeSession,
     onOpenSessionAsTab, onOpenAboutModal, onFileClick,
     onOpenMarketplace,
-    isGraphViewOpen, onOpenGraphView, onFocusFileInGraph
+    isGraphViewOpen: _isGraphViewOpen, onOpenGraphView, onFocusFileInGraph
   } = props;
+
+  // Mark as intentionally unused - passed through for future use
+  void _isGraphViewOpen;
 
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
   const autoRunRef = useRef<AutoRunHandle>(null);

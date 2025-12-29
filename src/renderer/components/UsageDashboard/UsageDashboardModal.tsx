@@ -536,7 +536,7 @@ export function UsageDashboardModal({
           onKeyDown={handleTabKeyDown}
           data-testid="view-mode-tabs"
         >
-          {VIEW_MODE_TABS.map((tab, index) => (
+          {VIEW_MODE_TABS.map((tab) => (
             <button
               key={tab.value}
               onClick={() => setViewMode(tab.value)}
