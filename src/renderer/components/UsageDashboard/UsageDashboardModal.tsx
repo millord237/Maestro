@@ -25,6 +25,11 @@ import { EmptyState } from './EmptyState';
 import type { Theme } from '../../types';
 import { useLayerStack } from '../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
+import { getRendererPerfMetrics } from '../../utils/logger';
+import { PERFORMANCE_THRESHOLDS } from '../../../shared/performance-metrics';
+
+// Performance metrics instance for dashboard
+const perfMetrics = getRendererPerfMetrics('UsageDashboard');
 
 // Stats time range type matching the backend API
 type StatsTimeRange = 'day' | 'week' | 'month' | 'year' | 'all';
@@ -121,6 +126,8 @@ export function UsageDashboardModal({
 
   // Fetch stats data when range changes
   const fetchStats = useCallback(async (showRefresh = false) => {
+    const fetchStart = perfMetrics.start();
+
     if (showRefresh) {
       setIsRefreshing(true);
     } else {
@@ -136,9 +143,25 @@ export function UsageDashboardModal({
       ]);
       setData(stats);
       setDatabaseSize(dbSize);
+
+      // Log fetch performance
+      const fetchDuration = perfMetrics.end(fetchStart, 'fetchStats', {
+        timeRange,
+        totalQueries: stats?.totalQueries,
+        isRefresh: showRefresh,
+      });
+
+      // Warn if fetch is slow
+      if (fetchDuration > PERFORMANCE_THRESHOLDS.DASHBOARD_LOAD) {
+        console.warn(
+          `[UsageDashboard] fetchStats took ${fetchDuration.toFixed(0)}ms (threshold: ${PERFORMANCE_THRESHOLDS.DASHBOARD_LOAD}ms)`,
+          { timeRange, totalQueries: stats?.totalQueries }
+        );
+      }
     } catch (err) {
       console.error('Failed to fetch usage stats:', err);
       setError(err instanceof Error ? err.message : 'Failed to load stats');
+      perfMetrics.end(fetchStart, 'fetchStats:error', { timeRange, error: String(err) });
     } finally {
       setLoading(false);
       if (showRefresh) {

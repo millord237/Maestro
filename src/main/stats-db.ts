@@ -47,8 +47,21 @@ import {
   StatsFilters,
   StatsAggregation,
 } from '../shared/stats-types';
+import { PerformanceMetrics, PERFORMANCE_THRESHOLDS } from '../shared/performance-metrics';
 
 const LOG_CONTEXT = '[StatsDB]';
+
+/**
+ * Performance metrics logger for StatsDB operations.
+ *
+ * Disabled by default - enable via setPerformanceLoggingEnabled(true).
+ * Logs at debug level through the main process logger.
+ */
+const perfMetrics = new PerformanceMetrics(
+  'StatsDB',
+  (message, context) => logger.debug(message, context ?? LOG_CONTEXT),
+  false // Disabled by default - enable for debugging
+);
 
 /**
  * Result of a database integrity check
@@ -1110,17 +1123,21 @@ export class StatsDB {
   getAggregatedStats(range: StatsTimeRange): StatsAggregation {
     if (!this.db) throw new Error('Database not initialized');
 
+    const perfStart = perfMetrics.start();
     const startTime = getTimeRangeStart(range);
 
     // Total queries and duration
+    const totalsStart = perfMetrics.start();
     const totalsStmt = this.db.prepare(`
       SELECT COUNT(*) as count, COALESCE(SUM(duration), 0) as total_duration
       FROM query_events
       WHERE start_time >= ?
     `);
     const totals = totalsStmt.get(startTime) as { count: number; total_duration: number };
+    perfMetrics.end(totalsStart, 'getAggregatedStats:totals', { range });
 
     // By agent type
+    const byAgentStart = perfMetrics.start();
     const byAgentStmt = this.db.prepare(`
       SELECT agent_type, COUNT(*) as count, SUM(duration) as duration
       FROM query_events
@@ -1136,8 +1153,10 @@ export class StatsDB {
     for (const row of byAgentRows) {
       byAgent[row.agent_type] = { count: row.count, duration: row.duration };
     }
+    perfMetrics.end(byAgentStart, 'getAggregatedStats:byAgent', { range, agentCount: byAgentRows.length });
 
     // By source (user vs auto)
+    const bySourceStart = perfMetrics.start();
     const bySourceStmt = this.db.prepare(`
       SELECT source, COUNT(*) as count
       FROM query_events
@@ -1149,8 +1168,10 @@ export class StatsDB {
     for (const row of bySourceRows) {
       bySource[row.source] = row.count;
     }
+    perfMetrics.end(bySourceStart, 'getAggregatedStats:bySource', { range });
 
     // By day (for charts)
+    const byDayStart = perfMetrics.start();
     const byDayStmt = this.db.prepare(`
       SELECT date(start_time / 1000, 'unixepoch', 'localtime') as date,
              COUNT(*) as count,
@@ -1165,6 +1186,21 @@ export class StatsDB {
       count: number;
       duration: number;
     }>;
+    perfMetrics.end(byDayStart, 'getAggregatedStats:byDay', { range, dayCount: byDayRows.length });
+
+    const totalDuration = perfMetrics.end(perfStart, 'getAggregatedStats:total', {
+      range,
+      totalQueries: totals.count,
+    });
+
+    // Log warning if the aggregation is slow
+    if (totalDuration > PERFORMANCE_THRESHOLDS.DASHBOARD_LOAD) {
+      logger.warn(
+        `getAggregatedStats took ${totalDuration.toFixed(0)}ms (threshold: ${PERFORMANCE_THRESHOLDS.DASHBOARD_LOAD}ms)`,
+        LOG_CONTEXT,
+        { range, totalQueries: totals.count }
+      );
+    }
 
     return {
       totalQueries: totals.count,
@@ -1340,4 +1376,53 @@ export function closeStatsDB(): void {
     statsDbInstance.close();
     statsDbInstance = null;
   }
+}
+
+// ============================================================================
+// Performance Metrics API
+// ============================================================================
+
+/**
+ * Enable or disable performance metrics logging for StatsDB operations.
+ *
+ * When enabled, detailed timing information is logged at debug level for:
+ * - Database queries (getAggregatedStats, getQueryEvents, etc.)
+ * - Individual SQL operations (totals, byAgent, bySource, byDay queries)
+ *
+ * Performance warnings are always logged (even when metrics are disabled)
+ * when operations exceed defined thresholds.
+ *
+ * @param enabled - Whether to enable performance metrics logging
+ */
+export function setPerformanceLoggingEnabled(enabled: boolean): void {
+  perfMetrics.setEnabled(enabled);
+  logger.info(`Performance metrics logging ${enabled ? 'enabled' : 'disabled'}`, LOG_CONTEXT);
+}
+
+/**
+ * Check if performance metrics logging is currently enabled.
+ *
+ * @returns true if performance metrics are being logged
+ */
+export function isPerformanceLoggingEnabled(): boolean {
+  return perfMetrics.isEnabled();
+}
+
+/**
+ * Get collected performance metrics for analysis.
+ *
+ * Returns the last 100 recorded metrics (when enabled).
+ * Useful for debugging and performance analysis.
+ *
+ * @returns Array of performance metric entries
+ */
+export function getPerformanceMetrics() {
+  return perfMetrics.getMetrics();
+}
+
+/**
+ * Clear collected performance metrics.
+ */
+export function clearPerformanceMetrics(): void {
+  perfMetrics.clearMetrics();
 }

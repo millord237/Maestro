@@ -10,6 +10,11 @@
 import { Node, Edge } from 'reactflow';
 import { parseMarkdownLinks, ExternalLink } from '../../utils/markdownLinkParser';
 import { computeDocumentStats, DocumentStats } from '../../utils/documentStats';
+import { getRendererPerfMetrics } from '../../utils/logger';
+import { PERFORMANCE_THRESHOLDS } from '../../../shared/performance-metrics';
+
+// Performance metrics instance for graph data building
+const perfMetrics = getRendererPerfMetrics('DocumentGraph');
 
 /**
  * Progress callback data for reporting scan/parse progress
@@ -228,9 +233,16 @@ async function parseFile(rootPath: string, relativePath: string): Promise<Parsed
 export async function buildGraphData(options: BuildOptions): Promise<GraphData> {
   const { rootPath, includeExternalLinks, maxNodes, offset = 0, onProgress } = options;
 
+  const buildStart = perfMetrics.start();
+
   // Step 1: Scan for all markdown files
+  const scanStart = perfMetrics.start();
   const markdownPaths = await scanMarkdownFiles(rootPath, onProgress);
   const totalDocuments = markdownPaths.length;
+  perfMetrics.end(scanStart, 'buildGraphData:scan', {
+    totalDocuments,
+    rootPath: rootPath.split('/').slice(-2).join('/'), // Last 2 path segments for privacy
+  });
 
   // Step 2: Apply pagination if maxNodes is set
   let pathsToProcess = markdownPaths;
@@ -239,6 +251,7 @@ export async function buildGraphData(options: BuildOptions): Promise<GraphData> 
   }
 
   // Step 3: Parse the files we're processing
+  const parseStart = perfMetrics.start();
   const parsedFiles: ParsedFile[] = [];
   for (let i = 0; i < pathsToProcess.length; i++) {
     const relativePath = pathsToProcess[i];
@@ -258,6 +271,10 @@ export async function buildGraphData(options: BuildOptions): Promise<GraphData> 
       parsedFiles.push(parsed);
     }
   }
+  perfMetrics.end(parseStart, 'buildGraphData:parse', {
+    fileCount: pathsToProcess.length,
+    parsedCount: parsedFiles.length,
+  });
 
   // Create a set of known file paths for validating internal links
   // Note: We use ALL known paths (not just loaded ones) to allow edges to connect properly
@@ -349,6 +366,26 @@ export async function buildGraphData(options: BuildOptions): Promise<GraphData> 
   // Calculate pagination info
   const loadedDocuments = parsedFiles.length;
   const hasMore = maxNodes !== undefined && maxNodes > 0 && offset + loadedDocuments < totalDocuments;
+
+  // Log total build time with performance threshold check
+  const totalBuildTime = perfMetrics.end(buildStart, 'buildGraphData:total', {
+    totalDocuments,
+    loadedDocuments,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    includeExternalLinks,
+  });
+
+  // Warn if build time exceeds thresholds
+  const threshold = totalDocuments < 100
+    ? PERFORMANCE_THRESHOLDS.GRAPH_BUILD_SMALL
+    : PERFORMANCE_THRESHOLDS.GRAPH_BUILD_LARGE;
+  if (totalBuildTime > threshold) {
+    console.warn(
+      `[DocumentGraph] buildGraphData took ${totalBuildTime.toFixed(0)}ms (threshold: ${threshold}ms)`,
+      { totalDocuments, nodeCount: nodes.length, edgeCount: edges.length }
+    );
+  }
 
   return { nodes, edges, totalDocuments, loadedDocuments, hasMore };
 }
