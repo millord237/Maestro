@@ -349,23 +349,26 @@ jobs:
           # Package with ARM64 target
           npx electron-builder --linux --arm64 --publish never --config.extraMetadata.version="$BUILD_VERSION"
 
-      # Verify pty.node is correctly included in unpacked resources (Linux x64)
-      - name: Verify pty.node in package (Linux x64)
+      # Verify native modules are correctly included in unpacked resources (Linux x64)
+      - name: Verify native modules in package (Linux x64)
         if: matrix.platform == 'linux'
         run: |
-          echo "Checking for pty.node in unpacked resources..."
           UNPACKED_DIR="release/linux-unpacked/resources/app.asar.unpacked"
+
+          # Verify pty.node
+          echo "Checking for pty.node in unpacked resources..."
           PTY_NODE="$UNPACKED_DIR/node_modules/node-pty/build/Release/pty.node"
           if [ -f "$PTY_NODE" ]; then
             echo "✓ pty.node found at: $PTY_NODE"
             file "$PTY_NODE"
             ls -la "$PTY_NODE"
-            # Double-check architecture
+            # Double-check architecture - FAIL if wrong architecture
             if file "$PTY_NODE" | grep -q "x86-64\|x86_64\|AMD64"; then
               echo "✓ Architecture verified: x64"
             else
-              echo "✗ WARNING: Architecture mismatch in packaged binary!"
+              echo "✗ ERROR: Architecture mismatch in packaged pty.node!"
               file "$PTY_NODE"
+              exit 1
             fi
           else
             echo "✗ ERROR: pty.node not found in unpacked resources!"
@@ -374,8 +377,30 @@ jobs:
             exit 1
           fi
 
-      # Verify native modules are correctly included in unpacked resources (Linux ARM64 only)
-      - name: Verify native modules in package
+          # Verify better_sqlite3.node
+          echo "Checking for better_sqlite3.node in unpacked resources..."
+          SQLITE_NODE="$UNPACKED_DIR/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+          if [ -f "$SQLITE_NODE" ]; then
+            echo "✓ better_sqlite3.node found at: $SQLITE_NODE"
+            file "$SQLITE_NODE"
+            ls -la "$SQLITE_NODE"
+            # Double-check architecture - FAIL if wrong architecture
+            if file "$SQLITE_NODE" | grep -q "x86-64\|x86_64\|AMD64"; then
+              echo "✓ Architecture verified: x64"
+            else
+              echo "✗ ERROR: Architecture mismatch in packaged better_sqlite3.node!"
+              file "$SQLITE_NODE"
+              exit 1
+            fi
+          else
+            echo "✗ ERROR: better_sqlite3.node not found in unpacked resources!"
+            echo "Contents of app.asar.unpacked:"
+            find "$UNPACKED_DIR" -name "*.node" 2>/dev/null || echo "Directory not found"
+            exit 1
+          fi
+
+      # Verify native modules are correctly included in unpacked resources (Linux ARM64)
+      - name: Verify native modules in package (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
         run: |
           UNPACKED_DIR="release/linux-arm64-unpacked/resources/app.asar.unpacked"
@@ -595,3 +620,45 @@ jobs:
             **[Download & Full Changelog](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})**
           url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
           color: 0x58B09C
+
+  # Sync release notes to docs after release is published
+  sync-docs:
+    needs: release
+    runs-on: ubuntu-latest
+    if: always() && needs.release.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync release notes to docs
+        run: node scripts/sync-release-notes.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet docs/releases.md; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push docs update
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/releases.md
+          git commit -m "docs: sync release notes for ${TAG_NAME}"
+          git push
