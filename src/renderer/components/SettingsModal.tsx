@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database, Server } from 'lucide-react';
 import { useSettings } from '../hooks';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
@@ -220,7 +220,7 @@ interface SettingsModalProps {
   setCrashReportingEnabled: (value: boolean) => void;
   customAICommands: CustomAICommand[];
   setCustomAICommands: (commands: CustomAICommand[]) => void;
-  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands';
+  initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands' | 'ssh';
   hasNoAgents?: boolean;
   onThemeImportError?: (message: string) => void;
   onThemeImportSuccess?: (message: string) => void;
@@ -247,7 +247,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
     setDefaultStatsTimeRange,
   } = useSettings();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands' | 'ssh'>('general');
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [customFonts, setCustomFonts] = useState<string[]>([]);
   const [fontLoading, setFontLoading] = useState(false);
@@ -375,9 +375,9 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
     if (!isOpen) return;
 
     const handleTabNavigation = (e: KeyboardEvent) => {
-      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands'> = FEATURE_FLAGS.LLM_SETTINGS
-        ? ['general', 'llm', 'shortcuts', 'theme', 'notifications', 'aicommands']
-        : ['general', 'shortcuts', 'theme', 'notifications', 'aicommands'];
+      const tabs: Array<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands' | 'ssh'> = FEATURE_FLAGS.LLM_SETTINGS
+        ? ['general', 'llm', 'shortcuts', 'theme', 'notifications', 'aicommands', 'ssh']
+        : ['general', 'shortcuts', 'theme', 'notifications', 'aicommands', 'ssh'];
       const currentIndex = tabs.indexOf(activeTab);
 
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '[') {
@@ -763,6 +763,10 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
           <button onClick={() => setActiveTab('aicommands')} className={`px-4 py-4 text-sm font-bold border-b-2 ${activeTab === 'aicommands' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1} title="AI Commands">
             <Cpu className="w-4 h-4" />
             {activeTab === 'aicommands' && <span>AI Commands</span>}
+          </button>
+          <button onClick={() => setActiveTab('ssh')} className={`px-4 py-4 text-sm font-bold border-b-2 ${activeTab === 'ssh' ? 'border-indigo-500' : 'border-transparent'} flex items-center gap-2`} tabIndex={-1} title="SSH">
+            <Server className="w-4 h-4" />
+            {activeTab === 'ssh' && <span>SSH</span>}
           </button>
           <div className="flex-1 flex justify-end items-center pr-4">
             <button onClick={onClose} tabIndex={-1}><X className="w-5 h-5 opacity-50 hover:opacity-100" /></button>
@@ -1592,9 +1596,6 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 </div>
               </div>
 
-              {/* SSH Remote Hosts */}
-              <SshRemotesSection theme={theme} />
-
               {/* Settings Storage Location */}
               <div
                 className="flex items-start gap-3 p-4 rounded-xl border relative"
@@ -1986,6 +1987,12 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
               {/* OpenSpec Commands Section */}
               <OpenSpecCommandsPanel theme={theme} />
+            </div>
+          )}
+
+          {activeTab === 'ssh' && (
+            <div className="space-y-5">
+              <SshRemotesSection theme={theme} />
             </div>
           )}
         </div>

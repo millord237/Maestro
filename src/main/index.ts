@@ -12,7 +12,7 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
-import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, registerStatsHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, registerStatsHandlers, registerDocumentGraphHandlers, registerSshRemoteHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
 import { initializeStatsDB, closeStatsDB, getStatsDB } from './stats-db';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
 import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, setGetAgentConfigCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState, respawnParticipantWithRecovery } from './group-chat/group-chat-router';
@@ -1107,6 +1107,17 @@ function setupIpcHandlers() {
   // Register Stats handlers for usage tracking
   registerStatsHandlers({
     getMainWindow: () => mainWindow,
+    settingsStore: store,
+  });
+
+  // Register Document Graph handlers for file watching
+  registerDocumentGraphHandlers({
+    getMainWindow: () => mainWindow,
+    app,
+  });
+
+  // Register SSH Remote handlers for managing SSH configurations
+  registerSshRemoteHandlers({
     settingsStore: store,
   });
 
