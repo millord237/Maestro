@@ -23,6 +23,7 @@ import { MaestroWizard, useWizard, WizardResumeModal, AUTO_RUN_FOLDER_NAME } fro
 import { TourOverlay } from './components/Wizard/tour';
 import { CONDUCTOR_BADGES, getBadgeForTime } from './constants/conductorBadges';
 import { EmptyStateView } from './components/EmptyStateView';
+import { MarketplaceModal } from './components/MarketplaceModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -184,6 +185,8 @@ function MaestroConsoleInner() {
     batchRunnerModalOpen, setBatchRunnerModalOpen,
     // Auto Run Setup Modal
     autoRunSetupModalOpen, setAutoRunSetupModalOpen,
+    // Marketplace Modal
+    marketplaceModalOpen, setMarketplaceModalOpen,
     // Wizard Resume Modal
     wizardResumeModalOpen, setWizardResumeModalOpen, wizardResumeState, setWizardResumeState,
     // Agent Error Modal
@@ -4413,6 +4416,11 @@ function MaestroConsoleInner() {
     setBatchRunnerModalOpen(true);
   }, []);
 
+  // Handler to open marketplace modal
+  const handleOpenMarketplace = useCallback(() => {
+    setMarketplaceModalOpen(true);
+  }, [setMarketplaceModalOpen]);
+
   // Handler for switching to autorun tab - shows setup modal if no folder configured
   const handleSetActiveRightTab = useCallback((tab: RightPanelTab) => {
     if (tab === 'autorun' && activeSession && !activeSession.autoRunFolderPath) {
@@ -4451,6 +4459,19 @@ function MaestroConsoleInner() {
     autoRunDocumentList,
     startBatchRun,
   });
+
+  // Handler for marketplace import completion - refresh document list
+  const handleMarketplaceImportComplete = useCallback(async (folderName: string) => {
+    // Refresh the Auto Run document list to show newly imported documents
+    if (activeSession?.autoRunFolderPath) {
+      handleAutoRunRefresh();
+    }
+    addToast({
+      type: 'success',
+      title: 'Playbook Imported',
+      message: `Successfully imported playbook to ${folderName}`,
+    });
+  }, [activeSession?.autoRunFolderPath, handleAutoRunRefresh, addToast]);
 
   // File tree auto-refresh interval change handler (kept in App.tsx as it's not Auto Run specific)
   const handleAutoRefreshChange = useCallback((interval: number) => {
@@ -7907,7 +7928,7 @@ function MaestroConsoleInner() {
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
     setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownEditMode,
     toggleTabStar, toggleTabUnread, setPromptComposerOpen, openWizardModal, rightPanelRef, setFuzzyFileSearchOpen,
-    setShowNewGroupChatModal, deleteGroupChatWithConfirmation,
+    setMarketplaceModalOpen, setShowNewGroupChatModal, deleteGroupChatWithConfirmation,
     // Group chat context
     activeGroupChatId, groupChatInputRef, groupChatStagedImages, setGroupChatRightTab,
     // Navigation handlers from useKeyboardNavigation hook
@@ -8370,6 +8391,7 @@ function MaestroConsoleInner() {
         autoRunDocumentTree={autoRunDocumentTree}
         getDocumentTaskCount={getDocumentTaskCount}
         onAutoRunRefresh={handleAutoRunRefresh}
+        onOpenMarketplace={handleOpenMarketplace}
         tabSwitcherOpen={tabSwitcherOpen}
         onCloseTabSwitcher={handleCloseTabSwitcher}
         onTabSelect={handleUtilityTabSelect}
@@ -8486,6 +8508,18 @@ function MaestroConsoleInner() {
         isOpen={debugWizardModalOpen}
         onClose={() => setDebugWizardModalOpen(false)}
       />
+
+      {/* --- MARKETPLACE MODAL --- */}
+      {activeSession && activeSession.autoRunFolderPath && (
+        <MarketplaceModal
+          theme={theme}
+          isOpen={marketplaceModalOpen}
+          onClose={() => setMarketplaceModalOpen(false)}
+          autoRunFolderPath={activeSession.autoRunFolderPath}
+          sessionId={activeSession.id}
+          onImportComplete={handleMarketplaceImportComplete}
+        />
+      )}
 
       {/* --- GIST PUBLISH MODAL --- */}
       {gistPublishModalOpen && previewFile && (
@@ -9392,6 +9426,7 @@ function MaestroConsoleInner() {
             onResumeSession={handleResumeSession}
             onOpenSessionAsTab={handleResumeSession}
             onOpenAboutModal={() => setAboutModalOpen(true)}
+            onOpenMarketplace={handleOpenMarketplace}
             onFileClick={async (relativePath: string) => {
               if (!activeSession) return;
               const filename = relativePath.split('/').pop() || relativePath;

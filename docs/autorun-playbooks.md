@@ -58,6 +58,10 @@ Save your batch configurations for reuse:
 
 ![Playbooks](./screenshots/autorun-2.png)
 
+### Playbook Exchange
+
+Looking for pre-built playbooks? The [Playbook Exchange](./playbook-exchange) offers community-contributed playbooks for common workflows like security audits, code reviews, and documentation generation. Open it via Quick Actions (`Cmd+K`) or click the Exchange button in the Auto Run panel.
+
 ## Progress Tracking
 
 The runner will:
