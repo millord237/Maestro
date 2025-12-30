@@ -72,6 +72,8 @@ export interface BuildSpawnConfigOptions {
   sessionCustomModel?: string;
   /** Per-session custom context window */
   sessionCustomContextWindow?: number;
+  /** Per-session SSH remote config (takes precedence over agent-level SSH config) */
+  sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string };
 }
 
 /**
@@ -112,6 +114,7 @@ export async function buildSpawnConfigForAgent(
     sessionCustomEnvVars,
     sessionCustomModel,
     sessionCustomContextWindow,
+    sessionSshRemoteConfig,
   } = options;
 
   // Fetch the agent configuration from main process
@@ -151,6 +154,8 @@ export async function buildSpawnConfigForAgent(
     sessionCustomEnvVars,
     sessionCustomModel,
     sessionCustomContextWindow,
+    // Per-session SSH remote config (takes precedence over agent-level SSH config)
+    sessionSshRemoteConfig,
   };
 
   return spawnConfig;

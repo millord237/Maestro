@@ -103,6 +103,12 @@ export interface WizardState {
   customArgs?: string;
   /** Per-agent custom environment variables */
   customEnvVars?: Record<string, string>;
+  /** Per-session SSH remote configuration (stored per-session, not per-agent) */
+  sessionSshRemoteConfig?: {
+    enabled: boolean;
+    remoteId: string | null;
+    workingDirOverride?: string;
+  };
 
   // Directory Selection (Step 2)
   /** Selected directory path */
@@ -169,6 +175,7 @@ const initialState: WizardState = {
   customPath: undefined,
   customArgs: undefined,
   customEnvVars: undefined,
+  sessionSshRemoteConfig: undefined,
 
   // Directory Selection
   directoryPath: '',
@@ -217,6 +224,7 @@ type WizardAction =
   | { type: 'SET_CUSTOM_PATH'; path: string | undefined }
   | { type: 'SET_CUSTOM_ARGS'; args: string | undefined }
   | { type: 'SET_CUSTOM_ENV_VARS'; envVars: Record<string, string> | undefined }
+  | { type: 'SET_SESSION_SSH_REMOTE_CONFIG'; config: { enabled: boolean; remoteId: string | null; workingDirOverride?: string } | undefined }
   | { type: 'SET_DIRECTORY_PATH'; path: string }
   | { type: 'SET_IS_GIT_REPO'; isGitRepo: boolean }
   | { type: 'SET_DETECTED_AGENT_PATH'; path: string | null }
@@ -300,6 +308,9 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 
     case 'SET_CUSTOM_ENV_VARS':
       return { ...state, customEnvVars: action.envVars };
+
+    case 'SET_SESSION_SSH_REMOTE_CONFIG':
+      return { ...state, sessionSshRemoteConfig: action.config };
 
     case 'SET_DIRECTORY_PATH':
       return { ...state, directoryPath: action.path, directoryError: null };
@@ -435,6 +446,8 @@ export interface WizardContextAPI {
   setCustomArgs: (args: string | undefined) => void;
   /** Set custom environment variables for the agent */
   setCustomEnvVars: (envVars: Record<string, string> | undefined) => void;
+  /** Set per-session SSH remote configuration */
+  setSessionSshRemoteConfig: (config: { enabled: boolean; remoteId: string | null; workingDirOverride?: string } | undefined) => void;
 
   // Directory Selection
   /** Set the directory path */
@@ -615,6 +628,10 @@ export function WizardProvider({ children }: WizardProviderProps) {
 
   const setCustomEnvVars = useCallback((envVars: Record<string, string> | undefined) => {
     dispatch({ type: 'SET_CUSTOM_ENV_VARS', envVars });
+  }, []);
+
+  const setSessionSshRemoteConfig = useCallback((config: { enabled: boolean; remoteId: string | null; workingDirOverride?: string } | undefined) => {
+    dispatch({ type: 'SET_SESSION_SSH_REMOTE_CONFIG', config });
   }, []);
 
   // Directory Selection
@@ -839,6 +856,7 @@ export function WizardProvider({ children }: WizardProviderProps) {
     setCustomPath,
     setCustomArgs,
     setCustomEnvVars,
+    setSessionSshRemoteConfig,
 
     // Directory Selection
     setDirectoryPath,
@@ -893,6 +911,7 @@ export function WizardProvider({ children }: WizardProviderProps) {
     setCustomPath,
     setCustomArgs,
     setCustomEnvVars,
+    setSessionSshRemoteConfig,
     setDirectoryPath,
     setIsGitRepo,
     setDetectedAgentPath,

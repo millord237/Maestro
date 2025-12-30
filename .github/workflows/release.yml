@@ -737,9 +737,10 @@ jobs:
     if: always() && needs.release.result == 'success'
 
     steps:
-      - name: Checkout code
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js

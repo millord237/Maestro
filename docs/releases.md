@@ -13,6 +13,51 @@ Maestro can update itself automatically! This feature was introduced in **v0.8.7
 
 ---
 
+## v0.14.x - Document Graphs
+
+**Latest: v0.14.0** | Released December 31, 1
+
+### Changes
+
+- Markdown documents graph view! 📈
+
+### Other Changes
+- Support for managing Agents over SSH 🛣️
+- Leaderboard tracking now works across multiple systems 🏆
+- We were not correctly tallying user interactions in the new usage dashboard 🧮
+- Performance improvement in Auto Run panel editor 🏃‍♂️
+
+---
+
+## v0.13.x - Playbook Exchange & Usage Dashboard
+
+**Latest: v0.13.2** | Released December 29, 2025
+
+### Changes
+
+- TAKE TWO! Fixed Linux ARM64 build architecture contamination issues 🏗️
+
+### v0.13.1 Changes
+- Fixed Linux ARM64 build architecture contamination issues 🏗️
+- Enhanced error handling for Auto Run batch processing 🚨
+
+### v0.13.0 Changes
+- Added a global usage dashboard, data collection begins with this install 🎛️
+- Added a Playbook Exchange for downloading pre-defined Auto Run playbooks from [Maestro-Playbooks](https://github.com/pedramamini/Maestro-Playbooks) 📕
+- Bundled OpenSpec commands for structured change proposals 📝
+- Added pre-release channel support for beta/RC updates 🧪
+- Implemented global hands-on time tracking across sessions ⏱️
+- Added new keyboard shortcut for agent settings (Opt+Cmd+, | Ctrl+Alt+,) ⌨️
+- Added directory size calculation with file/folder counts in file explorer 📊
+- Added sleep detection to exclude laptop sleep from time tracking ⏰
+
+### Previous Releases in this Series
+
+- **v0.13.1** (December 29, 2025) - Playbook Exchange & Usage Dashboard
+- **v0.13.0** (December 29, 2025) - Playbook Exchange & Usage Dashboard
+
+---
+
 ## v0.12.x - Thinking, Spec-Kits, Context Management
 
 **Latest: v0.12.3** | Released December 28, 2025

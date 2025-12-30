@@ -647,6 +647,8 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
             sessionCustomEnvVars: freshSession.customEnvVars,
             sessionCustomModel: freshSession.customModel,
             sessionCustomContextWindow: freshSession.customContextWindow,
+            // Per-session SSH remote config (takes precedence over agent-level SSH config)
+            sessionSshRemoteConfig: freshSession.sessionSshRemoteConfig,
           });
         } catch (error) {
           console.error('Failed to spawn agent batch process:', error);

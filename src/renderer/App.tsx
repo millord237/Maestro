@@ -5648,7 +5648,7 @@ function MaestroConsoleInner() {
    */
   const handleWizardLaunchSession = useCallback(async (wantsTour: boolean) => {
     // Get wizard state
-    const { selectedAgent, directoryPath, agentName, generatedDocuments, customPath, customArgs, customEnvVars } = wizardState;
+    const { selectedAgent, directoryPath, agentName, generatedDocuments, customPath, customArgs, customEnvVars, sessionSshRemoteConfig } = wizardState;
 
     if (!selectedAgent || !directoryPath) {
       console.error('Wizard launch failed: missing agent or directory');
@@ -5757,6 +5757,8 @@ function MaestroConsoleInner() {
       customPath,
       customArgs,
       customEnvVars,
+      // Per-session SSH remote config (takes precedence over agent-level SSH config)
+      sessionSshRemoteConfig,
     };
 
     // Add session and make it active
@@ -6356,6 +6358,8 @@ function MaestroConsoleInner() {
           sessionCustomEnvVars: session.customEnvVars,
           sessionCustomModel: session.customModel,
           sessionCustomContextWindow: session.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: session.sessionSshRemoteConfig,
         });
 
         console.log(`[Remote] ${session.toolType} spawn initiated successfully`);
@@ -6534,6 +6538,8 @@ function MaestroConsoleInner() {
           sessionCustomEnvVars: session.customEnvVars,
           sessionCustomModel: session.customModel,
           sessionCustomContextWindow: session.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: session.sessionSshRemoteConfig,
         });
       } else if (item.type === 'command' && item.command) {
         // Process a slash command - find the matching custom AI command, speckit command, or openspec command
@@ -6610,6 +6616,8 @@ function MaestroConsoleInner() {
             sessionCustomEnvVars: session.customEnvVars,
             sessionCustomModel: session.customModel,
             sessionCustomContextWindow: session.customContextWindow,
+            // Per-session SSH remote config (takes precedence over agent-level SSH config)
+            sessionSshRemoteConfig: session.sessionSshRemoteConfig,
           });
         } else {
           // Unknown command - add error log

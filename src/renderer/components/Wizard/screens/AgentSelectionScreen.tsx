@@ -288,6 +288,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     setCustomPath: setWizardCustomPath,
     setCustomArgs: setWizardCustomArgs,
     setCustomEnvVars: setWizardCustomEnvVars,
+    setSessionSshRemoteConfig: setWizardSessionSshRemoteConfig,
     nextStep,
     canProceedToNext,
   } = useWizard();
@@ -613,15 +614,15 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
    * Close the configuration panel and return to grid
    */
   const handleCloseConfig = useCallback(async () => {
-    // Save SSH remote config to agent config before closing
-    if (configuringAgentId) {
-      const currentConfig = { ...agentConfig };
-      if (sshRemoteConfig) {
-        currentConfig.sshRemote = sshRemoteConfig;
-      } else {
-        delete currentConfig.sshRemote;
-      }
-      await window.maestro.agents.setConfig(configuringAgentId, currentConfig);
+    // Save SSH remote config to wizard state (per-session, not per-agent)
+    if (sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId) {
+      setWizardSessionSshRemoteConfig({
+        enabled: true,
+        remoteId: sshRemoteConfig.remoteId,
+        workingDirOverride: sshRemoteConfig.workingDirOverride
+      });
+    } else {
+      setWizardSessionSshRemoteConfig(undefined);
     }
 
     setIsTransitioning(true);
@@ -639,7 +640,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 
     setAnnouncement('Returned to agent selection');
     setAnnouncementKey((prev) => prev + 1);
-  }, [configuringAgentId, agentConfig, sshRemoteConfig]);
+  }, [configuringAgentId, sshRemoteConfig, setWizardSessionSshRemoteConfig]);
 
   /**
    * Refresh agent detection after config changes

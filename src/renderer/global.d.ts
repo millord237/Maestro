@@ -36,6 +36,12 @@ interface ProcessConfig {
   sessionCustomEnvVars?: Record<string, string>;
   sessionCustomModel?: string;
   sessionCustomContextWindow?: number;
+  // Per-session SSH remote config (takes precedence over agent-level SSH config)
+  sessionSshRemoteConfig?: {
+    enabled: boolean;
+    remoteId: string | null;
+    workingDirOverride?: string;
+  };
 }
 
 interface AgentConfigOption {

@@ -362,6 +362,7 @@ export function useAgentExecution(
       customEnvVars?: Record<string, string>;
       customModel?: string;
       customContextWindow?: number;
+      sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string };
     }
   ): Promise<AgentSpawnResult> => {
     try {
@@ -429,6 +430,8 @@ export function useAgentExecution(
           sessionCustomEnvVars: sessionConfig?.customEnvVars,
           sessionCustomModel: sessionConfig?.customModel,
           sessionCustomContextWindow: sessionConfig?.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: sessionConfig?.sessionSshRemoteConfig,
         }).catch(() => {
           cleanup();
           resolve({ success: false });
