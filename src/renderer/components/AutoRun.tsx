@@ -1669,7 +1669,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
                 }}
               >
                 <FolderOpen className="w-4 h-4" />
-                Change Auto-run Folder
+                Select Folder
               </button>
             </div>
           </div>

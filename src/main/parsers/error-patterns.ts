@@ -639,6 +639,15 @@ export const SSH_ERROR_PATTERNS: AgentErrorPatterns = {
       recoverable: false,
     },
     {
+      // env: node: No such file or directory
+      // This happens when the agent script uses #!/usr/bin/env node shebang
+      // but node is not in PATH on the remote host. The $SHELL -lc wrapper
+      // should normally fix this, but if SSH path setup fails, this error appears.
+      pattern: /env:\s*(node|python|ruby|perl):\s*no such file or directory/i,
+      message: 'Runtime interpreter not found on remote host. Ensure node is installed and in PATH.',
+      recoverable: false,
+    },
+    {
       // SSH broken pipe - connection dropped during command execution
       pattern: /ssh:.*broken pipe/i,
       message: 'SSH connection dropped during command execution. The connection may have been interrupted.',

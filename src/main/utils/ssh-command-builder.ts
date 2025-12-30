@@ -238,10 +238,20 @@ export function buildSshCommand(
   // -l loads login profile for PATH, -c executes the command non-interactively.
   // Using $SHELL respects the user's configured shell (bash, zsh, etc.)
   //
-  // Use double quotes for the outer wrapper because:
-  // 1. $SHELL needs to be expanded by the remote shell
-  // 2. Single-quote escaping gets mangled through multiple shell layers (SSH -> remote shell -> $SHELL)
-  // 3. Double quotes with proper escaping work reliably across shell layers
+  // CRITICAL: When Node.js spawn() passes this to SSH without shell:true, SSH runs
+  // the command through the remote's default shell. The key is escaping:
+  // 1. Double quotes around the command are NOT escaped - they delimit the -c argument
+  // 2. $ signs inside the command MUST be escaped as \$ so they defer to the login shell
+  //    (shellEscapeForDoubleQuotes handles this)
+  // 3. Single quotes inside the command pass through unchanged
+  //
+  // Example transformation for spawn():
+  //   Input:  cd '/path' && MYVAR='value' claude --print
+  //   After escaping: cd '/path' && MYVAR='value' claude --print (no $ to escape here)
+  //   Wrapped: $SHELL -lc "cd '/path' && MYVAR='value' claude --print"
+  //   SSH receives this as one argument, passes to remote shell
+  //   Remote shell expands $SHELL, executes: /bin/zsh -lc "cd '/path' ..."
+  //   The login shell runs with full PATH from ~/.zprofile
   const escapedCommand = shellEscapeForDoubleQuotes(remoteCommand);
   const wrappedCommand = `$SHELL -lc "${escapedCommand}"`;
   args.push(wrappedCommand);

@@ -1073,8 +1073,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
                 </span>
               </div>
               <code
-                className="text-sm font-mono break-all select-all"
-                style={{ color: theme.colors.textMain }}
+                className="text-sm font-mono break-all"
+                style={{ color: theme.colors.textMain, userSelect: 'text', cursor: 'text' }}
               >
                 {detailView.processSessionId}
               </code>
@@ -1093,8 +1093,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
                   </span>
                 </div>
                 <code
-                  className="text-sm font-mono break-all select-all"
-                  style={{ color: theme.colors.textMain }}
+                  className="text-sm font-mono break-all"
+                  style={{ color: theme.colors.textMain, userSelect: 'text', cursor: 'text' }}
                 >
                   {detailView.agentSessionId}
                 </code>
@@ -1114,8 +1114,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
                   </span>
                 </div>
                 <code
-                  className="text-lg font-mono select-all"
-                  style={{ color: theme.colors.textMain }}
+                  className="text-lg font-mono"
+                  style={{ color: theme.colors.textMain, userSelect: 'text', cursor: 'text' }}
                 >
                   {detailView.pid}
                 </code>
@@ -1193,8 +1193,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
                 </span>
               </div>
               <code
-                className="text-sm font-mono break-all select-all"
-                style={{ color: theme.colors.textMain }}
+                className="text-sm font-mono break-all"
+                style={{ color: theme.colors.textMain, userSelect: 'text', cursor: 'text' }}
               >
                 {detailView.cwd || 'N/A'}
               </code>
@@ -1212,8 +1212,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
                 </span>
               </div>
               <code
-                className="text-sm font-mono break-all select-all block whitespace-pre-wrap"
-                style={{ color: theme.colors.textMain }}
+                className="text-sm font-mono break-all block whitespace-pre-wrap"
+                style={{ color: theme.colors.textMain, userSelect: 'text', cursor: 'text' }}
               >
                 {commandLine}
               </code>
