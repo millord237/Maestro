@@ -232,6 +232,9 @@ export class SshRemoteManager {
   buildSshArgs(config: SshRemoteConfig): string[] {
     const args: string[] = [];
 
+    // Force disable TTY allocation - this helps prevent shell rc files from being sourced
+    args.push('-T');
+
     // Private key (only if provided, or required for non-SSH config mode)
     if (config.useSshConfig) {
       // Only add key if explicitly provided (as override)

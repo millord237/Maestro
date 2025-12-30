@@ -35,7 +35,8 @@ interface NewInstanceModalProps {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   theme: any;
   existingSessions: Session[];
@@ -240,14 +241,16 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     // Get model from agent config - this will become per-session
     const agentCustomModel = agentConfigs[selectedAgent]?.model?.trim() || undefined;
 
-    // Save SSH remote configuration if set
+    // Get SSH remote configuration for this session (stored per-session, not per-agent)
     const sshRemoteConfig = agentSshRemoteConfigs[selectedAgent];
-    if (sshRemoteConfig) {
-      // Merge SSH remote config into agent configs and persist
-      const currentConfig = agentConfigs[selectedAgent] || {};
-      const updatedConfig = { ...currentConfig, sshRemote: sshRemoteConfig };
-      window.maestro.agents.setConfig(selectedAgent, updatedConfig);
-    }
+    // Convert to session-level format: only pass if enabled with a valid remoteId
+    const sessionSshRemoteConfig = sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
+      ? {
+          enabled: true,
+          remoteId: sshRemoteConfig.remoteId,
+          workingDirOverride: sshRemoteConfig.workingDirOverride
+        }
+      : undefined;
 
     onCreate(
       selectedAgent,
@@ -257,7 +260,8 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       agentCustomPath,
       agentCustomArgs,
       agentCustomEnvVars,
-      agentCustomModel
+      agentCustomModel,
+      sessionSshRemoteConfig
     );
     onClose();
 

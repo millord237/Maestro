@@ -8,8 +8,9 @@
  */
 
 import { SshRemoteConfig } from '../../shared/types';
-import { shellEscape, buildShellCommand } from './shell-escape';
+import { shellEscape, buildShellCommand, shellEscapeForDoubleQuotes } from './shell-escape';
 import { expandTilde } from '../../shared/pathUtils';
+import { logger } from './logger';
 
 /**
  * Result of building an SSH command.
@@ -169,6 +170,9 @@ export function buildSshCommand(
 ): SshCommandResult {
   const args: string[] = [];
 
+  // Force disable TTY allocation - this helps prevent shell rc files from being sourced
+  args.push('-T');
+
   // When using SSH config, we let SSH handle authentication settings
   // Only add explicit overrides if provided
   if (config.useSshConfig) {
@@ -229,7 +233,25 @@ export function buildSshCommand(
     env: Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined,
   });
 
-  args.push(remoteCommand);
+  // Wrap the command to execute via the user's login shell.
+  // $SHELL -lc ensures the user's full PATH (including homebrew, nvm, etc.) is available.
+  // -l loads login profile for PATH, -c executes the command non-interactively.
+  // Using $SHELL respects the user's configured shell (bash, zsh, etc.)
+  //
+  // Use double quotes for the outer wrapper because:
+  // 1. $SHELL needs to be expanded by the remote shell
+  // 2. Single-quote escaping gets mangled through multiple shell layers (SSH -> remote shell -> $SHELL)
+  // 3. Double quotes with proper escaping work reliably across shell layers
+  const escapedCommand = shellEscapeForDoubleQuotes(remoteCommand);
+  const wrappedCommand = `$SHELL -lc "${escapedCommand}"`;
+  args.push(wrappedCommand);
+
+  // Debug logging to trace the exact command being built
+  logger.info('Built SSH command', '[ssh-command-builder]', {
+    remoteCommand,
+    wrappedCommand,
+    fullCommand: `ssh ${args.join(' ')}`,
+  });
 
   return {
     command: 'ssh',

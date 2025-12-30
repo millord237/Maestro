@@ -5523,7 +5523,8 @@ function MaestroConsoleInner() {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => {
     // Get agent definition to get correct command
     const agent = await window.maestro.agents.get(agentId);
@@ -5623,7 +5624,9 @@ function MaestroConsoleInner() {
         customPath,
         customArgs,
         customEnvVars,
-        customModel
+        customModel,
+        // Per-session SSH remote config (takes precedence over agent-level SSH config)
+        sessionSshRemoteConfig
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);

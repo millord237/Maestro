@@ -489,6 +489,13 @@ export interface Session {
   customModel?: string;          // Custom model ID (overrides agent-level)
   customProviderPath?: string;   // Custom provider path (overrides agent-level)
   customContextWindow?: number;  // Custom context window size (overrides agent-level)
+  // Per-session SSH remote configuration (overrides agent-level SSH config)
+  // When set, this session uses the specified SSH remote; when not set, runs locally
+  sessionSshRemoteConfig?: {
+    enabled: boolean;            // Whether SSH is enabled for this session
+    remoteId: string | null;     // SSH remote config ID to use
+    workingDirOverride?: string; // Override remote working directory
+  };
 }
 
 export interface AgentConfigOption {
@@ -559,6 +566,12 @@ export interface ProcessConfig {
   sessionCustomEnvVars?: Record<string, string>;
   sessionCustomModel?: string;
   sessionCustomContextWindow?: number;
+  // Per-session SSH remote config (takes precedence over agent-level SSH config)
+  sessionSshRemoteConfig?: {
+    enabled: boolean;
+    remoteId: string | null;
+    workingDirOverride?: string;
+  };
 }
 
 // Directory entry from fs:readDir

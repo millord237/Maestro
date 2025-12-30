@@ -99,6 +99,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       sessionCustomEnvVars?: Record<string, string>; // Session-specific env vars
       sessionCustomModel?: string;    // Session-specific model selection
       sessionCustomContextWindow?: number; // Session-specific context window size
+      // Per-session SSH remote config (takes precedence over agent-level SSH config)
+      sessionSshRemoteConfig?: {
+        enabled: boolean;
+        remoteId: string | null;
+        workingDirOverride?: string;
+      };
       // Stats tracking options
       querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
       tabId?: string; // Tab ID for multi-tab tracking
@@ -224,13 +230,28 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 
       // Only consider SSH remote for non-terminal AI agent sessions
       if (config.toolType !== 'terminal') {
-        // Get agent-specific SSH config from agent configs store
-        const agentSshConfig = agentConfigValues.sshRemote as AgentSshRemoteConfig | undefined;
+        // SSH config priority: session-level > agent-level > global default
+        // Session-level config takes absolute precedence when provided
+        let effectiveSshConfig: AgentSshRemoteConfig | undefined;
+
+        if (config.sessionSshRemoteConfig) {
+          // Session-level SSH config provided - use it directly
+          // This allows each session to have its own SSH binding independent of agent-level config
+          effectiveSshConfig = config.sessionSshRemoteConfig;
+          logger.debug(`Using session-level SSH config`, LOG_CONTEXT, {
+            sessionId: config.sessionId,
+            enabled: effectiveSshConfig.enabled,
+            remoteId: effectiveSshConfig.remoteId,
+          });
+        } else {
+          // Fall back to agent-level SSH config from agent configs store
+          effectiveSshConfig = agentConfigValues.sshRemote as AgentSshRemoteConfig | undefined;
+        }
 
         // Resolve effective SSH remote configuration
         const sshStoreAdapter = createSshRemoteStoreAdapter(settingsStore);
         const sshResult = getSshRemoteConfig(sshStoreAdapter, {
-          agentSshConfig,
+          agentSshConfig: effectiveSshConfig,
           agentId: config.toolType,
         });
 
