@@ -76,7 +76,7 @@ export async function loadFileTree(
   if (currentDepth >= maxDepth) return [];
 
   try {
-    const entries = await window.maestro.fs.readDir(dirPath);
+    const entries = await window.maestro.fs.readDir(dirPath, sshContext?.sshRemoteId);
     const tree: FileTreeNode[] = [];
 
     for (const entry of entries) {

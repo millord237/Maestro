@@ -95,10 +95,10 @@ export function useFileTreeManagement(
 
     try {
       // Fetch tree and stats in parallel
-      // Note: sshContext is passed for future remote fs support (Phase 2)
+      // Pass SSH context for remote file operations
       const [newTree, stats] = await Promise.all([
         loadFileTree(session.cwd, 10, 0, sshContext),
-        window.maestro.fs.directorySize(session.cwd)
+        window.maestro.fs.directorySize(session.cwd, sshContext?.sshRemoteId)
       ]);
       const oldTree = session.fileTree || [];
       const changes = compareFileTrees(oldTree, newTree);
@@ -148,10 +148,10 @@ export function useFileTreeManagement(
 
     try {
       // Refresh file tree, stats, git repo status, branches, and tags in parallel
-      // Note: sshContext is passed for future remote fs/git support (Phase 2+)
+      // Pass SSH context for remote file operations
       const [tree, stats, isGitRepo] = await Promise.all([
         loadFileTree(cwd, 10, 0, sshContext),
-        window.maestro.fs.directorySize(cwd),
+        window.maestro.fs.directorySize(cwd, sshContext?.sshRemoteId),
         gitService.isRepo(cwd)
       ]);
 
@@ -217,7 +217,7 @@ export function useFileTreeManagement(
 
       Promise.all([
         loadFileTree(session.cwd, 10, 0, sshContext),
-        window.maestro.fs.directorySize(session.cwd)
+        window.maestro.fs.directorySize(session.cwd, sshContext?.sshRemoteId)
       ]).then(([tree, stats]) => {
         setSessions(prev => prev.map(s =>
           s.id === activeSessionId ? {
