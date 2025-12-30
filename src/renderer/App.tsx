@@ -9736,8 +9736,6 @@ function MaestroConsoleInner() {
                 console.error('[onFileClick] Failed to read file:', error);
               }
             }}
-            isGraphViewOpen={isGraphViewOpen}
-            onOpenGraphView={() => setIsGraphViewOpen(true)}
             onFocusFileInGraph={(relativePath: string) => {
               setGraphFocusFilePath(relativePath);
               setIsGraphViewOpen(true);
