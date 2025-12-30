@@ -1210,20 +1210,24 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                   <AlertTriangle className="w-3 h-3" />
                   Context Window Warnings
                 </label>
-                <label
-                  className="flex items-center gap-3 p-3 rounded border cursor-pointer hover:bg-opacity-10"
+                <div
+                  className="flex items-center justify-between p-3 rounded border cursor-pointer hover:bg-opacity-10"
                   style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                  onClick={() => updateContextManagementSettings({
+                    contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                  })}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      updateContextManagementSettings({
+                        contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                      });
+                    }
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={contextManagementSettings.contextWarningsEnabled}
-                    onChange={(e) => updateContextManagementSettings({
-                      contextWarningsEnabled: e.target.checked
-                    })}
-                    className="w-4 h-4"
-                    style={{ accentColor: theme.colors.accent }}
-                  />
-                  <div className="flex-1">
+                  <div className="flex-1 pr-3">
                     <div className="font-medium" style={{ color: theme.colors.textMain }}>
                       Show context consumption warnings
                     </div>
@@ -1231,7 +1235,27 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                       Display warning banners when context window usage reaches configurable thresholds
                     </div>
                   </div>
-                </label>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateContextManagementSettings({
+                        contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                      });
+                    }}
+                    className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                    style={{
+                      backgroundColor: contextManagementSettings.contextWarningsEnabled ? theme.colors.accent : theme.colors.bgActivity,
+                    }}
+                    role="switch"
+                    aria-checked={contextManagementSettings.contextWarningsEnabled}
+                  >
+                    <span
+                      className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        contextManagementSettings.contextWarningsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
 
                 {/* Threshold Sliders (ghosted when disabled) */}
                 <div

@@ -767,6 +767,7 @@ export function useBatchProcessor({
             const {
               tasksCompletedThisRun,
               addedUncheckedTasks,
+              totalTasksChange,
               newRemainingTasks,
               documentChanged,
               newCheckedCount,
@@ -825,15 +826,17 @@ export function useBatchProcessor({
             // (This tracking is intentionally a no-op for now - kept for future loop mode enhancements)
             void (!docEntry.resetOnCompletion ? tasksCompletedThisRun : 0);
 
-            // Update progress state
+            // Update progress state for current document
             if (addedUncheckedTasks > 0) {
               docTasksTotal += addedUncheckedTasks;
             }
 
             updateBatchStateAndBroadcastRef.current!(sessionId, prev => {
               const prevState = prev[sessionId] || DEFAULT_BATCH_STATE;
-              const nextTotalAcrossAllDocs = Math.max(0, prevState.totalTasksAcrossAllDocs + addedUncheckedTasks);
-              const nextTotalTasks = Math.max(0, prevState.totalTasks + addedUncheckedTasks);
+              // Use totalTasksChange for accurate overall tracking
+              // This correctly accounts for both completed tasks and newly added tasks
+              const nextTotalAcrossAllDocs = Math.max(0, prevState.totalTasksAcrossAllDocs + totalTasksChange);
+              const nextTotalTasks = Math.max(0, prevState.totalTasks + totalTasksChange);
               return {
                 ...prev,
                 [sessionId]: {

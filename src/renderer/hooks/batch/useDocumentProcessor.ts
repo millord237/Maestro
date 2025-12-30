@@ -120,6 +120,13 @@ export interface TaskResult {
    * Number of new unchecked tasks that were added during processing
    */
   addedUncheckedTasks: number;
+
+  /**
+   * Net change in total tasks (checked + unchecked) during processing.
+   * Can be negative if tasks were removed, positive if tasks were added.
+   * This correctly accounts for both completed tasks and newly added tasks.
+   */
+  totalTasksChange: number;
 }
 
 /**
@@ -332,6 +339,14 @@ export function useDocumentProcessor(): UseDocumentProcessorReturn {
       // Calculate tasks completed based on newly checked tasks
       // This remains accurate even if new unchecked tasks are added
       const tasksCompletedThisRun = Math.max(0, newCheckedCount - previousCheckedCount);
+
+      // Calculate the actual change in total tasks (checked + unchecked)
+      // This correctly handles cases where tasks are both completed and added
+      const previousTotal = previousRemainingTasks + previousCheckedCount;
+      const newTotal = newRemainingTasks + newCheckedCount;
+      const totalTasksChange = newTotal - previousTotal;
+
+      // For backwards compatibility, still track unchecked additions separately
       const addedUncheckedTasks = Math.max(
         0,
         newRemainingTasks - previousRemainingTasks
@@ -392,6 +407,7 @@ export function useDocumentProcessor(): UseDocumentProcessorReturn {
         contentAfterTask,
         newCheckedCount,
         addedUncheckedTasks,
+        totalTasksChange,
       };
     },
     [readDocAndCountTasks]
