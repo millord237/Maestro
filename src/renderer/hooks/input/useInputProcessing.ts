@@ -386,8 +386,9 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
         }
 
         // Verify the directory exists before updating shellCwd
+        // Pass SSH remote ID for remote sessions
         try {
-          await window.maestro.fs.readDir(candidatePath);
+          await window.maestro.fs.readDir(candidatePath, activeSession.sshRemoteId);
           // Directory exists, update shellCwd
           cwdChanged = true;
           newShellCwd = candidatePath;
@@ -647,6 +648,8 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
             sessionCustomEnvVars: freshSession.customEnvVars,
             sessionCustomModel: freshSession.customModel,
             sessionCustomContextWindow: freshSession.customContextWindow,
+            // Per-session SSH remote config (takes precedence over agent-level SSH config)
+            sessionSshRemoteConfig: freshSession.sessionSshRemoteConfig,
           });
         } catch (error) {
           console.error('Failed to spawn agent batch process:', error);

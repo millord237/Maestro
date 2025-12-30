@@ -158,7 +158,7 @@ function MaestroConsoleInner() {
     // Settings Modal
     settingsModalOpen, setSettingsModalOpen, settingsTab, setSettingsTab,
     // New Instance Modal
-    newInstanceModalOpen, setNewInstanceModalOpen,
+    newInstanceModalOpen, setNewInstanceModalOpen, duplicatingSessionId, setDuplicatingSessionId,
     // Edit Agent Modal
     editAgentModalOpen, setEditAgentModalOpen, editAgentSession, setEditAgentSession,
     // Shortcuts Help Modal
@@ -329,7 +329,6 @@ function MaestroConsoleInner() {
     defaultStatsTimeRange,
     documentGraphShowExternalLinks,
     documentGraphMaxNodes,
-    documentGraphLayoutMode,
 
   } = settings;
 
@@ -422,6 +421,7 @@ function MaestroConsoleInner() {
 
   // File Explorer State
   const [previewFile, setPreviewFile] = useState<{name: string; content: string; path: string} | null>(null);
+  const [filePreviewLoading, setFilePreviewLoading] = useState<{name: string; path: string} | null>(null);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [flatFileList, setFlatFileList] = useState<any[]>([]);
   const [fileTreeFilter, setFileTreeFilter] = useState('');
@@ -513,7 +513,10 @@ function MaestroConsoleInner() {
   }, []);
 
   // AppSessionModals stable callbacks
-  const handleCloseNewInstanceModal = useCallback(() => setNewInstanceModalOpen(false), []);
+  const handleCloseNewInstanceModal = useCallback(() => {
+    setNewInstanceModalOpen(false);
+    setDuplicatingSessionId(null);
+  }, [setDuplicatingSessionId]);
   const handleCloseEditAgentModal = useCallback(() => {
     setEditAgentModalOpen(false);
     setEditAgentSession(null);
@@ -1766,7 +1769,7 @@ function MaestroConsoleInner() {
           const timeAgo = formatRelativeTime(synopsisData.lastSynopsisTime);
           SYNOPSIS_PROMPT = `Synopsize ONLY the work done since the last synopsis (${timeAgo}). Do not repeat previous work. 2-3 sentences max.`;
         } else {
-          SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
+          SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max since the last time we did a synopsis.';
         }
         const startTime = Date.now();
         const synopsisTime = Date.now(); // Capture time for updating lastSynopsisTime
@@ -2753,6 +2756,7 @@ function MaestroConsoleInner() {
     setSessions,
     setActiveFocus,
     setPreviewFile,
+    setFilePreviewLoading,
     filePreviewHistory,
     setFilePreviewHistory,
     filePreviewHistoryIndex,
@@ -5016,11 +5020,12 @@ function MaestroConsoleInner() {
     customArgs?: string,
     customEnvVars?: Record<string, string>,
     customModel?: string,
-    customContextWindow?: number
+    customContextWindow?: number,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => {
     setSessions(prev => prev.map(s => {
       if (s.id !== sessionId) return s;
-      return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow };
+      return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow, sessionSshRemoteConfig };
     }));
   }, []);
 
@@ -5523,7 +5528,10 @@ function MaestroConsoleInner() {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    customContextWindow?: number,
+    customProviderPath?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => {
     // Get agent definition to get correct command
     const agent = await window.maestro.agents.get(agentId);
@@ -5623,7 +5631,11 @@ function MaestroConsoleInner() {
         customPath,
         customArgs,
         customEnvVars,
-        customModel
+        customModel,
+        customContextWindow,
+        customProviderPath,
+        // Per-session SSH remote config (takes precedence over agent-level SSH config)
+        sessionSshRemoteConfig
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);
@@ -5645,7 +5657,7 @@ function MaestroConsoleInner() {
    */
   const handleWizardLaunchSession = useCallback(async (wantsTour: boolean) => {
     // Get wizard state
-    const { selectedAgent, directoryPath, agentName, generatedDocuments, customPath, customArgs, customEnvVars } = wizardState;
+    const { selectedAgent, directoryPath, agentName, generatedDocuments, customPath, customArgs, customEnvVars, sessionSshRemoteConfig } = wizardState;
 
     if (!selectedAgent || !directoryPath) {
       console.error('Wizard launch failed: missing agent or directory');
@@ -5754,6 +5766,8 @@ function MaestroConsoleInner() {
       customPath,
       customArgs,
       customEnvVars,
+      // Per-session SSH remote config (takes precedence over agent-level SSH config)
+      sessionSshRemoteConfig,
     };
 
     // Add session and make it active
@@ -6353,6 +6367,8 @@ function MaestroConsoleInner() {
           sessionCustomEnvVars: session.customEnvVars,
           sessionCustomModel: session.customModel,
           sessionCustomContextWindow: session.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: session.sessionSshRemoteConfig,
         });
 
         console.log(`[Remote] ${session.toolType} spawn initiated successfully`);
@@ -6531,6 +6547,8 @@ function MaestroConsoleInner() {
           sessionCustomEnvVars: session.customEnvVars,
           sessionCustomModel: session.customModel,
           sessionCustomContextWindow: session.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: session.sessionSshRemoteConfig,
         });
       } else if (item.type === 'command' && item.command) {
         // Process a slash command - find the matching custom AI command, speckit command, or openspec command
@@ -6607,6 +6625,8 @@ function MaestroConsoleInner() {
             sessionCustomEnvVars: session.customEnvVars,
             sessionCustomModel: session.customModel,
             sessionCustomContextWindow: session.customContextWindow,
+            // Per-session SSH remote config (takes precedence over agent-level SSH config)
+            sessionSshRemoteConfig: session.sessionSshRemoteConfig,
           });
         } else {
           // Unknown command - add error log
@@ -8465,6 +8485,7 @@ function MaestroConsoleInner() {
         onCloseNewInstanceModal={handleCloseNewInstanceModal}
         onCreateSession={createNewSession}
         existingSessions={sessionsForValidation}
+        duplicatingSessionId={duplicatingSessionId}
         editAgentModalOpen={editAgentModalOpen}
         onCloseEditAgentModal={handleCloseEditAgentModal}
         onSaveEditAgent={handleSaveEditAgent}
@@ -8599,7 +8620,6 @@ function MaestroConsoleInner() {
         getDocumentTaskCount={getDocumentTaskCount}
         onAutoRunRefresh={handleAutoRunRefresh}
         onOpenMarketplace={handleOpenMarketplace}
-        onOpenDocumentGraph={() => setIsGraphViewOpen(true)}
         tabSwitcherOpen={tabSwitcherOpen}
         onCloseTabSwitcher={handleCloseTabSwitcher}
         onTabSelect={handleUtilityTabSelect}
@@ -8753,35 +8773,38 @@ function MaestroConsoleInner() {
         />
       )}
 
-      {/* --- DOCUMENT GRAPH VIEW --- */}
-      <DocumentGraphView
-        isOpen={isGraphViewOpen}
-        onClose={() => setIsGraphViewOpen(false)}
-        theme={theme}
-        rootPath={activeSession?.cwd ?? ''}
-        onDocumentOpen={(filePath) => {
-          // Open the document in file preview
-          const fullPath = `${activeSession?.cwd ?? ''}/${filePath}`;
-          window.maestro.fs.readFile(fullPath).then((content) => {
-            if (content !== null) {
-              setPreviewFile({ name: filePath.split('/').pop() || filePath, content, path: fullPath });
-            }
-          });
-          setIsGraphViewOpen(false);
-        }}
-        onExternalLinkOpen={(url) => {
-          // Open external URL in default browser
-          window.maestro.shell.openExternal(url);
-        }}
-        focusFilePath={graphFocusFilePath}
-        onFocusFileConsumed={() => setGraphFocusFilePath(undefined)}
-        savedLayoutMode={documentGraphLayoutMode}
-        onLayoutModeChange={settings.setDocumentGraphLayoutMode}
-        defaultShowExternalLinks={documentGraphShowExternalLinks}
-        onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
-        defaultMaxNodes={documentGraphMaxNodes}
-        sshRemoteId={activeSession?.sshRemoteId}
-      />
+      {/* --- DOCUMENT GRAPH VIEW (Mind Map) --- */}
+      {/* Only render when a focus file is provided - mind map requires a center document */}
+      {graphFocusFilePath && (
+        <DocumentGraphView
+          isOpen={isGraphViewOpen}
+          onClose={() => {
+            setIsGraphViewOpen(false);
+            setGraphFocusFilePath(undefined);
+          }}
+          theme={theme}
+          rootPath={activeSession?.cwd ?? ''}
+          onDocumentOpen={(filePath) => {
+            // Open the document in file preview
+            const fullPath = `${activeSession?.cwd ?? ''}/${filePath}`;
+            window.maestro.fs.readFile(fullPath, activeSession?.sshRemoteId).then((content) => {
+              if (content !== null) {
+                setPreviewFile({ name: filePath.split('/').pop() || filePath, content, path: fullPath });
+              }
+            });
+            setIsGraphViewOpen(false);
+          }}
+          onExternalLinkOpen={(url) => {
+            // Open external URL in default browser
+            window.maestro.shell.openExternal(url);
+          }}
+          focusFilePath={graphFocusFilePath}
+          defaultShowExternalLinks={documentGraphShowExternalLinks}
+          onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
+          defaultMaxNodes={documentGraphMaxNodes}
+          sshRemoteId={activeSession?.sshRemoteId}
+        />
+      )}
 
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
 
@@ -8911,6 +8934,9 @@ function MaestroConsoleInner() {
             groupChatStates={groupChatStates}
             allGroupChatParticipantStates={allGroupChatParticipantStates}
             sidebarContainerRef={sidebarContainerRef}
+            // Duplicate agent handlers
+            onNewAgentSession={addNewSession}
+            setDuplicatingSessionId={setDuplicatingSessionId}
           />
         </ErrorBoundary>
       )}
@@ -9041,6 +9067,7 @@ function MaestroConsoleInner() {
         slashCommands={allSlashCommands}
         selectedSlashCommandIndex={selectedSlashCommandIndex}
         previewFile={previewFile}
+        filePreviewLoading={filePreviewLoading}
         markdownEditMode={markdownEditMode}
         shortcuts={shortcuts}
         rightPanelOpen={rightPanelOpen}
@@ -9442,7 +9469,7 @@ function MaestroConsoleInner() {
 
           try {
             const fullPath = `${activeSession.fullPath}/${relativePath}`;
-            const content = await window.maestro.fs.readFile(fullPath);
+            const content = await window.maestro.fs.readFile(fullPath, activeSession.sshRemoteId);
             const newFile = {
               name: filename,
               content,
@@ -9690,7 +9717,7 @@ function MaestroConsoleInner() {
 
               try {
                 const fullPath = `${activeSession.fullPath}/${relativePath}`;
-                const content = await window.maestro.fs.readFile(fullPath);
+                const content = await window.maestro.fs.readFile(fullPath, activeSession.sshRemoteId);
                 const newFile = {
                   name: filename,
                   content,
@@ -9713,8 +9740,6 @@ function MaestroConsoleInner() {
                 console.error('[onFileClick] Failed to read file:', error);
               }
             }}
-            isGraphViewOpen={isGraphViewOpen}
-            onOpenGraphView={() => setIsGraphViewOpen(true)}
             onFocusFileInGraph={(relativePath: string) => {
               setGraphFocusFilePath(relativePath);
               setIsGraphViewOpen(true);

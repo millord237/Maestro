@@ -284,8 +284,6 @@ export interface UseSettingsReturn {
   setColorBlindMode: (value: boolean) => void;
 
   // Document Graph settings
-  documentGraphLayoutMode: 'force' | 'hierarchical';
-  setDocumentGraphLayoutMode: (value: 'force' | 'hierarchical') => void;
   documentGraphShowExternalLinks: boolean;
   setDocumentGraphShowExternalLinks: (value: boolean) => void;
   documentGraphMaxNodes: number;
@@ -296,6 +294,10 @@ export interface UseSettingsReturn {
   setStatsCollectionEnabled: (value: boolean) => void;
   defaultStatsTimeRange: 'day' | 'week' | 'month' | 'year' | 'all';
   setDefaultStatsTimeRange: (value: 'day' | 'week' | 'month' | 'year' | 'all') => void;
+
+  // Power management settings
+  preventSleepEnabled: boolean;
+  setPreventSleepEnabled: (value: boolean) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -408,13 +410,15 @@ export function useSettings(): UseSettingsReturn {
   const [colorBlindMode, setColorBlindModeState] = useState(false);
 
   // Document Graph settings
-  const [documentGraphLayoutMode, setDocumentGraphLayoutModeState] = useState<'force' | 'hierarchical'>('force');
   const [documentGraphShowExternalLinks, setDocumentGraphShowExternalLinksState] = useState(false); // Default: false
   const [documentGraphMaxNodes, setDocumentGraphMaxNodesState] = useState(200); // Default: 200
 
   // Stats settings
   const [statsCollectionEnabled, setStatsCollectionEnabledState] = useState(true); // Default: enabled
   const [defaultStatsTimeRange, setDefaultStatsTimeRangeState] = useState<'day' | 'week' | 'month' | 'year' | 'all'>('week'); // Default: week
+
+  // Power management settings
+  const [preventSleepEnabled, setPreventSleepEnabledState] = useState(false); // Default: disabled
 
   // Wrapper functions that persist to electron-store
   // PERF: All wrapped in useCallback to prevent re-renders
@@ -1098,12 +1102,6 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('colorBlindMode', value);
   }, []);
 
-  // Document Graph layout mode
-  const setDocumentGraphLayoutMode = useCallback((value: 'force' | 'hierarchical') => {
-    setDocumentGraphLayoutModeState(value);
-    window.maestro.settings.set('documentGraphLayoutMode', value);
-  }, []);
-
   // Document Graph show external links
   const setDocumentGraphShowExternalLinks = useCallback((value: boolean) => {
     setDocumentGraphShowExternalLinksState(value);
@@ -1128,6 +1126,13 @@ export function useSettings(): UseSettingsReturn {
   const setDefaultStatsTimeRange = useCallback((value: 'day' | 'week' | 'month' | 'year' | 'all') => {
     setDefaultStatsTimeRangeState(value);
     window.maestro.settings.set('defaultStatsTimeRange', value);
+  }, []);
+
+  // Sleep prevention enabled (persists to settings AND calls main process)
+  const setPreventSleepEnabled = useCallback(async (value: boolean) => {
+    setPreventSleepEnabledState(value);
+    await window.maestro.settings.set('preventSleepEnabled', value);
+    await window.maestro.power.setEnabled(value);
   }, []);
 
   // Load settings from electron-store on mount
@@ -1188,11 +1193,11 @@ export function useSettings(): UseSettingsReturn {
       const savedContextManagementSettings = await window.maestro.settings.get('contextManagementSettings');
       const savedKeyboardMasteryStats = await window.maestro.settings.get('keyboardMasteryStats');
       const savedColorBlindMode = await window.maestro.settings.get('colorBlindMode');
-      const savedDocumentGraphLayoutMode = await window.maestro.settings.get('documentGraphLayoutMode');
       const savedDocumentGraphShowExternalLinks = await window.maestro.settings.get('documentGraphShowExternalLinks');
       const savedDocumentGraphMaxNodes = await window.maestro.settings.get('documentGraphMaxNodes');
       const savedStatsCollectionEnabled = await window.maestro.settings.get('statsCollectionEnabled');
       const savedDefaultStatsTimeRange = await window.maestro.settings.get('defaultStatsTimeRange');
+      const savedPreventSleepEnabled = await window.maestro.settings.get('preventSleepEnabled');
 
       if (savedEnterToSendAI !== undefined) setEnterToSendAIState(savedEnterToSendAI as boolean);
       if (savedEnterToSendTerminal !== undefined) setEnterToSendTerminalState(savedEnterToSendTerminal as boolean);
@@ -1416,12 +1421,6 @@ export function useSettings(): UseSettingsReturn {
       if (savedColorBlindMode !== undefined) setColorBlindModeState(savedColorBlindMode as boolean);
 
       // Document Graph settings
-      if (savedDocumentGraphLayoutMode !== undefined) {
-        const validModes = ['force', 'hierarchical'];
-        if (validModes.includes(savedDocumentGraphLayoutMode as string)) {
-          setDocumentGraphLayoutModeState(savedDocumentGraphLayoutMode as 'force' | 'hierarchical');
-        }
-      }
       if (savedDocumentGraphShowExternalLinks !== undefined) {
         setDocumentGraphShowExternalLinksState(savedDocumentGraphShowExternalLinks as boolean);
       }
@@ -1441,6 +1440,13 @@ export function useSettings(): UseSettingsReturn {
         if (validTimeRanges.includes(savedDefaultStatsTimeRange as string)) {
           setDefaultStatsTimeRangeState(savedDefaultStatsTimeRange as 'day' | 'week' | 'month' | 'year' | 'all');
         }
+      }
+
+      // Power management settings
+      // Note: The main process loads this setting on its own at startup from settingsStore,
+      // so we only need to sync the renderer state here.
+      if (savedPreventSleepEnabled !== undefined) {
+        setPreventSleepEnabledState(savedPreventSleepEnabled as boolean);
       }
 
       } catch (error) {
@@ -1581,8 +1587,6 @@ export function useSettings(): UseSettingsReturn {
     getUnacknowledgedKeyboardMasteryLevel,
     colorBlindMode,
     setColorBlindMode,
-    documentGraphLayoutMode,
-    setDocumentGraphLayoutMode,
     documentGraphShowExternalLinks,
     setDocumentGraphShowExternalLinks,
     documentGraphMaxNodes,
@@ -1591,6 +1595,8 @@ export function useSettings(): UseSettingsReturn {
     setStatsCollectionEnabled,
     defaultStatsTimeRange,
     setDefaultStatsTimeRange,
+    preventSleepEnabled,
+    setPreventSleepEnabled,
   }), [
     // State values
     settingsLoaded,
@@ -1710,8 +1716,6 @@ export function useSettings(): UseSettingsReturn {
     getUnacknowledgedKeyboardMasteryLevel,
     colorBlindMode,
     setColorBlindMode,
-    documentGraphLayoutMode,
-    setDocumentGraphLayoutMode,
     documentGraphShowExternalLinks,
     setDocumentGraphShowExternalLinks,
     documentGraphMaxNodes,
@@ -1720,5 +1724,7 @@ export function useSettings(): UseSettingsReturn {
     setStatsCollectionEnabled,
     defaultStatsTimeRange,
     setDefaultStatsTimeRange,
+    preventSleepEnabled,
+    setPreventSleepEnabled,
   ]);
 }

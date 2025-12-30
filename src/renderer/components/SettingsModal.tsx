@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database, Server } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database, Server, Battery } from 'lucide-react';
 import { useSettings } from '../hooks';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
@@ -238,13 +238,14 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
     setDocumentGraphShowExternalLinks,
     documentGraphMaxNodes,
     setDocumentGraphMaxNodes,
-    documentGraphLayoutMode,
-    setDocumentGraphLayoutMode,
     // Stats settings
     statsCollectionEnabled,
     setStatsCollectionEnabled,
     defaultStatsTimeRange,
     setDefaultStatsTimeRange,
+    // Power management settings
+    preventSleepEnabled,
+    setPreventSleepEnabled,
   } = useSettings();
 
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands' | 'ssh'>('general');
@@ -1171,6 +1172,71 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 theme={theme}
               />
 
+              {/* Sleep Prevention */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Battery className="w-3 h-3" />
+                  Power
+                </label>
+                <div
+                  className="p-3 rounded border space-y-3"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setPreventSleepEnabled(!preventSleepEnabled)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setPreventSleepEnabled(!preventSleepEnabled);
+                      }
+                    }}
+                  >
+                    <div className="flex-1 pr-3">
+                      <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                        Prevent sleep while working
+                      </div>
+                      <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                        Keeps your computer awake when AI agents are busy or Auto Run is active
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreventSleepEnabled(!preventSleepEnabled);
+                      }}
+                      className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                      style={{
+                        backgroundColor: preventSleepEnabled ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={preventSleepEnabled}
+                    >
+                      <span
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          preventSleepEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Linux note */}
+                  {navigator.platform.toLowerCase().includes('linux') && (
+                    <div
+                      className="text-xs p-2 rounded"
+                      style={{
+                        backgroundColor: theme.colors.warning + '15',
+                        color: theme.colors.warning,
+                      }}
+                    >
+                      Note: May have limited support on some Linux desktop environments.
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Check for Updates on Startup */}
               <SettingCheckbox
                 icon={Download}
@@ -1211,62 +1277,65 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                   Context Window Warnings
                 </label>
                 <div
-                  className="flex items-center justify-between p-3 rounded border cursor-pointer hover:bg-opacity-10"
+                  className="p-3 rounded border space-y-3"
                   style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
-                  onClick={() => updateContextManagementSettings({
-                    contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
-                  })}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      updateContextManagementSettings({
-                        contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
-                      });
-                    }
-                  }}
                 >
-                  <div className="flex-1 pr-3">
-                    <div className="font-medium" style={{ color: theme.colors.textMain }}>
-                      Show context consumption warnings
-                    </div>
-                    <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
-                      Display warning banners when context window usage reaches configurable thresholds
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateContextManagementSettings({
-                        contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
-                      });
+                  {/* Enable/Disable Toggle */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => updateContextManagementSettings({
+                      contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                    })}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        updateContextManagementSettings({
+                          contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                        });
+                      }
                     }}
-                    className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
-                    style={{
-                      backgroundColor: contextManagementSettings.contextWarningsEnabled ? theme.colors.accent : theme.colors.bgActivity,
-                    }}
-                    role="switch"
-                    aria-checked={contextManagementSettings.contextWarningsEnabled}
                   >
-                    <span
-                      className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                        contextManagementSettings.contextWarningsEnabled ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
+                    <div className="flex-1 pr-3">
+                      <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                        Show context consumption warnings
+                      </div>
+                      <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                        Display warning banners when context window usage reaches configurable thresholds
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateContextManagementSettings({
+                          contextWarningsEnabled: !contextManagementSettings.contextWarningsEnabled
+                        });
+                      }}
+                      className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                      style={{
+                        backgroundColor: contextManagementSettings.contextWarningsEnabled ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={contextManagementSettings.contextWarningsEnabled}
+                    >
+                      <span
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          contextManagementSettings.contextWarningsEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
 
-                {/* Threshold Sliders (ghosted when disabled) */}
-                <div
-                  className="mt-3 p-3 rounded border space-y-4"
-                  style={{
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.bgMain,
-                    opacity: contextManagementSettings.contextWarningsEnabled ? 1 : 0.4,
-                    pointerEvents: contextManagementSettings.contextWarningsEnabled ? 'auto' : 'none',
-                  }}
-                >
+                  {/* Threshold Sliders (ghosted when disabled) */}
+                  <div
+                    className="space-y-4 pt-3 border-t"
+                    style={{
+                      borderColor: theme.colors.border,
+                      opacity: contextManagementSettings.contextWarningsEnabled ? 1 : 0.4,
+                      pointerEvents: contextManagementSettings.contextWarningsEnabled ? 'auto' : 'none',
+                    }}
+                  >
                   {/* Yellow Warning Threshold */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
@@ -1345,6 +1414,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                         background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} ${((contextManagementSettings.contextWarningRedThreshold - 50) / 45) * 100}%, ${theme.colors.bgActivity} 100%)`,
                       }}
                     />
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1522,54 +1592,6 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                   className="p-3 rounded border space-y-3"
                   style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
                 >
-                  {/* Default Layout Mode */}
-                  <div>
-                    <label className="block text-xs opacity-60 mb-2">Default layout mode</label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setDocumentGraphLayoutMode('force')}
-                        className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
-                          documentGraphLayoutMode === 'force' ? 'ring-2' : ''
-                        }`}
-                        style={{
-                          backgroundColor: documentGraphLayoutMode === 'force'
-                            ? theme.colors.accent + '20'
-                            : theme.colors.bgActivity,
-                          color: documentGraphLayoutMode === 'force'
-                            ? theme.colors.accent
-                            : theme.colors.textDim,
-                          borderColor: documentGraphLayoutMode === 'force'
-                            ? theme.colors.accent
-                            : 'transparent',
-                        }}
-                      >
-                        Force-Directed
-                      </button>
-                      <button
-                        onClick={() => setDocumentGraphLayoutMode('hierarchical')}
-                        className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-colors ${
-                          documentGraphLayoutMode === 'hierarchical' ? 'ring-2' : ''
-                        }`}
-                        style={{
-                          backgroundColor: documentGraphLayoutMode === 'hierarchical'
-                            ? theme.colors.accent + '20'
-                            : theme.colors.bgActivity,
-                          color: documentGraphLayoutMode === 'hierarchical'
-                            ? theme.colors.accent
-                            : theme.colors.textDim,
-                          borderColor: documentGraphLayoutMode === 'hierarchical'
-                            ? theme.colors.accent
-                            : 'transparent',
-                        }}
-                      >
-                        Hierarchical
-                      </button>
-                    </div>
-                    <p className="text-xs opacity-50 mt-1">
-                      Layout algorithm used when opening the Document Graph.
-                    </p>
-                  </div>
-
                   {/* Show External Links */}
                   <div className="flex items-center justify-between">
                     <div>

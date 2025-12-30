@@ -13,6 +13,7 @@ import {
 import { getSshRemoteConfig, createSshRemoteStoreAdapter } from '../../utils/ssh-remote-resolver';
 import { buildSshCommand } from '../../utils/ssh-command-builder';
 import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../shared/types';
+import { powerManager } from '../../power-manager';
 
 const LOG_CONTEXT = '[ProcessManager]';
 
@@ -99,6 +100,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       sessionCustomEnvVars?: Record<string, string>; // Session-specific env vars
       sessionCustomModel?: string;    // Session-specific model selection
       sessionCustomContextWindow?: number; // Session-specific context window size
+      // Per-session SSH remote config (takes precedence over agent-level SSH config)
+      sessionSshRemoteConfig?: {
+        enabled: boolean;
+        remoteId: string | null;
+        workingDirOverride?: string;
+      };
       // Stats tracking options
       querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
       tabId?: string; // Tab ID for multi-tab tracking
@@ -224,13 +231,28 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 
       // Only consider SSH remote for non-terminal AI agent sessions
       if (config.toolType !== 'terminal') {
-        // Get agent-specific SSH config from agent configs store
-        const agentSshConfig = agentConfigValues.sshRemote as AgentSshRemoteConfig | undefined;
+        // SSH config priority: session-level > agent-level > global default
+        // Session-level config takes absolute precedence when provided
+        let effectiveSshConfig: AgentSshRemoteConfig | undefined;
+
+        if (config.sessionSshRemoteConfig) {
+          // Session-level SSH config provided - use it directly
+          // This allows each session to have its own SSH binding independent of agent-level config
+          effectiveSshConfig = config.sessionSshRemoteConfig;
+          logger.debug(`Using session-level SSH config`, LOG_CONTEXT, {
+            sessionId: config.sessionId,
+            enabled: effectiveSshConfig.enabled,
+            remoteId: effectiveSshConfig.remoteId,
+          });
+        } else {
+          // Fall back to agent-level SSH config from agent configs store
+          effectiveSshConfig = agentConfigValues.sshRemote as AgentSshRemoteConfig | undefined;
+        }
 
         // Resolve effective SSH remote configuration
         const sshStoreAdapter = createSshRemoteStoreAdapter(settingsStore);
         const sshResult = getSshRemoteConfig(sshStoreAdapter, {
-          agentSshConfig,
+          agentSshConfig: effectiveSshConfig,
           agentId: config.toolType,
         });
 
@@ -238,12 +260,24 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           // SSH remote is configured - wrap the command for remote execution
           sshRemoteUsed = sshResult.config;
 
+          // For SSH execution, we need to include the prompt in the args here
+          // because ProcessManager.spawn() won't add it (we pass prompt: undefined for SSH)
+          // The prompt must be added with the '--' separator (unless noPromptSeparator is true)
+          let sshArgs = finalArgs;
+          if (config.prompt) {
+            if (agent?.noPromptSeparator) {
+              sshArgs = [...finalArgs, config.prompt];
+            } else {
+              sshArgs = [...finalArgs, '--', config.prompt];
+            }
+          }
+
           // Build the SSH command that wraps the agent execution
           // The cwd is the local project path which may not exist on remote
           // Remote should use remoteWorkingDir from SSH config if set
           const sshCommand = buildSshCommand(sshResult.config, {
             command: config.command,
-            args: finalArgs,
+            args: sshArgs,
             // Use the local cwd - the SSH command builder will handle remote path resolution
             // If SSH config has remoteWorkingDir, that takes precedence
             cwd: sshResult.config.remoteWorkingDir ? undefined : config.cwd,
@@ -273,7 +307,9 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         // When using SSH, disable PTY (SSH provides its own terminal handling)
         // and env vars are passed via the remote command string
         requiresPty: sshRemoteUsed ? false : agent?.requiresPty,
-        prompt: config.prompt,
+        // When using SSH, the prompt was already added to sshArgs above before
+        // building the SSH command, so don't let ProcessManager add it again
+        prompt: sshRemoteUsed ? undefined : config.prompt,
         shell: shellToUse,
         shellArgs: shellArgsStr,         // Shell-specific CLI args (for terminal sessions)
         shellEnvVars: shellEnvVars,      // Shell-specific env vars (for terminal sessions)
@@ -284,6 +320,9 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         noPromptSeparator: agent?.noPromptSeparator, // OpenCode doesn't support '--' before prompt
         // Stats tracking: use cwd as projectPath if not explicitly provided
         projectPath: config.cwd,
+        // SSH remote context (for SSH-specific error messages)
+        sshRemoteId: sshRemoteUsed?.id,
+        sshRemoteHost: sshRemoteUsed?.host,
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {
@@ -291,6 +330,12 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         pid: result.pid,
         ...(sshRemoteUsed && { sshRemoteId: sshRemoteUsed.id, sshRemoteName: sshRemoteUsed.name })
       });
+
+      // Add power block reason for AI sessions (not terminals)
+      // This prevents system sleep while AI is processing
+      if (config.toolType !== 'terminal') {
+        powerManager.addBlockReason(`session:${config.sessionId}`);
+      }
 
       // Emit SSH remote status event for renderer to update session state
       // This is emitted for all spawns (sshRemote will be null for local execution)

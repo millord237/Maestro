@@ -52,10 +52,11 @@ export interface UseAgentExecutionReturn {
       customEnvVars?: Record<string, string>;
       customModel?: string;
       customContextWindow?: number;
+      sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string };
     }
   ) => Promise<AgentSpawnResult>;
   /** Ref to spawnBackgroundSynopsis for use in callbacks that need latest version */
-  spawnBackgroundSynopsisRef: React.MutableRefObject<((sessionId: string, cwd: string, resumeAgentSessionId: string, prompt: string, toolType?: ToolType, sessionConfig?: { customPath?: string; customArgs?: string; customEnvVars?: Record<string, string>; customModel?: string; customContextWindow?: number; }) => Promise<AgentSpawnResult>) | null>;
+  spawnBackgroundSynopsisRef: React.MutableRefObject<((sessionId: string, cwd: string, resumeAgentSessionId: string, prompt: string, toolType?: ToolType, sessionConfig?: { customPath?: string; customArgs?: string; customEnvVars?: Record<string, string>; customModel?: string; customContextWindow?: number; sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }; }) => Promise<AgentSpawnResult>) | null>;
   /** Ref to spawnAgentWithPrompt for use in callbacks that need latest version */
   spawnAgentWithPromptRef: React.MutableRefObject<((prompt: string) => Promise<AgentSpawnResult>) | null>;
   /** Show flash notification (auto-dismisses after 2 seconds) */
@@ -317,6 +318,8 @@ export function useAgentExecution(
           sessionCustomEnvVars: session.customEnvVars,
           sessionCustomModel: session.customModel,
           sessionCustomContextWindow: session.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: session.sessionSshRemoteConfig,
         }).catch(() => {
           cleanup();
           resolve({ success: false });
@@ -359,6 +362,7 @@ export function useAgentExecution(
       customEnvVars?: Record<string, string>;
       customModel?: string;
       customContextWindow?: number;
+      sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string };
     }
   ): Promise<AgentSpawnResult> => {
     try {
@@ -426,6 +430,8 @@ export function useAgentExecution(
           sessionCustomEnvVars: sessionConfig?.customEnvVars,
           sessionCustomModel: sessionConfig?.customModel,
           sessionCustomContextWindow: sessionConfig?.customContextWindow,
+          // Per-session SSH remote config (takes precedence over agent-level SSH config)
+          sessionSshRemoteConfig: sessionConfig?.sessionSshRemoteConfig,
         }).catch(() => {
           cleanup();
           resolve({ success: false });

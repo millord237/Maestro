@@ -10,6 +10,7 @@ import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './par
 import { aggregateModelUsage } from './parsers/usage-aggregator';
 import { matchSshErrorPattern } from './parsers/error-patterns';
 import type { AgentError } from '../shared/types';
+import { detectNodeVersionManagerBinPaths } from '../shared/pathUtils';
 import { getAgentCapabilities } from './agent-capabilities';
 
 // Re-export parser types for consumers
@@ -22,6 +23,10 @@ export type { AgentError, AgentErrorType } from '../shared/types';
 // Re-export usage types for backwards compatibility
 export type { UsageStats, ModelStats } from './parsers/usage-aggregator';
 export { aggregateModelUsage } from './parsers/usage-aggregator';
+
+// Export Node version manager detection for testing
+// detectNodeVersionManagerBinPaths is now in shared/pathUtils.ts
+export { detectNodeVersionManagerBinPaths, buildUnixBasePath };
 
 /**
  * Maximum buffer size for stdout/stderr error detection buffers.
@@ -59,6 +64,9 @@ interface ProcessConfig {
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
   customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
   noPromptSeparator?: boolean; // If true, don't add '--' before the prompt (e.g., OpenCode doesn't support it)
+  // SSH remote execution context
+  sshRemoteId?: string; // ID of SSH remote being used (for SSH-specific error messages)
+  sshRemoteHost?: string; // Hostname of SSH remote (for error messages)
   // Stats tracking options
   querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
   tabId?: string; // Tab ID for multi-tab tracking
@@ -101,6 +109,9 @@ interface ManagedProcess {
   querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
   tabId?: string; // Tab ID for multi-tab tracking
   projectPath?: string; // Project path for stats tracking
+  // SSH remote context (for SSH-specific error messages)
+  sshRemoteId?: string; // ID of SSH remote being used
+  sshRemoteHost?: string; // Hostname of SSH remote
 }
 
 /**
@@ -184,6 +195,24 @@ function normalizeCodexUsage(
 
 // UsageStats, ModelStats, and aggregateModelUsage are now imported from ./parsers/usage-aggregator
 // and re-exported above for backwards compatibility
+
+/**
+ * Build the base PATH for macOS/Linux with detected Node version manager paths.
+ * Prepends version manager paths to ensure node/npm are available from GUI apps.
+ *
+ * Uses detectNodeVersionManagerBinPaths from shared/pathUtils.ts for consistency
+ * with agent-detector.ts.
+ */
+function buildUnixBasePath(): string {
+  const standardPaths = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+  const versionManagerPaths = detectNodeVersionManagerBinPaths();
+
+  if (versionManagerPaths.length > 0) {
+    return versionManagerPaths.join(':') + ':' + standardPaths;
+  }
+
+  return standardPaths;
+}
 
 /**
  * Build a stream-json message for Claude Code with images and text
@@ -409,9 +438,10 @@ export class ProcessManager extends EventEmitter {
         let ptyEnv: NodeJS.ProcessEnv;
         if (isTerminal) {
           // Platform-specific base PATH for terminal sessions
+          // On Unix, include detected Node version manager paths (nvm, fnm, volta, etc.)
           const basePath = process.platform === 'win32'
             ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32;${process.env.SystemRoot || 'C:\\Windows'};${process.env.ProgramFiles || 'C:\\Program Files'}\\Git\\cmd`
-            : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+            : buildUnixBasePath();
 
           ptyEnv = {
             HOME: process.env.HOME || process.env.USERPROFILE,
@@ -521,7 +551,8 @@ export class ProcessManager extends EventEmitter {
           ].join(';');
           checkPath = path.join(appData, 'npm');
         } else {
-          standardPaths = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+          // Include detected Node version manager paths (nvm, fnm, volta, etc.)
+          standardPaths = buildUnixBasePath();
           checkPath = '/opt/homebrew/bin';
         }
 
@@ -707,6 +738,9 @@ export class ProcessManager extends EventEmitter {
           querySource: config.querySource,
           tabId: config.tabId,
           projectPath: config.projectPath,
+          // SSH remote context (for SSH-specific error messages)
+          sshRemoteId: config.sshRemoteId,
+          sshRemoteHost: config.sshRemoteHost,
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -763,24 +797,33 @@ export class ProcessManager extends EventEmitter {
               // Accumulate stdout for error detection at exit (with size limit to prevent memory exhaustion)
               managedProcess.stdoutBuffer = appendToBuffer(managedProcess.stdoutBuffer || '', line + '\n');
 
-              // Check for errors using the parser (if available)
+              // Check for agent-specific errors using the parser (if available)
               if (outputParser && !managedProcess.errorEmitted) {
                 const agentError = outputParser.detectErrorFromLine(line);
                 if (agentError) {
                   managedProcess.errorEmitted = true;
                   agentError.sessionId = sessionId;
+
+                  // Enhance auth error messages with SSH context when running via remote
+                  if (agentError.type === 'auth_expired' && managedProcess.sshRemoteHost) {
+                    const hostInfo = managedProcess.sshRemoteHost;
+                    agentError.message = `Authentication failed on remote host "${hostInfo}". SSH into the remote and run "claude login" to re-authenticate.`;
+                  }
+
                   logger.debug('[ProcessManager] Error detected from output', 'ProcessManager', {
                     sessionId,
                     errorType: agentError.type,
                     errorMessage: agentError.message,
+                    isRemote: !!managedProcess.sshRemoteId,
                   });
                   this.emit('agent-error', sessionId, agentError);
                 }
               }
 
-              // Check for SSH-specific errors (when running via SSH remote)
-              // These are checked separately because they can occur with any agent
-              if (!managedProcess.errorEmitted) {
+              // Check for SSH-specific errors (only when running via SSH remote)
+              // These are checked after agent patterns and catch SSH transport errors
+              // like connection refused, permission denied, command not found, etc.
+              if (!managedProcess.errorEmitted && managedProcess.sshRemoteId) {
                 const sshError = matchSshErrorPattern(line);
                 if (sshError) {
                   managedProcess.errorEmitted = true;
@@ -1022,9 +1065,9 @@ export class ProcessManager extends EventEmitter {
               }
             }
 
-            // Check for SSH-specific errors in stderr (when running via SSH remote)
+            // Check for SSH-specific errors in stderr (only when running via SSH remote)
             // SSH errors typically appear on stderr (connection refused, permission denied, etc.)
-            if (!managedProcess.errorEmitted) {
+            if (!managedProcess.errorEmitted && managedProcess.sshRemoteId) {
               const sshError = matchSshErrorPattern(stderrData);
               if (sshError) {
                 managedProcess.errorEmitted = true;
@@ -1150,9 +1193,9 @@ export class ProcessManager extends EventEmitter {
             }
           }
 
-          // Check for SSH-specific errors at exit (if not already emitted)
+          // Check for SSH-specific errors at exit (only when running via SSH remote)
           // This catches SSH errors that may not have been detected during streaming
-          if (!managedProcess.errorEmitted && (code !== 0 || managedProcess.stderrBuffer)) {
+          if (!managedProcess.errorEmitted && managedProcess.sshRemoteId && (code !== 0 || managedProcess.stderrBuffer)) {
             const stderrToCheck = managedProcess.stderrBuffer || '';
             const sshError = matchSshErrorPattern(stderrToCheck);
             if (sshError) {
@@ -1485,9 +1528,10 @@ export class ProcessManager extends EventEmitter {
       }
 
       // Platform-specific base PATH
+      // On Unix, include detected Node version manager paths (nvm, fnm, volta, etc.)
       const basePath = isWindows
         ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32;${process.env.SystemRoot || 'C:\\Windows'};${process.env.ProgramFiles || 'C:\\Program Files'}\\Git\\cmd`
-        : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+        : buildUnixBasePath();
 
       // Pass minimal environment with a base PATH for essential system commands.
       // Shell startup files will prepend user paths to this.

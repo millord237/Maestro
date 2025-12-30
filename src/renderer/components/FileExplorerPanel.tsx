@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, EyeOff, GitGraph, Target, Copy, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, EyeOff, Target, Copy, ExternalLink, Server } from 'lucide-react';
 import type { Session, Theme, FocusArea } from '../types';
 import type { FileNode } from '../types/fileTree';
 import type { FileTreeChanges } from '../utils/fileExplorer';
@@ -62,7 +62,6 @@ interface FileExplorerPanelProps {
   onShowFlash?: (message: string) => void;
   showHiddenFiles: boolean;
   setShowHiddenFiles: (value: boolean) => void;
-  onOpenGraphView?: () => void;
   /** Callback to open graph view focused on a specific file (relative path to session.cwd) */
   onFocusFileInGraph?: (relativePath: string) => void;
 }
@@ -73,7 +72,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
     filteredFileTree, selectedFileIndex, setSelectedFileIndex, activeFocus, activeRightTab,
     previewFile, setActiveFocus, fileTreeFilterInputRef, toggleFolder, handleFileClick, expandAllFolders,
     collapseAllFolders, updateSessionWorkingDirectory, refreshFileTree, setSessions, onAutoRefreshChange, onShowFlash,
-    showHiddenFiles, setShowHiddenFiles, onOpenGraphView, onFocusFileInGraph
+    showHiddenFiles, setShowHiddenFiles, onFocusFileInGraph
   } = props;
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -430,7 +429,7 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
   }, [session.fullPath, session.changedFiles, session.fileExplorerExpanded, session.id, previewFile?.path, activeFocus, activeRightTab, selectedFileIndex, theme, toggleFolder, setSessions, setSelectedFileIndex, setActiveFocus, handleFileClick, fileTreeFilter, handleContextMenu]);
 
   return (
-    <div className="space-y-2 relative">
+    <div className="flex flex-col h-full relative">
       {/* File Tree Filter */}
       {fileTreeFilterOpen && (
         <div className="mb-3 pt-4">
@@ -454,30 +453,32 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
           backgroundColor: theme.colors.bgSidebar
         }}
       >
-        <span
-          className="opacity-50 min-w-0 flex-1 overflow-hidden whitespace-nowrap cursor-pointer"
-          style={{
-            direction: 'rtl',
-            textOverflow: 'ellipsis',
-            textAlign: 'left',
-          }}
-          title={session.cwd}
-          onDoubleClick={() => {
-            navigator.clipboard.writeText(session.cwd);
-            onShowFlash?.('Path copied to clipboard');
-          }}
-        ><bdi>{session.cwd}</bdi></span>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {onOpenGraphView && (
-            <button
-              onClick={onOpenGraphView}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
-              title="Document Graph"
-              style={{ color: theme.colors.textDim }}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+          {/* SSH Remote indicator */}
+          {session.sshRemote && (
+            <span
+              className="flex-shrink-0"
+              title={`SSH: ${session.sshRemote.name} (${session.sshRemote.host})`}
+              style={{ color: theme.colors.accent }}
             >
-              <GitGraph className="w-3.5 h-3.5" />
-            </button>
+              <Server className="w-3.5 h-3.5" />
+            </span>
           )}
+          <span
+            className="opacity-50 min-w-0 flex-1 overflow-hidden whitespace-nowrap cursor-pointer"
+            style={{
+              direction: 'rtl',
+              textOverflow: 'ellipsis',
+              textAlign: 'left',
+            }}
+            title={session.sshRemote ? `${session.sshRemote.host}:${session.cwd}` : session.cwd}
+            onDoubleClick={() => {
+              navigator.clipboard.writeText(session.cwd);
+              onShowFlash?.('Path copied to clipboard');
+            }}
+          ><bdi>{session.cwd}</bdi></span>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setShowHiddenFiles(!showHiddenFiles)}
             className="p-1 rounded hover:bg-white/10 transition-colors"
@@ -650,10 +651,10 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
       {/* Status bar at bottom */}
       {session.fileTreeStats && (
         <div
-          className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-1.5 text-xs border-t mt-2"
+          className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-1.5 text-xs rounded mt-3 mb-[7px]"
           style={{
             backgroundColor: theme.colors.bgActivity,
-            borderColor: theme.colors.border,
+            border: `1px solid ${theme.colors.border}`,
             color: theme.colors.textDim
           }}
         >

@@ -9,6 +9,7 @@ import { WebServer } from './web-server';
 import { AgentDetector } from './agent-detector';
 import { logger } from './utils/logger';
 import { tunnelManager } from './tunnel-manager';
+import { powerManager } from './power-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
@@ -24,6 +25,7 @@ import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
 import { readDirRemote, readFileRemote, statRemote, directorySizeRemote } from './utils/remote-fs';
+import { checkWslEnvironment } from './utils/wslDetector';
 
 // ============================================================================
 // Custom Storage Location Configuration
@@ -737,6 +739,9 @@ app.whenReady().then(async () => {
     platform: process.platform,
     logLevel
   });
+
+  // Check for WSL + Windows mount issues early
+  checkWslEnvironment(process.cwd());
 
   // Initialize core services
   logger.info('Initializing core services', 'Startup');
@@ -2582,6 +2587,10 @@ function setupProcessListeners() {
     });
 
     processManager.on('exit', (sessionId: string, code: number) => {
+      // Remove power block reason for this session
+      // This allows system sleep when no AI sessions are active
+      powerManager.removeBlockReason(`session:${sessionId}`);
+
       // Handle group chat moderator exit - route buffered output and set state back to idle
       // Session ID format: group-chat-{groupChatId}-moderator-{uuid}
       // This handles BOTH initial moderator responses AND synthesis responses.

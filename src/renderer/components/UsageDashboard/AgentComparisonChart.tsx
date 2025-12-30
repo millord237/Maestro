@@ -1,32 +1,27 @@
 /**
  * AgentComparisonChart
  *
- * Horizontal bar chart comparing time spent per agent type.
- * Displays usage metrics by agent with toggle between count and duration views.
+ * Horizontal bar chart comparing usage per agent type.
+ * Displays both query count and duration for each agent.
  *
  * Features:
- * - Horizontal bar chart with sorted values (descending)
- * - Toggle between count-based and duration-based views
- * - Distinct colors per agent (derived from agent name hash)
- * - Percentage labels on bars
+ * - Horizontal bar chart with sorted values (descending by duration)
+ * - Shows both count and duration for each agent
+ * - Distinct colors per agent (derived from theme accent)
  * - Theme-aware axis and label colors
  * - Tooltip on hover with exact values
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import type { Theme } from '../../types';
 import type { StatsAggregation } from '../../hooks/useStats';
 import { COLORBLIND_AGENT_PALETTE } from '../../constants/colorblindPalettes';
-
-// Metric display mode
-type MetricMode = 'count' | 'duration';
 
 interface AgentData {
   agent: string;
   count: number;
   duration: number;
-  value: number; // Current metric value based on mode
-  percentage: number;
+  durationPercentage: number;
   color: string;
 }
 
@@ -39,31 +34,34 @@ interface AgentComparisonChartProps {
   colorBlindMode?: boolean;
 }
 
-// Standard color palette that works with both light and dark themes
-const STANDARD_AGENT_PALETTE = [
-  '#3b82f6', // blue
-  '#10b981', // emerald
-  '#f59e0b', // amber
-  '#ef4444', // red
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#f97316', // orange
-  '#84cc16', // lime
-  '#6366f1', // indigo
-];
-
 /**
- * Generate a distinct color for an agent based on its position in the list
- * Uses a predefined palette to ensure visual distinction between agents
+ * Generate a color for an agent
+ * Uses the theme's accent color as primary, with additional colors for multiple agents
  */
 function getAgentColor(agentName: string, index: number, theme: Theme, colorBlindMode?: boolean): string {
   // Use colorblind-safe palette when colorblind mode is enabled
-  const palette = colorBlindMode ? COLORBLIND_AGENT_PALETTE : STANDARD_AGENT_PALETTE;
+  if (colorBlindMode) {
+    return COLORBLIND_AGENT_PALETTE[index % COLORBLIND_AGENT_PALETTE.length];
+  }
 
-  // Use index directly to ensure unique colors for each agent position
-  // This guarantees distinct colors for up to 10 agents
-  return palette[index % palette.length];
+  // For the first (primary) agent, use the theme's accent color
+  if (index === 0) {
+    return theme.colors.accent;
+  }
+
+  // For additional agents, use a palette that complements the accent
+  const additionalColors = [
+    '#10b981', // emerald
+    '#8b5cf6', // violet
+    '#ef4444', // red
+    '#06b6d4', // cyan
+    '#ec4899', // pink
+    '#f59e0b', // amber
+    '#84cc16', // lime
+    '#6366f1', // indigo
+  ];
+
+  return additionalColors[(index - 1) % additionalColors.length];
 }
 
 /**
@@ -98,7 +96,6 @@ function formatNumber(num: number): string {
 }
 
 export function AgentComparisonChart({ data, theme, colorBlindMode = false }: AgentComparisonChartProps) {
-  const [metricMode, setMetricMode] = useState<MetricMode>('duration');
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -107,32 +104,25 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
     const entries = Object.entries(data.byAgent);
     if (entries.length === 0) return [];
 
-    // Calculate total for percentage
-    const total = entries.reduce(
-      (sum, [, stats]) => sum + (metricMode === 'count' ? stats.count : stats.duration),
-      0
-    );
+    // Calculate total duration for percentage
+    const totalDuration = entries.reduce((sum, [, stats]) => sum + stats.duration, 0);
 
-    // Map and sort by current metric descending
+    // Map and sort by duration descending
     return entries
-      .map(([agent, stats], index) => {
-        const value = metricMode === 'count' ? stats.count : stats.duration;
-        return {
-          agent,
-          count: stats.count,
-          duration: stats.duration,
-          value,
-          percentage: total > 0 ? (value / total) * 100 : 0,
-          color: getAgentColor(agent, index, theme, colorBlindMode),
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-  }, [data.byAgent, metricMode, theme, colorBlindMode]);
+      .map(([agent, stats], index) => ({
+        agent,
+        count: stats.count,
+        duration: stats.duration,
+        durationPercentage: totalDuration > 0 ? (stats.duration / totalDuration) * 100 : 0,
+        color: getAgentColor(agent, index, theme, colorBlindMode),
+      }))
+      .sort((a, b) => b.duration - a.duration);
+  }, [data.byAgent, theme, colorBlindMode]);
 
-  // Get max value for bar width calculation
-  const maxValue = useMemo(() => {
+  // Get max duration for bar width calculation
+  const maxDuration = useMemo(() => {
     if (agentData.length === 0) return 0;
-    return Math.max(...agentData.map((d) => d.value));
+    return Math.max(...agentData.map((d) => d.duration));
   }, [agentData]);
 
   // Handle mouse events for tooltip
@@ -159,7 +149,7 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
     return agentData.find((d) => d.agent === hoveredAgent) || null;
   }, [hoveredAgent, agentData]);
 
-  // Bar height (gap defined in inline styles)
+  // Bar height
   const barHeight = 28;
 
   return (
@@ -167,9 +157,9 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
       className="p-4 rounded-lg"
       style={{ backgroundColor: theme.colors.bgMain }}
       role="figure"
-      aria-label={`Agent comparison chart showing ${metricMode === 'count' ? 'query counts' : 'total duration'} by agent type. ${agentData.length} agents displayed.`}
+      aria-label={`Agent comparison chart showing query counts and duration by agent type. ${agentData.length} agents displayed.`}
     >
-      {/* Header with title and metric toggle */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3
           className="text-sm font-medium"
@@ -177,56 +167,6 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
         >
           Agent Comparison
         </h3>
-        <div className="flex items-center gap-2">
-          <span
-            className="text-xs"
-            style={{ color: theme.colors.textDim }}
-          >
-            Show:
-          </span>
-          <div
-            className="flex rounded overflow-hidden border"
-            style={{ borderColor: theme.colors.border }}
-          >
-            <button
-              onClick={() => setMetricMode('count')}
-              className="px-2 py-1 text-xs transition-colors"
-              style={{
-                backgroundColor:
-                  metricMode === 'count'
-                    ? `${theme.colors.accent}20`
-                    : 'transparent',
-                color:
-                  metricMode === 'count'
-                    ? theme.colors.accent
-                    : theme.colors.textDim,
-              }}
-              aria-pressed={metricMode === 'count'}
-              aria-label="Show query count"
-            >
-              Count
-            </button>
-            <button
-              onClick={() => setMetricMode('duration')}
-              className="px-2 py-1 text-xs transition-colors"
-              style={{
-                backgroundColor:
-                  metricMode === 'duration'
-                    ? `${theme.colors.accent}20`
-                    : 'transparent',
-                color:
-                  metricMode === 'duration'
-                    ? theme.colors.accent
-                    : theme.colors.textDim,
-                borderLeft: `1px solid ${theme.colors.border}`,
-              }}
-              aria-pressed={metricMode === 'duration'}
-              aria-label="Show total duration"
-            >
-              Duration
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Chart container */}
@@ -241,7 +181,7 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
         ) : (
           <div className="space-y-2" role="list" aria-label="Agent usage data">
             {agentData.map((agent) => {
-              const barWidth = maxValue > 0 ? (agent.value / maxValue) * 100 : 0;
+              const barWidth = maxDuration > 0 ? (agent.duration / maxDuration) * 100 : 0;
               const isHovered = hoveredAgent === agent.agent;
 
               return (
@@ -252,7 +192,7 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
                   onMouseEnter={(e) => handleMouseEnter(agent.agent, e)}
                   onMouseLeave={handleMouseLeave}
                   role="listitem"
-                  aria-label={`${agent.agent}: ${agent.percentage.toFixed(1)}%, ${metricMode === 'count' ? `${agent.count} queries` : formatDuration(agent.duration)}`}
+                  aria-label={`${agent.agent}: ${agent.count} queries, ${formatDuration(agent.duration)}`}
                 >
                   {/* Agent name label */}
                   <div
@@ -272,7 +212,7 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
                       backgroundColor: `${theme.colors.border}30`,
                     }}
                     role="meter"
-                    aria-valuenow={agent.percentage}
+                    aria-valuenow={agent.durationPercentage}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-label={`${agent.agent} usage percentage`}
@@ -296,7 +236,7 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
                             textShadow: '0 1px 2px rgba(0,0,0,0.3)',
                           }}
                         >
-                          {agent.percentage.toFixed(1)}%
+                          {agent.durationPercentage.toFixed(1)}%
                         </span>
                       )}
                     </div>
@@ -312,19 +252,22 @@ export function AgentComparisonChart({ data, theme, colorBlindMode = false }: Ag
                           color: theme.colors.textDim,
                         }}
                       >
-                        {agent.percentage.toFixed(1)}%
+                        {agent.durationPercentage.toFixed(1)}%
                       </span>
                     )}
                   </div>
 
-                  {/* Value label */}
+                  {/* Count and Duration labels */}
                   <div
-                    className="w-16 text-xs text-right flex-shrink-0"
+                    className="flex items-center gap-3 flex-shrink-0"
                     style={{ color: theme.colors.textDim }}
                   >
-                    {metricMode === 'count'
-                      ? formatNumber(agent.count)
-                      : formatDuration(agent.duration)}
+                    <div className="w-16 text-xs text-right" title="Query count">
+                      {formatNumber(agent.count)} {agent.count === 1 ? 'query' : 'queries'}
+                    </div>
+                    <div className="w-14 text-xs text-right font-medium" title="Total duration" style={{ color: theme.colors.textMain }}>
+                      {formatDuration(agent.duration)}
+                    </div>
                   </div>
                 </div>
               );

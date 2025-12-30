@@ -168,7 +168,7 @@ export const SessionItem = memo(function SessionItem({
                 {jumpNumber}
               </div>
             )}
-            <Activity className="w-3 h-3" /> {session.toolType}
+            <Activity className="w-3 h-3" /> {session.toolType}{session.sessionSshRemoteConfig?.enabled ? ' (SSH)' : ''}
 
             {/* Group badge (only in bookmark variant when session belongs to a group) */}
             {variant === 'bookmark' && group && (
@@ -193,17 +193,23 @@ export const SessionItem = memo(function SessionItem({
           </div>
         )}
 
-        {/* Git vs Local Indicator */}
+        {/* Git vs Local/Remote Indicator */}
         {showGitLocalBadge && (
           <div
             className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
             style={{
-              backgroundColor: session.isGitRepo ? theme.colors.accent + '30' : theme.colors.textDim + '20',
-              color: session.isGitRepo ? theme.colors.accent : theme.colors.textDim
+              backgroundColor: session.sessionSshRemoteConfig?.enabled
+                ? theme.colors.warning + '30'
+                : session.isGitRepo ? theme.colors.accent + '30' : theme.colors.textDim + '20',
+              color: session.sessionSshRemoteConfig?.enabled
+                ? theme.colors.warning
+                : session.isGitRepo ? theme.colors.accent : theme.colors.textDim
             }}
-            title={session.isGitRepo ? 'Git repository' : 'Local directory (not a git repo)'}
+            title={session.sessionSshRemoteConfig?.enabled
+              ? 'Running on remote host via SSH'
+              : session.isGitRepo ? 'Git repository' : 'Local directory (not a git repo)'}
           >
-            {session.isGitRepo ? 'GIT' : 'LOCAL'}
+            {session.sessionSshRemoteConfig?.enabled ? 'REMOTE' : session.isGitRepo ? 'GIT' : 'LOCAL'}
           </div>
         )}
 

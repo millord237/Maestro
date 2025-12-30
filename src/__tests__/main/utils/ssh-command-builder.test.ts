@@ -1,20 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   buildSshCommand,
   buildRemoteCommand,
 } from '../../../main/utils/ssh-command-builder';
 import type { SshRemoteConfig } from '../../../shared/types';
+import * as os from 'os';
+
+// Mock os.homedir() for consistent path expansion tests
+vi.mock('os', async () => {
+  const actual = await vi.importActual('os');
+  return {
+    ...actual,
+    homedir: vi.fn(() => '/Users/testuser'),
+  };
+});
 
 describe('ssh-command-builder', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    // Mock HOME for consistent path expansion tests
-    process.env = { ...originalEnv, HOME: '/Users/testuser' };
+    // Reset mock to ensure consistent behavior
+    vi.mocked(os.homedir).mockReturnValue('/Users/testuser');
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    vi.clearAllMocks();
   });
 
   // Base config for testing
@@ -242,9 +250,10 @@ describe('ssh-command-builder', () => {
         args: ['--print', 'hello'],
       });
 
-      const remoteCommand = result.args[result.args.length - 1];
-      expect(remoteCommand).toBe("claude '--print' 'hello'");
-      expect(remoteCommand).not.toContain('cd');
+      const wrappedCommand = result.args[result.args.length - 1];
+      // The command is wrapped in $SHELL -lc "..."
+      expect(wrappedCommand).toBe('$SHELL -lc "claude \'--print\' \'hello\'"');
+      expect(wrappedCommand).not.toContain('cd');
     });
 
     it('includes the remote command as the last argument', () => {
@@ -269,8 +278,10 @@ describe('ssh-command-builder', () => {
 
       expect(result.command).toBe('ssh');
       // Verify the arguments form a valid SSH command
-      expect(result.args[0]).toBe('-i');
-      expect(result.args[1]).toBe('/Users/testuser/.ssh/id_ed25519');
+      // First argument is -T (disable TTY), then -i for identity file
+      expect(result.args[0]).toBe('-T');
+      expect(result.args[1]).toBe('-i');
+      expect(result.args[2]).toBe('/Users/testuser/.ssh/id_ed25519');
 
       // Check that -o options come before -p
       const oIndices = result.args.reduce<number[]>((acc, arg, i) => {
@@ -297,9 +308,16 @@ describe('ssh-command-builder', () => {
         args: ['commit', '-m', "fix: it's a bug with $VARIABLES"],
       });
 
-      const remoteCommand = result.args[result.args.length - 1];
-      // The message should be properly escaped
-      expect(remoteCommand).toContain("'fix: it'\\''s a bug with $VARIABLES'");
+      const wrappedCommand = result.args[result.args.length - 1];
+      // The command is wrapped in $SHELL -lc "..." with double-quote escaping
+      // The inner single quotes become escaped for double-quote context
+      // Original: git 'commit' '-m' 'fix: it'\''s a bug with $VARIABLES'
+      // In double quotes: \' becomes \\' and $ becomes \$
+      expect(wrappedCommand).toContain('git');
+      expect(wrappedCommand).toContain('commit');
+      expect(wrappedCommand).toContain('fix:');
+      // $VARIABLES should be escaped to prevent expansion
+      expect(wrappedCommand).toContain('\\$VARIABLES');
     });
   });
 
@@ -508,6 +526,60 @@ describe('ssh-command-builder', () => {
       // The command should still be present
       const remoteCommand = result.args[result.args.length - 1];
       expect(remoteCommand).toContain('claude');
+    });
+  });
+
+  describe('prompt handling', () => {
+    it('includes prompt in args with -- separator', () => {
+      // This tests that when a prompt is passed in the args (as process.ts does),
+      // it gets properly escaped and included in the SSH command
+      const result = buildSshCommand(baseConfig, {
+        command: 'claude',
+        args: ['--print', '--verbose', '--', 'project status?'],
+      });
+
+      const remoteCommand = result.args[result.args.length - 1];
+      expect(remoteCommand).toContain('claude');
+      expect(remoteCommand).toContain('--print');
+      expect(remoteCommand).toContain('--verbose');
+      expect(remoteCommand).toContain('--');
+      expect(remoteCommand).toContain('project status?');
+    });
+
+    it('includes prompt without -- separator for agents that dont support it', () => {
+      const result = buildSshCommand(baseConfig, {
+        command: 'opencode',
+        args: ['--print', 'project status?'],
+      });
+
+      const remoteCommand = result.args[result.args.length - 1];
+      expect(remoteCommand).toContain('opencode');
+      expect(remoteCommand).toContain('--print');
+      expect(remoteCommand).toContain('project status?');
+      // Should not have standalone '--' before the prompt
+    });
+
+    it('properly escapes prompts with special characters', () => {
+      const result = buildSshCommand(baseConfig, {
+        command: 'claude',
+        args: ['--print', '--', "what's the $PATH variable?"],
+      });
+
+      const remoteCommand = result.args[result.args.length - 1];
+      // The prompt should be escaped - $ should become \$ in the double-quoted wrapper
+      expect(remoteCommand).toContain('\\$PATH');
+    });
+
+    it('handles multi-line prompts', () => {
+      const result = buildSshCommand(baseConfig, {
+        command: 'claude',
+        args: ['--print', '--', 'line1\nline2\nline3'],
+      });
+
+      const remoteCommand = result.args[result.args.length - 1];
+      expect(remoteCommand).toContain('line1');
+      expect(remoteCommand).toContain('line2');
+      expect(remoteCommand).toContain('line3');
     });
   });
 });

@@ -13,7 +13,7 @@
  * - Tooltip on hover with exact values
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Theme } from '../../types';
 import type { StatsAggregation } from '../../hooks/useStats';
 import { COLORBLIND_BINARY_PALETTE } from '../../constants/colorblindPalettes';
@@ -167,7 +167,6 @@ export function SourceDistributionChart({
 }: SourceDistributionChartProps) {
   const [metricMode, setMetricMode] = useState<MetricMode>('count');
   const [hoveredSource, setHoveredSource] = useState<'interactive' | 'auto' | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
   // Calculate source data based on mode
   const sourceData = useMemo((): SourceData[] => {
@@ -218,30 +217,6 @@ export function SourceDistributionChart({
   const innerRadius = 45;
   const centerX = size / 2;
   const centerY = size / 2;
-
-  // Handle mouse events for tooltip
-  const handleMouseEnter = useCallback(
-    (source: 'interactive' | 'auto', event: React.MouseEvent<SVGPathElement>) => {
-      setHoveredSource(source);
-      const rect = event.currentTarget.getBoundingClientRect();
-      setTooltipPos({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
-      });
-    },
-    []
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    setHoveredSource(null);
-    setTooltipPos(null);
-  }, []);
-
-  // Get hovered source data for tooltip
-  const hoveredSourceData = useMemo(() => {
-    if (!hoveredSource) return null;
-    return sourceData.find((s) => s.source === hoveredSource) || null;
-  }, [hoveredSource, sourceData]);
 
   // Calculate arc angles for each segment
   const arcs = useMemo(() => {
@@ -366,8 +341,8 @@ export function SourceDistributionChart({
                     style={{
                       transition: 'd 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
                     }}
-                    onMouseEnter={(e) => handleMouseEnter(arc.source, e)}
-                    onMouseLeave={handleMouseLeave}
+                    onMouseEnter={() => setHoveredSource(arc.source)}
+                    onMouseLeave={() => setHoveredSource(null)}
                   />
                 ))}
               </svg>
@@ -401,7 +376,7 @@ export function SourceDistributionChart({
                   key={source.source}
                   className="flex items-center gap-3 cursor-default"
                   onMouseEnter={() => setHoveredSource(source.source)}
-                  onMouseLeave={handleMouseLeave}
+                  onMouseLeave={() => setHoveredSource(null)}
                   role="listitem"
                   aria-label={`${source.label}: ${source.percentage.toFixed(1)}%`}
                 >
@@ -438,36 +413,6 @@ export function SourceDistributionChart({
         )}
       </div>
 
-      {/* Tooltip */}
-      {hoveredSourceData && tooltipPos && (
-        <div
-          className="fixed z-50 px-3 py-2 rounded text-xs whitespace-nowrap pointer-events-none shadow-lg"
-          style={{
-            left: tooltipPos.x,
-            top: tooltipPos.y - 8,
-            transform: 'translate(-50%, -100%)',
-            backgroundColor: theme.colors.bgActivity,
-            color: theme.colors.textMain,
-            border: `1px solid ${theme.colors.border}`,
-          }}
-        >
-          <div className="font-medium mb-1 flex items-center gap-2">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: hoveredSourceData.color }}
-            />
-            {hoveredSourceData.label}
-          </div>
-          <div style={{ color: theme.colors.textDim }}>
-            <div>{hoveredSourceData.percentage.toFixed(1)}% of total</div>
-            <div>
-              {metricMode === 'count'
-                ? `${formatNumber(hoveredSourceData.value)} queries`
-                : formatDuration(hoveredSourceData.value)}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

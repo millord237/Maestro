@@ -19,6 +19,7 @@ import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../../shared/t
 import { useWizard } from '../WizardContext';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 import { AgentConfigPanel } from '../../shared/AgentConfigPanel';
+import { SshRemoteSelector } from '../../shared/SshRemoteSelector';
 
 interface AgentSelectionScreenProps {
   theme: Theme;
@@ -287,6 +288,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     setCustomPath: setWizardCustomPath,
     setCustomArgs: setWizardCustomArgs,
     setCustomEnvVars: setWizardCustomEnvVars,
+    setSessionSshRemoteConfig: setWizardSessionSshRemoteConfig,
     nextStep,
     canProceedToNext,
   } = useWizard();
@@ -322,7 +324,6 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   // SSH Remote configuration state
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
   const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -389,10 +390,6 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
         const configsResult = await window.maestro.sshRemote.getConfigs();
         if (mounted && configsResult.success && configsResult.configs) {
           setSshRemotes(configsResult.configs);
-        }
-        const defaultResult = await window.maestro.sshRemote.getDefaultId();
-        if (mounted && defaultResult.success) {
-          setGlobalDefaultSshRemoteId(defaultResult.id ?? null);
         }
       } catch (error) {
         console.error('Failed to load SSH remotes:', error);
@@ -617,15 +614,17 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
    * Close the configuration panel and return to grid
    */
   const handleCloseConfig = useCallback(async () => {
-    // Save SSH remote config to agent config before closing
-    if (configuringAgentId) {
-      const currentConfig = { ...agentConfig };
-      if (sshRemoteConfig) {
-        currentConfig.sshRemote = sshRemoteConfig;
-      } else {
-        delete currentConfig.sshRemote;
-      }
-      await window.maestro.agents.setConfig(configuringAgentId, currentConfig);
+    // Save SSH remote config to wizard state (per-session, not per-agent)
+    // ALWAYS pass explicitly to override any agent-level config
+    if (sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId) {
+      setWizardSessionSshRemoteConfig({
+        enabled: true,
+        remoteId: sshRemoteConfig.remoteId,
+        workingDirOverride: sshRemoteConfig.workingDirOverride
+      });
+    } else {
+      // Explicitly disable SSH to override any agent-level config
+      setWizardSessionSshRemoteConfig({ enabled: false, remoteId: null });
     }
 
     setIsTransitioning(true);
@@ -643,7 +642,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 
     setAnnouncement('Returned to agent selection');
     setAnnouncementKey((prev) => prev + 1);
-  }, [configuringAgentId, agentConfig, sshRemoteConfig]);
+  }, [configuringAgentId, sshRemoteConfig, setWizardSessionSshRemoteConfig]);
 
   /**
    * Refresh agent detection after config changes
@@ -816,11 +815,20 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
               refreshingAgent={refreshingAgent}
               compact
               showBuiltInEnvVars
-              sshRemotes={sshRemotes}
-              sshRemoteConfig={sshRemoteConfig}
-              onSshRemoteConfigChange={setSshRemoteConfig}
-              globalDefaultSshRemoteId={globalDefaultSshRemoteId}
             />
+
+            {/* SSH Remote Execution - at config view level */}
+            {sshRemotes.length > 0 && (
+              <div className="mt-3">
+                <SshRemoteSelector
+                  theme={theme}
+                  sshRemotes={sshRemotes}
+                  sshRemoteConfig={sshRemoteConfig}
+                  onSshRemoteConfigChange={setSshRemoteConfig}
+                  compact
+                />
+              </div>
+            )}
           </div>
         </div>
 

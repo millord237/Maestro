@@ -12,10 +12,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Check, X, Settings, ArrowLeft } from 'lucide-react';
 import type { Theme, AgentConfig, ModeratorConfig, GroupChat } from '../types';
+import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../shared/types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter, FormInput } from './ui';
 import { AgentLogo, AGENT_TILES } from './Wizard/screens/AgentSelectionScreen';
 import { AgentConfigPanel } from './shared/AgentConfigPanel';
+import { SshRemoteSelector } from './shared/SshRemoteSelector';
 
 interface EditGroupChatModalProps {
   theme: Theme;
@@ -51,6 +53,10 @@ export function EditGroupChatModal({
   const [refreshingAgent, setRefreshingAgent] = useState(false);
   // Track if user has visited/modified the config panel (agent-level settings like model)
   const [configWasModified, setConfigWasModified] = useState(false);
+
+  // SSH Remote configuration state
+  const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
+  const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   // Ref to track latest agentConfig for async save operations
@@ -91,6 +97,7 @@ export function EditGroupChatModal({
     setLoadingModels(false);
     setRefreshingAgent(false);
     setConfigWasModified(false);
+    setSshRemoteConfig(undefined);
   }, []);
 
   // Detect agents on mount
@@ -112,7 +119,19 @@ export function EditGroupChatModal({
       }
     }
 
+    async function loadSshRemotes() {
+      try {
+        const configsResult = await window.maestro.sshRemote.getConfigs();
+        if (configsResult.success && configsResult.configs) {
+          setSshRemotes(configsResult.configs);
+        }
+      } catch (error) {
+        console.error('Failed to load SSH remotes:', error);
+      }
+    }
+
     detect();
+    loadSshRemotes();
   }, [isOpen, resetState]);
 
   // Focus name input when agents detected
@@ -499,6 +518,18 @@ export function EditGroupChatModal({
             </div>
           )}
         </div>
+
+        {/* SSH Remote Execution - Top Level */}
+        {sshRemotes.length > 0 && (
+          <div className="mb-4">
+            <SshRemoteSelector
+              theme={theme}
+              sshRemotes={sshRemotes}
+              sshRemoteConfig={sshRemoteConfig}
+              onSshRemoteConfigChange={setSshRemoteConfig}
+            />
+          </div>
+        )}
 
         {/* Warning about changing moderator */}
         {groupChat && selectedAgent !== groupChat.moderatorAgentId && (

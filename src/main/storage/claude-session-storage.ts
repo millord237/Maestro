@@ -918,9 +918,13 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
             if (sessionFile) {
               const stats = await fs.stat(sessionFile);
               lastActivityAt = stats.mtime.getTime();
+            } else {
+              // No session file path found, skip this stale entry
+              continue;
             }
           } catch {
-            // Session file may not exist or be inaccessible
+            // Session file doesn't exist or is inaccessible, skip stale entry
+            continue;
           }
 
           namedSessions.push({

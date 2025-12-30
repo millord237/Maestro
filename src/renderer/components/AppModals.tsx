@@ -254,6 +254,7 @@ export function AppInfoModals({
           theme={theme}
           defaultTimeRange={defaultStatsTimeRange}
           colorBlindMode={colorBlindMode}
+          sessions={sessions}
         />
       )}
     </>
@@ -358,9 +359,13 @@ export interface AppSessionModalsProps {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    customContextWindow?: number,
+    customProviderPath?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   existingSessions: Session[];
+  sourceSession?: Session; // For agent duplication
 
   // EditAgentModal
   editAgentModalOpen: boolean;
@@ -413,6 +418,7 @@ export function AppSessionModals({
   onCloseNewInstanceModal,
   onCreateSession,
   existingSessions,
+  sourceSession,
   // EditAgentModal
   editAgentModalOpen,
   onCloseEditAgentModal,
@@ -442,6 +448,7 @@ export function AppSessionModals({
         onCreate={onCreateSession}
         theme={theme}
         existingSessions={existingSessions}
+        sourceSession={sourceSession}
       />
 
       {/* --- EDIT AGENT MODAL --- */}
@@ -817,7 +824,6 @@ export interface AppUtilityModalsProps {
   getDocumentTaskCount: (filename: string) => Promise<number>;
   onAutoRunRefresh: () => Promise<void>;
   onOpenMarketplace?: () => void;
-  onOpenDocumentGraph?: () => void;
 
   // TabSwitcherModal
   tabSwitcherOpen: boolean;
@@ -983,7 +989,6 @@ export function AppUtilityModals({
   getDocumentTaskCount,
   onAutoRunRefresh,
   onOpenMarketplace,
-  onOpenDocumentGraph,
   // TabSwitcherModal
   tabSwitcherOpen,
   onCloseTabSwitcher,
@@ -1100,7 +1105,6 @@ export function AppUtilityModals({
           onPublishGist={onPublishGist}
           onInjectOpenSpecPrompt={onInjectOpenSpecPrompt}
           onOpenPlaybookExchange={onOpenMarketplace}
-          onOpenDocumentGraph={onOpenDocumentGraph}
         />
       )}
 
@@ -1143,6 +1147,8 @@ export function AppUtilityModals({
           onFolderSelected={onAutoRunFolderSelected}
           currentFolder={activeSession?.autoRunFolderPath}
           sessionName={activeSession?.name}
+          sshRemoteId={activeSession?.sshRemoteId}
+          sshRemoteHost={activeSession?.sshRemote?.host}
         />
       )}
 
@@ -1672,9 +1678,13 @@ export interface AppModalsProps {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    customContextWindow?: number,
+    customProviderPath?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   existingSessions: Session[];
+  duplicatingSessionId?: string | null; // Session ID to duplicate from
   editAgentModalOpen: boolean;
   onCloseEditAgentModal: () => void;
   onSaveEditAgent: (
@@ -1823,7 +1833,6 @@ export interface AppModalsProps {
   getDocumentTaskCount: (filename: string) => Promise<number>;
   onAutoRunRefresh: () => Promise<void>;
   onOpenMarketplace?: () => void;
-  onOpenDocumentGraph?: () => void;
   tabSwitcherOpen: boolean;
   onCloseTabSwitcher: () => void;
   onTabSelect: (tabId: string) => void;
@@ -1970,6 +1979,7 @@ export function AppModals(props: AppModalsProps) {
     onCloseNewInstanceModal,
     onCreateSession,
     existingSessions,
+    duplicatingSessionId,
     editAgentModalOpen,
     onCloseEditAgentModal,
     onSaveEditAgent,
@@ -2106,7 +2116,6 @@ export function AppModals(props: AppModalsProps) {
     getDocumentTaskCount,
     onAutoRunRefresh,
     onOpenMarketplace,
-    onOpenDocumentGraph,
     tabSwitcherOpen,
     onCloseTabSwitcher,
     onTabSelect,
@@ -2240,6 +2249,7 @@ export function AppModals(props: AppModalsProps) {
         onCloseNewInstanceModal={onCloseNewInstanceModal}
         onCreateSession={onCreateSession}
         existingSessions={existingSessions}
+        sourceSession={duplicatingSessionId ? sessions.find(s => s.id === duplicatingSessionId) : undefined}
         editAgentModalOpen={editAgentModalOpen}
         onCloseEditAgentModal={onCloseEditAgentModal}
         onSaveEditAgent={onSaveEditAgent}
@@ -2399,7 +2409,6 @@ export function AppModals(props: AppModalsProps) {
         getDocumentTaskCount={getDocumentTaskCount}
         onAutoRunRefresh={onAutoRunRefresh}
         onOpenMarketplace={onOpenMarketplace}
-        onOpenDocumentGraph={onOpenDocumentGraph}
         tabSwitcherOpen={tabSwitcherOpen}
         onCloseTabSwitcher={onCloseTabSwitcher}
         onTabSelect={onTabSelect}

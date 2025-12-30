@@ -8,8 +8,9 @@
  */
 
 import { SshRemoteConfig } from '../../shared/types';
-import { shellEscape, buildShellCommand } from './shell-escape';
-import * as path from 'path';
+import { shellEscape, buildShellCommand, shellEscapeForDoubleQuotes } from './shell-escape';
+import { expandTilde } from '../../shared/pathUtils';
+import { logger } from './logger';
 
 /**
  * Result of building an SSH command.
@@ -47,20 +48,6 @@ const DEFAULT_SSH_OPTIONS: Record<string, string> = {
   ClearAllForwardings: 'yes', // Disable port forwarding from SSH config (avoids "Address already in use" errors)
   RequestTTY: 'no', // Don't request a TTY for command execution (avoids shell rc issues)
 };
-
-/**
- * Expand tilde (~) in paths to the user's home directory.
- *
- * @param filePath Path that may start with ~
- * @returns Expanded absolute path
- */
-function expandPath(filePath: string): string {
-  if (filePath.startsWith('~')) {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    return path.join(homeDir, filePath.slice(1));
-  }
-  return filePath;
-}
 
 /**
  * Build the remote shell command string from command, args, cwd, and env.
@@ -183,16 +170,19 @@ export function buildSshCommand(
 ): SshCommandResult {
   const args: string[] = [];
 
+  // Force disable TTY allocation - this helps prevent shell rc files from being sourced
+  args.push('-T');
+
   // When using SSH config, we let SSH handle authentication settings
   // Only add explicit overrides if provided
   if (config.useSshConfig) {
     // Only specify identity file if explicitly provided (override SSH config)
     if (config.privateKeyPath && config.privateKeyPath.trim()) {
-      args.push('-i', expandPath(config.privateKeyPath));
+      args.push('-i', expandTilde(config.privateKeyPath));
     }
   } else {
     // Direct connection: require private key
-    args.push('-i', expandPath(config.privateKeyPath));
+    args.push('-i', expandTilde(config.privateKeyPath));
   }
 
   // Default SSH options for non-interactive operation
@@ -243,7 +233,25 @@ export function buildSshCommand(
     env: Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined,
   });
 
-  args.push(remoteCommand);
+  // Wrap the command to execute via the user's login shell.
+  // $SHELL -lc ensures the user's full PATH (including homebrew, nvm, etc.) is available.
+  // -l loads login profile for PATH, -c executes the command non-interactively.
+  // Using $SHELL respects the user's configured shell (bash, zsh, etc.)
+  //
+  // Use double quotes for the outer wrapper because:
+  // 1. $SHELL needs to be expanded by the remote shell
+  // 2. Single-quote escaping gets mangled through multiple shell layers (SSH -> remote shell -> $SHELL)
+  // 3. Double quotes with proper escaping work reliably across shell layers
+  const escapedCommand = shellEscapeForDoubleQuotes(remoteCommand);
+  const wrappedCommand = `$SHELL -lc "${escapedCommand}"`;
+  args.push(wrappedCommand);
+
+  // Debug logging to trace the exact command being built
+  logger.info('Built SSH command', '[ssh-command-builder]', {
+    remoteCommand,
+    wrappedCommand,
+    fullCommand: `ssh ${args.join(' ')}`,
+  });
 
   return {
     command: 'ssh',

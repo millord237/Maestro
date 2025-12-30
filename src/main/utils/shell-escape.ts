@@ -58,3 +58,28 @@ export function shellEscapeArgs(args: string[]): string[] {
 export function buildShellCommand(command: string, args: string[]): string {
   return [command, ...shellEscapeArgs(args)].join(' ');
 }
+
+/**
+ * Escape a string for inclusion in double-quoted shell context.
+ *
+ * Escapes characters that have special meaning within double quotes:
+ * - $ (variable expansion)
+ * - ` (command substitution)
+ * - \ (escape character)
+ * - " (quote terminator)
+ * - ! (history expansion in some shells)
+ *
+ * Use this when the outer command needs double quotes (e.g., for $SHELL expansion)
+ * but the inner content should be treated literally.
+ *
+ * @param str The string to escape
+ * @returns The escaped string (without surrounding quotes)
+ */
+export function shellEscapeForDoubleQuotes(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/"/g, '\\"')    // Escape double quotes
+    .replace(/\$/g, '\\$')   // Escape dollar signs
+    .replace(/`/g, '\\`')    // Escape backticks
+    .replace(/!/g, '\\!');   // Escape history expansion
+}

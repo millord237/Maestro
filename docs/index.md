@@ -1,7 +1,7 @@
 ---
 title: Maestro
 description: Cross-platform desktop app for orchestrating multiple AI coding agents with a keyboard-first interface.
-icon: home
+icon: wand-sparkles
 ---
 
 > Maestro hones fractured attention into focused intent.

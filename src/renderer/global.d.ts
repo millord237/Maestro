@@ -36,6 +36,12 @@ interface ProcessConfig {
   sessionCustomEnvVars?: Record<string, string>;
   sessionCustomModel?: string;
   sessionCustomContextWindow?: number;
+  // Per-session SSH remote config (takes precedence over agent-level SSH config)
+  sessionSshRemoteConfig?: {
+    enabled: boolean;
+    remoteId: string | null;
+    workingDirOverride?: string;
+  };
 }
 
 interface AgentConfigOption {
@@ -665,6 +671,18 @@ interface MaestroAPI {
     open: () => Promise<void>;
     close: () => Promise<void>;
     toggle: () => Promise<void>;
+  };
+  power: {
+    setEnabled: (enabled: boolean) => Promise<void>;
+    isEnabled: () => Promise<boolean>;
+    getStatus: () => Promise<{
+      enabled: boolean;
+      blocking: boolean;
+      reasons: string[];
+      platform: 'darwin' | 'win32' | 'linux';
+    }>;
+    addReason: (reason: string) => Promise<void>;
+    removeReason: (reason: string) => Promise<void>;
   };
   app: {
     onQuitConfirmationRequest: (callback: () => void) => () => void;

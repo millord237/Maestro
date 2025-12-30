@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AgentCapabilities, getAgentCapabilities } from './agent-capabilities';
+import { expandTilde, detectNodeVersionManagerBinPaths } from '../shared/pathUtils';
 
 // Re-export AgentCapabilities for convenience
 export { AgentCapabilities } from './agent-capabilities';
@@ -290,17 +291,6 @@ export class AgentDetector {
   }
 
   /**
-   * Expand tilde (~) to home directory in paths.
-   * This is necessary because Node.js fs functions don't understand shell tilde expansion.
-   */
-  private expandTilde(filePath: string): string {
-    if (filePath.startsWith('~/') || filePath === '~') {
-      return path.join(os.homedir(), filePath.slice(1));
-    }
-    return filePath;
-  }
-
-  /**
    * Check if a custom path points to a valid executable
    * On Windows, also tries .cmd and .exe extensions if the path doesn't exist as-is
    */
@@ -308,7 +298,7 @@ export class AgentDetector {
     const isWindows = process.platform === 'win32';
 
     // Expand tilde to home directory (Node.js fs doesn't understand ~)
-    const expandedPath = this.expandTilde(customPath);
+    const expandedPath = expandTilde(customPath);
 
     // Helper to check if a specific path exists and is a file
     const checkPath = async (pathToCheck: string): Promise<boolean> => {
@@ -541,6 +531,9 @@ export class AgentDetector {
   private async probeUnixPaths(binaryName: string): Promise<string | null> {
     const home = os.homedir();
 
+    // Get dynamic paths from Node version managers (nvm, fnm, volta, etc.)
+    const versionManagerPaths = detectNodeVersionManagerBinPaths();
+
     // Define known installation paths for each binary, in priority order
     const knownPaths: Record<string, string[]> = {
       claude: [
@@ -556,6 +549,8 @@ export class AgentDetector {
         path.join(home, '.npm-global', 'bin', 'claude'),
         // User bin directory
         path.join(home, 'bin', 'claude'),
+        // Add paths from Node version managers (nvm, fnm, volta, etc.)
+        ...versionManagerPaths.map(p => path.join(p, 'claude')),
       ],
       codex: [
         // User local bin
@@ -565,6 +560,8 @@ export class AgentDetector {
         '/usr/local/bin/codex',
         // npm global
         path.join(home, '.npm-global', 'bin', 'codex'),
+        // Add paths from Node version managers (nvm, fnm, volta, etc.)
+        ...versionManagerPaths.map(p => path.join(p, 'codex')),
       ],
       opencode: [
         // OpenCode installer default location
@@ -576,12 +573,16 @@ export class AgentDetector {
         // Homebrew paths
         '/opt/homebrew/bin/opencode',
         '/usr/local/bin/opencode',
+        // Add paths from Node version managers (nvm, fnm, volta, etc.)
+        ...versionManagerPaths.map(p => path.join(p, 'opencode')),
       ],
       gemini: [
         // npm global paths
         path.join(home, '.npm-global', 'bin', 'gemini'),
         '/opt/homebrew/bin/gemini',
         '/usr/local/bin/gemini',
+        // Add paths from Node version managers (nvm, fnm, volta, etc.)
+        ...versionManagerPaths.map(p => path.join(p, 'gemini')),
       ],
       aider: [
         // pip installation
@@ -589,6 +590,8 @@ export class AgentDetector {
         // Homebrew paths
         '/opt/homebrew/bin/aider',
         '/usr/local/bin/aider',
+        // Add paths from Node version managers (in case installed via npm)
+        ...versionManagerPaths.map(p => path.join(p, 'aider')),
       ],
     };
 

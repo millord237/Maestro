@@ -7,6 +7,7 @@ import { validateNewSession, validateEditSession } from '../utils/sessionValidat
 import { FormInput } from './ui/FormInput';
 import { Modal, ModalFooter } from './ui/Modal';
 import { AgentConfigPanel } from './shared/AgentConfigPanel';
+import { SshRemoteSelector } from './shared/SshRemoteSelector';
 
 // Maximum character length for nudge message
 const NUDGE_MESSAGE_MAX_LENGTH = 1000;
@@ -34,10 +35,14 @@ interface NewInstanceModalProps {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    customContextWindow?: number,
+    customProviderPath?: string,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   theme: any;
   existingSessions: Session[];
+  sourceSession?: Session; // Optional session to duplicate from
 }
 
 interface EditAgentModalProps {
@@ -51,7 +56,8 @@ interface EditAgentModalProps {
     customArgs?: string,
     customEnvVars?: Record<string, string>,
     customModel?: string,
-    customContextWindow?: number
+    customContextWindow?: number,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   theme: any;
   session: Session | null;
@@ -61,7 +67,7 @@ interface EditAgentModalProps {
 // Supported agents that are fully implemented
 const SUPPORTED_AGENTS = ['claude-code', 'opencode', 'codex'];
 
-export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSessions }: NewInstanceModalProps) {
+export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSessions, sourceSession }: NewInstanceModalProps) {
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [selectedAgent, setSelectedAgent] = useState('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
@@ -81,7 +87,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   const [directoryWarningAcknowledged, setDirectoryWarningAcknowledged] = useState(false);
   // SSH Remote configuration
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
   const [agentSshRemoteConfigs, setAgentSshRemoteConfigs] = useState<Record<string, AgentSshRemoteConfig>>({});
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +120,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   }, [workingDir]);
 
   // Define handlers first before they're used in effects
-  const loadAgents = async () => {
+  const loadAgents = async (source?: Session) => {
     setLoading(true);
     try {
       const detectedAgents = await window.maestro.agents.detect();
@@ -123,10 +128,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
 
       // Per-agent config (path, args, env vars) starts empty - each agent gets its own config
       // No provider-level loading - config is set per-agent during creation
-      setCustomAgentPaths({});
-      setCustomAgentArgs({});
-      setCustomAgentEnvVars({});
-      setAgentSshRemoteConfigs({});
+      // Only reset if NOT duplicating (source session will provide values)
+      if (!source) {
+        setCustomAgentPaths({});
+        setCustomAgentArgs({});
+        setCustomAgentEnvVars({});
+        setAgentSshRemoteConfigs({});
+      }
 
       // Load configurations for all agents (model, contextWindow - these are provider-level)
       const configs: Record<string, Record<string, any>> = {};
@@ -150,6 +158,21 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
         }
       }
 
+      // If duplicating, merge source session config values into loaded configs
+      if (source) {
+        const sourceConfig: Record<string, any> = { ...configs[source.toolType] };
+        if (source.customModel) {
+          sourceConfig.model = source.customModel;
+        }
+        if (source.customContextWindow) {
+          sourceConfig.contextWindow = source.customContextWindow;
+        }
+        if (source.customProviderPath) {
+          sourceConfig.providerPath = source.customProviderPath;
+        }
+        configs[source.toolType] = sourceConfig;
+      }
+
       setAgentConfigs(configs);
       setCustomAgentPaths(paths);
       setCustomAgentArgs(args);
@@ -161,19 +184,52 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
         if (sshConfigsResult.success && sshConfigsResult.configs) {
           setSshRemotes(sshConfigsResult.configs);
         }
-        const sshDefaultResult = await window.maestro.sshRemote.getDefaultId();
-        if (sshDefaultResult.success) {
-          setGlobalDefaultSshRemoteId(sshDefaultResult.id ?? null);
-        }
       } catch (sshError) {
         console.error('Failed to load SSH remote configs:', sshError);
       }
 
-      // Select first available non-hidden agent
+      // Select first available non-hidden agent (or source agent if duplicating)
       // (hidden agents like 'terminal' should never be auto-selected)
-      const firstAvailable = detectedAgents.find((a: AgentConfig) => a.available && !a.hidden);
-      if (firstAvailable) {
-        setSelectedAgent(firstAvailable.id);
+      if (source) {
+        setSelectedAgent(source.toolType);
+      } else {
+        const firstAvailable = detectedAgents.find((a: AgentConfig) => a.available && !a.hidden);
+        if (firstAvailable) {
+          setSelectedAgent(firstAvailable.id);
+        }
+      }
+
+      // Pre-fill form fields AFTER agents are loaded (ensures no race condition)
+      if (source) {
+        setWorkingDir(source.cwd);
+        setInstanceName(`${source.name} (Copy)`);
+        setNudgeMessage(source.nudgeMessage || '');
+
+        // Pre-fill custom agent configuration
+        setCustomAgentPaths(prev => ({
+          ...prev,
+          [source.toolType]: source.customPath || ''
+        }));
+        setCustomAgentArgs(prev => ({
+          ...prev,
+          [source.toolType]: source.customArgs || ''
+        }));
+        setCustomAgentEnvVars(prev => ({
+          ...prev,
+          [source.toolType]: source.customEnvVars || {}
+        }));
+
+        // Pre-fill SSH remote configuration if source session has it
+        if (source.sessionSshRemoteConfig?.enabled && source.sessionSshRemoteConfig?.remoteId) {
+          setAgentSshRemoteConfigs(prev => ({
+            ...prev,
+            [source.toolType]: {
+              enabled: true,
+              remoteId: source.sessionSshRemoteConfig!.remoteId!,
+              workingDirOverride: source.sessionSshRemoteConfig!.workingDirOverride
+            }
+          }));
+        }
       }
     } catch (error) {
       console.error('Failed to load agents:', error);
@@ -243,15 +299,21 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       : undefined;
     // Get model from agent config - this will become per-session
     const agentCustomModel = agentConfigs[selectedAgent]?.model?.trim() || undefined;
+    // Get contextWindow and providerPath from agent config
+    const agentCustomContextWindow = agentConfigs[selectedAgent]?.contextWindow || undefined;
+    const agentCustomProviderPath = agentConfigs[selectedAgent]?.providerPath?.trim() || undefined;
 
-    // Save SSH remote configuration if set
+    // Get SSH remote configuration for this session (stored per-session, not per-agent)
     const sshRemoteConfig = agentSshRemoteConfigs[selectedAgent];
-    if (sshRemoteConfig) {
-      // Merge SSH remote config into agent configs and persist
-      const currentConfig = agentConfigs[selectedAgent] || {};
-      const updatedConfig = { ...currentConfig, sshRemote: sshRemoteConfig };
-      window.maestro.agents.setConfig(selectedAgent, updatedConfig);
-    }
+    // Convert to session-level format: ALWAYS pass explicitly to override any agent-level config
+    // For new sessions, this ensures consistent behavior with the UI selection
+    const sessionSshRemoteConfig = sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
+      ? {
+          enabled: true,
+          remoteId: sshRemoteConfig.remoteId,
+          workingDirOverride: sshRemoteConfig.workingDirOverride
+        }
+      : { enabled: false, remoteId: null };
 
     onCreate(
       selectedAgent,
@@ -261,7 +323,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       agentCustomPath,
       agentCustomArgs,
       agentCustomEnvVars,
-      agentCustomModel
+      agentCustomModel,
+      agentCustomContextWindow,
+      agentCustomProviderPath,
+      sessionSshRemoteConfig
     );
     onClose();
 
@@ -280,6 +345,22 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     });
   }, [instanceName, selectedAgent, workingDir, nudgeMessage, customAgentPaths, customAgentArgs, customAgentEnvVars, agentConfigs, agentSshRemoteConfigs, onCreate, onClose, expandTilde, existingSessions]);
 
+  // Check if SSH remote is enabled for the selected agent
+  const isSshEnabled = useMemo(() => {
+    if (!selectedAgent) return false;
+    const config = agentSshRemoteConfigs[selectedAgent];
+    return config?.enabled && !!config?.remoteId;
+  }, [selectedAgent, agentSshRemoteConfigs]);
+
+  // Get SSH remote host for display
+  const sshRemoteHost = useMemo(() => {
+    if (!isSshEnabled || !selectedAgent) return undefined;
+    const config = agentSshRemoteConfigs[selectedAgent];
+    if (!config?.remoteId) return undefined;
+    const remote = sshRemotes.find(r => r.id === config.remoteId);
+    return remote?.host;
+  }, [isSshEnabled, selectedAgent, agentSshRemoteConfigs, sshRemotes]);
+
   // Check if form is valid for submission
   const isFormValid = useMemo(() => {
     const hasWarningThatNeedsAck = validation.warning && !directoryWarningAcknowledged;
@@ -293,11 +374,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Handle Cmd+O for folder picker before stopping propagation
+    // Handle Cmd+O for folder picker (disabled when SSH remote is active)
     if ((e.key === 'o' || e.key === 'O') && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
-      handleSelectFolder();
+      if (!isSshEnabled) {
+        handleSelectFolder();
+      }
       return;
     }
     // Handle Cmd+Enter for creating agent
@@ -309,7 +392,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       }
       return;
     }
-  }, [handleSelectFolder, handleCreate, isFormValid]);
+  }, [handleSelectFolder, handleCreate, isFormValid, isSshEnabled]);
 
   // Sort agents: supported first, then coming soon at the bottom
   const sortedAgents = useMemo(() => {
@@ -319,16 +402,22 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     return [...supported, ...comingSoon];
   }, [agents]);
 
-  // Effects
+  // Effects - load agents and optionally pre-fill from source session
   useEffect(() => {
     if (isOpen) {
-      loadAgents();
-      // Keep all agents collapsed by default
-      setExpandedAgent(null);
+      // Pass sourceSession to loadAgents to handle pre-fill AFTER agents are loaded
+      // This prevents the race condition where loadAgents would overwrite pre-filled values
+      loadAgents(sourceSession);
+      // Keep all agents collapsed by default, or expand when duplicating to show custom config
+      if (sourceSession) {
+        setExpandedAgent(sourceSession.toolType);
+      } else {
+        setExpandedAgent(null);
+      }
       // Reset warning acknowledgment when modal opens
       setDirectoryWarningAcknowledged(false);
     }
-  }, [isOpen]);
+  }, [isOpen, sourceSession]);
 
   if (!isOpen) return null;
 
@@ -575,15 +664,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                             onRefreshAgent={() => handleRefreshAgent(agent.id)}
                             refreshingAgent={refreshingAgent === agent.id}
                             showBuiltInEnvVars
-                            sshRemotes={sshRemotes}
-                            sshRemoteConfig={agentSshRemoteConfigs[agent.id]}
-                            onSshRemoteConfigChange={(config) => {
-                              setAgentSshRemoteConfigs(prev => ({
-                                ...prev,
-                                [agent.id]: config
-                              }));
-                            }}
-                            globalDefaultSshRemoteId={globalDefaultSshRemoteId}
                           />
                         </div>
                       )}
@@ -650,16 +730,23 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
             label="Working Directory"
             value={workingDir}
             onChange={setWorkingDir}
-            placeholder="Select directory..."
+            placeholder={isSshEnabled
+              ? `Enter remote path${sshRemoteHost ? ` on ${sshRemoteHost}` : ''} (e.g., /home/user/project)`
+              : 'Select directory...'
+            }
             error={validation.errorField === 'directory' ? validation.error : undefined}
             monospace
             heightClass="p-2"
             addon={
               <button
-                onClick={handleSelectFolder}
-                className="p-2 rounded border hover:bg-opacity-10"
+                onClick={isSshEnabled ? undefined : handleSelectFolder}
+                disabled={isSshEnabled}
+                className={`p-2 rounded border transition-colors ${isSshEnabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-opacity-10'}`}
                 style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-                title="Browse folders (Cmd+O)"
+                title={isSshEnabled
+                  ? `Folder picker unavailable for SSH remote${sshRemoteHost ? ` (${sshRemoteHost})` : ''}. Enter the remote path manually.`
+                  : 'Browse folders (Cmd+O)'
+                }
               >
                 <Folder className="w-5 h-5" />
               </button>
@@ -702,6 +789,21 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                 </div>
               </div>
             </div>
+          )}
+
+          {/* SSH Remote Execution - Top Level */}
+          {sshRemotes.length > 0 && selectedAgent && (
+            <SshRemoteSelector
+              theme={theme}
+              sshRemotes={sshRemotes}
+              sshRemoteConfig={agentSshRemoteConfigs[selectedAgent]}
+              onSshRemoteConfigChange={(config) => {
+                setAgentSshRemoteConfigs(prev => ({
+                  ...prev,
+                  [selectedAgent]: config
+                }));
+              }}
+            />
           )}
 
           {/* Nudge Message */}
@@ -756,7 +858,6 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
   const [refreshingAgent, setRefreshingAgent] = useState(false);
   // SSH Remote configuration
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
   const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -785,10 +886,18 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
         const modelValue = session.customModel ?? globalConfig.model ?? '';
         const contextWindowValue = session.customContextWindow ?? globalConfig.contextWindow;
         setAgentConfig({ ...globalConfig, model: modelValue, contextWindow: contextWindowValue });
-        // Load SSH remote config from agent config
-        const sshConfig = globalConfig.sshRemote as AgentSshRemoteConfig | undefined;
-        setSshRemoteConfig(sshConfig);
       });
+
+      // Load SSH remote config from session (per-session, not global)
+      if (session.sessionSshRemoteConfig?.enabled && session.sessionSshRemoteConfig?.remoteId) {
+        setSshRemoteConfig({
+          enabled: true,
+          remoteId: session.sessionSshRemoteConfig.remoteId,
+          workingDirOverride: session.sessionSshRemoteConfig.workingDirOverride
+        });
+      } else {
+        setSshRemoteConfig(undefined);
+      }
 
       // Load SSH remote configurations
       window.maestro.sshRemote.getConfigs()
@@ -798,13 +907,6 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
           }
         })
         .catch((err) => console.error('Failed to load SSH remotes:', err));
-      window.maestro.sshRemote.getDefaultId()
-        .then((result) => {
-          if (result.success) {
-            setGlobalDefaultSshRemoteId(result.id ?? null);
-          }
-        })
-        .catch((err) => console.error('Failed to load SSH default ID:', err));
 
       // Load per-session config (stored on the session/agent instance)
       // No provider-level fallback - each agent has its own config
@@ -847,19 +949,17 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
       ? agentConfig.contextWindow
       : undefined;
 
-    // Save SSH remote configuration to agent config store
-    if (sshRemoteConfig) {
-      const currentConfig = { ...agentConfig };
-      currentConfig.sshRemote = sshRemoteConfig;
-      window.maestro.agents.setConfig(session.toolType, currentConfig);
-    } else {
-      // Clear SSH remote config if undefined
-      const currentConfig = { ...agentConfig };
-      delete currentConfig.sshRemote;
-      window.maestro.agents.setConfig(session.toolType, currentConfig);
-    }
+    // Build per-session SSH remote config: ALWAYS pass explicitly to override any agent-level config
+    // When disabled or no remoteId, we explicitly pass enabled: false to ensure local execution
+    const sessionSshRemoteConfig = sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
+      ? {
+          enabled: true,
+          remoteId: sshRemoteConfig.remoteId,
+          workingDirOverride: sshRemoteConfig.workingDirOverride
+        }
+      : { enabled: false, remoteId: null };
 
-    // Save with per-session config fields including model and contextWindow
+    // Save with per-session config fields including model, contextWindow, and SSH config
     onSave(
       session.id,
       name,
@@ -868,7 +968,8 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
       customArgs.trim() || undefined,
       Object.keys(customEnvVars).length > 0 ? customEnvVars : undefined,
       modelValue,
-      contextWindowValue
+      contextWindowValue,
+      sessionSshRemoteConfig
     );
     onClose();
   }, [session, instanceName, nudgeMessage, customPath, customArgs, customEnvVars, agentConfig, sshRemoteConfig, onSave, onClose, existingSessions]);
@@ -935,7 +1036,7 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
     <div onKeyDown={handleKeyDown}>
       <Modal
         theme={theme}
-        title="Edit Agent"
+        title={`Edit Agent: ${session.name}`}
         priority={MODAL_PRIORITIES.NEW_INSTANCE}
         onClose={onClose}
         width={500}
@@ -1088,12 +1189,18 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
                 onRefreshAgent={handleRefreshAgent}
                 refreshingAgent={refreshingAgent}
                 showBuiltInEnvVars
-                sshRemotes={sshRemotes}
-                sshRemoteConfig={sshRemoteConfig}
-                onSshRemoteConfigChange={setSshRemoteConfig}
-                globalDefaultSshRemoteId={globalDefaultSshRemoteId}
               />
             </div>
+          )}
+
+          {/* SSH Remote Execution - Top Level */}
+          {sshRemotes.length > 0 && (
+            <SshRemoteSelector
+              theme={theme}
+              sshRemotes={sshRemotes}
+              sshRemoteConfig={sshRemoteConfig}
+              onSshRemoteConfigChange={setSshRemoteConfig}
+            />
           )}
         </div>
       </Modal>
