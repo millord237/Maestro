@@ -82,7 +82,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
   const [directoryWarningAcknowledged, setDirectoryWarningAcknowledged] = useState(false);
   // SSH Remote configuration
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
   const [agentSshRemoteConfigs, setAgentSshRemoteConfigs] = useState<Record<string, AgentSshRemoteConfig>>({});
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -161,10 +160,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
         const sshConfigsResult = await window.maestro.sshRemote.getConfigs();
         if (sshConfigsResult.success && sshConfigsResult.configs) {
           setSshRemotes(sshConfigsResult.configs);
-        }
-        const sshDefaultResult = await window.maestro.sshRemote.getDefaultId();
-        if (sshDefaultResult.success) {
-          setGlobalDefaultSshRemoteId(sshDefaultResult.id ?? null);
         }
       } catch (sshError) {
         console.error('Failed to load SSH remote configs:', sshError);
@@ -708,7 +703,6 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                   [selectedAgent]: config
                 }));
               }}
-              globalDefaultSshRemoteId={globalDefaultSshRemoteId}
             />
           )}
 
@@ -764,7 +758,6 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
   const [refreshingAgent, setRefreshingAgent] = useState(false);
   // SSH Remote configuration
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
   const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -806,13 +799,6 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
           }
         })
         .catch((err) => console.error('Failed to load SSH remotes:', err));
-      window.maestro.sshRemote.getDefaultId()
-        .then((result) => {
-          if (result.success) {
-            setGlobalDefaultSshRemoteId(result.id ?? null);
-          }
-        })
-        .catch((err) => console.error('Failed to load SSH default ID:', err));
 
       // Load per-session config (stored on the session/agent instance)
       // No provider-level fallback - each agent has its own config
@@ -1096,12 +1082,18 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
                 onRefreshAgent={handleRefreshAgent}
                 refreshingAgent={refreshingAgent}
                 showBuiltInEnvVars
-                sshRemotes={sshRemotes}
-                sshRemoteConfig={sshRemoteConfig}
-                onSshRemoteConfigChange={setSshRemoteConfig}
-                globalDefaultSshRemoteId={globalDefaultSshRemoteId}
               />
             </div>
+          )}
+
+          {/* SSH Remote Execution - Top Level */}
+          {sshRemotes.length > 0 && (
+            <SshRemoteSelector
+              theme={theme}
+              sshRemotes={sshRemotes}
+              sshRemoteConfig={sshRemoteConfig}
+              onSshRemoteConfigChange={setSshRemoteConfig}
+            />
           )}
         </div>
       </Modal>

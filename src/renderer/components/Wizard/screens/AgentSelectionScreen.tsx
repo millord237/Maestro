@@ -19,6 +19,7 @@ import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../../shared/t
 import { useWizard } from '../WizardContext';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 import { AgentConfigPanel } from '../../shared/AgentConfigPanel';
+import { SshRemoteSelector } from '../../shared/SshRemoteSelector';
 
 interface AgentSelectionScreenProps {
   theme: Theme;
@@ -322,7 +323,6 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   // SSH Remote configuration state
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
   const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
-  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -389,10 +389,6 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
         const configsResult = await window.maestro.sshRemote.getConfigs();
         if (mounted && configsResult.success && configsResult.configs) {
           setSshRemotes(configsResult.configs);
-        }
-        const defaultResult = await window.maestro.sshRemote.getDefaultId();
-        if (mounted && defaultResult.success) {
-          setGlobalDefaultSshRemoteId(defaultResult.id ?? null);
         }
       } catch (error) {
         console.error('Failed to load SSH remotes:', error);
@@ -816,11 +812,20 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
               refreshingAgent={refreshingAgent}
               compact
               showBuiltInEnvVars
-              sshRemotes={sshRemotes}
-              sshRemoteConfig={sshRemoteConfig}
-              onSshRemoteConfigChange={setSshRemoteConfig}
-              globalDefaultSshRemoteId={globalDefaultSshRemoteId}
             />
+
+            {/* SSH Remote Execution - at config view level */}
+            {sshRemotes.length > 0 && (
+              <div className="mt-3">
+                <SshRemoteSelector
+                  theme={theme}
+                  sshRemotes={sshRemotes}
+                  sshRemoteConfig={sshRemoteConfig}
+                  onSshRemoteConfigChange={setSshRemoteConfig}
+                  compact
+                />
+              </div>
+            )}
           </div>
         </div>
 
