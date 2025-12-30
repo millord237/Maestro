@@ -8780,6 +8780,7 @@ function MaestroConsoleInner() {
         defaultShowExternalLinks={documentGraphShowExternalLinks}
         onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
         defaultMaxNodes={documentGraphMaxNodes}
+        sshRemoteId={activeSession?.sshRemoteId}
       />
 
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
