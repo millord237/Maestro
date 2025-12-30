@@ -26,7 +26,7 @@ import {
   hasSessionStorage,
   getAllSessionStorages,
 } from '../../agent-session-storage';
-import { CLAUDE_PRICING } from '../../constants';
+import { calculateClaudeCost } from '../../utils/pricing';
 import {
   loadGlobalStatsCache,
   saveGlobalStatsCache,
@@ -94,22 +94,6 @@ export interface AgentSessionsHandlerDependencies {
  */
 function handlerOpts(operation: string) {
   return { context: LOG_CONTEXT, operation, logSuccess: false };
-}
-
-/**
- * Calculate cost for Claude sessions based on token counts
- */
-function calculateClaudeCost(
-  inputTokens: number,
-  outputTokens: number,
-  cacheReadTokens: number,
-  cacheCreationTokens: number
-): number {
-  const inputCost = (inputTokens / 1_000_000) * CLAUDE_PRICING.INPUT_PER_MILLION;
-  const outputCost = (outputTokens / 1_000_000) * CLAUDE_PRICING.OUTPUT_PER_MILLION;
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * CLAUDE_PRICING.CACHE_READ_PER_MILLION;
-  const cacheCreationCost = (cacheCreationTokens / 1_000_000) * CLAUDE_PRICING.CACHE_CREATION_PER_MILLION;
-  return inputCost + outputCost + cacheReadCost + cacheCreationCost;
 }
 
 /**
