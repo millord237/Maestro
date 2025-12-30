@@ -9,7 +9,7 @@
 
 import { SshRemoteConfig } from '../../shared/types';
 import { shellEscape, buildShellCommand } from './shell-escape';
-import * as path from 'path';
+import { expandTilde } from '../../shared/pathUtils';
 
 /**
  * Result of building an SSH command.
@@ -45,20 +45,6 @@ const DEFAULT_SSH_OPTIONS: Record<string, string> = {
   StrictHostKeyChecking: 'accept-new', // Auto-accept new host keys
   ConnectTimeout: '10', // Connection timeout in seconds
 };
-
-/**
- * Expand tilde (~) in paths to the user's home directory.
- *
- * @param filePath Path that may start with ~
- * @returns Expanded absolute path
- */
-function expandPath(filePath: string): string {
-  if (filePath.startsWith('~')) {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    return path.join(homeDir, filePath.slice(1));
-  }
-  return filePath;
-}
 
 /**
  * Build the remote shell command string from command, args, cwd, and env.
@@ -186,11 +172,11 @@ export function buildSshCommand(
   if (config.useSshConfig) {
     // Only specify identity file if explicitly provided (override SSH config)
     if (config.privateKeyPath && config.privateKeyPath.trim()) {
-      args.push('-i', expandPath(config.privateKeyPath));
+      args.push('-i', expandTilde(config.privateKeyPath));
     }
   } else {
     // Direct connection: require private key
-    args.push('-i', expandPath(config.privateKeyPath));
+    args.push('-i', expandTilde(config.privateKeyPath));
   }
 
   // Default SSH options for non-interactive operation
