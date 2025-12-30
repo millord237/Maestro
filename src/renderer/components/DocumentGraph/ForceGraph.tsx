@@ -65,6 +65,28 @@ export interface ForceGraphLink {
 }
 
 /**
+ * Physics settings for the force simulation (Obsidian-style)
+ */
+export interface ForcePhysicsSettings {
+  /** Center force strength - pulls nodes toward center (0-1, default 0.1) */
+  centerForce: number;
+  /** Repel force strength - nodes push each other away (0-500, default 100) */
+  repelForce: number;
+  /** Link force strength - connected nodes attract (0-1, default 0.4) */
+  linkForce: number;
+  /** Link distance - target distance between connected nodes (10-200, default 50) */
+  linkDistance: number;
+}
+
+/** Default physics settings tuned for Obsidian-like appearance */
+export const DEFAULT_PHYSICS: ForcePhysicsSettings = {
+  centerForce: 0.25,    // Strong center pull to keep graph compact (like Obsidian)
+  repelForce: 60,       // Low repel for tighter clusters
+  linkForce: 0.7,       // Strong link attraction to keep connected nodes close
+  linkDistance: 30,     // Short links for close, tight clusters
+};
+
+/**
  * Props for the ForceGraph component
  */
 export interface ForceGraphProps {
@@ -96,6 +118,30 @@ export interface ForceGraphProps {
   focusFilePath: string | null;
   /** Callback when focus is consumed */
   onFocusConsumed?: () => void;
+  /** Physics settings for the force simulation */
+  physics?: ForcePhysicsSettings;
+}
+
+/**
+ * Generate initial positions for nodes in a compact spiral pattern
+ * This prevents the "explosion" effect when the graph first loads
+ */
+function generateInitialPositions(count: number): Array<{ x: number; y: number }> {
+  const positions: Array<{ x: number; y: number }> = [];
+  const spacing = 25; // Tight initial spacing
+
+  // Use a spiral pattern for compact initial layout
+  for (let i = 0; i < count; i++) {
+    // Golden angle spiral for even distribution
+    const angle = i * 2.399963; // Golden angle in radians
+    const radius = spacing * Math.sqrt(i + 1);
+    positions.push({
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    });
+  }
+
+  return positions;
 }
 
 /**
@@ -119,9 +165,20 @@ export function convertToForceGraphData(
     neighborMap.get(edge.target)!.add(edge.source);
   });
 
-  const nodes: ForceGraphNode[] = graphNodes.map(node => {
+  // Generate initial positions for compact starting layout
+  const initialPositions = generateInitialPositions(graphNodes.length);
+
+  // Sort nodes by connection count (most connected first, placed in center)
+  const sortedNodes = [...graphNodes].map((node) => ({
+    node,
+    connectionCount: (neighborMap.get(node.id) || new Set()).size,
+  })).sort((a, b) => b.connectionCount - a.connectionCount);
+
+  const nodes: ForceGraphNode[] = sortedNodes.map(({ node }, posIndex) => {
     const neighbors = neighborMap.get(node.id) || new Set();
     const connectionCount = neighbors.size;
+    // Assign position based on sorted order (most connected in center)
+    const pos = initialPositions[posIndex] || { x: 0, y: 0 };
 
     if (node.data.nodeType === 'document') {
       const docData = node.data as DocumentNodeData;
@@ -139,6 +196,8 @@ export function convertToForceGraphData(
         isLargeFile: docData.isLargeFile,
         neighbors,
         connectionCount,
+        x: pos.x,
+        y: pos.y,
       };
     } else {
       const extData = node.data as ExternalLinkNodeData;
@@ -151,6 +210,8 @@ export function convertToForceGraphData(
         urls: extData.urls,
         neighbors,
         connectionCount,
+        x: pos.x,
+        y: pos.y,
       };
     }
   });
@@ -246,6 +307,7 @@ export function ForceGraph({
   neighborDepth,
   focusFilePath,
   onFocusConsumed,
+  physics = DEFAULT_PHYSICS,
 }: ForceGraphProps) {
   const graphRef = useRef<ForceGraphMethods<ForceGraphNode, ForceGraphLink>>();
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -541,21 +603,29 @@ export function ForceGraph({
     }
   }, [focusFilePath, hasInitialized, nodes]);
 
-  // Configure physics
+  // Configure physics based on settings
   useEffect(() => {
     if (graphRef.current) {
-      // Get the d3 force simulation
       const fg = graphRef.current;
 
-      // Configure forces for better layout
-      fg.d3Force('charge')?.strength(-150);
-      fg.d3Force('link')?.distance(80);
-      fg.d3Force('center')?.strength(0.05);
+      // Configure forces using Obsidian-style settings
+      // Charge force controls node repulsion (negative = repel)
+      fg.d3Force('charge')?.strength(-physics.repelForce);
 
-      // Reheat simulation when nodes change significantly
+      // Link force controls attraction between connected nodes
+      const linkForce = fg.d3Force('link');
+      if (linkForce) {
+        linkForce.distance(physics.linkDistance);
+        linkForce.strength(physics.linkForce);
+      }
+
+      // Center force pulls nodes toward center
+      fg.d3Force('center')?.strength(physics.centerForce);
+
+      // Reheat simulation when physics change
       fg.d3ReheatSimulation();
     }
-  }, [nodes.length]);
+  }, [physics.centerForce, physics.repelForce, physics.linkForce, physics.linkDistance, nodes.length]);
 
   return (
     <ForceGraph2D

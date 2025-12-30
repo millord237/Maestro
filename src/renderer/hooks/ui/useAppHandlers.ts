@@ -173,7 +173,8 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
           return;
         }
 
-        const content = await window.maestro.fs.readFile(fullPath);
+        // Pass SSH remote ID for remote sessions
+        const content = await window.maestro.fs.readFile(fullPath, activeSession.sshRemoteId);
         const newFile = {
           name: node.name,
           content: content,

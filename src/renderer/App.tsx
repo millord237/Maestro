@@ -8782,7 +8782,7 @@ function MaestroConsoleInner() {
         onDocumentOpen={(filePath) => {
           // Open the document in file preview
           const fullPath = `${activeSession?.cwd ?? ''}/${filePath}`;
-          window.maestro.fs.readFile(fullPath).then((content) => {
+          window.maestro.fs.readFile(fullPath, activeSession?.sshRemoteId).then((content) => {
             if (content !== null) {
               setPreviewFile({ name: filePath.split('/').pop() || filePath, content, path: fullPath });
             }
@@ -9465,7 +9465,7 @@ function MaestroConsoleInner() {
 
           try {
             const fullPath = `${activeSession.fullPath}/${relativePath}`;
-            const content = await window.maestro.fs.readFile(fullPath);
+            const content = await window.maestro.fs.readFile(fullPath, activeSession.sshRemoteId);
             const newFile = {
               name: filename,
               content,
@@ -9713,7 +9713,7 @@ function MaestroConsoleInner() {
 
               try {
                 const fullPath = `${activeSession.fullPath}/${relativePath}`;
-                const content = await window.maestro.fs.readFile(fullPath);
+                const content = await window.maestro.fs.readFile(fullPath, activeSession.sshRemoteId);
                 const newFile = {
                   name: filename,
                   content,

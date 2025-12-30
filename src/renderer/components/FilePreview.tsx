@@ -65,6 +65,8 @@ interface FilePreviewProps {
   onPublishGist?: () => void;
   /** Callback to open Document Graph focused on this file */
   onOpenInGraph?: () => void;
+  /** SSH remote ID for remote file operations */
+  sshRemoteId?: string;
 }
 
 // Get language from filename extension
