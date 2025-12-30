@@ -2103,5 +2103,64 @@ describe('NewInstanceModal', () => {
       // The actual visibility depends on the agent being expanded, which we also set
       expect(sourceSession.customArgs).toBe('--model=opus --verbose');
     });
+
+    it('should pre-fill SSH remote configuration when duplicating', async () => {
+      const sourceSession: Session = {
+        id: 'session-1',
+        name: 'SSH Agent',
+        toolType: 'claude-code',
+        cwd: '/remote/project',
+        projectRoot: '/remote/project',
+        fullPath: '/remote/project',
+        state: 'idle',
+        inputMode: 'ai',
+        aiPid: 12345,
+        terminalPid: 12346,
+        port: 3000,
+        aiTabs: [],
+        activeTabId: 'tab-1',
+        closedTabHistory: [],
+        shellLogs: [],
+        executionQueue: [],
+        contextUsage: 0,
+        workLog: [],
+        isGitRepo: false,
+        changedFiles: [],
+        fileTree: [],
+        fileExplorerExpanded: [],
+        fileExplorerScrollPos: 0,
+        isLive: false,
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+          workingDirOverride: '/custom/path'
+        },
+      } as Session;
+
+      vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
+      ]);
+
+      render(
+        <NewInstanceModal
+          isOpen={true}
+          onClose={onClose}
+          onCreate={onCreate}
+          theme={theme}
+          existingSessions={[]}
+          sourceSession={sourceSession}
+        />
+      );
+
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText('Agent Name') as HTMLInputElement;
+        expect(nameInput.value).toBe('SSH Agent (Copy)');
+      });
+
+      // Verify SSH config was pre-filled (internal state test)
+      expect(sourceSession.sessionSshRemoteConfig?.enabled).toBe(true);
+      expect(sourceSession.sessionSshRemoteConfig?.remoteId).toBe('remote-1');
+      expect(sourceSession.sessionSshRemoteConfig?.workingDirOverride).toBe('/custom/path');
+    });
   });
 });

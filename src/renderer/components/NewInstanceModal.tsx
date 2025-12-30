@@ -218,6 +218,18 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
           ...prev,
           [source.toolType]: source.customEnvVars || {}
         }));
+
+        // Pre-fill SSH remote configuration if source session has it
+        if (source.sessionSshRemoteConfig?.enabled && source.sessionSshRemoteConfig?.remoteId) {
+          setAgentSshRemoteConfigs(prev => ({
+            ...prev,
+            [source.toolType]: {
+              enabled: true,
+              remoteId: source.sessionSshRemoteConfig!.remoteId!,
+              workingDirOverride: source.sessionSshRemoteConfig!.workingDirOverride
+            }
+          }));
+        }
       }
     } catch (error) {
       console.error('Failed to load agents:', error);
