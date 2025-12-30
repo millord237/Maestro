@@ -12,7 +12,7 @@ import { tunnelManager } from './tunnel-manager';
 import { getThemeById } from './themes';
 import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
-import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, registerStatsHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
+import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, registerDebugHandlers, registerSpeckitHandlers, registerOpenSpecHandlers, registerContextHandlers, registerMarketplaceHandlers, registerStatsHandlers, registerDocumentGraphHandlers, registerSshRemoteHandlers, setupLoggerEventForwarding, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './ipc/handlers';
 import { initializeStatsDB, closeStatsDB, getStatsDB } from './stats-db';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
 import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, setGetAgentConfigCallback, markParticipantResponded, spawnModeratorSynthesis, getGroupChatReadOnlyState, respawnParticipantWithRecovery } from './group-chat/group-chat-router';
@@ -21,6 +21,7 @@ import { needsSessionRecovery, initiateSessionRecovery } from './group-chat/sess
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
+import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
 
 // ============================================================================
@@ -148,6 +149,9 @@ interface MaestroSettings {
   // Web interface custom port
   webInterfaceUseCustomPort: boolean;
   webInterfaceCustomPort: number;
+  // SSH remote execution
+  sshRemotes: SshRemoteConfig[];
+  defaultSshRemoteId: string | null;
 }
 
 const store = new Store<MaestroSettings>({
@@ -168,6 +172,8 @@ const store = new Store<MaestroSettings>({
     webAuthToken: null,
     webInterfaceUseCustomPort: false,
     webInterfaceCustomPort: 8080,
+    sshRemotes: [],
+    defaultSshRemoteId: null,
   },
 });
 
@@ -1011,6 +1017,7 @@ function setupIpcHandlers() {
     getAgentDetector: () => agentDetector,
     agentConfigsStore,
     settingsStore: store,
+    getMainWindow: () => mainWindow,
   });
 
   // Persistence operations - extracted to src/main/ipc/handlers/persistence.ts
@@ -1100,6 +1107,17 @@ function setupIpcHandlers() {
   // Register Stats handlers for usage tracking
   registerStatsHandlers({
     getMainWindow: () => mainWindow,
+    settingsStore: store,
+  });
+
+  // Register Document Graph handlers for file watching
+  registerDocumentGraphHandlers({
+    getMainWindow: () => mainWindow,
+    app,
+  });
+
+  // Register SSH Remote handlers for managing SSH configurations
+  registerSshRemoteHandlers({
     settingsStore: store,
   });
 

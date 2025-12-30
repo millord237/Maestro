@@ -147,6 +147,13 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.on('process:tool-execution', handler);
       return () => ipcRenderer.removeListener('process:tool-execution', handler);
     },
+    // SSH remote execution status
+    // Emitted when a process starts executing via SSH on a remote host
+    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => void) => {
+      const handler = (_: any, sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => callback(sessionId, sshRemote);
+      ipcRenderer.on('process:ssh-remote', handler);
+      return () => ipcRenderer.removeListener('process:ssh-remote', handler);
+    },
     // Remote command execution from web interface
     // This allows web commands to go through the same code path as desktop commands
     // inputMode is optional - if provided, renderer should use it instead of session state
@@ -578,6 +585,36 @@ contextBridge.exposeInMainWorld('maestro', {
     start: () => ipcRenderer.invoke('tunnel:start'),
     stop: () => ipcRenderer.invoke('tunnel:stop'),
     getStatus: () => ipcRenderer.invoke('tunnel:getStatus'),
+  },
+
+  // SSH Remote API (execute agents on remote hosts via SSH)
+  sshRemote: {
+    saveConfig: (config: {
+      id?: string;
+      name?: string;
+      host?: string;
+      port?: number;
+      username?: string;
+      privateKeyPath?: string;
+      remoteWorkingDir?: string;
+      remoteEnv?: Record<string, string>;
+      enabled?: boolean;
+    }) => ipcRenderer.invoke('ssh-remote:saveConfig', config),
+    deleteConfig: (id: string) => ipcRenderer.invoke('ssh-remote:deleteConfig', id),
+    getConfigs: () => ipcRenderer.invoke('ssh-remote:getConfigs'),
+    getDefaultId: () => ipcRenderer.invoke('ssh-remote:getDefaultId'),
+    setDefaultId: (id: string | null) => ipcRenderer.invoke('ssh-remote:setDefaultId', id),
+    test: (configOrId: string | {
+      id: string;
+      name: string;
+      host: string;
+      port: number;
+      username: string;
+      privateKeyPath: string;
+      remoteWorkingDir?: string;
+      remoteEnv?: Record<string, string>;
+      enabled: boolean;
+    }, agentCommand?: string) => ipcRenderer.invoke('ssh-remote:test', configOrId, agentCommand),
   },
 
   // Sync API (custom storage location for cross-device sync)
@@ -1595,7 +1632,11 @@ export interface MaestroAPI {
     setAll: (groups: any[]) => Promise<boolean>;
   };
   process: {
-    spawn: (config: ProcessConfig) => Promise<{ pid: number; success: boolean }>;
+    spawn: (config: ProcessConfig) => Promise<{
+      pid: number;
+      success: boolean;
+      sshRemote?: { id: string; name: string; host: string };
+    }>;
     write: (sessionId: string, data: string) => Promise<boolean>;
     interrupt: (sessionId: string) => Promise<boolean>;
     kill: (sessionId: string) => Promise<boolean>;
@@ -1618,6 +1659,7 @@ export interface MaestroAPI {
     onSlashCommands: (callback: (sessionId: string, slashCommands: string[]) => void) => () => void;
     onThinkingChunk: (callback: (sessionId: string, content: string) => void) => () => void;
     onToolExecution: (callback: (sessionId: string, toolEvent: { toolName: string; state?: unknown; timestamp: number }) => void) => () => void;
+    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => void) => () => void;
     onRemoteCommand: (callback: (sessionId: string, command: string) => void) => () => void;
     onRemoteSwitchMode: (callback: (sessionId: string, mode: 'ai' | 'terminal') => void) => () => void;
     onRemoteInterrupt: (callback: (sessionId: string) => void) => () => void;
@@ -1816,6 +1858,76 @@ export interface MaestroAPI {
     start: () => Promise<{ success: boolean; url?: string; error?: string }>;
     stop: () => Promise<{ success: boolean }>;
     getStatus: () => Promise<{ isRunning: boolean; url: string | null; error: string | null }>;
+  };
+  sshRemote: {
+    saveConfig: (config: {
+      id?: string;
+      name?: string;
+      host?: string;
+      port?: number;
+      username?: string;
+      privateKeyPath?: string;
+      remoteWorkingDir?: string;
+      remoteEnv?: Record<string, string>;
+      enabled?: boolean;
+    }) => Promise<{
+      success: boolean;
+      config?: {
+        id: string;
+        name: string;
+        host: string;
+        port: number;
+        username: string;
+        privateKeyPath: string;
+        remoteWorkingDir?: string;
+        remoteEnv?: Record<string, string>;
+        enabled: boolean;
+      };
+      error?: string;
+    }>;
+    deleteConfig: (id: string) => Promise<{ success: boolean; error?: string }>;
+    getConfigs: () => Promise<{
+      success: boolean;
+      configs?: Array<{
+        id: string;
+        name: string;
+        host: string;
+        port: number;
+        username: string;
+        privateKeyPath: string;
+        remoteWorkingDir?: string;
+        remoteEnv?: Record<string, string>;
+        enabled: boolean;
+      }>;
+      error?: string;
+    }>;
+    getDefaultId: () => Promise<{ success: boolean; id?: string | null; error?: string }>;
+    setDefaultId: (id: string | null) => Promise<{ success: boolean; error?: string }>;
+    test: (
+      configOrId: string | {
+        id: string;
+        name: string;
+        host: string;
+        port: number;
+        username: string;
+        privateKeyPath: string;
+        remoteWorkingDir?: string;
+        remoteEnv?: Record<string, string>;
+        enabled: boolean;
+      },
+      agentCommand?: string
+    ) => Promise<{
+      success: boolean;
+      result?: {
+        success: boolean;
+        error?: string;
+        remoteInfo?: {
+          hostname: string;
+          agentVersion?: string;
+        };
+      };
+      error?: string;
+    }>;
   };
   sync: {
     getDefaultPath: () => Promise<string>;
