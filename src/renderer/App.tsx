@@ -329,7 +329,6 @@ function MaestroConsoleInner() {
     defaultStatsTimeRange,
     documentGraphShowExternalLinks,
     documentGraphMaxNodes,
-    documentGraphLayoutMode,
 
   } = settings;
 
@@ -8795,8 +8794,6 @@ function MaestroConsoleInner() {
         }}
         focusFilePath={graphFocusFilePath}
         onFocusFileConsumed={() => setGraphFocusFilePath(undefined)}
-        savedLayoutMode={documentGraphLayoutMode}
-        onLayoutModeChange={settings.setDocumentGraphLayoutMode}
         defaultShowExternalLinks={documentGraphShowExternalLinks}
         onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
         defaultMaxNodes={documentGraphMaxNodes}
