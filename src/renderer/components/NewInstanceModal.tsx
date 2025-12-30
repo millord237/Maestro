@@ -53,7 +53,8 @@ interface EditAgentModalProps {
     customArgs?: string,
     customEnvVars?: Record<string, string>,
     customModel?: string,
-    customContextWindow?: number
+    customContextWindow?: number,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => void;
   theme: any;
   session: Session | null;
@@ -243,14 +244,15 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
 
     // Get SSH remote configuration for this session (stored per-session, not per-agent)
     const sshRemoteConfig = agentSshRemoteConfigs[selectedAgent];
-    // Convert to session-level format: only pass if enabled with a valid remoteId
+    // Convert to session-level format: ALWAYS pass explicitly to override any agent-level config
+    // For new sessions, this ensures consistent behavior with the UI selection
     const sessionSshRemoteConfig = sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
       ? {
           enabled: true,
           remoteId: sshRemoteConfig.remoteId,
           workingDirOverride: sshRemoteConfig.workingDirOverride
         }
-      : undefined;
+      : { enabled: false, remoteId: null };
 
     onCreate(
       selectedAgent,
@@ -790,10 +792,18 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
         const modelValue = session.customModel ?? globalConfig.model ?? '';
         const contextWindowValue = session.customContextWindow ?? globalConfig.contextWindow;
         setAgentConfig({ ...globalConfig, model: modelValue, contextWindow: contextWindowValue });
-        // Load SSH remote config from agent config
-        const sshConfig = globalConfig.sshRemote as AgentSshRemoteConfig | undefined;
-        setSshRemoteConfig(sshConfig);
       });
+
+      // Load SSH remote config from session (per-session, not global)
+      if (session.sessionSshRemoteConfig?.enabled && session.sessionSshRemoteConfig?.remoteId) {
+        setSshRemoteConfig({
+          enabled: true,
+          remoteId: session.sessionSshRemoteConfig.remoteId,
+          workingDirOverride: session.sessionSshRemoteConfig.workingDirOverride
+        });
+      } else {
+        setSshRemoteConfig(undefined);
+      }
 
       // Load SSH remote configurations
       window.maestro.sshRemote.getConfigs()
@@ -845,19 +855,17 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
       ? agentConfig.contextWindow
       : undefined;
 
-    // Save SSH remote configuration to agent config store
-    if (sshRemoteConfig) {
-      const currentConfig = { ...agentConfig };
-      currentConfig.sshRemote = sshRemoteConfig;
-      window.maestro.agents.setConfig(session.toolType, currentConfig);
-    } else {
-      // Clear SSH remote config if undefined
-      const currentConfig = { ...agentConfig };
-      delete currentConfig.sshRemote;
-      window.maestro.agents.setConfig(session.toolType, currentConfig);
-    }
+    // Build per-session SSH remote config: ALWAYS pass explicitly to override any agent-level config
+    // When disabled or no remoteId, we explicitly pass enabled: false to ensure local execution
+    const sessionSshRemoteConfig = sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId
+      ? {
+          enabled: true,
+          remoteId: sshRemoteConfig.remoteId,
+          workingDirOverride: sshRemoteConfig.workingDirOverride
+        }
+      : { enabled: false, remoteId: null };
 
-    // Save with per-session config fields including model and contextWindow
+    // Save with per-session config fields including model, contextWindow, and SSH config
     onSave(
       session.id,
       name,
@@ -866,7 +874,8 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
       customArgs.trim() || undefined,
       Object.keys(customEnvVars).length > 0 ? customEnvVars : undefined,
       modelValue,
-      contextWindowValue
+      contextWindowValue,
+      sessionSshRemoteConfig
     );
     onClose();
   }, [session, instanceName, nudgeMessage, customPath, customArgs, customEnvVars, agentConfig, sshRemoteConfig, onSave, onClose, existingSessions]);
@@ -933,7 +942,7 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
     <div onKeyDown={handleKeyDown}>
       <Modal
         theme={theme}
-        title="Edit Agent"
+        title={`Edit Agent: ${session.name}`}
         priority={MODAL_PRIORITIES.NEW_INSTANCE}
         onClose={onClose}
         width={500}

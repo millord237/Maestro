@@ -615,6 +615,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
    */
   const handleCloseConfig = useCallback(async () => {
     // Save SSH remote config to wizard state (per-session, not per-agent)
+    // ALWAYS pass explicitly to override any agent-level config
     if (sshRemoteConfig?.enabled && sshRemoteConfig?.remoteId) {
       setWizardSessionSshRemoteConfig({
         enabled: true,
@@ -622,7 +623,8 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
         workingDirOverride: sshRemoteConfig.workingDirOverride
       });
     } else {
-      setWizardSessionSshRemoteConfig(undefined);
+      // Explicitly disable SSH to override any agent-level config
+      setWizardSessionSshRemoteConfig({ enabled: false, remoteId: null });
     }
 
     setIsTransitioning(true);

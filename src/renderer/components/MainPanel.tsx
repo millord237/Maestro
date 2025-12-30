@@ -333,6 +333,27 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
     };
   }, [activeSession?.toolType, activeSession?.customContextWindow]);
 
+  // Resolve SSH remote name for header display when session has SSH configured
+  const [sshRemoteName, setSshRemoteName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeSession?.sessionSshRemoteConfig?.enabled || !activeSession.sessionSshRemoteConfig.remoteId) {
+      setSshRemoteName(null);
+      return;
+    }
+
+    const remoteId = activeSession.sessionSshRemoteConfig.remoteId;
+    window.maestro.sshRemote.getConfigs()
+      .then((result) => {
+        if (result.success && result.configs) {
+          const remote = result.configs.find((r: { id: string }) => r.id === remoteId);
+          setSshRemoteName(remote?.name || null);
+        } else {
+          setSshRemoteName(null);
+        }
+      })
+      .catch(() => setSshRemoteName(null));
+  }, [activeSession?.sessionSshRemoteConfig?.enabled, activeSession?.sessionSshRemoteConfig?.remoteId]);
+
   const activeTabContextWindow = useMemo(() => {
     const configured = configuredContextWindow;
     const reported = activeTab?.usageStats?.contextWindow ?? 0;
@@ -531,29 +552,44 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                   onMouseEnter={activeSession.isGitRepo ? gitTooltip.triggerHandlers.onMouseEnter : undefined}
                   onMouseLeave={gitTooltip.triggerHandlers.onMouseLeave}
                 >
-                  <span
-                    className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border cursor-pointer ${activeSession.isGitRepo ? 'border-orange-500/30 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'border-blue-500/30 text-blue-500 bg-blue-500/10'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (activeSession.isGitRepo) {
-                        refreshGitStatus(); // Refresh git info immediately on click
-                        setGitLogOpen?.(true);
-                      }
-                    }}
-                    title={activeSession.isGitRepo && gitInfo?.branch ? gitInfo.branch : undefined}
-                  >
-                    {activeSession.isGitRepo ? (
-                      <>
-                        <GitBranch className="w-3 h-3" />
-                        {/* Hide branch name text at narrow widths, show on hover via title */}
-                        {!useIconOnlyGitBranch && (
-                          <span className="max-w-[120px] truncate">
-                            {gitInfo?.branch || 'GIT'}
-                          </span>
-                        )}
-                      </>
-                    ) : 'LOCAL'}
-                  </span>
+                  {/* SSH Host Pill - show SSH remote name when running remotely (replaces GIT/LOCAL badge) */}
+                  {activeSession.sessionSshRemoteConfig?.enabled && sshRemoteName ? (
+                    <span
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-purple-500/30 text-purple-500 bg-purple-500/10 max-w-[120px]"
+                      title={`SSH Remote: ${sshRemoteName}`}
+                    >
+                      <Server className="w-3 h-3 shrink-0" />
+                      <span className="truncate uppercase">{sshRemoteName}</span>
+                    </span>
+                  ) : (
+                    <span
+                      className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border cursor-pointer ${
+                        activeSession.isGitRepo
+                          ? 'border-orange-500/30 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20'
+                          : 'border-blue-500/30 text-blue-500 bg-blue-500/10'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (activeSession.isGitRepo) {
+                          refreshGitStatus(); // Refresh git info immediately on click
+                          setGitLogOpen?.(true);
+                        }
+                      }}
+                      title={activeSession.isGitRepo && gitInfo?.branch ? gitInfo.branch : undefined}
+                    >
+                      {activeSession.isGitRepo ? (
+                        <>
+                          <GitBranch className="w-3 h-3" />
+                          {/* Hide branch name text at narrow widths, show on hover via title */}
+                          {!useIconOnlyGitBranch && (
+                            <span className="truncate">
+                              {gitInfo?.branch || 'GIT'}
+                            </span>
+                          )}
+                        </>
+                      ) : 'LOCAL'}
+                    </span>
+                  )}
                   {activeSession.isGitRepo && gitTooltip.isOpen && gitInfo && (
                     <>
                       {/* Invisible bridge to prevent hover gap */}
@@ -703,23 +739,6 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                 compact={useCompactGitWidget}
               />
 
-              {/* SSH Remote Indicator - shows when session is using SSH remote execution */}
-              {activeSession.sshRemote && (
-                <span
-                  className="flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border"
-                  style={{
-                    borderColor: 'rgba(147, 51, 234, 0.3)', // purple-500/30
-                    color: 'rgb(147, 51, 234)', // purple-500
-                    backgroundColor: 'rgba(147, 51, 234, 0.1)', // purple-500/10
-                  }}
-                  title={`Running on SSH remote: ${activeSession.sshRemote.name} (${activeSession.sshRemote.host})`}
-                >
-                  <Server className="w-3 h-3" />
-                  <span className="max-w-[100px] truncate">
-                    {activeSession.sshRemote.name}
-                  </span>
-                </span>
-              )}
 
             </div>
 

@@ -990,79 +990,74 @@ export function LeaderboardRegistrationModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t flex justify-between" style={{ borderColor: theme.colors.border }}>
-          {/* Left side - Opt Out and Sync from Cloud (only for existing registrations with auth token) */}
-          <div className="flex gap-2">
-            {existingRegistration?.authToken && !showOptOutConfirm && submitState === 'idle' && onSyncStats && (
-              <button
-                onClick={handleSyncFromServer}
-                disabled={isSyncing}
-                className="px-3 py-2 text-xs rounded hover:bg-white/10 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                style={{ color: theme.colors.accent }}
-              >
-                {isSyncing ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <DownloadCloud className="w-3.5 h-3.5" />
-                    Sync from Cloud
-                  </>
-                )}
-              </button>
-            )}
-            {existingRegistration && !showOptOutConfirm && submitState === 'idle' && (
-              <button
-                onClick={() => setShowOptOutConfirm(true)}
-                className="px-3 py-2 text-xs rounded hover:bg-white/10 transition-colors flex items-center gap-1.5"
-                style={{ color: theme.colors.error }}
-              >
-                <UserX className="w-3.5 h-3.5" />
-                Opt Out
-              </button>
-            )}
-          </div>
-
-          {/* Right side - Cancel/Close and Submit */}
-          <div className="flex gap-2">
+        <div className="p-4 border-t flex justify-center gap-3" style={{ borderColor: theme.colors.border }}>
+          {/* Push Up - Submit stats to leaderboard */}
+          {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'polling' && submitState !== 'opted_out' && !showOptOutConfirm && (
             <button
-              onClick={() => {
-                stopPolling();
-                onClose();
+              onClick={handleSubmit}
+              disabled={!isFormValid || submitState === 'submitting' || showManualTokenEntry}
+              className="px-4 py-2 text-sm rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: theme.colors.bgActivity,
+                color: theme.colors.accent,
+                border: `1px solid ${theme.colors.border}`,
               }}
-              className="px-4 py-2 text-sm rounded hover:bg-white/10 transition-colors"
-              style={{ color: theme.colors.textDim }}
-              disabled={submitState === 'submitting'}
             >
-              {submitState === 'success' || submitState === 'opted_out' ? 'Close' :
-               submitState === 'awaiting_confirmation' || submitState === 'polling' ? 'Close (Continue in Background)' : 'Cancel'}
+              {submitState === 'submitting' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pushing...
+                </>
+              ) : (
+                <>
+                  <Trophy className="w-4 h-4" />
+                  Push Up
+                </>
+              )}
             </button>
-            {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'polling' && submitState !== 'opted_out' && (
-              <button
-                onClick={handleSubmit}
-                disabled={!isFormValid || submitState === 'submitting' || showOptOutConfirm || showManualTokenEntry}
-                className="px-4 py-2 text-sm font-medium rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  backgroundColor: theme.colors.accent,
-                  color: '#fff',
-                }}
-              >
-                {submitState === 'submitting' ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Trophy className="w-4 h-4" />
-                    {existingRegistration ? 'Update & Submit' : 'Register'}
-                  </>
-                )}
-              </button>
-            )}
-          </div>
+          )}
+
+          {/* Pull Down - Sync from cloud (only for existing registrations with auth token) */}
+          {existingRegistration?.authToken && !showOptOutConfirm && submitState === 'idle' && onSyncStats && (
+            <button
+              onClick={handleSyncFromServer}
+              disabled={isSyncing}
+              className="px-4 py-2 text-sm rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+              style={{
+                backgroundColor: theme.colors.bgActivity,
+                color: theme.colors.accent,
+                border: `1px solid ${theme.colors.border}`,
+              }}
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pulling...
+                </>
+              ) : (
+                <>
+                  <DownloadCloud className="w-4 h-4" />
+                  Pull Down
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Opt Out */}
+          {existingRegistration && !showOptOutConfirm && submitState === 'idle' && (
+            <button
+              onClick={() => setShowOptOutConfirm(true)}
+              className="px-4 py-2 text-sm rounded transition-colors flex items-center gap-2"
+              style={{
+                backgroundColor: theme.colors.bgActivity,
+                color: theme.colors.error,
+                border: `1px solid ${theme.colors.border}`,
+              }}
+            >
+              <UserX className="w-4 h-4" />
+              Opt Out
+            </button>
+          )}
         </div>
       </div>
     </div>

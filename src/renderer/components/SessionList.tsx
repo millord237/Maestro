@@ -544,11 +544,15 @@ function SessionTooltipContent({
           <span
             className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
             style={{
-              backgroundColor: session.isGitRepo ? theme.colors.accent + '30' : theme.colors.textDim + '20',
-              color: session.isGitRepo ? theme.colors.accent : theme.colors.textDim
+              backgroundColor: session.sessionSshRemoteConfig?.enabled
+                ? theme.colors.warning + '30'
+                : session.isGitRepo ? theme.colors.accent + '30' : theme.colors.textDim + '20',
+              color: session.sessionSshRemoteConfig?.enabled
+                ? theme.colors.warning
+                : session.isGitRepo ? theme.colors.accent : theme.colors.textDim
             }}
           >
-            {session.isGitRepo ? 'GIT' : 'LOCAL'}
+            {session.sessionSshRemoteConfig?.enabled ? 'REMOTE' : session.isGitRepo ? 'GIT' : 'LOCAL'}
           </span>
         )}
         {/* AUTO Mode Indicator */}
@@ -565,7 +569,7 @@ function SessionTooltipContent({
           </span>
         )}
       </div>
-      <div className="text-[10px] capitalize mb-2" style={{ color: theme.colors.textDim }}>{session.state} • {session.toolType}</div>
+      <div className="text-[10px] capitalize mb-2" style={{ color: theme.colors.textDim }}>{session.state} • {session.toolType}{session.sessionSshRemoteConfig?.enabled ? ' (SSH)' : ''}</div>
 
       <div className="pt-2 mt-2 space-y-1.5" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
         <div className="flex items-center justify-between text-[10px]">

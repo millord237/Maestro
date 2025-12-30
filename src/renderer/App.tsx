@@ -1766,7 +1766,7 @@ function MaestroConsoleInner() {
           const timeAgo = formatRelativeTime(synopsisData.lastSynopsisTime);
           SYNOPSIS_PROMPT = `Synopsize ONLY the work done since the last synopsis (${timeAgo}). Do not repeat previous work. 2-3 sentences max.`;
         } else {
-          SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max.';
+          SYNOPSIS_PROMPT = 'Synopsize our recent work in 2-3 sentences max since the last time we did a synopsis.';
         }
         const startTime = Date.now();
         const synopsisTime = Date.now(); // Capture time for updating lastSynopsisTime
@@ -5016,11 +5016,12 @@ function MaestroConsoleInner() {
     customArgs?: string,
     customEnvVars?: Record<string, string>,
     customModel?: string,
-    customContextWindow?: number
+    customContextWindow?: number,
+    sessionSshRemoteConfig?: { enabled: boolean; remoteId: string | null; workingDirOverride?: string }
   ) => {
     setSessions(prev => prev.map(s => {
       if (s.id !== sessionId) return s;
-      return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow };
+      return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow, sessionSshRemoteConfig };
     }));
   }, []);
 
