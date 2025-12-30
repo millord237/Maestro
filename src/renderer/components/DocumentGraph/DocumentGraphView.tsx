@@ -38,10 +38,11 @@ import ReactFlow, {
   NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { X, LayoutGrid, Network, ExternalLink, RefreshCw, Maximize2, ChevronDown, Loader2, Search, RotateCcw } from 'lucide-react';
+import { X, LayoutGrid, Network, ExternalLink, RefreshCw, Maximize2, ChevronDown, Loader2, Search, RotateCcw, AlertTriangle } from 'lucide-react';
 import type { Theme } from '../../types';
 import { useLayerStack } from '../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../constants/modalPriorities';
+import { Modal, ModalFooter } from '../ui/Modal';
 import { useDebouncedCallback } from '../../hooks/utils';
 import { DocumentNode } from './DocumentNode';
 import { ExternalLinkNode } from './ExternalLinkNode';
@@ -160,6 +161,10 @@ function DocumentGraphViewInner({
     nodeData: GraphNodeData;
   } | null>(null);
 
+  // Close confirmation modal state
+  const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
+  const confirmCloseButtonRef = useRef<HTMLButtonElement>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchQueryRef = useRef(searchQuery);
@@ -168,6 +173,11 @@ function DocumentGraphViewInner({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const { fitView, setCenter, getZoom } = useReactFlow();
+
+  // Handler for escape - show confirmation modal
+  const handleEscapeRequest = useCallback(() => {
+    setShowCloseConfirmation(true);
+  }, []);
 
   // Register with layer stack for Escape handling
   useEffect(() => {
@@ -178,11 +188,11 @@ function DocumentGraphViewInner({
         blocksLowerLayers: true,
         capturesFocus: true,
         focusTrap: 'lenient',
-        onEscape: () => onCloseRef.current(),
+        onEscape: handleEscapeRequest,
       });
       return () => unregisterLayer(id);
     }
-  }, [isOpen, registerLayer, unregisterLayer]);
+  }, [isOpen, registerLayer, unregisterLayer, handleEscapeRequest]);
 
   // Focus container on open
   useEffect(() => {
@@ -614,26 +624,37 @@ function DocumentGraphViewInner({
     GRAPH_REBUILD_DEBOUNCE_DELAY
   );
 
-  // Track previous includeExternalLinks to detect changes
+  // Track previous values to detect changes
   const prevIncludeExternalLinksRef = useRef(includeExternalLinks);
-  const isInitialMountRef = useRef(true);
+  const prevRootPathRef = useRef(rootPath);
+  const hasLoadedDataRef = useRef(false);
 
-  // Load data when modal opens (immediate) or settings change (debounced)
+  // Load data when modal opens for first time, rootPath changes, or settings change
   useEffect(() => {
     if (!isOpen) return;
 
     const includeExternalLinksChanged = prevIncludeExternalLinksRef.current !== includeExternalLinks;
-    prevIncludeExternalLinksRef.current = includeExternalLinks;
+    const rootPathChanged = prevRootPathRef.current !== rootPath;
 
-    if (isInitialMountRef.current) {
-      // Initial load: execute immediately
-      isInitialMountRef.current = false;
+    prevIncludeExternalLinksRef.current = includeExternalLinks;
+    prevRootPathRef.current = rootPath;
+
+    // Load immediately if:
+    // 1. We have no data yet (first open)
+    // 2. The rootPath changed (different project)
+    const needsInitialLoad = !hasLoadedDataRef.current || rootPathChanged;
+
+    if (needsInitialLoad) {
+      hasLoadedDataRef.current = true;
+      // Reset the initial load ref since we're loading fresh
+      isInitialLoadRef.current = true;
       loadGraphData();
     } else if (includeExternalLinksChanged) {
       // Settings changed: debounce the rebuild
       debouncedLoadGraphData();
     }
-  }, [isOpen, includeExternalLinks, loadGraphData, debouncedLoadGraphData]);
+    // If we already have data and nothing changed, do nothing (preserves cache)
+  }, [isOpen, includeExternalLinks, rootPath, loadGraphData, debouncedLoadGraphData]);
 
   // Cancel debounced load on unmount
   useEffect(() => {
@@ -1356,8 +1377,8 @@ function DocumentGraphViewInner({
         style={{
           backgroundColor: theme.colors.bgActivity,
           borderColor: theme.colors.border,
-          width: 'calc(100vw - 48px)',
-          height: 'calc(100vh - 48px)',
+          width: '90vw',
+          height: '90vh',
         }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
@@ -1731,6 +1752,35 @@ function DocumentGraphViewInner({
           <span style={{ opacity: 0.7 }}>Arrow keys to navigate • Enter to open • Tab to cycle • Drag to move • Scroll to zoom • Esc to close</span>
         </div>
       </div>
+
+      {/* Close Confirmation Modal */}
+      {showCloseConfirmation && (
+        <Modal
+          theme={theme}
+          title="Close Document Graph?"
+          priority={MODAL_PRIORITIES.DOCUMENT_GRAPH + 1}
+          onClose={() => setShowCloseConfirmation(false)}
+          width={400}
+          footer={
+            <ModalFooter
+              theme={theme}
+              onCancel={() => setShowCloseConfirmation(false)}
+              onConfirm={() => {
+                setShowCloseConfirmation(false);
+                onClose();
+              }}
+              cancelLabel="Cancel"
+              confirmLabel="Close Graph"
+              confirmButtonRef={confirmCloseButtonRef}
+            />
+          }
+          initialFocusRef={confirmCloseButtonRef}
+        >
+          <p style={{ color: theme.colors.textDim }}>
+            Are you sure you want to close the Document Graph?
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }

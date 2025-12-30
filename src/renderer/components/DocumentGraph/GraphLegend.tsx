@@ -195,9 +195,10 @@ export const GraphLegend = memo(function GraphLegend({
         border: `1px solid ${theme.colors.border}`,
         maxWidth: 280,
         zIndex: 10,
-        // Position above the React Flow Controls (which are ~90px tall at bottom-left)
-        bottom: 100,
-        left: 16,
+        // Position at bottom center
+        bottom: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
       }}
       role="region"
       aria-label="Graph legend"

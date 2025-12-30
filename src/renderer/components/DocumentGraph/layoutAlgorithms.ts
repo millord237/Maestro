@@ -50,8 +50,8 @@ const DEFAULT_OPTIONS: Required<LayoutOptions> = {
   nodeWidth: 280,
   nodeHeight: 120,
   rankDirection: 'TB',
-  nodeSeparation: 50,
-  rankSeparation: 100,
+  nodeSeparation: 80,  // Increased from 50 for better spacing
+  rankSeparation: 150, // Increased from 100 for better vertical spacing
   centerX: 0,
   centerY: 0,
 };
@@ -117,8 +117,8 @@ export function applyForceLayout(
       isExternal: edge.type === 'external',
     }));
 
-  // Calculate link distance based on node sizes
-  const baseLinkDistance = opts.nodeSeparation + Math.max(opts.nodeWidth, opts.nodeHeight) / 2;
+  // Calculate link distance based on node sizes - ensure adequate spacing
+  const baseLinkDistance = opts.nodeSeparation + Math.max(opts.nodeWidth, opts.nodeHeight);
 
   // Create and run the force simulation
   const simulation = forceSimulation<ForceNodeDatum>(simNodes)
@@ -127,47 +127,47 @@ export function applyForceLayout(
       forceLink<ForceNodeDatum, ForceLinkDatum>(simLinks)
         .id((d) => d.id)
         .distance((link) => {
-          // External links can be longer
-          return link.isExternal ? baseLinkDistance * 1.5 : baseLinkDistance;
+          // External links need more distance to avoid clustering
+          return link.isExternal ? baseLinkDistance * 2 : baseLinkDistance * 1.2;
         })
         .strength((link) => {
-          // External links are weaker
-          return link.isExternal ? 0.3 : 0.7;
+          // Stronger links to keep connected nodes closer but not overlapping
+          return link.isExternal ? 0.4 : 0.6;
         })
     )
     .force(
       'charge',
       forceManyBody<ForceNodeDatum>()
         .strength((d) => {
-          // External nodes need stronger repulsion to prevent overlap
-          return d.isExternal ? -300 : -400;
+          // Strong repulsion to prevent overlap - external nodes need even more
+          return d.isExternal ? -800 : -600;
         })
-        .distanceMax(600)
+        .distanceMax(1000)
     )
     .force(
       'collide',
       forceCollide<ForceNodeDatum>()
         .radius((d) => {
-          // External nodes need more collision space to prevent overlap
+          // Generous collision radius to absolutely prevent overlap
           const baseRadius = Math.max(d.width, d.height) / 2;
-          return d.isExternal ? baseRadius + 40 : baseRadius + 20;
+          return d.isExternal ? baseRadius + 60 : baseRadius + 40;
         })
         .strength(1.0)
-        .iterations(3)
+        .iterations(5)  // More iterations for better collision resolution
     )
     .force('center', forceCenter(opts.centerX, opts.centerY))
     .force(
       'x',
-      forceX<ForceNodeDatum>(opts.centerX).strength(0.05)
+      forceX<ForceNodeDatum>(opts.centerX).strength(0.03)  // Weaker centering to allow spread
     )
     .force(
       'y',
-      forceY<ForceNodeDatum>(opts.centerY).strength(0.05)
+      forceY<ForceNodeDatum>(opts.centerY).strength(0.03)
     )
     .stop();
 
-  // Run simulation synchronously for a set number of iterations
-  const iterations = 300;
+  // Run simulation synchronously for more iterations to ensure convergence
+  const iterations = 500;
   simulation.tick(iterations);
 
   // Build result nodes with updated positions
@@ -205,27 +205,28 @@ export function applyHierarchicalLayout(
   // Create a new dagre graph
   const g = new dagre.graphlib.Graph();
 
-  // Configure the graph
+  // Configure the graph with generous spacing
   g.setGraph({
     rankdir: opts.rankDirection,
-    nodesep: opts.nodeSeparation,
-    ranksep: opts.rankSeparation,
-    marginx: 50,
-    marginy: 50,
+    nodesep: opts.nodeSeparation * 1.5,  // More horizontal spacing
+    ranksep: opts.rankSeparation * 1.2,  // More vertical spacing
+    marginx: 80,
+    marginy: 80,
+    ranker: 'network-simplex',  // Better ranking algorithm
   });
 
   // Default edge label
   g.setDefaultEdgeLabel(() => ({}));
 
-  // Add nodes to the graph
+  // Add nodes to the graph with generous sizing
   for (const node of nodes) {
-    const width = node.type === 'externalLinkNode' ? 160 : opts.nodeWidth;
-    const height = node.type === 'externalLinkNode' ? 60 : opts.nodeHeight;
+    const width = node.type === 'externalLinkNode' ? 180 : opts.nodeWidth;
+    const height = node.type === 'externalLinkNode' ? 80 : opts.nodeHeight;
 
     g.setNode(node.id, {
-      // Add padding to external nodes to prevent overlap in hierarchical layout
-      width: node.type === 'externalLinkNode' ? width + 40 : width,
-      height: node.type === 'externalLinkNode' ? height + 20 : height,
+      // Add substantial padding to prevent overlap
+      width: node.type === 'externalLinkNode' ? width + 60 : width + 40,
+      height: node.type === 'externalLinkNode' ? height + 40 : height + 20,
       label: node.id,
     });
   }
@@ -235,7 +236,8 @@ export function applyHierarchicalLayout(
     // Only add edge if both nodes exist
     if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
       g.setEdge(edge.source, edge.target, {
-        minlen: edge.type === 'external' ? 2 : 1,
+        minlen: edge.type === 'external' ? 3 : 2,  // Increased minimum length
+        weight: edge.type === 'external' ? 0.5 : 1,  // External edges have less weight
       });
     }
   }
@@ -251,14 +253,15 @@ export function applyHierarchicalLayout(
     }
 
     // Dagre returns center positions, convert to top-left for React Flow
-    const width = node.type === 'externalLinkNode' ? 160 : opts.nodeWidth;
-    const height = node.type === 'externalLinkNode' ? 60 : opts.nodeHeight;
+    // Use the actual display size (not the padded size used for layout)
+    const displayWidth = node.type === 'externalLinkNode' ? 160 : opts.nodeWidth;
+    const displayHeight = node.type === 'externalLinkNode' ? 60 : opts.nodeHeight;
 
     return {
       ...node,
       position: {
-        x: dagreNode.x - width / 2,
-        y: dagreNode.y - height / 2,
+        x: dagreNode.x - displayWidth / 2,
+        y: dagreNode.y - displayHeight / 2,
       },
     };
   });
