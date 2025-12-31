@@ -30,6 +30,8 @@ interface GroupChatRightPanelProps {
   participantStates: Map<string, 'idle' | 'working'>;
   /** Map of participant sessionId to their project root path (for color preferences) */
   participantSessionPaths?: Map<string, string>;
+  /** Map of session name to SSH remote name (for displaying SSH pill on participant cards) */
+  sessionSshRemoteNames?: Map<string, string>;
   isOpen: boolean;
   onToggle: () => void;
   width: number;
@@ -61,6 +63,7 @@ export function GroupChatRightPanel({
   participants,
   participantStates,
   participantSessionPaths,
+  sessionSshRemoteNames,
   isOpen,
   onToggle,
   width,
@@ -153,10 +156,16 @@ export function GroupChatRightPanel({
     totalCost: moderatorUsage?.totalCost,
   }), [moderatorAgentId, moderatorSessionId, moderatorAgentSessionId, moderatorUsage]);
 
-  // Sort participants alphabetically by name
+  // Sort participants alphabetically by name and enrich with SSH remote names from sessions
   const sortedParticipants = useMemo(() => {
-    return [...participants].sort((a, b) => a.name.localeCompare(b.name));
-  }, [participants]);
+    return [...participants]
+      .map(p => ({
+        ...p,
+        // If participant doesn't have sshRemoteName stored, look it up from sessions by name
+        sshRemoteName: p.sshRemoteName || sessionSshRemoteNames?.get(p.name),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [participants, sessionSshRemoteNames]);
 
   // Handle context reset for a participant
   const handleContextReset = useCallback(async (participantName: string) => {

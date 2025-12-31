@@ -416,7 +416,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     // Last Document Graph - quick re-open (only when a graph has been opened before)
     ...(lastGraphFocusFile && onOpenLastDocumentGraph ? [{
       id: 'lastDocumentGraph',
-      label: 'Last Document Graph',
+      label: 'Open Last Document Graph',
       subtext: `Re-open: ${lastGraphFocusFile}`,
       action: () => {
         onOpenLastDocumentGraph();

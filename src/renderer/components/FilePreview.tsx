@@ -1073,17 +1073,18 @@ export function FilePreview({ file, onClose, theme, markdownEditMode, setMarkdow
         onNavigateForward();
         onShortcutUsed?.('filePreviewForward');
       }
+    } else if (e.key === 'g' && (e.metaKey || e.ctrlKey) && e.shiftKey && isMarkdown && onOpenInGraph) {
+      // Cmd+Shift+G: Open Document Graph focused on this file (markdown files only)
+      // Must come before fuzzyFileSearch check since isShortcut doesn't check for extra modifiers
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenInGraph();
     } else if (isShortcut(e, 'fuzzyFileSearch') && onOpenFuzzySearch) {
       // Cmd+G: Open fuzzy file search (only in preview mode, not edit mode)
       if (isMarkdown && markdownEditMode) return;
       e.preventDefault();
       e.stopPropagation();
       onOpenFuzzySearch();
-    } else if (e.key === 'g' && (e.metaKey || e.ctrlKey) && e.shiftKey && isMarkdown && onOpenInGraph) {
-      // Cmd+Shift+G: Open Document Graph focused on this file (markdown files only)
-      e.preventDefault();
-      e.stopPropagation();
-      onOpenInGraph();
     }
   };
 

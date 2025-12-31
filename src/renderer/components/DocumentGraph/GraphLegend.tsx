@@ -285,10 +285,10 @@ export const GraphLegend = memo(function GraphLegend({
 }: GraphLegendProps) {
   return (
     <div
-      className="graph-legend absolute top-0 right-0 h-full overflow-y-auto shadow-xl animate-in slide-in-from-right duration-200"
+      className="graph-legend absolute top-0 left-0 h-full overflow-y-auto shadow-xl animate-in slide-in-from-left duration-200"
       style={{
         backgroundColor: theme.colors.bgActivity,
-        borderLeft: `1px solid ${theme.colors.border}`,
+        borderRight: `1px solid ${theme.colors.border}`,
         width: 280,
         zIndex: 20,
       }}
