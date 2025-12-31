@@ -1,5 +1,9 @@
 /**
  * Tests for SSH Remote Configuration Resolver.
+ *
+ * SSH is SESSION-LEVEL ONLY:
+ * - Each session can have its own SSH config
+ * - No agent-level or global defaults
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -43,32 +47,28 @@ describe('getSshRemoteConfig', () => {
   };
 
   /**
-   * Create a mock store with specified configuration.
+   * Create a mock store with specified SSH remotes.
+   * Note: SSH is session-level only - no agent-level or global defaults.
    */
-  function createMockStore(
-    sshRemotes: SshRemoteConfig[] = [],
-    defaultSshRemoteId: string | null = null
-  ): SshRemoteSettingsStore {
+  function createMockStore(sshRemotes: SshRemoteConfig[] = []): SshRemoteSettingsStore {
     return {
       getSshRemotes: vi.fn(() => sshRemotes),
-      getDefaultSshRemoteId: vi.fn(() => defaultSshRemoteId),
     };
   }
 
   describe('when no SSH remotes are configured', () => {
     it('returns null config with source "none"', () => {
-      const store = createMockStore([], null);
+      const store = createMockStore([]);
       const result = getSshRemoteConfig(store, {});
 
       expect(result.config).toBeNull();
       expect(result.source).toBe('none');
     });
 
-    it('returns null even with agent-specific config when no remotes exist', () => {
-      const store = createMockStore([], null);
+    it('returns null even with session SSH config when no remotes exist', () => {
+      const store = createMockStore([]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'remote-1' },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: 'remote-1' },
       });
 
       expect(result.config).toBeNull();
@@ -76,25 +76,18 @@ describe('getSshRemoteConfig', () => {
     });
   });
 
-  describe('when using global default SSH remote', () => {
-    it('returns the global default config with source "global"', () => {
-      const store = createMockStore([remote1, remote2], 'remote-1');
+  describe('when no session SSH config is provided (local execution)', () => {
+    it('returns null config with source "none" even when remotes exist', () => {
+      const store = createMockStore([remote1, remote2]);
       const result = getSshRemoteConfig(store, {});
 
-      expect(result.config).toEqual(remote1);
-      expect(result.source).toBe('global');
-    });
-
-    it('returns null when global default points to disabled remote', () => {
-      const store = createMockStore([disabledRemote], 'remote-disabled');
-      const result = getSshRemoteConfig(store, {});
-
+      // No session config = local execution (no defaults)
       expect(result.config).toBeNull();
       expect(result.source).toBe('none');
     });
 
-    it('returns null when global default points to non-existent remote', () => {
-      const store = createMockStore([remote1], 'non-existent');
+    it('returns null when only disabled remotes exist', () => {
+      const store = createMockStore([disabledRemote]);
       const result = getSshRemoteConfig(store, {});
 
       expect(result.config).toBeNull();
@@ -102,67 +95,63 @@ describe('getSshRemoteConfig', () => {
     });
   });
 
-  describe('when using agent-specific SSH remote override', () => {
-    it('returns agent-specific config with source "agent" when enabled', () => {
-      const store = createMockStore([remote1, remote2], 'remote-1');
+  describe('when using session-specific SSH remote config', () => {
+    it('returns session config with source "session" when enabled', () => {
+      const store = createMockStore([remote1, remote2]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'remote-2' },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: 'remote-2' },
       });
 
       expect(result.config).toEqual(remote2);
-      expect(result.source).toBe('agent');
+      expect(result.source).toBe('session');
     });
 
-    it('returns null with source "disabled" when agent SSH is explicitly disabled', () => {
-      const store = createMockStore([remote1, remote2], 'remote-1');
+    it('returns null with source "disabled" when session SSH is explicitly disabled', () => {
+      const store = createMockStore([remote1, remote2]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: false, remoteId: null },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: false, remoteId: null },
       });
 
       expect(result.config).toBeNull();
       expect(result.source).toBe('disabled');
     });
 
-    it('overrides global default even when agent points to same remote', () => {
-      const store = createMockStore([remote1], 'remote-1');
+    it('returns session config when matching remote ID', () => {
+      const store = createMockStore([remote1]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'remote-1' },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: 'remote-1' },
       });
 
       expect(result.config).toEqual(remote1);
-      expect(result.source).toBe('agent');
+      expect(result.source).toBe('session');
     });
 
-    it('falls back to global default when agent remote ID not found', () => {
-      const store = createMockStore([remote1, remote2], 'remote-1');
+    it('returns null with source "none" when session remote ID not found', () => {
+      const store = createMockStore([remote1, remote2]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'non-existent' },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: 'non-existent' },
       });
 
-      expect(result.config).toEqual(remote1);
-      expect(result.source).toBe('global');
+      // Remote not found = local execution
+      expect(result.config).toBeNull();
+      expect(result.source).toBe('none');
     });
 
-    it('falls back to global default when agent remote is disabled', () => {
-      const store = createMockStore([remote1, disabledRemote], 'remote-1');
+    it('returns null with source "none" when session remote is disabled', () => {
+      const store = createMockStore([remote1, disabledRemote]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'remote-disabled' },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: 'remote-disabled' },
       });
 
-      expect(result.config).toEqual(remote1);
-      expect(result.source).toBe('global');
+      // Remote disabled = local execution
+      expect(result.config).toBeNull();
+      expect(result.source).toBe('none');
     });
 
-    it('returns null when agent enabled but no remoteId and no global default', () => {
-      const store = createMockStore([remote1], null);
+    it('returns null when session enabled but no remoteId specified', () => {
+      const store = createMockStore([remote1]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: null },
-        agentId: 'claude-code',
+        sessionSshConfig: { enabled: true, remoteId: null },
       });
 
       expect(result.config).toBeNull();
@@ -171,24 +160,24 @@ describe('getSshRemoteConfig', () => {
   });
 
   describe('priority ordering', () => {
-    it('agent-specific disabled takes precedence over global default', () => {
-      const store = createMockStore([remote1], 'remote-1');
+    it('session-specific disabled takes precedence (returns disabled source)', () => {
+      const store = createMockStore([remote1]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: false, remoteId: null },
+        sessionSshConfig: { enabled: false, remoteId: null },
       });
 
       expect(result.config).toBeNull();
       expect(result.source).toBe('disabled');
     });
 
-    it('agent-specific remote takes precedence over global default', () => {
-      const store = createMockStore([remote1, remote2], 'remote-1');
+    it('session-specific remote is used when valid', () => {
+      const store = createMockStore([remote1, remote2]);
       const result = getSshRemoteConfig(store, {
-        agentSshConfig: { enabled: true, remoteId: 'remote-2' },
+        sessionSshConfig: { enabled: true, remoteId: 'remote-2' },
       });
 
       expect(result.config).toEqual(remote2);
-      expect(result.source).toBe('agent');
+      expect(result.source).toBe('session');
     });
   });
 });
@@ -207,7 +196,6 @@ describe('createSshRemoteStoreAdapter', () => {
   it('creates adapter that delegates to store.get for sshRemotes', () => {
     const mockGet = vi.fn().mockImplementation((key: string, defaultValue: unknown) => {
       if (key === 'sshRemotes') return [remote1];
-      if (key === 'defaultSshRemoteId') return 'remote-1';
       return defaultValue;
     });
     const mockStore = { get: mockGet };
@@ -217,33 +205,6 @@ describe('createSshRemoteStoreAdapter', () => {
 
     expect(remotes).toEqual([remote1]);
     expect(mockGet).toHaveBeenCalledWith('sshRemotes', []);
-  });
-
-  it('creates adapter that delegates to store.get for defaultSshRemoteId', () => {
-    const mockGet = vi.fn().mockImplementation((key: string, defaultValue: unknown) => {
-      if (key === 'sshRemotes') return [];
-      if (key === 'defaultSshRemoteId') return 'remote-1';
-      return defaultValue;
-    });
-    const mockStore = { get: mockGet };
-
-    const adapter = createSshRemoteStoreAdapter(mockStore);
-    const defaultId = adapter.getDefaultSshRemoteId();
-
-    expect(defaultId).toBe('remote-1');
-    expect(mockGet).toHaveBeenCalledWith('defaultSshRemoteId', null);
-  });
-
-  it('returns null for defaultSshRemoteId when not set', () => {
-    const mockGet = vi.fn().mockImplementation((_key: string, defaultValue: unknown) => {
-      return defaultValue;
-    });
-    const mockStore = { get: mockGet };
-
-    const adapter = createSshRemoteStoreAdapter(mockStore);
-    const defaultId = adapter.getDefaultSshRemoteId();
-
-    expect(defaultId).toBeNull();
   });
 
   it('returns empty array for sshRemotes when not set', () => {
@@ -270,10 +231,25 @@ describe('integration with getSshRemoteConfig', () => {
     enabled: true,
   };
 
-  it('works end-to-end with store adapter', () => {
+  it('works end-to-end with store adapter and session config', () => {
     const mockGet = vi.fn().mockImplementation((key: string, defaultValue: unknown) => {
       if (key === 'sshRemotes') return [remote1];
-      if (key === 'defaultSshRemoteId') return 'remote-1';
+      return defaultValue;
+    });
+    const mockStore = { get: mockGet };
+
+    const adapter = createSshRemoteStoreAdapter(mockStore);
+    const result = getSshRemoteConfig(adapter, {
+      sessionSshConfig: { enabled: true, remoteId: 'remote-1' },
+    });
+
+    expect(result.config).toEqual(remote1);
+    expect(result.source).toBe('session');
+  });
+
+  it('returns null for local execution when no session config', () => {
+    const mockGet = vi.fn().mockImplementation((key: string, defaultValue: unknown) => {
+      if (key === 'sshRemotes') return [remote1];
       return defaultValue;
     });
     const mockStore = { get: mockGet };
@@ -281,7 +257,8 @@ describe('integration with getSshRemoteConfig', () => {
     const adapter = createSshRemoteStoreAdapter(mockStore);
     const result = getSshRemoteConfig(adapter, {});
 
-    expect(result.config).toEqual(remote1);
-    expect(result.source).toBe('global');
+    // No session config = local execution
+    expect(result.config).toBeNull();
+    expect(result.source).toBe('none');
   });
 });

@@ -609,7 +609,8 @@ describe('process IPC handlers', () => {
     });
   });
 
-  describe('SSH remote execution', () => {
+  describe('SSH remote execution (session-level only)', () => {
+    // SSH is SESSION-LEVEL ONLY - no agent-level or global defaults
     const mockSshRemote = {
       id: 'remote-1',
       name: 'Dev Server',
@@ -621,7 +622,7 @@ describe('process IPC handlers', () => {
       remoteEnv: { REMOTE_VAR: 'remote-value' },
     };
 
-    it('should wrap agent command with SSH when global default remote is configured', async () => {
+    it('should run locally when no session SSH config is provided', async () => {
       const mockAgent = {
         id: 'claude-code',
         name: 'Claude Code',
@@ -631,7 +632,6 @@ describe('process IPC handlers', () => {
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return [mockSshRemote];
-        if (key === 'defaultSshRemoteId') return 'remote-1';
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -643,49 +643,27 @@ describe('process IPC handlers', () => {
         cwd: '/local/project',
         command: 'claude',
         args: ['--print', '--verbose'],
+        // No sessionSshRemoteConfig = local execution
       });
 
-      // Should spawn with 'ssh' command instead of 'claude'
+      // Without session SSH config, should run locally
       expect(mockProcessManager.spawn).toHaveBeenCalledWith(
         expect.objectContaining({
-          command: 'ssh',
-          // SSH args should include authentication and remote command
-          args: expect.arrayContaining([
-            '-i', expect.stringContaining('.ssh/id_ed25519'),
-            '-p', '22',
-            'devuser@dev.example.com',
-          ]),
-          // SSH remote execution disables PTY
-          requiresPty: false,
+          command: 'claude', // Original command, not 'ssh'
+          args: expect.arrayContaining(['--print', '--verbose']),
         })
       );
     });
 
-    it('should use agent-specific SSH remote override', async () => {
-      const agentSpecificRemote = {
-        ...mockSshRemote,
-        id: 'agent-remote',
-        name: 'Agent-Specific Server',
-        host: 'agent.example.com',
-      };
-
+    it('should use session-level SSH remote config when provided', async () => {
       const mockAgent = {
         id: 'claude-code',
         requiresPty: true, // Note: should be disabled when using SSH
       };
 
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
-      mockAgentConfigsStore.get.mockReturnValue({
-        'claude-code': {
-          sshRemote: {
-            enabled: true,
-            remoteId: 'agent-remote',
-          },
-        },
-      });
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
-        if (key === 'sshRemotes') return [mockSshRemote, agentSpecificRemote];
-        if (key === 'defaultSshRemoteId') return 'remote-1'; // Global default is different
+        if (key === 'sshRemotes') return [mockSshRemote];
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -697,14 +675,19 @@ describe('process IPC handlers', () => {
         cwd: '/local/project',
         command: 'claude',
         args: ['--print'],
+        // Session-level SSH config
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
       });
 
-      // Should use agent-specific remote, not global default
+      // Should use session SSH config
       expect(mockProcessManager.spawn).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'ssh',
           args: expect.arrayContaining([
-            'devuser@agent.example.com', // agent-specific host
+            'devuser@dev.example.com',
           ]),
           // PTY should be disabled for SSH
           requiresPty: false,
@@ -712,7 +695,7 @@ describe('process IPC handlers', () => {
       );
     });
 
-    it('should not use SSH for terminal sessions', async () => {
+    it('should not use SSH for terminal sessions even with session config', async () => {
       const mockAgent = {
         id: 'terminal',
         requiresPty: true,
@@ -721,7 +704,6 @@ describe('process IPC handlers', () => {
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return [mockSshRemote];
-        if (key === 'defaultSshRemoteId') return 'remote-1';
         if (key === 'defaultShell') return 'zsh';
         return defaultValue;
       });
@@ -734,6 +716,11 @@ describe('process IPC handlers', () => {
         cwd: '/local/project',
         command: '/bin/zsh',
         args: [],
+        // Even with session SSH config, terminal sessions should be local
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
       });
 
       // Terminal sessions should NOT use SSH - they need local PTY
@@ -769,7 +756,6 @@ describe('process IPC handlers', () => {
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return [mockSshRemote];
-        if (key === 'defaultSshRemoteId') return 'remote-1';
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -782,6 +768,11 @@ describe('process IPC handlers', () => {
         command: 'claude',
         args: ['--print'],
         sessionCustomEnvVars: { CUSTOM_API_KEY: 'secret123' },
+        // Session-level SSH config
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
       });
 
       // When using SSH, customEnvVars should be undefined (passed via remote command)
@@ -798,24 +789,15 @@ describe('process IPC handlers', () => {
       expect(remoteCommandArg).toContain('CUSTOM_API_KEY=');
     });
 
-    it('should not wrap command when SSH is disabled for agent', async () => {
+    it('should run locally when session SSH is explicitly disabled', async () => {
       const mockAgent = {
         id: 'claude-code',
         requiresPty: false,
       };
 
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
-      mockAgentConfigsStore.get.mockReturnValue({
-        'claude-code': {
-          sshRemote: {
-            enabled: false, // Explicitly disabled for this agent
-            remoteId: null,
-          },
-        },
-      });
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return [mockSshRemote];
-        if (key === 'defaultSshRemoteId') return 'remote-1';
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -827,9 +809,14 @@ describe('process IPC handlers', () => {
         cwd: '/local/project',
         command: 'claude',
         args: ['--print'],
+        // Session SSH explicitly disabled
+        sessionSshRemoteConfig: {
+          enabled: false,
+          remoteId: null,
+        },
       });
 
-      // Agent has SSH disabled, should run locally
+      // Session has SSH explicitly disabled, should run locally
       expect(mockProcessManager.spawn).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'claude', // Original command, not 'ssh'
@@ -837,7 +824,7 @@ describe('process IPC handlers', () => {
       );
     });
 
-    it('should run locally when no SSH remote is configured', async () => {
+    it('should run locally when no SSH remotes are configured', async () => {
       const mockAgent = {
         id: 'claude-code',
         requiresPty: true,
@@ -846,7 +833,6 @@ describe('process IPC handlers', () => {
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return []; // No remotes configured
-        if (key === 'defaultSshRemoteId') return null;
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -858,9 +844,14 @@ describe('process IPC handlers', () => {
         cwd: '/local/project',
         command: 'claude',
         args: ['--print'],
+        // Session config points to non-existent remote
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
       });
 
-      // No SSH remote, should run locally with original command
+      // No matching SSH remote, should run locally
       expect(mockProcessManager.spawn).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'claude',
@@ -883,7 +874,6 @@ describe('process IPC handlers', () => {
       mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
       mockSettingsStore.get.mockImplementation((key, defaultValue) => {
         if (key === 'sshRemotes') return [sshRemoteWithWorkDir];
-        if (key === 'defaultSshRemoteId') return 'remote-1';
         return defaultValue;
       });
       mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
@@ -895,6 +885,11 @@ describe('process IPC handlers', () => {
         cwd: '/local/project', // Local cwd should be ignored when remoteWorkingDir is set
         command: 'claude',
         args: ['--print'],
+        // Session-level SSH config
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
       });
 
       // The SSH command should use the remote working directory

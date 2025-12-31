@@ -2,10 +2,12 @@
  * SSH Remote Configuration Resolver.
  *
  * Provides utilities for resolving which SSH remote configuration should
- * be used for agent execution. Handles the resolution priority:
- * 1. Agent-specific SSH remote override (per-agent configuration)
- * 2. Global default SSH remote (applies to all agents)
- * 3. Local execution (no SSH remote)
+ * be used for agent execution.
+ *
+ * SSH is SESSION-LEVEL ONLY:
+ * - Each session can have its own SSH config (sessionSshRemoteConfig)
+ * - If no session SSH config, execution is local
+ * - There is NO agent-level or global default SSH
  *
  * This module is used by the process spawn handlers to determine whether
  * an agent command should be executed locally or via SSH on a remote host.
@@ -18,16 +20,11 @@ import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../shared/types';
  */
 export interface SshRemoteResolveOptions {
   /**
-   * Agent-specific SSH remote configuration (optional).
-   * If provided and enabled, takes precedence over global default.
+   * Session-specific SSH remote configuration (optional).
+   * If provided and enabled, the session will execute via SSH.
+   * This is the ONLY way to enable SSH - there are no agent-level or global defaults.
    */
-  agentSshConfig?: AgentSshRemoteConfig;
-
-  /**
-   * The tool type / agent ID.
-   * Used for logging and debugging.
-   */
-  agentId?: string;
+  sessionSshConfig?: AgentSshRemoteConfig;
 }
 
 /**
@@ -41,12 +38,11 @@ export interface SshRemoteResolveResult {
 
   /**
    * How the configuration was resolved.
-   * - 'agent': Agent-specific override was used
-   * - 'global': Global default was used
-   * - 'disabled': SSH remote is explicitly disabled for this agent
+   * - 'session': Session-level SSH config was used
+   * - 'disabled': SSH remote is explicitly disabled for this session
    * - 'none': No SSH remote configured (local execution)
    */
-  source: 'agent' | 'global' | 'disabled' | 'none';
+  source: 'session' | 'disabled' | 'none';
 }
 
 /**
@@ -58,89 +54,67 @@ export interface SshRemoteSettingsStore {
    * Get all SSH remote configurations.
    */
   getSshRemotes(): SshRemoteConfig[];
-
-  /**
-   * Get the global default SSH remote ID.
-   */
-  getDefaultSshRemoteId(): string | null;
 }
 
 /**
  * Resolve the effective SSH remote configuration for agent execution.
  *
- * Resolution priority:
- * 1. If agentSshConfig is provided and explicitly disabled -> local execution
- * 2. If agentSshConfig is provided with a remoteId -> use that specific remote
- * 3. If global defaultSshRemoteId is set -> use that remote
- * 4. Otherwise -> local execution
+ * SSH is session-level only:
+ * 1. If sessionSshConfig is provided and explicitly disabled -> local execution
+ * 2. If sessionSshConfig is provided with a remoteId -> use that specific remote
+ * 3. Otherwise -> local execution (no defaults)
  *
  * @param store The settings store to read SSH remote configurations from
- * @param options Resolution options including agent-specific config
+ * @param options Resolution options including session-specific config
  * @returns Resolved SSH remote configuration with source information
  *
  * @example
- * // Using global default (no agent override)
+ * // No session config = local execution
  * const result = getSshRemoteConfig(store, {});
- * if (result.config) {
- *   // Execute via SSH
- * }
+ * // result.config === null, result.source === 'none'
  *
  * @example
- * // With agent-specific override
+ * // With session-specific SSH config
  * const result = getSshRemoteConfig(store, {
- *   agentSshConfig: { enabled: true, remoteId: 'remote-1' },
- *   agentId: 'claude-code'
+ *   sessionSshConfig: { enabled: true, remoteId: 'remote-1' },
  * });
  */
 export function getSshRemoteConfig(
   store: SshRemoteSettingsStore,
   options: SshRemoteResolveOptions = {}
 ): SshRemoteResolveResult {
-  const { agentSshConfig, agentId: _agentId } = options;
+  const { sessionSshConfig } = options;
 
   // Get all available SSH remotes
   const sshRemotes = store.getSshRemotes();
 
-  // Priority 1: Check agent-specific configuration
-  if (agentSshConfig) {
-    // If explicitly disabled for this agent, return null (local execution)
-    if (!agentSshConfig.enabled) {
+  // Check session-specific configuration (the ONLY way to enable SSH)
+  if (sessionSshConfig) {
+    // If explicitly disabled for this session, return null (local execution)
+    if (!sessionSshConfig.enabled) {
       return {
         config: null,
         source: 'disabled',
       };
     }
 
-    // If agent has a specific remote ID configured, use it
-    if (agentSshConfig.remoteId) {
+    // If session has a specific remote ID configured, use it
+    if (sessionSshConfig.remoteId) {
       const config = sshRemotes.find(
-        (r) => r.id === agentSshConfig.remoteId && r.enabled
+        (r) => r.id === sessionSshConfig.remoteId && r.enabled
       );
 
       if (config) {
         return {
           config,
-          source: 'agent',
+          source: 'session',
         };
       }
-      // If the specified remote doesn't exist or is disabled, fall through to global default
+      // If the specified remote doesn't exist or is disabled, fall through to local execution
     }
   }
 
-  // Priority 2: Check global default
-  const defaultId = store.getDefaultSshRemoteId();
-  if (defaultId) {
-    const config = sshRemotes.find((r) => r.id === defaultId && r.enabled);
-
-    if (config) {
-      return {
-        config,
-        source: 'global',
-      };
-    }
-  }
-
-  // Priority 3: No SSH remote configured - local execution
+  // No SSH remote configured - local execution
   return {
     config: null,
     source: 'none',
@@ -157,17 +131,17 @@ export function getSshRemoteConfig(
  * @returns A SshRemoteSettingsStore adapter
  *
  * @example
- * const storeAdapter = createStoreAdapter(settingsStore);
- * const result = getSshRemoteConfig(storeAdapter, { agentId: 'claude-code' });
+ * const storeAdapter = createSshRemoteStoreAdapter(settingsStore);
+ * const result = getSshRemoteConfig(storeAdapter, {
+ *   sessionSshConfig: { enabled: true, remoteId: 'remote-1' },
+ * });
  */
 export function createSshRemoteStoreAdapter<
   T extends {
     get(key: 'sshRemotes', defaultValue: SshRemoteConfig[]): SshRemoteConfig[];
-    get(key: 'defaultSshRemoteId', defaultValue: null): string | null;
   }
 >(store: T): SshRemoteSettingsStore {
   return {
     getSshRemotes: () => store.get('sshRemotes', []),
-    getDefaultSshRemoteId: () => store.get('defaultSshRemoteId', null),
   };
 }
