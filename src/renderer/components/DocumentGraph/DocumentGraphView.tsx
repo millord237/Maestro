@@ -148,8 +148,8 @@ export function DocumentGraphView({
   const [maxNodes, setMaxNodes] = useState(defaultMaxNodes);
 
   // Cached external data for instant toggling (without re-scanning)
-  const [cachedExternalData, setCachedExternalData] = useState<CachedExternalData | null>(null);
-  const [internalLinkCount, setInternalLinkCount] = useState(0);
+  const [_cachedExternalData, setCachedExternalData] = useState<CachedExternalData | null>(null);
+  const [_internalLinkCount, setInternalLinkCount] = useState(0);
 
   // Store already-converted MindMap nodes/links for toggling (with all required fields)
   const [documentOnlyNodes, setDocumentOnlyNodes] = useState<MindMapNode[]>([]);

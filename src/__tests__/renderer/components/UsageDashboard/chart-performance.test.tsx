@@ -190,18 +190,18 @@ describe('Chart Performance: Recharts NOT Used (Custom SVG Charts)', () => {
       expect(allElements.length).toBeLessThan(600);
     });
 
-    it('ActivityHeatmap handles 365 days with hour-by-day grid cells', () => {
+    it('ActivityHeatmap handles 365 days with GitHub-style grid', () => {
       const data = generateLargeDataset(365);
       const { container } = render(
         <ActivityHeatmap data={data} timeRange="year" theme={theme} />
       );
 
-      // New design: hour-by-day grid with AM/PM rows
-      // 365 days * 2 AM/PM rows = 730 cells
-      // Query for cells in the grid structure (rounded-sm without width constraint)
+      // GitHub-style layout for year view: weeks as columns, 7 days per week as rows
+      // ~52-53 weeks * 7 days = ~364-371 cells + placeholder cells for incomplete weeks
+      // Plus legend cells (5 for intensity scale)
       const cells = container.querySelectorAll('.rounded-sm');
-      expect(cells.length).toBeGreaterThan(500); // At least most cells rendered
-      expect(cells.length).toBeLessThanOrEqual(800); // ~730 cells + legend cells
+      expect(cells.length).toBeGreaterThan(350); // At least most cells rendered
+      expect(cells.length).toBeLessThanOrEqual(400); // ~371 cells + placeholders + legend
     });
 
     it('DurationTrendsChart X-axis labels are intelligently reduced for year view', () => {

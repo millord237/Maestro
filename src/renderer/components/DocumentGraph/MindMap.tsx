@@ -124,7 +124,7 @@ const NODE_HEIGHT_BASE = 56 + NODE_SUBHEADER_HEIGHT;
 /** Node height with description */
 const NODE_HEIGHT_WITH_DESC = 90 + NODE_SUBHEADER_HEIGHT;
 /** Maximum characters per line in description */
-const DESC_MAX_CHARS_PER_LINE = 32;
+const _DESC_MAX_CHARS_PER_LINE = 32;
 /** Scale factor for center node */
 const CENTER_NODE_SCALE = 1.15;
 /** External node width (smaller) */
@@ -896,7 +896,6 @@ export function MindMap({
       setFocusedNodeId(centerNode.id);
       onNodeSelect(centerNode);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerFilePath]); // Only trigger when center file changes, not on every layout/callback update
 
   // Sync focusedNodeId when selectedNodeId changes from parent (e.g., returning from search)

@@ -496,7 +496,8 @@ describe('process IPC handlers', () => {
         'ls -la',
         '/test/dir',
         'zsh', // default shell
-        {} // shell env vars
+        {}, // shell env vars
+        null // sshRemoteConfig (not set in this test)
       );
       expect(result).toEqual({ exitCode: 0 });
     });
@@ -522,7 +523,8 @@ describe('process IPC handlers', () => {
         'echo test',
         '/test',
         'fish',
-        { CUSTOM_VAR: 'value' }
+        { CUSTOM_VAR: 'value' },
+        null // sshRemoteConfig (not set in this test)
       );
     });
 
@@ -547,7 +549,8 @@ describe('process IPC handlers', () => {
         'pwd',
         '/test',
         '/opt/custom/shell',
-        {}
+        {},
+        null // sshRemoteConfig (not set in this test)
       );
     });
 

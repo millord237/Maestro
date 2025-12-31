@@ -45,7 +45,7 @@ function joinPath(...segments: string[]): string {
     .replace(/\\/g, '/');
 
   // Normalize multiple slashes
-  let normalized = joined.replace(/\/+/g, '/');
+  const normalized = joined.replace(/\/+/g, '/');
 
   // Resolve . and .. segments
   const parts = normalized.split('/');

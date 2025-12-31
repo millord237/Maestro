@@ -195,12 +195,13 @@ interface ParsedFile {
 }
 
 /**
- * Recursively scan a directory for all markdown files
+ * Recursively scan a directory for all markdown files.
+ * Note: Currently unused - retained for potential future features like "scan all" mode.
  * @param rootPath - Root directory to scan
  * @param onProgress - Optional callback for progress updates (reports number of directories scanned)
  * @returns Array of file paths relative to root
  */
-async function scanMarkdownFiles(
+async function _scanMarkdownFiles(
   rootPath: string,
   onProgress?: ProgressCallback
 ): Promise<string[]> {
