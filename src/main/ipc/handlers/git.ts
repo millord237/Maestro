@@ -23,6 +23,7 @@ import {
   listWorktreesRemote,
   getRepoRootRemote,
 } from '../../utils/remote-git';
+import { readDirRemote } from '../../utils/remote-fs';
 
 const LOG_CONTEXT = '[Git]';
 
@@ -800,32 +801,54 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   // Scan a directory for subdirectories that are git repositories or worktrees
   // This is used for auto-discovering worktrees in a parent directory
   // PERFORMANCE: Parallelized git operations to avoid blocking UI (was sequential before)
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:scanWorktreeDirectory', createIpcHandler(
     handlerOpts('scanWorktreeDirectory'),
-    async (parentPath: string) => {
-      try {
-        // Read directory contents
-        const entries = await fs.readdir(parentPath, { withFileTypes: true });
+    async (parentPath: string, sshRemoteId?: string) => {
+      const sshRemote = getSshRemoteById(sshRemoteId);
 
-        // Filter to only directories (excluding hidden directories)
-        const subdirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.'));
+      try {
+        // Read directory contents (SSH-aware)
+        let subdirs: Array<{ name: string; isDirectory: boolean }>;
+
+        if (sshRemote) {
+          // SSH remote: use readDirRemote
+          const result = await readDirRemote(parentPath, sshRemote);
+          if (!result.success || !result.data) {
+            logger.error(`Failed to read remote directory ${parentPath}: ${result.error}`, LOG_CONTEXT);
+            return { gitSubdirs: [] };
+          }
+          // Filter to only directories (excluding hidden directories)
+          subdirs = result.data.filter(e => e.isDirectory && !e.name.startsWith('.'));
+        } else {
+          // Local: use standard fs operations
+          const entries = await fs.readdir(parentPath, { withFileTypes: true });
+          // Filter to only directories (excluding hidden directories)
+          subdirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => ({
+            name: e.name,
+            isDirectory: true,
+          }));
+        }
 
         // Process all subdirectories in parallel instead of sequentially
         // This dramatically reduces the time for directories with many worktrees
         const results = await Promise.all(subdirs.map(async (subdir) => {
-          const subdirPath = path.join(parentPath, subdir.name);
+          // Use POSIX path joining for remote paths
+          const subdirPath = sshRemote
+            ? (parentPath.endsWith('/') ? `${parentPath}${subdir.name}` : `${parentPath}/${subdir.name}`)
+            : path.join(parentPath, subdir.name);
 
-          // Check if it's inside a git work tree
-          const isInsideWorkTree = await execFileNoThrow('git', ['rev-parse', '--is-inside-work-tree'], subdirPath);
+          // Check if it's inside a git work tree (SSH-aware via execGit)
+          const isInsideWorkTree = await execGit(['rev-parse', '--is-inside-work-tree'], subdirPath, sshRemote);
           if (isInsideWorkTree.exitCode !== 0) {
             return null; // Not a git repo
           }
 
-          // Run remaining git commands in parallel for each subdirectory
+          // Run remaining git commands in parallel for each subdirectory (SSH-aware via execGit)
           const [gitDirResult, gitCommonDirResult, branchResult] = await Promise.all([
-            execFileNoThrow('git', ['rev-parse', '--git-dir'], subdirPath),
-            execFileNoThrow('git', ['rev-parse', '--git-common-dir'], subdirPath),
-            execFileNoThrow('git', ['rev-parse', '--abbrev-ref', 'HEAD'], subdirPath),
+            execGit(['rev-parse', '--git-dir'], subdirPath, sshRemote),
+            execGit(['rev-parse', '--git-common-dir'], subdirPath, sshRemote),
+            execGit(['rev-parse', '--abbrev-ref', 'HEAD'], subdirPath, sshRemote),
           ]);
 
           const gitDir = gitDirResult.exitCode === 0 ? gitDirResult.stdout.trim() : '';
@@ -836,12 +859,21 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
           // Get repo root
           let repoRoot: string | null = null;
           if (isWorktree && gitCommonDir) {
-            const commonDirAbs = path.isAbsolute(gitCommonDir)
-              ? gitCommonDir
-              : path.resolve(subdirPath, gitCommonDir);
-            repoRoot = path.dirname(commonDirAbs);
+            // For SSH, use POSIX path operations
+            if (sshRemote) {
+              const commonDirAbs = gitCommonDir.startsWith('/')
+                ? gitCommonDir
+                : `${subdirPath}/${gitCommonDir}`.replace(/\/+/g, '/');
+              // Get parent directory (remove last path component)
+              repoRoot = commonDirAbs.split('/').slice(0, -1).join('/') || '/';
+            } else {
+              const commonDirAbs = path.isAbsolute(gitCommonDir)
+                ? gitCommonDir
+                : path.resolve(subdirPath, gitCommonDir);
+              repoRoot = path.dirname(commonDirAbs);
+            }
           } else {
-            const repoRootResult = await execFileNoThrow('git', ['rev-parse', '--show-toplevel'], subdirPath);
+            const repoRootResult = await execGit(['rev-parse', '--show-toplevel'], subdirPath, sshRemote);
             if (repoRootResult.exitCode === 0) {
               repoRoot = repoRootResult.stdout.trim();
             }

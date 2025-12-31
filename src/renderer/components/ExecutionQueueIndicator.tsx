@@ -31,7 +31,9 @@ export function ExecutionQueueIndicator({ session, theme, onClick }: ExecutionQu
 
   const tabNames = Object.keys(tabCounts);
 
-  // Calculate how many pills we can show based on available space
+  // Calculate how many pills we can show and their max width based on available space
+  const [maxPillWidth, setMaxPillWidth] = useState<number | null>(null);
+
   const calculateMaxPills = useCallback(() => {
     if (!containerRef.current) return;
 
@@ -47,18 +49,47 @@ export function ExecutionQueueIndicator({ session, theme, onClick }: ExecutionQu
     // Total fixed: ~340px
     const fixedWidth = 340;
 
-    // Each pill is roughly 100px (text + padding + count)
     // "+N" indicator is roughly 30px
-    const avgPillWidth = 100;
     const plusIndicatorWidth = 30;
 
     const availableWidth = containerWidth - fixedWidth - plusIndicatorWidth;
-    const calculatedMax = Math.floor(availableWidth / avgPillWidth);
 
-    // Clamp between 0 and 5 - can show zero pills on very small screens
-    const maxPills = Math.min(5, Math.max(0, calculatedMax));
-    setMaxVisiblePills(maxPills);
-  }, []);
+    // Calculate how many pills to show and their width
+    const numTabs = tabNames.length;
+    if (numTabs === 0) {
+      setMaxVisiblePills(0);
+      setMaxPillWidth(null);
+      return;
+    }
+
+    // Minimum pill width (padding + some text)
+    const minPillWidth = 60;
+    // Maximum pills to show
+    const maxPossiblePills = Math.min(5, numTabs);
+
+    // Try to fit as many pills as possible, starting from max
+    let pillsToShow = maxPossiblePills;
+    let pillWidth: number | null = null;
+
+    for (let n = maxPossiblePills; n >= 1; n--) {
+      const widthPerPill = availableWidth / n;
+      if (widthPerPill >= minPillWidth) {
+        pillsToShow = n;
+        // Only set max width if we need to constrain (when there's overflow potential)
+        pillWidth = widthPerPill > 200 ? null : widthPerPill;
+        break;
+      }
+    }
+
+    // If even 1 pill doesn't fit, show 0 pills
+    if (availableWidth < minPillWidth) {
+      pillsToShow = 0;
+      pillWidth = null;
+    }
+
+    setMaxVisiblePills(pillsToShow);
+    setMaxPillWidth(pillWidth);
+  }, [tabNames.length]);
 
   // Use ResizeObserver to recalculate when container size changes
   useEffect(() => {
@@ -120,19 +151,25 @@ export function ExecutionQueueIndicator({ session, theme, onClick }: ExecutionQu
 
       {/* Tab pills - dynamically show as many as fit, then +N more */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {tabNames.slice(0, maxVisiblePills).map(tabName => (
-          <span
-            key={tabName}
-            className="px-1.5 py-0.5 rounded text-xs font-mono whitespace-nowrap"
-            style={{
-              backgroundColor: theme.colors.accent + '30',
-              color: theme.colors.textMain
-            }}
-          >
-            {tabName.length > 8 ? tabName.slice(0, 8) + '...' : tabName}
-            {tabCounts[tabName] > 1 && ` (${tabCounts[tabName]})`}
-          </span>
-        ))}
+        {tabNames.slice(0, maxVisiblePills).map(tabName => {
+          const countSuffix = tabCounts[tabName] > 1 ? ` (${tabCounts[tabName]})` : '';
+          const fullText = tabName + countSuffix;
+          return (
+            <span
+              key={tabName}
+              className="px-1.5 py-0.5 rounded text-xs font-mono overflow-hidden text-ellipsis"
+              style={{
+                backgroundColor: theme.colors.accent + '30',
+                color: theme.colors.textMain,
+                maxWidth: maxPillWidth ? `${maxPillWidth}px` : undefined,
+                whiteSpace: 'nowrap'
+              }}
+              title={fullText}
+            >
+              {fullText}
+            </span>
+          );
+        })}
         {tabNames.length > maxVisiblePills && (
           <span
             className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"

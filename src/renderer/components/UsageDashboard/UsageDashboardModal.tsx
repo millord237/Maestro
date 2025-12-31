@@ -19,6 +19,7 @@ import { SummaryCards } from './SummaryCards';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { AgentComparisonChart } from './AgentComparisonChart';
 import { SourceDistributionChart } from './SourceDistributionChart';
+import { LocationDistributionChart } from './LocationDistributionChart';
 import { DurationTrendsChart } from './DurationTrendsChart';
 import { AutoRunStats } from './AutoRunStats';
 import { SessionStats } from './SessionStats';
@@ -32,7 +33,7 @@ import { getRendererPerfMetrics } from '../../utils/logger';
 import { PERFORMANCE_THRESHOLDS } from '../../../shared/performance-metrics';
 
 // Section IDs for keyboard navigation
-const OVERVIEW_SECTIONS = ['summary-cards', 'agent-comparison', 'source-distribution', 'activity-heatmap', 'duration-trends'] as const;
+const OVERVIEW_SECTIONS = ['summary-cards', 'agent-comparison', 'source-distribution', 'location-distribution', 'activity-heatmap', 'duration-trends'] as const;
 const AGENTS_SECTIONS = ['session-stats', 'agent-comparison'] as const;
 const ACTIVITY_SECTIONS = ['activity-heatmap', 'duration-trends'] as const;
 const AUTORUN_SECTIONS = ['autorun-stats'] as const;
@@ -52,6 +53,7 @@ interface StatsAggregation {
   avgDuration: number;
   byAgent: Record<string, { count: number; duration: number }>;
   bySource: { user: number; auto: number };
+  byLocation: { local: number; remote: number };
   byDay: Array<{ date: string; count: number; duration: number }>;
 }
 
@@ -320,6 +322,7 @@ export function UsageDashboardModal({
       'session-stats': 'Session Statistics',
       'agent-comparison': 'Agent Comparison Chart',
       'source-distribution': 'Source Distribution Chart',
+      'location-distribution': 'Location Distribution Chart',
       'activity-heatmap': 'Activity Heatmap',
       'duration-trends': 'Duration Trends Chart',
       'autorun-stats': 'Auto Run Statistics',
@@ -713,6 +716,25 @@ export function UsageDashboardModal({
                     >
                       <ChartErrorBoundary theme={theme} chartName="Source Distribution">
                         <SourceDistributionChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
+                      </ChartErrorBoundary>
+                    </div>
+
+                    {/* Location Distribution Chart */}
+                    <div
+                      ref={setSectionRef('location-distribution')}
+                      tabIndex={0}
+                      role="region"
+                      aria-label={getSectionLabel('location-distribution')}
+                      onKeyDown={(e) => handleSectionKeyDown(e, 'location-distribution')}
+                      className="outline-none rounded-lg transition-shadow"
+                      style={{
+                        minHeight: '300px',
+                        boxShadow: focusedSection === 'location-distribution' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
+                      }}
+                      data-testid="section-location-distribution"
+                    >
+                      <ChartErrorBoundary theme={theme} chartName="Location Distribution">
+                        <LocationDistributionChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
                       </ChartErrorBoundary>
                     </div>
                   </div>

@@ -357,7 +357,7 @@ interface MaestroAPI {
         isBare: boolean;
       }>;
     }>;
-    scanWorktreeDirectory: (parentPath: string) => Promise<{
+    scanWorktreeDirectory: (parentPath: string, sshRemoteId?: string) => Promise<{
       gitSubdirs: Array<{
         path: string;
         name: string;
@@ -1568,6 +1568,7 @@ interface MaestroAPI {
       duration: number;
       projectPath?: string;
       tabId?: string;
+      isRemote?: boolean;
     }) => Promise<string>;
     // Start an Auto Run session (returns session ID)
     startAutoRun: (session: {
@@ -1641,6 +1642,7 @@ interface MaestroAPI {
       avgDuration: number;
       byAgent: Record<string, { count: number; duration: number }>;
       bySource: { user: number; auto: number };
+      byLocation: { local: number; remote: number };
       byDay: Array<{ date: string; count: number; duration: number }>;
     }>;
     // Export query events to CSV

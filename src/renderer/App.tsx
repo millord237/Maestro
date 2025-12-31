@@ -748,8 +748,13 @@ function MaestroConsoleInner() {
       const aiSuccess = true;
 
       if (aiSuccess) {
-        // Check if the working directory is a Git repository
-        const isGitRepo = await gitService.isRepo(correctedSession.cwd);
+        // Get SSH remote ID for remote git operations
+        // Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+        // we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
+        const sshRemoteId = correctedSession.sshRemoteId || correctedSession.sessionSshRemoteConfig?.remoteId || undefined;
+
+        // Check if the working directory is a Git repository (via SSH for remote sessions)
+        const isGitRepo = await gitService.isRepo(correctedSession.cwd, sshRemoteId);
 
         // Fetch git branches and tags if it's a git repo
         let gitBranches: string[] | undefined;
@@ -757,8 +762,8 @@ function MaestroConsoleInner() {
         let gitRefsCacheTime: number | undefined;
         if (isGitRepo) {
           [gitBranches, gitTags] = await Promise.all([
-            gitService.getBranches(correctedSession.cwd),
-            gitService.getTags(correctedSession.cwd)
+            gitService.getBranches(correctedSession.cwd, sshRemoteId),
+            gitService.getTags(correctedSession.cwd, sshRemoteId)
           ]);
           gitRefsCacheTime = Date.now();
         }
@@ -1049,7 +1054,9 @@ function MaestroConsoleInner() {
 
       for (const parentSession of sessionsWithWorktreeConfig) {
         try {
-          const scanResult = await window.maestro.git.scanWorktreeDirectory(parentSession.worktreeConfig!.basePath);
+          // Get SSH remote ID for remote git operations
+          const sshRemoteId = parentSession.sshRemoteId || parentSession.sessionSshRemoteConfig?.remoteId || undefined;
+          const scanResult = await window.maestro.git.scanWorktreeDirectory(parentSession.worktreeConfig!.basePath, sshRemoteId);
           const { gitSubdirs } = scanResult;
 
           for (const subdir of gitSubdirs) {
@@ -1091,15 +1098,15 @@ function MaestroConsoleInner() {
               saveToHistory: true
             };
 
-            // Fetch git info
+            // Fetch git info (via SSH for remote sessions)
             let gitBranches: string[] | undefined;
             let gitTags: string[] | undefined;
             let gitRefsCacheTime: number | undefined;
 
             try {
               [gitBranches, gitTags] = await Promise.all([
-                gitService.getBranches(subdir.path),
-                gitService.getTags(subdir.path)
+                gitService.getBranches(subdir.path, sshRemoteId),
+                gitService.getTags(subdir.path, sshRemoteId)
               ]);
               gitRefsCacheTime = Date.now();
             } catch {
@@ -1149,7 +1156,9 @@ function MaestroConsoleInner() {
               customModel: parentSession.customModel,
               customContextWindow: parentSession.customContextWindow,
               nudgeMessage: parentSession.nudgeMessage,
-              autoRunFolderPath: parentSession.autoRunFolderPath
+              autoRunFolderPath: parentSession.autoRunFolderPath,
+              // Inherit SSH configuration from parent session
+              sessionSshRemoteConfig: parentSession.sessionSshRemoteConfig,
             };
 
             newWorktreeSessions.push(worktreeSession);
@@ -1414,6 +1423,7 @@ function MaestroConsoleInner() {
         agentType?: string;
         projectPath?: string;
         startTime?: number;
+        isRemote?: boolean; // Whether this was an SSH remote session
       } | null = null;
       let queuedItemToProcess: { sessionId: string; item: QueuedItem } | null = null;
       // Track if we need to run synopsis after completion (for /commit and other AI commands)
@@ -1503,6 +1513,8 @@ function MaestroConsoleInner() {
             agentType: currentSession.toolType,
             projectPath: currentSession.cwd,
             startTime: completedTabData?.thinkingStartTime || currentSession.thinkingStartTime,
+            // SSH remote session tracking: check both sshRemoteId (set after spawn) and sessionSshRemoteConfig (set before spawn)
+            isRemote: !!(currentSession.sshRemoteId || currentSession.sessionSshRemoteConfig?.enabled),
           };
 
           // Check if synopsis should be triggered:
@@ -1714,9 +1726,10 @@ function MaestroConsoleInner() {
 
           if (shouldRefresh) {
             (async () => {
+              const sshRemoteId = currentSession.sshRemoteId || currentSession.sessionSshRemoteConfig?.remoteId || undefined;
               const [gitBranches, gitTags] = await Promise.all([
-                gitService.getBranches(currentSession.cwd),
-                gitService.getTags(currentSession.cwd)
+                gitService.getBranches(currentSession.cwd, sshRemoteId),
+                gitService.getTags(currentSession.cwd, sshRemoteId)
               ]);
               setSessions(prev => prev.map(s =>
                 s.id === actualSessionId
@@ -1739,6 +1752,7 @@ function MaestroConsoleInner() {
           duration: toastData.duration,
           projectPath: toastData.projectPath,
           tabId: toastData.tabId,
+          isRemote: toastData.isRemote,
         }).catch(err => {
           // Don't fail the completion flow if stats recording fails
           console.warn('[onProcessExit] Failed to record query stats:', err);
@@ -4376,15 +4390,18 @@ function MaestroConsoleInner() {
         saveToHistory: defaultSaveToHistory
       };
 
-      // Fetch git info
+      // Get SSH remote ID for remote git operations
+      const sshRemoteId = parentSession.sshRemoteId || parentSession.sessionSshRemoteConfig?.remoteId || undefined;
+
+      // Fetch git info (via SSH for remote sessions)
       let gitBranches: string[] | undefined;
       let gitTags: string[] | undefined;
       let gitRefsCacheTime: number | undefined;
 
       try {
         [gitBranches, gitTags] = await Promise.all([
-          gitService.getBranches(worktree.path),
-          gitService.getTags(worktree.path)
+          gitService.getBranches(worktree.path, sshRemoteId),
+          gitService.getTags(worktree.path, sshRemoteId)
         ]);
         gitRefsCacheTime = Date.now();
       } catch {
@@ -4434,7 +4451,9 @@ function MaestroConsoleInner() {
         customModel: parentSession.customModel,
         customContextWindow: parentSession.customContextWindow,
         nudgeMessage: parentSession.nudgeMessage,
-        autoRunFolderPath: parentSession.autoRunFolderPath
+        autoRunFolderPath: parentSession.autoRunFolderPath,
+        // Inherit SSH configuration from parent session
+        sessionSshRemoteConfig: parentSession.sessionSshRemoteConfig,
       };
 
       setSessions(prev => {
@@ -4497,7 +4516,9 @@ function MaestroConsoleInner() {
 
         for (const session of worktreeParentSessions) {
           try {
-            const result = await window.maestro.git.scanWorktreeDirectory(session.worktreeParentPath!);
+            // Get SSH remote ID for parent session (check both runtime and config)
+            const parentSshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
+            const result = await window.maestro.git.scanWorktreeDirectory(session.worktreeParentPath!, parentSshRemoteId);
             const { gitSubdirs } = result;
 
             for (const subdir of gitSubdirs) {
@@ -4541,15 +4562,15 @@ function MaestroConsoleInner() {
                 saveToHistory: defaultSaveToHistory
               };
 
-              // Fetch git info
+              // Fetch git info (with SSH support)
               let gitBranches: string[] | undefined;
               let gitTags: string[] | undefined;
               let gitRefsCacheTime: number | undefined;
 
               try {
                 [gitBranches, gitTags] = await Promise.all([
-                  gitService.getBranches(subdir.path),
-                  gitService.getTags(subdir.path)
+                  gitService.getBranches(subdir.path, parentSshRemoteId),
+                  gitService.getTags(subdir.path, parentSshRemoteId)
                 ]);
                 gitRefsCacheTime = Date.now();
               } catch {
@@ -4570,6 +4591,8 @@ function MaestroConsoleInner() {
                 gitTags,
                 gitRefsCacheTime,
                 worktreeParentPath: session.worktreeParentPath,
+                // Inherit SSH configuration from parent session
+                sessionSshRemoteConfig: session.sessionSshRemoteConfig,
                 aiLogs: [],
                 shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
                 workLog: [],
@@ -5588,8 +5611,11 @@ function MaestroConsoleInner() {
       const newId = generateId();
       const aiPid = 0;
 
-      // Check if the working directory is a Git repository
-      const isGitRepo = await gitService.isRepo(workingDir);
+      // Get SSH remote ID for remote git operations (from session config)
+      const sshRemoteId = sessionSshRemoteConfig?.enabled ? sessionSshRemoteConfig.remoteId || undefined : undefined;
+
+      // Check if the working directory is a Git repository (via SSH for remote sessions)
+      const isGitRepo = await gitService.isRepo(workingDir, sshRemoteId);
 
       // Fetch git branches and tags if it's a git repo
       let gitBranches: string[] | undefined;
@@ -5597,8 +5623,8 @@ function MaestroConsoleInner() {
       let gitRefsCacheTime: number | undefined;
       if (isGitRepo) {
         [gitBranches, gitTags] = await Promise.all([
-          gitService.getBranches(workingDir),
-          gitService.getTags(workingDir)
+          gitService.getBranches(workingDir, sshRemoteId),
+          gitService.getTags(workingDir, sshRemoteId)
         ]);
         gitRefsCacheTime = Date.now();
       }
@@ -5721,15 +5747,16 @@ function MaestroConsoleInner() {
     // aiPid stays at 0 until user sends their first message
     const aiPid = 0;
 
-    // Check git repo status
-    const isGitRepo = await gitService.isRepo(directoryPath);
+    // Check git repo status (with SSH support if configured)
+    const wizardSshRemoteId = sessionSshRemoteConfig?.remoteId || undefined;
+    const isGitRepo = await gitService.isRepo(directoryPath, wizardSshRemoteId);
     let gitBranches: string[] | undefined;
     let gitTags: string[] | undefined;
     let gitRefsCacheTime: number | undefined;
     if (isGitRepo) {
       [gitBranches, gitTags] = await Promise.all([
-        gitService.getBranches(directoryPath),
-        gitService.getTags(directoryPath)
+        gitService.getBranches(directoryPath, wizardSshRemoteId),
+        gitService.getTags(directoryPath, wizardSshRemoteId)
       ]);
       gitRefsCacheTime = Date.now();
     }
@@ -5888,13 +5915,18 @@ function MaestroConsoleInner() {
     // Track session creation in global stats
     updateGlobalStats({ totalSessions: 1 });
 
-    // Check if this is a git repo and update git info
-    const isGitRepo = await gitService.isRepo(session.projectRoot);
+    // Get SSH remote ID for remote git operations
+    // Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+    // we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
+    const sshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
+
+    // Check if this is a git repo and update git info (via SSH for remote sessions)
+    const isGitRepo = await gitService.isRepo(session.projectRoot, sshRemoteId);
     if (isGitRepo) {
       try {
         const [gitBranches, gitTags] = await Promise.all([
-          gitService.getBranches(session.projectRoot),
-          gitService.getTags(session.projectRoot)
+          gitService.getBranches(session.projectRoot, sshRemoteId),
+          gitService.getTags(session.projectRoot, sshRemoteId)
         ]);
 
         setSessions(prev => prev.map(s => {
@@ -7446,8 +7478,10 @@ function MaestroConsoleInner() {
     ));
 
     // Scan for worktrees and create sub-agent sessions
+    // Get SSH remote ID for parent session (check both runtime and config)
+    const parentSshRemoteId = activeSession.sshRemoteId || activeSession.sessionSshRemoteConfig?.remoteId || undefined;
     try {
-      const scanResult = await window.maestro.git.scanWorktreeDirectory(config.basePath);
+      const scanResult = await window.maestro.git.scanWorktreeDirectory(config.basePath, parentSshRemoteId);
       const { gitSubdirs } = scanResult;
 
       if (gitSubdirs.length > 0) {
@@ -7489,15 +7523,15 @@ function MaestroConsoleInner() {
             saveToHistory: true
           };
 
-          // Fetch git info for this subdirectory
+          // Fetch git info for this subdirectory (with SSH support)
           let gitBranches: string[] | undefined;
           let gitTags: string[] | undefined;
           let gitRefsCacheTime: number | undefined;
 
           try {
             [gitBranches, gitTags] = await Promise.all([
-              gitService.getBranches(subdir.path),
-              gitService.getTags(subdir.path)
+              gitService.getBranches(subdir.path, parentSshRemoteId),
+              gitService.getTags(subdir.path, parentSshRemoteId)
             ]);
             gitRefsCacheTime = Date.now();
           } catch {
@@ -7519,6 +7553,8 @@ function MaestroConsoleInner() {
             gitRefsCacheTime,
             parentSessionId: activeSession.id,
             worktreeBranch: subdir.branch || undefined,
+            // Inherit SSH configuration from parent session
+            sessionSshRemoteConfig: activeSession.sessionSshRemoteConfig,
             aiLogs: [],
             shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Worktree Session Ready.' }],
             workLog: [],

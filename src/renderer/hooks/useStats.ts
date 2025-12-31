@@ -26,6 +26,7 @@ export interface StatsAggregation {
   avgDuration: number;
   byAgent: Record<string, { count: number; duration: number }>;
   bySource: { user: number; auto: number };
+  byLocation: { local: number; remote: number };
   byDay: Array<{ date: string; count: number; duration: number }>;
 }
 

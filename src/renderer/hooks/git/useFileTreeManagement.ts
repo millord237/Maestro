@@ -163,7 +163,7 @@ export function useFileTreeManagement(
       const [tree, stats, isGitRepo] = await Promise.all([
         loadFileTree(treeRoot, 10, 0, sshContext),
         window.maestro.fs.directorySize(treeRoot, sshContext?.sshRemoteId),
-        gitService.isRepo(gitRoot)
+        gitService.isRepo(gitRoot, sshContext?.sshRemoteId)
       ]);
 
       let gitBranches: string[] | undefined;
@@ -172,8 +172,8 @@ export function useFileTreeManagement(
 
       if (isGitRepo) {
         [gitBranches, gitTags] = await Promise.all([
-          gitService.getBranches(gitRoot),
-          gitService.getTags(gitRoot)
+          gitService.getBranches(gitRoot, sshContext?.sshRemoteId),
+          gitService.getTags(gitRoot, sshContext?.sshRemoteId)
         ]);
         gitRefsCacheTime = Date.now();
       }

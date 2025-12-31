@@ -274,12 +274,11 @@ export class StatsDB {
         description: 'Initial schema: query_events, auto_run_sessions, auto_run_tasks tables',
         up: () => this.migrateV1(),
       },
-      // Future migrations should be added here:
-      // {
-      //   version: 2,
-      //   description: 'Add token_count column to query_events',
-      //   up: () => this.migrateV2(),
-      // },
+      {
+        version: 2,
+        description: 'Add is_remote column to query_events for tracking SSH sessions',
+        up: () => this.migrateV2(),
+      },
     ];
   }
 
@@ -535,6 +534,24 @@ export class StatsDB {
     }
 
     logger.debug('Created stats database tables and indexes', LOG_CONTEXT);
+  }
+
+  /**
+   * Migration v2: Add is_remote column for SSH session tracking
+   *
+   * Adds a new column to track whether queries were executed on remote SSH sessions
+   * vs local sessions. This enables usage analytics broken down by session location.
+   */
+  private migrateV2(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Add is_remote column (0 = local, 1 = remote, NULL = unknown/legacy data)
+    this.db.prepare('ALTER TABLE query_events ADD COLUMN is_remote INTEGER').run();
+
+    // Add index for efficient filtering by location
+    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_query_is_remote ON query_events(is_remote)').run();
+
+    logger.debug('Added is_remote column to query_events table', LOG_CONTEXT);
   }
 
   // ============================================================================
@@ -862,8 +879,8 @@ export class StatsDB {
 
     const id = generateId();
     const stmt = this.db.prepare(`
-      INSERT INTO query_events (id, session_id, agent_type, source, start_time, duration, project_path, tab_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO query_events (id, session_id, agent_type, source, start_time, duration, project_path, tab_id, is_remote)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -874,7 +891,8 @@ export class StatsDB {
       event.startTime,
       event.duration,
       normalizePath(event.projectPath),
-      event.tabId ?? null
+      event.tabId ?? null,
+      event.isRemote !== undefined ? (event.isRemote ? 1 : 0) : null
     );
 
     logger.debug(`Inserted query event ${id}`, LOG_CONTEXT);
@@ -921,6 +939,7 @@ export class StatsDB {
       duration: number;
       project_path: string | null;
       tab_id: string | null;
+      is_remote: number | null;
     }>;
 
     return rows.map((row) => ({
@@ -932,6 +951,7 @@ export class StatsDB {
       duration: row.duration,
       projectPath: row.project_path ?? undefined,
       tabId: row.tab_id ?? undefined,
+      isRemote: row.is_remote !== null ? row.is_remote === 1 : undefined,
     }));
   }
 
@@ -1170,6 +1190,26 @@ export class StatsDB {
     }
     perfMetrics.end(bySourceStart, 'getAggregatedStats:bySource', { range });
 
+    // By location (local vs remote SSH)
+    const byLocationStart = perfMetrics.start();
+    const byLocationStmt = this.db.prepare(`
+      SELECT is_remote, COUNT(*) as count
+      FROM query_events
+      WHERE start_time >= ?
+      GROUP BY is_remote
+    `);
+    const byLocationRows = byLocationStmt.all(startTime) as Array<{ is_remote: number | null; count: number }>;
+    const byLocation = { local: 0, remote: 0 };
+    for (const row of byLocationRows) {
+      if (row.is_remote === 1) {
+        byLocation.remote = row.count;
+      } else {
+        // Treat NULL (legacy data) and 0 as local
+        byLocation.local += row.count;
+      }
+    }
+    perfMetrics.end(byLocationStart, 'getAggregatedStats:byLocation', { range });
+
     // By day (for charts)
     const byDayStart = perfMetrics.start();
     const byDayStmt = this.db.prepare(`
@@ -1209,6 +1249,7 @@ export class StatsDB {
       byAgent,
       bySource,
       byDay: byDayRows,
+      byLocation,
     };
   }
 

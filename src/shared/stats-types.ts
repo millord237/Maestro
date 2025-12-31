@@ -16,6 +16,8 @@ export interface QueryEvent {
   duration: number;
   projectPath?: string;
   tabId?: string;
+  /** Whether this query was executed on a remote SSH session */
+  isRemote?: boolean;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface StatsAggregation {
   byAgent: Record<string, { count: number; duration: number }>;
   bySource: { user: number; auto: number };
   byDay: Array<{ date: string; count: number; duration: number }>;
+  /** Breakdown by session location (local vs SSH remote) */
+  byLocation: { local: number; remote: number };
 }
 
 /**
@@ -78,4 +82,4 @@ export interface StatsFilters {
 /**
  * Database schema version for migrations
  */
-export const STATS_DB_VERSION = 1;
+export const STATS_DB_VERSION = 2;

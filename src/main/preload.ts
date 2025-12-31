@@ -462,8 +462,9 @@ contextBridge.exposeInMainWorld('maestro', {
         }>;
       }>,
     // Scan a directory for subdirectories that are git repositories or worktrees
-    scanWorktreeDirectory: (parentPath: string) =>
-      ipcRenderer.invoke('git:scanWorktreeDirectory', parentPath) as Promise<{
+    // Supports SSH remote execution via optional sshRemoteId parameter
+    scanWorktreeDirectory: (parentPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:scanWorktreeDirectory', parentPath, sshRemoteId) as Promise<{
         gitSubdirs: Array<{
           path: string;
           name: string;
@@ -1517,6 +1518,7 @@ contextBridge.exposeInMainWorld('maestro', {
       duration: number;
       projectPath?: string;
       tabId?: string;
+      isRemote?: boolean;
     }) => ipcRenderer.invoke('stats:record-query', event) as Promise<string>,
 
     // Start an Auto Run session (returns session ID)
@@ -1873,7 +1875,7 @@ export interface MaestroAPI {
         isBare: boolean;
       }>;
     }>;
-    scanWorktreeDirectory: (parentPath: string) => Promise<{
+    scanWorktreeDirectory: (parentPath: string, sshRemoteId?: string) => Promise<{
       gitSubdirs: Array<{
         path: string;
         name: string;
@@ -2071,6 +2073,7 @@ export interface MaestroAPI {
       duration: number;
       projectPath?: string;
       tabId?: string;
+      isRemote?: boolean;
     }) => Promise<string>;
     startAutoRun: (session: {
       sessionId: string;

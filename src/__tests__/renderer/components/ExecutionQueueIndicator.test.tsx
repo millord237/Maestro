@@ -288,7 +288,7 @@ describe('ExecutionQueueIndicator', () => {
       expect(screen.getByText('MyTab')).toBeInTheDocument();
     });
 
-    it('should truncate long tab names with ellipsis', () => {
+    it('should show full tab name when space is available', () => {
       const session = createSession({
         executionQueue: [
           createQueuedItem({ tabName: 'VeryLongTabNameThatNeedsTruncation' })
@@ -297,7 +297,8 @@ describe('ExecutionQueueIndicator', () => {
       render(
         <ExecutionQueueIndicator session={session} theme={theme} onClick={mockOnClick} />
       );
-      expect(screen.getByText('VeryLong...')).toBeInTheDocument();
+      // With wide container (800px), full name should be visible
+      expect(screen.getByText('VeryLongTabNameThatNeedsTruncation')).toBeInTheDocument();
     });
 
     it('should show count in parentheses when tab has multiple items', () => {
@@ -508,8 +509,8 @@ describe('ExecutionQueueIndicator', () => {
       render(
         <ExecutionQueueIndicator session={session} theme={theme} onClick={mockOnClick} />
       );
-      // Should safely render truncated name (8 chars + ...)
-      expect(screen.getByText('<script>...')).toBeInTheDocument();
+      // Should safely render the name (React escapes HTML by default)
+      expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
     });
 
     it('should handle unicode in tab names', () => {
@@ -524,28 +525,30 @@ describe('ExecutionQueueIndicator', () => {
       expect(screen.getByText('🎵 Music')).toBeInTheDocument();
     });
 
-    it('should handle exactly 8 character tab names without truncation', () => {
+    it('should show full tab names when container has space', () => {
       const session = createSession({
         executionQueue: [
-          createQueuedItem({ tabName: 'Exactly8' })
+          createQueuedItem({ tabName: 'LongerTabName' })
         ]
       });
       render(
         <ExecutionQueueIndicator session={session} theme={theme} onClick={mockOnClick} />
       );
-      expect(screen.getByText('Exactly8')).toBeInTheDocument();
+      // With 800px container width, names should not be truncated
+      expect(screen.getByText('LongerTabName')).toBeInTheDocument();
     });
 
-    it('should truncate tab names longer than 8 characters', () => {
+    it('should add title attribute for full text on hover', () => {
       const session = createSession({
         executionQueue: [
-          createQueuedItem({ tabName: 'Exactly9c' })
+          createQueuedItem({ tabName: 'FullTabName' })
         ]
       });
       render(
         <ExecutionQueueIndicator session={session} theme={theme} onClick={mockOnClick} />
       );
-      expect(screen.getByText('Exactly9...')).toBeInTheDocument();
+      const pill = screen.getByText('FullTabName');
+      expect(pill).toHaveAttribute('title', 'FullTabName');
     });
 
     it('should handle rapid prop updates', () => {

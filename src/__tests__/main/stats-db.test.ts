@@ -414,13 +414,13 @@ describe('StatsDB class (mocked)', () => {
       const db = new StatsDB();
       db.initialize();
 
-      // Currently we have version 1 migration
-      expect(db.getTargetVersion()).toBe(1);
+      // Currently we have version 2 migration (v1: initial schema, v2: is_remote column)
+      expect(db.getTargetVersion()).toBe(2);
     });
 
     it('should return false from hasPendingMigrations() when up to date', async () => {
       mockDb.pragma.mockImplementation((sql: string) => {
-        if (sql === 'user_version') return [{ user_version: 1 }];
+        if (sql === 'user_version') return [{ user_version: 2 }];
         return undefined;
       });
 
@@ -435,8 +435,8 @@ describe('StatsDB class (mocked)', () => {
       // This test verifies the hasPendingMigrations() logic
       // by checking current version < target version
 
-      // Simulate a database that's already at version 1
-      let currentVersion = 1;
+      // Simulate a database that's already at version 2 (target version)
+      let currentVersion = 2;
       mockDb.pragma.mockImplementation((sql: string) => {
         if (sql === 'user_version') return [{ user_version: currentVersion }];
         // Handle version updates from migration
@@ -450,9 +450,9 @@ describe('StatsDB class (mocked)', () => {
       const db = new StatsDB();
       db.initialize();
 
-      // At version 1, target is 1, so no pending migrations
-      expect(db.getCurrentVersion()).toBe(1);
-      expect(db.getTargetVersion()).toBe(1);
+      // At version 2, target is 2, so no pending migrations
+      expect(db.getCurrentVersion()).toBe(2);
+      expect(db.getTargetVersion()).toBe(2);
       expect(db.hasPendingMigrations()).toBe(false);
     });
 
@@ -3577,13 +3577,14 @@ describe('Aggregation queries return correct calculations', () => {
     it('should return daily breakdown with correct structure', async () => {
       mockStatement.get.mockReturnValue({ count: 30, total_duration: 150000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 30, duration: 150000 }])
-        .mockReturnValueOnce([{ source: 'user', count: 30 }])
+        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 30, duration: 150000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'user', count: 30 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 30 }]) // byLocation
         .mockReturnValueOnce([
           { date: '2024-01-01', count: 10, duration: 50000 },
           { date: '2024-01-02', count: 12, duration: 60000 },
           { date: '2024-01-03', count: 8, duration: 40000 },
-        ]);
+        ]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -3614,9 +3615,10 @@ describe('Aggregation queries return correct calculations', () => {
     it('should handle single day of data', async () => {
       mockStatement.get.mockReturnValue({ count: 5, total_duration: 25000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 5, duration: 25000 }])
-        .mockReturnValueOnce([{ source: 'user', count: 5 }])
-        .mockReturnValueOnce([{ date: '2024-06-15', count: 5, duration: 25000 }]);
+        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 5, duration: 25000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'user', count: 5 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 5 }]) // byLocation
+        .mockReturnValueOnce([{ date: '2024-06-15', count: 5, duration: 25000 }]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -3633,13 +3635,14 @@ describe('Aggregation queries return correct calculations', () => {
     it('should order daily data chronologically (ASC)', async () => {
       mockStatement.get.mockReturnValue({ count: 15, total_duration: 75000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 15, duration: 75000 }])
-        .mockReturnValueOnce([{ source: 'user', count: 15 }])
+        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 15, duration: 75000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'user', count: 15 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 15 }]) // byLocation
         .mockReturnValueOnce([
           { date: '2024-03-01', count: 3, duration: 15000 },
           { date: '2024-03-02', count: 5, duration: 25000 },
           { date: '2024-03-03', count: 7, duration: 35000 },
-        ]);
+        ]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -3656,13 +3659,14 @@ describe('Aggregation queries return correct calculations', () => {
     it('should sum daily counts equal to totalQueries', async () => {
       mockStatement.get.mockReturnValue({ count: 25, total_duration: 125000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 25, duration: 125000 }])
-        .mockReturnValueOnce([{ source: 'user', count: 25 }])
+        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 25, duration: 125000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'user', count: 25 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 25 }]) // byLocation
         .mockReturnValueOnce([
           { date: '2024-02-01', count: 8, duration: 40000 },
           { date: '2024-02-02', count: 10, duration: 50000 },
           { date: '2024-02-03', count: 7, duration: 35000 },
-        ]);
+        ]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -3678,13 +3682,14 @@ describe('Aggregation queries return correct calculations', () => {
     it('should sum daily durations equal to totalDuration', async () => {
       mockStatement.get.mockReturnValue({ count: 20, total_duration: 100000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'opencode', count: 20, duration: 100000 }])
-        .mockReturnValueOnce([{ source: 'auto', count: 20 }])
+        .mockReturnValueOnce([{ agent_type: 'opencode', count: 20, duration: 100000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'auto', count: 20 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 20 }]) // byLocation
         .mockReturnValueOnce([
           { date: '2024-04-10', count: 5, duration: 25000 },
           { date: '2024-04-11', count: 8, duration: 40000 },
           { date: '2024-04-12', count: 7, duration: 35000 },
-        ]);
+        ]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -3891,12 +3896,13 @@ describe('Aggregation queries return correct calculations', () => {
     it('should handle dates spanning year boundaries', async () => {
       mockStatement.get.mockReturnValue({ count: 2, total_duration: 10000 });
       mockStatement.all
-        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 2, duration: 10000 }])
-        .mockReturnValueOnce([{ source: 'user', count: 2 }])
+        .mockReturnValueOnce([{ agent_type: 'claude-code', count: 2, duration: 10000 }]) // byAgent
+        .mockReturnValueOnce([{ source: 'user', count: 2 }]) // bySource
+        .mockReturnValueOnce([{ is_remote: 0, count: 2 }]) // byLocation
         .mockReturnValueOnce([
           { date: '2023-12-31', count: 1, duration: 5000 },
           { date: '2024-01-01', count: 1, duration: 5000 },
-        ]);
+        ]); // byDay
 
       const { StatsDB } = await import('../../main/stats-db');
       const db = new StatsDB();
@@ -5401,6 +5407,7 @@ describe('File path normalization in database (forward slashes consistently)', (
       });
 
       // Verify that the statement was called with normalized path
+      // insertQueryEvent now has 9 parameters: id, sessionId, agentType, source, startTime, duration, projectPath, tabId, isRemote
       expect(mockStatement.run).toHaveBeenCalledWith(
         expect.any(String), // id
         'session-1',
@@ -5409,7 +5416,8 @@ describe('File path normalization in database (forward slashes consistently)', (
         expect.any(Number), // startTime
         5000,
         'C:/Users/TestUser/Projects/MyApp', // normalized path
-        'tab-1'
+        'tab-1',
+        null // isRemote (undefined → null)
       );
     });
 
@@ -5428,6 +5436,7 @@ describe('File path normalization in database (forward slashes consistently)', (
         tabId: 'tab-1',
       });
 
+      // insertQueryEvent now has 9 parameters including isRemote
       expect(mockStatement.run).toHaveBeenCalledWith(
         expect.any(String),
         'session-1',
@@ -5436,7 +5445,8 @@ describe('File path normalization in database (forward slashes consistently)', (
         expect.any(Number),
         5000,
         '/Users/testuser/Projects/MyApp', // unchanged
-        'tab-1'
+        'tab-1',
+        null // isRemote (undefined → null)
       );
     });
 
@@ -5454,6 +5464,7 @@ describe('File path normalization in database (forward slashes consistently)', (
         // projectPath is undefined
       });
 
+      // insertQueryEvent now has 9 parameters including isRemote
       expect(mockStatement.run).toHaveBeenCalledWith(
         expect.any(String),
         'session-1',
@@ -5462,7 +5473,8 @@ describe('File path normalization in database (forward slashes consistently)', (
         expect.any(Number),
         5000,
         null, // undefined becomes null
-        null
+        null, // tabId undefined → null
+        null  // isRemote undefined → null
       );
     });
   });
@@ -6808,7 +6820,7 @@ describe('Database VACUUM functionality', () => {
         mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
       });
 
-      it('should execute 4 SQL queries for aggregation (COUNT+SUM, GROUP BY agent, GROUP BY source, GROUP BY date)', async () => {
+      it('should execute 5 SQL queries for aggregation (COUNT+SUM, GROUP BY agent, GROUP BY source, GROUP BY is_remote, GROUP BY date)', async () => {
         // Track prepared statements
         const preparedQueries: string[] = [];
         mockDb.prepare.mockImplementation((sql: string) => {
@@ -6825,17 +6837,21 @@ describe('Database VACUUM functionality', () => {
         db.initialize();
         mockStatement.run.mockClear();
 
+        // Clear queries captured during initialization (migrations, etc.)
+        preparedQueries.length = 0;
+
         db.getAggregatedStats('year');
 
-        // Verify exactly 4 queries were prepared for aggregation
+        // Verify exactly 5 queries were prepared for aggregation
         const aggregationQueries = preparedQueries.filter(
           (sql) =>
             sql.includes('query_events') &&
             !sql.includes('CREATE') &&
-            !sql.includes('INSERT')
+            !sql.includes('INSERT') &&
+            !sql.includes('ALTER')
         );
 
-        expect(aggregationQueries.length).toBe(4);
+        expect(aggregationQueries.length).toBe(5);
 
         // Query 1: Total count and sum
         expect(aggregationQueries[0]).toContain('COUNT(*)');
@@ -6847,8 +6863,11 @@ describe('Database VACUUM functionality', () => {
         // Query 3: Group by source
         expect(aggregationQueries[2]).toContain('GROUP BY source');
 
-        // Query 4: Group by date
-        expect(aggregationQueries[3]).toContain('GROUP BY date');
+        // Query 4: Group by is_remote (location)
+        expect(aggregationQueries[3]).toContain('GROUP BY is_remote');
+
+        // Query 5: Group by date
+        expect(aggregationQueries[4]).toContain('GROUP BY date');
       });
 
       it('should use indexed column (start_time) in WHERE clause for all aggregation queries', async () => {
@@ -6867,16 +6886,19 @@ describe('Database VACUUM functionality', () => {
         db.initialize();
         mockStatement.run.mockClear();
 
+        // Clear queries captured during initialization (migrations, etc.)
+        preparedQueries.length = 0;
+
         db.getAggregatedStats('year');
 
-        // All 4 aggregation queries should filter by start_time (indexed column)
+        // All 5 aggregation queries should filter by start_time (indexed column)
         const aggregationQueries = preparedQueries.filter(
           (sql) =>
             sql.includes('query_events') &&
             sql.includes('WHERE start_time')
         );
 
-        expect(aggregationQueries.length).toBe(4);
+        expect(aggregationQueries.length).toBe(5);
       });
 
       it('should compute time range correctly for year filter (365 days)', async () => {
@@ -7396,7 +7418,8 @@ describe('Database VACUUM functionality', () => {
           get: vi.fn(() => ({ count: 100000, total_duration: 500000000 })),
           all: vi.fn(() => {
             queryIndex++;
-            if (queryIndex === 3) return sparseByDay; // byDay query
+            // byDay is now the 5th query (index 4): totals, byAgent, bySource, byLocation, byDay
+            if (queryIndex === 4) return sparseByDay; // byDay query
             return [];
           }),
           run: vi.fn(() => ({ changes: 1 })),
@@ -7934,16 +7957,20 @@ describe('Database VACUUM functionality', () => {
         db.initialize();
         mockStatement.run.mockClear();
 
+        // Clear queries captured during initialization (migrations, etc.)
+        queriesExecuted.length = 0;
+
         db.getAggregatedStats('month');
 
-        // Find all SELECT queries on query_events
+        // Find all SELECT queries on query_events (excluding ALTER statements from migrations)
         const aggregationQueries = queriesExecuted.filter(
           (sql) =>
             sql.includes('query_events') &&
-            (sql.includes('COUNT') || sql.includes('GROUP BY'))
+            (sql.includes('COUNT') || sql.includes('GROUP BY')) &&
+            !sql.includes('ALTER')
         );
 
-        expect(aggregationQueries.length).toBe(4);
+        expect(aggregationQueries.length).toBe(5);
 
         // All should filter by start_time (enables index usage)
         for (const query of aggregationQueries) {

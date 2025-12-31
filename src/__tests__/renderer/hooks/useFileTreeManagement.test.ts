@@ -191,10 +191,11 @@ describe('useFileTreeManagement', () => {
 
     // loadFileTree always uses projectRoot (treeRoot), not shellCwd
     // But git operations use shellCwd when inputMode is 'terminal'
+    // The second parameter is sshRemoteId, which is undefined for local sessions
     expect(loadFileTree).toHaveBeenCalledWith('/test/project', 10, 0, undefined);
-    expect(gitService.isRepo).toHaveBeenCalledWith('/test/shell');
-    expect(gitService.getBranches).toHaveBeenCalledWith('/test/shell');
-    expect(gitService.getTags).toHaveBeenCalledWith('/test/shell');
+    expect(gitService.isRepo).toHaveBeenCalledWith('/test/shell', undefined);
+    expect(gitService.getBranches).toHaveBeenCalledWith('/test/shell', undefined);
+    expect(gitService.getTags).toHaveBeenCalledWith('/test/shell', undefined);
     expect(window.maestro.history.reload).toHaveBeenCalled();
     expect(rightPanelRef.current?.refreshHistoryPanel).toHaveBeenCalled();
 
