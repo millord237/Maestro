@@ -408,9 +408,9 @@ describe('UsageDashboard Responsive Layout', () => {
       simulateContainerResize(500);
 
       await waitFor(() => {
-        // Find the grid containing agent-comparison and source-distribution
-        const agentSection = screen.getByTestId('section-agent-comparison');
-        const chartGrid = agentSection.parentElement;
+        // Find the distribution charts grid (contains source-distribution and location-distribution)
+        const sourceSection = screen.getByTestId('section-source-distribution');
+        const chartGrid = sourceSection.parentElement;
         expect(chartGrid).toHaveStyle({ gridTemplateColumns: 'repeat(1, minmax(0, 1fr))' });
       });
     });
@@ -429,8 +429,8 @@ describe('UsageDashboard Responsive Layout', () => {
       simulateContainerResize(750);
 
       await waitFor(() => {
-        const agentSection = screen.getByTestId('section-agent-comparison');
-        const chartGrid = agentSection.parentElement;
+        const sourceSection = screen.getByTestId('section-source-distribution');
+        const chartGrid = sourceSection.parentElement;
         expect(chartGrid).toHaveStyle({ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' });
       });
     });
@@ -449,8 +449,8 @@ describe('UsageDashboard Responsive Layout', () => {
       simulateContainerResize(1100);
 
       await waitFor(() => {
-        const agentSection = screen.getByTestId('section-agent-comparison');
-        const chartGrid = agentSection.parentElement;
+        const sourceSection = screen.getByTestId('section-source-distribution');
+        const chartGrid = sourceSection.parentElement;
         expect(chartGrid).toHaveStyle({ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' });
       });
     });
@@ -744,25 +744,25 @@ describe('UsageDashboard Responsive Layout', () => {
   });
 
   describe('Chart Minimum Heights', () => {
-    it('agent comparison chart has minimum height of 300px', async () => {
+    it('agent comparison chart has minimum height of 180px', async () => {
       render(
         <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
       );
 
       await waitFor(() => {
         const agentSection = screen.getByTestId('section-agent-comparison');
-        expect(agentSection).toHaveStyle({ minHeight: '300px' });
+        expect(agentSection).toHaveStyle({ minHeight: '180px' });
       });
     });
 
-    it('source distribution chart has minimum height of 300px', async () => {
+    it('source distribution chart has minimum height of 240px', async () => {
       render(
         <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
       );
 
       await waitFor(() => {
         const sourceSection = screen.getByTestId('section-source-distribution');
-        expect(sourceSection).toHaveStyle({ minHeight: '300px' });
+        expect(sourceSection).toHaveStyle({ minHeight: '240px' });
       });
     });
 
@@ -816,15 +816,15 @@ describe('UsageDashboard Responsive Layout', () => {
   });
 
   describe('Grid Gap Consistency', () => {
-    it('chart grid has consistent 6 unit gap (1.5rem/24px)', async () => {
+    it('content sections have consistent 6 unit spacing (1.5rem/24px)', async () => {
       render(
         <UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />
       );
 
       await waitFor(() => {
-        const agentSection = screen.getByTestId('section-agent-comparison');
-        const chartGrid = agentSection.parentElement;
-        expect(chartGrid).toHaveClass('gap-6');
+        // The main content area uses space-y-6 for vertical spacing between sections
+        const contentArea = screen.getByTestId('usage-dashboard-content');
+        expect(contentArea).toHaveClass('space-y-6');
       });
     });
 

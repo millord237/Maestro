@@ -52,6 +52,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash" />,
   Edit3: () => <span data-testid="icon-edit" />,
   FolderInput: () => <span data-testid="icon-folder-input" />,
+  FolderPlus: () => <span data-testid="icon-folder-plus" />,
   Download: () => <span data-testid="icon-download" />,
   Compass: () => <span data-testid="icon-compass" />,
   Globe: () => <span data-testid="icon-globe" />,

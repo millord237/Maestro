@@ -283,8 +283,8 @@ describe('ActivityHeatmap', () => {
 
         // Tooltip should appear with date and query count
         // Note: Tooltip content depends on the specific day data
-        // We just verify a tooltip-like element appears
-        const tooltip = container.querySelector('.fixed.z-50');
+        // We just verify a tooltip-like element appears (uses z-[99999] for high stacking)
+        const tooltip = container.querySelector('.fixed.z-\\[99999\\]');
         expect(tooltip).toBeInTheDocument();
       }
     });
@@ -304,7 +304,7 @@ describe('ActivityHeatmap', () => {
         fireEvent.mouseEnter(cells[0]);
         fireEvent.mouseLeave(cells[0]);
 
-        const tooltip = container.querySelector('.fixed.z-50');
+        const tooltip = container.querySelector('.fixed.z-\\[99999\\]');
         expect(tooltip).not.toBeInTheDocument();
       }
     });
