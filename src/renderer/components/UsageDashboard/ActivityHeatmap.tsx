@@ -519,13 +519,13 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
   }, [dayDataMap, metricMode, timeRange, useGitHubLayout]);
 
   // Handle mouse events for tooltip (HourData for day/week, DayCell for month+)
+  // Track mouse position for tooltip placement at cursor
   const handleMouseEnterHour = useCallback(
     (cell: HourData, event: React.MouseEvent<HTMLDivElement>) => {
       setHoveredCell(cell);
-      const rect = event.currentTarget.getBoundingClientRect();
       setTooltipPos({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
+        x: event.clientX,
+        y: event.clientY,
       });
     },
     []
@@ -535,10 +535,9 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
     (cell: DayCell, event: React.MouseEvent<HTMLDivElement>) => {
       if (cell.isPlaceholder) return;
       setHoveredCell(cell);
-      const rect = event.currentTarget.getBoundingClientRect();
       setTooltipPos({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
+        x: event.clientX,
+        y: event.clientY,
       });
     },
     []
@@ -548,13 +547,25 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
     (cell: TimeBlockCell, event: React.MouseEvent<HTMLDivElement>) => {
       if (cell.isPlaceholder) return;
       setHoveredCell(cell);
-      const rect = event.currentTarget.getBoundingClientRect();
       setTooltipPos({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
+        x: event.clientX,
+        y: event.clientY,
       });
     },
     []
+  );
+
+  // Update tooltip position as mouse moves within cells
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (hoveredCell) {
+        setTooltipPos({
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }
+    },
+    [hoveredCell]
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -634,7 +645,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* GitHub-style heatmap for month/year/all views */}
       {useGitHubLayout && gitHubGrid && (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onMouseMove={handleMouseMove}>
           {/* Day of week labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 32, paddingTop: 20 }}>
             {dayOfWeekLabels.map((label, idx) => (
@@ -713,7 +724,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* 4-hour block heatmap for month view */}
       {use4HourBlockLayout && blockGrid && (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onMouseMove={handleMouseMove}>
           {/* Time block labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 48, paddingTop: 18 }}>
             {TIME_BLOCK_LABELS.map((label, idx) => (
@@ -780,7 +791,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* Original hourly heatmap for day/week views */}
       {!useGitHubLayout && !use4HourBlockLayout && (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onMouseMove={handleMouseMove}>
           {/* Hour labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 28, paddingTop: 18 }}>
             {hourLabels.map((label, idx) => (
@@ -879,30 +890,48 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
         </span>
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip - positioned at mouse cursor with edge detection */}
       {hoveredCell && tooltipPos && (() => {
-        const tooltipWidth = 180;
-        const tooltipHeight = 50;
+        const tooltipWidth = 200;
+        const tooltipHeight = 60;
         const viewportWidth = window.innerWidth;
-        const margin = 12;
+        const viewportHeight = window.innerHeight;
+        const cursorOffset = 12; // Distance from cursor
 
         // Calculate horizontal position with edge detection
-        let left = tooltipPos.x;
-        let transformX = '-50%'; // Default: centered
+        // Default: tooltip to the right of cursor
+        let left = tooltipPos.x + cursorOffset;
+        let transformX = '0%';
 
-        // Check right edge overflow
-        if (tooltipPos.x + tooltipWidth / 2 > viewportWidth - margin) {
-          left = viewportWidth - margin;
+        // Check right edge overflow - if tooltip would go off right, show to the left of cursor
+        if (left + tooltipWidth > viewportWidth - cursorOffset) {
+          left = tooltipPos.x - cursorOffset;
           transformX = '-100%';
         }
-        // Check left edge overflow
-        else if (tooltipPos.x - tooltipWidth / 2 < margin) {
-          left = margin;
+
+        // Check left edge overflow after adjustment
+        if (transformX === '-100%' && left - tooltipWidth < cursorOffset) {
+          // Can't fit on either side, clamp to left edge
+          left = cursorOffset;
           transformX = '0%';
         }
 
-        // Check if tooltip would overflow top - if so, show below
-        const wouldOverflowTop = tooltipPos.y - tooltipHeight - margin < 0;
+        // Calculate vertical position - default above cursor
+        let top = tooltipPos.y - cursorOffset;
+        let transformY = '-100%';
+
+        // Check top edge overflow - if would overflow top, show below cursor
+        if (top - tooltipHeight < cursorOffset) {
+          top = tooltipPos.y + cursorOffset;
+          transformY = '0%';
+        }
+
+        // Check bottom edge overflow
+        if (transformY === '0%' && top + tooltipHeight > viewportHeight - cursorOffset) {
+          // Clamp to bottom edge
+          top = viewportHeight - tooltipHeight - cursorOffset;
+          transformY = '0%';
+        }
 
         // Determine cell type for time display
         const isBlockCell = 'blockIndex' in hoveredCell;
@@ -910,14 +939,15 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
         return (
           <div
-            className="fixed z-50 px-2 py-1.5 rounded text-xs whitespace-nowrap pointer-events-none shadow-lg"
+            className="fixed z-50 px-3 py-2 rounded text-xs whitespace-nowrap pointer-events-none"
             style={{
               left,
-              top: wouldOverflowTop ? tooltipPos.y + 20 : tooltipPos.y - 8,
-              transform: `translate(${transformX}, ${wouldOverflowTop ? '0%' : '-100%'})`,
+              top,
+              transform: `translate(${transformX}, ${transformY})`,
               backgroundColor: theme.colors.bgActivity,
               color: theme.colors.textMain,
               border: `1px solid ${theme.colors.border}`,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             }}
           >
             <div className="font-medium mb-0.5">

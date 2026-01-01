@@ -74,7 +74,62 @@ const defaultDeps: RemoteFsDeps = {
 };
 
 /**
- * Execute a command on a remote host via SSH.
+ * Patterns indicating transient SSH errors that should be retried.
+ * These are network/connection issues that may resolve on retry.
+ */
+const RECOVERABLE_SSH_ERRORS = [
+  /connection closed/i,
+  /connection reset/i,
+  /broken pipe/i,
+  /network is unreachable/i,
+  /connection timed out/i,
+  /client_loop:\s*send disconnect/i,
+  /packet corrupt/i,
+  /protocol error/i,
+  /ssh_exchange_identification/i,
+  /connection unexpectedly closed/i,
+  /kex_exchange_identification/i,
+  /read: Connection reset by peer/i,
+];
+
+/**
+ * Check if an SSH error is recoverable (transient network issue).
+ */
+function isRecoverableSshError(stderr: string): boolean {
+  return RECOVERABLE_SSH_ERRORS.some((pattern) => pattern.test(stderr));
+}
+
+/**
+ * Default retry configuration for SSH operations.
+ */
+const DEFAULT_RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 500,
+  maxDelayMs: 5000,
+};
+
+/**
+ * Sleep for a specified duration with jitter.
+ */
+function sleep(ms: number): Promise<void> {
+  // Add 0-20% jitter to prevent thundering herd
+  const jitter = ms * (Math.random() * 0.2);
+  return new Promise((resolve) => setTimeout(resolve, ms + jitter));
+}
+
+/**
+ * Calculate exponential backoff delay.
+ */
+function getBackoffDelay(attempt: number, baseDelay: number, maxDelay: number): number {
+  const delay = baseDelay * Math.pow(2, attempt);
+  return Math.min(delay, maxDelay);
+}
+
+/**
+ * Execute a command on a remote host via SSH with automatic retry for transient errors.
+ *
+ * Implements exponential backoff with jitter for recoverable SSH errors like
+ * connection closed, connection reset, broken pipe, etc.
  *
  * @param config SSH remote configuration
  * @param remoteCommand The shell command to execute on the remote
@@ -86,9 +141,39 @@ async function execRemoteCommand(
   remoteCommand: string,
   deps: RemoteFsDeps = defaultDeps
 ): Promise<ExecResult> {
-  const sshArgs = deps.buildSshArgs(config);
-  sshArgs.push(remoteCommand);
-  return deps.execSsh('ssh', sshArgs);
+  const { maxRetries, baseDelayMs, maxDelayMs } = DEFAULT_RETRY_CONFIG;
+  let lastResult: ExecResult | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const sshArgs = deps.buildSshArgs(config);
+    sshArgs.push(remoteCommand);
+
+    const result = await deps.execSsh('ssh', sshArgs);
+    lastResult = result;
+
+    // Success - return immediately
+    if (result.exitCode === 0) {
+      return result;
+    }
+
+    // Check if this is a recoverable error
+    const combinedOutput = `${result.stderr} ${result.stdout}`;
+    if (isRecoverableSshError(combinedOutput) && attempt < maxRetries) {
+      const delay = getBackoffDelay(attempt, baseDelayMs, maxDelayMs);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[remote-fs] SSH transient error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms: ${result.stderr.slice(0, 100)}`
+      );
+      await sleep(delay);
+      continue;
+    }
+
+    // Non-recoverable error or max retries reached - return the result
+    return result;
+  }
+
+  // Should never reach here, but return last result as fallback
+  return lastResult!;
 }
 
 /**
