@@ -46,7 +46,7 @@ const DEFAULT_SSH_OPTIONS: Record<string, string> = {
   StrictHostKeyChecking: 'accept-new', // Auto-accept new host keys
   ConnectTimeout: '10', // Connection timeout in seconds
   ClearAllForwardings: 'yes', // Disable port forwarding from SSH config (avoids "Address already in use" errors)
-  RequestTTY: 'no', // Don't request a TTY for command execution (avoids shell rc issues)
+  RequestTTY: 'force', // Force TTY allocation - required for Claude Code's --print mode to produce output
 };
 
 /**
@@ -170,8 +170,9 @@ export function buildSshCommand(
 ): SshCommandResult {
   const args: string[] = [];
 
-  // Force disable TTY allocation - this helps prevent shell rc files from being sourced
-  args.push('-T');
+  // Force TTY allocation - required for Claude Code's --print mode to produce output
+  // Without a TTY, Claude Code with --print hangs indefinitely
+  args.push('-tt');
 
   // When using SSH config, we let SSH handle authentication settings
   // Only add explicit overrides if provided

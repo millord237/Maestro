@@ -1644,6 +1644,7 @@ interface MaestroAPI {
       bySource: { user: number; auto: number };
       byLocation: { local: number; remote: number };
       byDay: Array<{ date: string; count: number; duration: number }>;
+      byHour: Array<{ hour: number; count: number; duration: number }>;
     }>;
     // Export query events to CSV
     exportCsv: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<string>;

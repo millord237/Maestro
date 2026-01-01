@@ -28,6 +28,7 @@ export interface StatsAggregation {
   bySource: { user: number; auto: number };
   byLocation: { local: number; remote: number };
   byDay: Array<{ date: string; count: number; duration: number }>;
+  byHour: Array<{ hour: number; count: number; duration: number }>;
 }
 
 // Return type for the useStats hook

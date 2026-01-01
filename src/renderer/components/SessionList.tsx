@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, ChevronUp, X, Keyboard,
-  Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, Info, GitBranch, Bot, Clock,
+  Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, FolderPlus, Info, GitBranch, Bot, Clock,
   ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe,
   GitPullRequest, BookOpen, BarChart3
 } from 'lucide-react';
@@ -37,6 +37,7 @@ interface SessionContextMenuProps {
   onQuickCreateWorktree?: () => void; // Opens small modal for quick worktree creation
   onConfigureWorktrees?: () => void; // Opens full worktree config modal
   onDeleteWorktree?: () => void; // For worktree child sessions to delete
+  onCreateGroup?: () => void; // Creates a new group from the Move to Group submenu
 }
 
 function SessionContextMenu({
@@ -57,6 +58,7 @@ function SessionContextMenu({
   onQuickCreateWorktree,
   onConfigureWorktrees,
   onDeleteWorktree,
+  onCreateGroup,
 }: SessionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const moveToGroupRef = useRef<HTMLDivElement>(null);
@@ -257,6 +259,26 @@ function SessionContextMenu({
                   {session.groupId === group.id && <span className="text-[10px] opacity-50">(current)</span>}
                 </button>
               ))}
+
+              {/* Divider before Create New Group */}
+              {onCreateGroup && (
+                <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
+              )}
+
+              {/* Create New Group option */}
+              {onCreateGroup && (
+                <button
+                  onClick={() => {
+                    onCreateGroup();
+                    onDismiss();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors flex items-center gap-2"
+                  style={{ color: theme.colors.accent }}
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                  Create New Group
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2210,6 +2232,7 @@ function SessionListInner(props: SessionListProps) {
           onQuickCreateWorktree={onQuickCreateWorktree && !contextMenuSession.parentSessionId ? () => onQuickCreateWorktree(contextMenuSession) : undefined}
           onConfigureWorktrees={onOpenWorktreeConfig && !contextMenuSession.parentSessionId ? () => onOpenWorktreeConfig(contextMenuSession) : undefined}
           onDeleteWorktree={onDeleteWorktree && contextMenuSession.parentSessionId ? () => onDeleteWorktree(contextMenuSession) : undefined}
+          onCreateGroup={createNewGroup}
         />
       )}
     </div>

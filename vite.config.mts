@@ -17,6 +17,15 @@ export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },
+  resolve: {
+    alias: {
+      // In development, use wdyr.dev.ts which loads why-did-you-render
+      // In production, use wdyr.ts which is empty (prevents bundling the library)
+      './wdyr': mode === 'development'
+        ? path.join(__dirname, 'src/renderer/wdyr.dev.ts')
+        : path.join(__dirname, 'src/renderer/wdyr.ts'),
+    },
+  },
   esbuild: {
     // Strip console.log and console.debug in production builds
     drop: mode === 'production' ? ['console', 'debugger'] : [],

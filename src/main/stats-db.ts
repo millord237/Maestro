@@ -1228,6 +1228,24 @@ export class StatsDB {
     }>;
     perfMetrics.end(byDayStart, 'getAggregatedStats:byDay', { range, dayCount: byDayRows.length });
 
+    // By hour (for peak hours chart)
+    const byHourStart = perfMetrics.start();
+    const byHourStmt = this.db.prepare(`
+      SELECT CAST(strftime('%H', start_time / 1000, 'unixepoch', 'localtime') AS INTEGER) as hour,
+             COUNT(*) as count,
+             SUM(duration) as duration
+      FROM query_events
+      WHERE start_time >= ?
+      GROUP BY hour
+      ORDER BY hour ASC
+    `);
+    const byHourRows = byHourStmt.all(startTime) as Array<{
+      hour: number;
+      count: number;
+      duration: number;
+    }>;
+    perfMetrics.end(byHourStart, 'getAggregatedStats:byHour', { range });
+
     const totalDuration = perfMetrics.end(perfStart, 'getAggregatedStats:total', {
       range,
       totalQueries: totals.count,
@@ -1250,6 +1268,7 @@ export class StatsDB {
       bySource,
       byDay: byDayRows,
       byLocation,
+      byHour: byHourRows,
     };
   }
 

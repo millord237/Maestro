@@ -2,7 +2,7 @@
  * Tests for ExecutionQueueBrowser component
  *
  * This component displays a modal for browsing and managing the execution queue
- * across all sessions. Supports filtering by current project vs global view.
+ * across all sessions. Supports filtering by current agent vs global view.
  */
 
 import React from 'react';
@@ -331,7 +331,7 @@ describe('ExecutionQueueBrowser', () => {
   });
 
   describe('view mode toggle', () => {
-    it('should default to current project view', () => {
+    it('should default to current agent view', () => {
       render(
         <ExecutionQueueBrowser
           isOpen={true}
@@ -344,13 +344,13 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      const currentButton = screen.getByText('Current Project');
+      const currentButton = screen.getByText('Current Agent');
       expect(currentButton.closest('button')).toHaveStyle({
         backgroundColor: theme.colors.accent
       });
     });
 
-    it('should switch to global view when All Projects is clicked', () => {
+    it('should switch to global view when All Agents is clicked', () => {
       const session = createSession({
         executionQueue: [createQueuedItem()]
       });
@@ -366,12 +366,12 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      const allProjectsButton = screen.getByText('All Projects').closest('button');
-      expect(allProjectsButton).not.toBeNull();
-      fireEvent.click(allProjectsButton!);
+      const allAgentsButton = screen.getByText('All Agents').closest('button');
+      expect(allAgentsButton).not.toBeNull();
+      fireEvent.click(allAgentsButton!);
 
-      // After switching, All Projects should be active
-      expect(allProjectsButton).toHaveStyle({
+      // After switching, All Agents should be active
+      expect(allAgentsButton).toHaveStyle({
         backgroundColor: theme.colors.accent
       });
     });
@@ -396,11 +396,11 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      const currentButton = screen.getByText('Current Project').closest('button');
+      const currentButton = screen.getByText('Current Agent').closest('button');
       expect(currentButton).toHaveTextContent('(2)');
     });
 
-    it('should show total item count in All Projects button', () => {
+    it('should show total item count in All Agents button', () => {
       const session1 = createSession({
         id: 'session-1',
         executionQueue: [createQueuedItem()]
@@ -421,11 +421,11 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       expect(allButton).toHaveTextContent('(3)');
     });
 
-    it('should not show count for current project when 0 items', () => {
+    it('should not show count for current agent when 0 items', () => {
       const session = createSession({
         id: 'active-session',
         executionQueue: []
@@ -442,7 +442,7 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      const currentButton = screen.getByText('Current Project').closest('button');
+      const currentButton = screen.getByText('Current Agent').closest('button');
       expect(currentButton?.textContent).not.toContain('(0)');
     });
   });
@@ -465,7 +465,7 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      expect(screen.getByText('No items queued for this project')).toBeInTheDocument();
+      expect(screen.getByText('No items queued for this agent')).toBeInTheDocument();
     });
 
     it('should show empty message in global view when no items', () => {
@@ -482,7 +482,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       expect(screen.getByText('No items queued')).toBeInTheDocument();
@@ -509,7 +509,7 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      expect(screen.getByText('No items queued for this project')).toBeInTheDocument();
+      expect(screen.getByText('No items queued for this agent')).toBeInTheDocument();
     });
   });
 
@@ -565,7 +565,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       expect(screen.getByText('Item one')).toBeInTheDocument();
@@ -596,7 +596,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       expect(screen.getByText('Has Items')).toBeInTheDocument();
@@ -624,7 +624,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       expect(screen.getByText('Test Project')).toBeInTheDocument();
@@ -680,7 +680,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       // Find the session header and check for count
@@ -707,7 +707,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       // Click session header
@@ -1082,7 +1082,7 @@ describe('ExecutionQueueBrowser', () => {
         />
       );
 
-      expect(screen.getByText('Drag and drop to reorder. Items are processed sequentially per project to prevent file conflicts.')).toBeInTheDocument();
+      expect(screen.getByText('Drag and drop to reorder. Items are processed sequentially per agent to prevent file conflicts.')).toBeInTheDocument();
     });
   });
 
@@ -1251,7 +1251,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Should show empty state
-      expect(screen.getByText('No items queued for this project')).toBeInTheDocument();
+      expect(screen.getByText('No items queued for this agent')).toBeInTheDocument();
     });
 
     it('should handle items without tabName', () => {
@@ -1313,7 +1313,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Current view should show empty (no active session)
-      expect(screen.getByText('No items queued for this project')).toBeInTheDocument();
+      expect(screen.getByText('No items queued for this agent')).toBeInTheDocument();
     });
 
     it('should handle multiple sessions with same name', () => {
@@ -1340,7 +1340,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       // Both sessions should be rendered (both with "Same Name")
@@ -1368,7 +1368,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       expect(screen.getByText(longName)).toBeInTheDocument();
@@ -1774,7 +1774,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       // All items should have grab cursor
@@ -1816,7 +1816,7 @@ describe('ExecutionQueueBrowser', () => {
       );
 
       // Switch to global view
-      const allButton = screen.getByText('All Projects').closest('button');
+      const allButton = screen.getByText('All Agents').closest('button');
       fireEvent.click(allButton!);
 
       // Should have drop zones for each session: 3 for session1 (2 items + 1 after) + 3 for session2

@@ -166,6 +166,75 @@ describe('ssh-command-builder', () => {
       expect(result.args).toContain('testuser@dev.example.com');
     });
 
+    describe('TTY allocation (CRITICAL for Claude Code)', () => {
+      /**
+       * IMPORTANT: These tests document a critical requirement for SSH remote execution.
+       *
+       * Claude Code's `--print` mode (batch/non-interactive) REQUIRES a TTY to produce output.
+       * Without forced TTY allocation (-tt), the SSH process hangs indefinitely with no stdout.
+       *
+       * This was discovered when SSH commands appeared to run (process status: Running)
+       * but produced no output, causing Maestro to get stuck in "Thinking..." state forever.
+       *
+       * The fix requires BOTH:
+       * 1. The `-tt` flag (force pseudo-TTY allocation even when stdin isn't a terminal)
+       * 2. The `RequestTTY=force` option (explicit option for the same purpose)
+       *
+       * DO NOT CHANGE THESE TO `-T` or `RequestTTY=no` - it will break SSH agent execution!
+       *
+       * Test commands that verified this behavior:
+       * - HANGS:  ssh -T user@host 'zsh -lc "claude --print -- hi"'
+       * - WORKS:  ssh -tt user@host 'zsh -lc "claude --print -- hi"'
+       */
+
+      it('uses -tt flag for forced TTY allocation (first argument)', () => {
+        const result = buildSshCommand(baseConfig, {
+          command: 'claude',
+          args: ['--print', '--verbose'],
+        });
+
+        // -tt MUST be the first argument for reliable TTY allocation
+        expect(result.args[0]).toBe('-tt');
+      });
+
+      it('includes RequestTTY=force in SSH options', () => {
+        const result = buildSshCommand(baseConfig, {
+          command: 'claude',
+          args: ['--print'],
+        });
+
+        // Find the RequestTTY option
+        const requestTtyIndex = result.args.findIndex(
+          (arg, i) => result.args[i - 1] === '-o' && arg.startsWith('RequestTTY=')
+        );
+        expect(requestTtyIndex).toBeGreaterThan(-1);
+        expect(result.args[requestTtyIndex]).toBe('RequestTTY=force');
+      });
+
+      it('never uses -T (disable TTY) which breaks Claude Code', () => {
+        const result = buildSshCommand(baseConfig, {
+          command: 'claude',
+          args: ['--print'],
+        });
+
+        // Ensure -T is never present - it causes Claude Code to hang
+        expect(result.args).not.toContain('-T');
+      });
+
+      it('never uses RequestTTY=no which breaks Claude Code', () => {
+        const result = buildSshCommand(baseConfig, {
+          command: 'claude',
+          args: ['--print'],
+        });
+
+        // Check no option says RequestTTY=no
+        const hasNoTty = result.args.some(
+          (arg, i) => result.args[i - 1] === '-o' && arg === 'RequestTTY=no'
+        );
+        expect(hasNoTty).toBe(false);
+      });
+    });
+
     it('includes default SSH options', () => {
       const result = buildSshCommand(baseConfig, {
         command: 'claude',
@@ -278,8 +347,8 @@ describe('ssh-command-builder', () => {
 
       expect(result.command).toBe('ssh');
       // Verify the arguments form a valid SSH command
-      // First argument is -T (disable TTY), then -i for identity file
-      expect(result.args[0]).toBe('-T');
+      // First argument is -tt (force TTY for Claude Code's --print mode), then -i for identity file
+      expect(result.args[0]).toBe('-tt');
       expect(result.args[1]).toBe('-i');
       expect(result.args[2]).toBe('/Users/testuser/.ssh/id_ed25519');
 

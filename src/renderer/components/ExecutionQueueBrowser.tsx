@@ -178,7 +178,7 @@ export function ExecutionQueueBrowser({
             }}
           >
             <Folder className="w-3.5 h-3.5" />
-            Current Project
+            Current Agent
             {currentSessionItems > 0 && (
               <span className="ml-1 text-xs opacity-80">({currentSessionItems})</span>
             )}
@@ -194,7 +194,7 @@ export function ExecutionQueueBrowser({
             }}
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            All Projects
+            All Agents
             <span className="ml-1 text-xs opacity-80">({totalQueuedItems})</span>
           </button>
         </div>
@@ -206,7 +206,7 @@ export function ExecutionQueueBrowser({
               className="text-center py-12 text-sm"
               style={{ color: theme.colors.textDim }}
             >
-              No items queued{viewMode === 'current' ? ' for this project' : ''}
+              No items queued{viewMode === 'current' ? ' for this agent' : ''}
             </div>
           ) : (
             filteredSessions.map(session => (
@@ -283,7 +283,7 @@ export function ExecutionQueueBrowser({
           className="px-4 py-3 border-t text-xs"
           style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
         >
-          Drag and drop to reorder. Items are processed sequentially per project to prevent file conflicts.
+          Drag and drop to reorder. Items are processed sequentially per agent to prevent file conflicts.
         </div>
       </div>
     </div>

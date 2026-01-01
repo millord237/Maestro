@@ -67,6 +67,8 @@ export interface StatsAggregation {
   byDay: Array<{ date: string; count: number; duration: number }>;
   /** Breakdown by session location (local vs SSH remote) */
   byLocation: { local: number; remote: number };
+  /** Breakdown by hour of day (0-23) for peak hours chart */
+  byHour: Array<{ hour: number; count: number; duration: number }>;
 }
 
 /**

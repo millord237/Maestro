@@ -20,6 +20,7 @@ import { ActivityHeatmap } from './ActivityHeatmap';
 import { AgentComparisonChart } from './AgentComparisonChart';
 import { SourceDistributionChart } from './SourceDistributionChart';
 import { LocationDistributionChart } from './LocationDistributionChart';
+import { PeakHoursChart } from './PeakHoursChart';
 import { DurationTrendsChart } from './DurationTrendsChart';
 import { AutoRunStats } from './AutoRunStats';
 import { SessionStats } from './SessionStats';
@@ -33,7 +34,7 @@ import { getRendererPerfMetrics } from '../../utils/logger';
 import { PERFORMANCE_THRESHOLDS } from '../../../shared/performance-metrics';
 
 // Section IDs for keyboard navigation
-const OVERVIEW_SECTIONS = ['summary-cards', 'agent-comparison', 'source-distribution', 'location-distribution', 'activity-heatmap', 'duration-trends'] as const;
+const OVERVIEW_SECTIONS = ['summary-cards', 'agent-comparison', 'source-distribution', 'location-distribution', 'peak-hours', 'activity-heatmap', 'duration-trends'] as const;
 const AGENTS_SECTIONS = ['session-stats', 'agent-comparison'] as const;
 const ACTIVITY_SECTIONS = ['activity-heatmap', 'duration-trends'] as const;
 const AUTORUN_SECTIONS = ['autorun-stats'] as const;
@@ -55,6 +56,7 @@ interface StatsAggregation {
   bySource: { user: number; auto: number };
   byLocation: { local: number; remote: number };
   byDay: Array<{ date: string; count: number; duration: number }>;
+  byHour: Array<{ hour: number; count: number; duration: number }>;
 }
 
 // View mode options for the dashboard
@@ -323,6 +325,7 @@ export function UsageDashboardModal({
       'agent-comparison': 'Agent Comparison Chart',
       'source-distribution': 'Source Distribution Chart',
       'location-distribution': 'Location Distribution Chart',
+      'peak-hours': 'Peak Hours Chart',
       'activity-heatmap': 'Activity Heatmap',
       'duration-trends': 'Duration Trends Chart',
       'autorun-stats': 'Auto Run Statistics',
@@ -673,33 +676,34 @@ export function UsageDashboardModal({
                     </ChartErrorBoundary>
                   </div>
 
-                  {/* Charts Grid - 2 columns on wide, 1 on narrow */}
+                  {/* Agent Comparison Chart - Full width bar chart */}
+                  <div
+                    ref={setSectionRef('agent-comparison')}
+                    tabIndex={0}
+                    role="region"
+                    aria-label={getSectionLabel('agent-comparison')}
+                    onKeyDown={(e) => handleSectionKeyDown(e, 'agent-comparison')}
+                    className="outline-none rounded-lg transition-shadow dashboard-section-enter"
+                    style={{
+                      minHeight: '180px',
+                      boxShadow: focusedSection === 'agent-comparison' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
+                      animationDelay: '100ms',
+                    }}
+                    data-testid="section-agent-comparison"
+                  >
+                    <ChartErrorBoundary theme={theme} chartName="Agent Comparison">
+                      <AgentComparisonChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
+                    </ChartErrorBoundary>
+                  </div>
+
+                  {/* Distribution Charts Grid - 2 columns for donut charts */}
                   <div
                     className="grid gap-6 dashboard-section-enter"
                     style={{
                       gridTemplateColumns: `repeat(${layout.chartGridCols}, minmax(0, 1fr))`,
-                      animationDelay: '100ms',
+                      animationDelay: '150ms',
                     }}
                   >
-                    {/* Agent Comparison Chart */}
-                    <div
-                      ref={setSectionRef('agent-comparison')}
-                      tabIndex={0}
-                      role="region"
-                      aria-label={getSectionLabel('agent-comparison')}
-                      onKeyDown={(e) => handleSectionKeyDown(e, 'agent-comparison')}
-                      className="outline-none rounded-lg transition-shadow"
-                      style={{
-                        minHeight: '300px',
-                        boxShadow: focusedSection === 'agent-comparison' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
-                      }}
-                      data-testid="section-agent-comparison"
-                    >
-                      <ChartErrorBoundary theme={theme} chartName="Agent Comparison">
-                        <AgentComparisonChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
-                      </ChartErrorBoundary>
-                    </div>
-
                     {/* Source Distribution Chart */}
                     <div
                       ref={setSectionRef('source-distribution')}
@@ -709,7 +713,7 @@ export function UsageDashboardModal({
                       onKeyDown={(e) => handleSectionKeyDown(e, 'source-distribution')}
                       className="outline-none rounded-lg transition-shadow"
                       style={{
-                        minHeight: '300px',
+                        minHeight: '240px',
                         boxShadow: focusedSection === 'source-distribution' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
                       }}
                       data-testid="section-source-distribution"
@@ -728,7 +732,7 @@ export function UsageDashboardModal({
                       onKeyDown={(e) => handleSectionKeyDown(e, 'location-distribution')}
                       className="outline-none rounded-lg transition-shadow"
                       style={{
-                        minHeight: '300px',
+                        minHeight: '240px',
                         boxShadow: focusedSection === 'location-distribution' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
                       }}
                       data-testid="section-location-distribution"
@@ -737,6 +741,26 @@ export function UsageDashboardModal({
                         <LocationDistributionChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
                       </ChartErrorBoundary>
                     </div>
+                  </div>
+
+                  {/* Peak Hours Chart - Full width compact bar chart */}
+                  <div
+                    ref={setSectionRef('peak-hours')}
+                    tabIndex={0}
+                    role="region"
+                    aria-label={getSectionLabel('peak-hours')}
+                    onKeyDown={(e) => handleSectionKeyDown(e, 'peak-hours')}
+                    className="outline-none rounded-lg transition-shadow dashboard-section-enter"
+                    style={{
+                      minHeight: '180px',
+                      boxShadow: focusedSection === 'peak-hours' ? `0 0 0 2px ${theme.colors.accent}` : 'none',
+                      animationDelay: '175ms',
+                    }}
+                    data-testid="section-peak-hours"
+                  >
+                    <ChartErrorBoundary theme={theme} chartName="Peak Hours">
+                      <PeakHoursChart data={data} theme={theme} colorBlindMode={colorBlindMode} />
+                    </ChartErrorBoundary>
                   </div>
 
                   {/* Activity Heatmap - Full width */}
