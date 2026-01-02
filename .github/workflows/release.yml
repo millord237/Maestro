@@ -46,14 +46,14 @@ jobs:
         if: matrix.platform == 'linux' || matrix.platform == 'linux-arm64'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           # Explicitly no cache to prevent cross-architecture contamination
 
       - name: Setup Node.js (non-Linux - with cache)
         if: matrix.platform != 'linux' && matrix.platform != 'linux-arm64'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       # Use architecture-specific cache for Linux builds
@@ -746,7 +746,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Sync release notes to docs
         run: node scripts/sync-release-notes.mjs
