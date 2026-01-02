@@ -54,6 +54,9 @@ vi.mock('lucide-react', () => ({
   ArrowRightToLine: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
     <span data-testid="arrow-right-to-line-icon" className={className} style={style}>⇥</span>
   ),
+  Share2: ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <span data-testid="share2-icon" className={className} style={style}>⬆</span>
+  ),
 }));
 
 // Mock react-dom createPortal
@@ -2377,6 +2380,207 @@ describe('TabBar', () => {
 
       // The ArrowRightCircle icon should be present
       expect(screen.getByTestId('arrow-right-circle-icon')).toBeInTheDocument();
+    });
+  });
+
+  describe('Publish as GitHub Gist', () => {
+    const mockOnPublishGist = vi.fn();
+
+    beforeEach(() => {
+      mockOnPublishGist.mockClear();
+    });
+
+    it('shows Publish as GitHub Gist button when onPublishGist and ghCliAvailable are provided and tab has logs', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }]
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={true}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      expect(screen.getByText('Context: Publish as GitHub Gist')).toBeInTheDocument();
+    });
+
+    it('does not show Publish as GitHub Gist button when ghCliAvailable is false', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }]
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={false}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      expect(screen.queryByText('Context: Publish as GitHub Gist')).not.toBeInTheDocument();
+    });
+
+    it('does not show Publish as GitHub Gist button when tab has no logs', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: []
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={true}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      expect(screen.queryByText('Context: Publish as GitHub Gist')).not.toBeInTheDocument();
+    });
+
+    it('calls onPublishGist with tab id when clicked', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }]
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={true}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      const publishGistButton = screen.getByText('Context: Publish as GitHub Gist');
+      fireEvent.click(publishGistButton);
+
+      expect(mockOnPublishGist).toHaveBeenCalledWith('tab-1');
+      expect(mockOnPublishGist).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes overlay after clicking Publish as GitHub Gist', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }]
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={true}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      const publishGistButton = screen.getByText('Context: Publish as GitHub Gist');
+      fireEvent.click(publishGistButton);
+
+      expect(screen.queryByText('Context: Publish as GitHub Gist')).not.toBeInTheDocument();
+    });
+
+    it('renders Share2 icon for Publish as GitHub Gist button', async () => {
+      const tabs = [createTab({
+        id: 'tab-1',
+        name: 'Tab 1',
+        agentSessionId: 'abc123-def456',
+        logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }]
+      })];
+
+      render(
+        <TabBar
+          tabs={tabs}
+          activeTabId="tab-1"
+          theme={mockTheme}
+          onTabSelect={mockOnTabSelect}
+          onTabClose={mockOnTabClose}
+          onNewTab={mockOnNewTab}
+          onPublishGist={mockOnPublishGist}
+          ghCliAvailable={true}
+        />
+      );
+
+      const tab = screen.getByText('Tab 1').closest('[data-tab-id]')!;
+      fireEvent.mouseEnter(tab);
+
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+
+      expect(screen.getByTestId('share2-icon')).toBeInTheDocument();
     });
   });
 });

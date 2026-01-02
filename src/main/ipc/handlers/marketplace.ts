@@ -410,6 +410,8 @@ export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies
         }
 
         // Create the playbook entry for local storage
+        // Prefix document filenames with the target folder path so they can be found
+        // when the playbook is loaded (allDocuments contains relative paths from root)
         const now = Date.now();
         const newPlaybook = {
           id: crypto.randomUUID(),
@@ -417,7 +419,8 @@ export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies
           createdAt: now,
           updatedAt: now,
           documents: marketplacePlaybook.documents.map((d) => ({
-            filename: d.filename,
+            // Include target folder in the path (e.g., "development/security-audit/1_ANALYZE")
+            filename: targetFolderName ? `${targetFolderName}/${d.filename}` : d.filename,
             resetOnCompletion: d.resetOnCompletion,
           })),
           loopEnabled: marketplacePlaybook.loopEnabled,

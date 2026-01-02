@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2, Download, Clipboard, Minus, ArrowLeftToLine, ArrowRightToLine } from 'lucide-react';
+import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2, Download, Clipboard, Minus, ArrowLeftToLine, ArrowRightToLine, Share2 } from 'lucide-react';
 import type { AITab, Theme } from '../types';
 import { hasDraft } from '../utils/tabHelpers';
 
@@ -25,6 +25,10 @@ interface TabBarProps {
   onCopyContext?: (tabId: string) => void;
   /** Handler to export tab as HTML */
   onExportHtml?: (tabId: string) => void;
+  /** Handler to publish tab context as GitHub Gist */
+  onPublishGist?: (tabId: string) => void;
+  /** Whether GitHub CLI is available for gist publishing */
+  ghCliAvailable?: boolean;
   showUnreadOnly?: boolean;
   onToggleUnreadFilter?: () => void;
   onOpenTabSearch?: () => void;
@@ -57,6 +61,8 @@ interface TabProps {
   onCopyContext?: () => void;
   /** Handler to export tab as HTML */
   onExportHtml?: () => void;
+  /** Handler to publish tab context as GitHub Gist */
+  onPublishGist?: () => void;
   /** Handler to close other tabs */
   onCloseOthers?: () => void;
   /** Handler to close tabs to the left */
@@ -140,6 +146,7 @@ function Tab({
   onSummarizeAndContinue,
   onCopyContext,
   onExportHtml,
+  onPublishGist,
   onCloseOthers,
   onCloseLeft,
   onCloseRight,
@@ -286,6 +293,12 @@ function Tab({
   const handleExportHtmlClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onExportHtml?.();
+    setOverlayOpen(false);
+  };
+
+  const handlePublishGistClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onPublishGist?.();
     setOverlayOpen(false);
   };
 
@@ -585,6 +598,18 @@ function Tab({
               </button>
             )}
 
+            {/* Context: Publish as GitHub Gist - only show if tab has logs and gh CLI is available */}
+            {(tab.logs?.length ?? 0) >= 1 && onPublishGist && (
+              <button
+                onClick={handlePublishGistClick}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Share2 className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
+                Context: Publish as GitHub Gist
+              </button>
+            )}
+
             {/* Tab Close Actions Section - divider and close options */}
             <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 
@@ -663,6 +688,8 @@ function TabBarInner({
   onSummarizeAndContinue,
   onCopyContext,
   onExportHtml,
+  onPublishGist,
+  ghCliAvailable,
   showUnreadOnly: showUnreadOnlyProp,
   onToggleUnreadFilter,
   onOpenTabSearch
@@ -909,6 +936,7 @@ function TabBarInner({
               onSummarizeAndContinue={onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5 ? () => onSummarizeAndContinue(tab.id) : undefined}
               onCopyContext={onCopyContext && (tab.logs?.length ?? 0) >= 1 ? () => onCopyContext(tab.id) : undefined}
               onExportHtml={onExportHtml ? () => onExportHtml(tab.id) : undefined}
+              onPublishGist={onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1 ? () => onPublishGist(tab.id) : undefined}
               onCloseOthers={() => handleCloseOthers(tab.id)}
               onCloseLeft={() => handleCloseLeft(tab.id)}
               onCloseRight={() => handleCloseRight(tab.id)}

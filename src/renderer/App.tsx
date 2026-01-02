@@ -464,6 +464,8 @@ function MaestroConsoleInner() {
   // GitHub CLI availability (for gist publishing)
   const [ghCliAvailable, setGhCliAvailable] = useState(false);
   const [gistPublishModalOpen, setGistPublishModalOpen] = useState(false);
+  // Tab context gist publishing - stores { filename, content } when publishing tab context
+  const [tabGistContent, setTabGistContent] = useState<{ filename: string; content: string } | null>(null);
 
   // Note: Git Diff State, Tour Overlay State, and Git Log Viewer State are now from ModalContext
 
@@ -9065,12 +9067,16 @@ You are taking over this conversation. Based on the context above, provide a bri
       )}
 
       {/* --- GIST PUBLISH MODAL --- */}
-      {gistPublishModalOpen && previewFile && (
+      {/* Supports both file preview and tab context gist publishing */}
+      {gistPublishModalOpen && (previewFile || tabGistContent) && (
         <GistPublishModal
           theme={theme}
-          filename={previewFile.name}
-          content={previewFile.content}
-          onClose={() => setGistPublishModalOpen(false)}
+          filename={tabGistContent?.filename ?? previewFile?.name ?? 'conversation.md'}
+          content={tabGistContent?.content ?? previewFile?.content ?? ''}
+          onClose={() => {
+            setGistPublishModalOpen(false);
+            setTabGistContent(null);
+          }}
           onSuccess={(gistUrl, isPublic) => {
             // Copy the gist URL to clipboard
             navigator.clipboard.writeText(gistUrl);
@@ -9083,6 +9089,8 @@ You are taking over this conversation. Based on the context above, provide a bri
               actionUrl: gistUrl,
               actionLabel: 'Open Gist',
             });
+            // Clear tab gist content after success
+            setTabGistContent(null);
           }}
         />
       )}
@@ -9917,6 +9925,22 @@ You are taking over this conversation. Based on the context above, provide a bri
               message: 'Failed to export conversation as HTML.',
             });
           }
+        }}
+        onPublishTabGist={(tabId: string) => {
+          // Publish tab conversation context as GitHub Gist
+          if (!activeSession) return;
+          const tab = activeSession.aiTabs.find(t => t.id === tabId);
+          if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+          // Convert logs to markdown-like text format
+          const content = formatLogsForClipboard(tab.logs);
+          // Generate filename based on tab name or session ID
+          const tabName = tab.name || (tab.agentSessionId?.slice(0, 8) ?? 'conversation');
+          const filename = `${tabName.replace(/[^a-zA-Z0-9-_]/g, '_')}_context.md`;
+
+          // Set content and open the modal
+          setTabGistContent({ filename, content });
+          setGistPublishModalOpen(true);
         }}
         // Context warning sash settings (Phase 6)
         contextWarningsEnabled={contextManagementSettings.contextWarningsEnabled}

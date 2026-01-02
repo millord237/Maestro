@@ -634,10 +634,19 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('autoRunStats', value);
   }, []);
 
-  // Usage Stats setters
+  // Usage Stats setters - enforces Math.max() to never decrease peak values
   const setUsageStats = useCallback((value: MaestroUsageStats) => {
-    setUsageStatsState(value);
-    window.maestro.settings.set('usageStats', value);
+    setUsageStatsState(prev => {
+      const updated: MaestroUsageStats = {
+        maxAgents: Math.max(prev.maxAgents, value.maxAgents ?? 0),
+        maxDefinedAgents: Math.max(prev.maxDefinedAgents, value.maxDefinedAgents ?? 0),
+        maxSimultaneousAutoRuns: Math.max(prev.maxSimultaneousAutoRuns, value.maxSimultaneousAutoRuns ?? 0),
+        maxSimultaneousQueries: Math.max(prev.maxSimultaneousQueries, value.maxSimultaneousQueries ?? 0),
+        maxQueueDepth: Math.max(prev.maxQueueDepth, value.maxQueueDepth ?? 0),
+      };
+      window.maestro.settings.set('usageStats', updated);
+      return updated;
+    });
   }, []);
 
   // Update usage stats - only updates values if new value is higher (tracks peak usage)

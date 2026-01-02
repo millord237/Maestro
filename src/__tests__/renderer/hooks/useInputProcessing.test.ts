@@ -536,13 +536,43 @@ describe('useInputProcessing', () => {
   });
 
   describe('Auto Run blocking', () => {
-    it('queues write commands when Auto Run is active', async () => {
+    it('queues write commands when Auto Run is active AND session is busy', async () => {
       const runningBatchState: BatchRunState = {
         ...defaultBatchState,
         isRunning: true,
       };
       mockGetBatchState.mockReturnValue(runningBatchState);
 
+      // Session must be busy for the message to actually be queued
+      // If session is idle, it processes immediately instead of queuing
+      const session = createMockSession({ state: 'busy' });
+      const deps = createDeps({
+        activeSession: session,
+        inputValue: 'regular message',
+        activeBatchRunState: runningBatchState,
+      });
+      const { result } = renderHook(() => useInputProcessing(deps));
+
+      await act(async () => {
+        await result.current.processInput();
+      });
+
+      // Should add to queue because both Auto Run is active AND session is busy
+      expect(mockSetSessions).toHaveBeenCalled();
+      const setSessionsCall = mockSetSessions.mock.calls[0][0];
+      const updatedSessions = setSessionsCall([session]);
+      expect(updatedSessions[0].executionQueue.length).toBe(1);
+    });
+
+    it('processes immediately when Auto Run is active but session is idle', async () => {
+      const runningBatchState: BatchRunState = {
+        ...defaultBatchState,
+        isRunning: true,
+      };
+      mockGetBatchState.mockReturnValue(runningBatchState);
+
+      // When session is idle, even with AutoRun active, we process immediately
+      // This prevents messages from getting stuck in the queue
       const session = createMockSession({ state: 'idle' });
       const deps = createDeps({
         activeSession: session,
@@ -555,11 +585,12 @@ describe('useInputProcessing', () => {
         await result.current.processInput();
       });
 
-      // Should add to queue because Auto Run is active
+      // Should process immediately (set to busy), not add to queue
       expect(mockSetSessions).toHaveBeenCalled();
       const setSessionsCall = mockSetSessions.mock.calls[0][0];
       const updatedSessions = setSessionsCall([session]);
-      expect(updatedSessions[0].executionQueue.length).toBe(1);
+      expect(updatedSessions[0].state).toBe('busy');
+      expect(updatedSessions[0].executionQueue.length).toBe(0);
     });
   });
 

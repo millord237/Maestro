@@ -297,6 +297,17 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
         ? activeTab?.state === 'busy' // Read-only: only queue if THIS tab is busy
         : (activeSession.state === 'busy' && !canWriteBypassQueue()) || isAutoRunActive; // Write mode: queue if busy OR AutoRun active
 
+      // Debug logging to diagnose queue issues
+      console.log('[processInput] Queue decision:', {
+        sessionId: activeSession.id.substring(0, 8),
+        sessionState: activeSession.state,
+        tabState: activeTab?.state,
+        isReadOnlyMode,
+        isAutoRunActive,
+        shouldQueue,
+        queueLength: activeSession.executionQueue.length,
+      });
+
       if (shouldQueue) {
         const queuedItem: QueuedItem = {
           id: generateId(),
@@ -311,6 +322,54 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
           readOnlyMode: isReadOnlyMode,
         };
 
+        // CRITICAL: Check if the session is actually idle (no agent running)
+        // If so, we need to process immediately rather than just queuing.
+        // This handles the case where AutoRun is active but no interactive agent is running -
+        // the queue would never be processed because there's no onExit event to trigger it.
+        const sessionIsActuallyIdle = activeSession.state !== 'busy';
+
+        if (sessionIsActuallyIdle) {
+          // Session is idle - set up state and process immediately
+          // (same pattern as slash command handling above)
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id !== activeSessionId) return s;
+
+              // Set the target tab to busy
+              const updatedAiTabs = s.aiTabs.map((tab) =>
+                tab.id === queuedItem.tabId
+                  ? { ...tab, state: 'busy' as const, thinkingStartTime: Date.now() }
+                  : tab
+              );
+
+              return {
+                ...s,
+                state: 'busy' as SessionState,
+                busySource: 'ai',
+                thinkingStartTime: Date.now(),
+                currentCycleTokens: 0,
+                currentCycleBytes: 0,
+                aiTabs: updatedAiTabs,
+                // Don't add to queue - we're processing immediately
+              };
+            })
+          );
+
+          // Clear input
+          setInputValue('');
+          setStagedImages([]);
+          syncAiInputToSession('');
+          if (inputRef.current) inputRef.current.style.height = 'auto';
+
+          // Process immediately after state is set up
+          // 50ms delay allows React to flush the setState above
+          setTimeout(() => {
+            processQueuedItemRef.current?.(activeSessionId, queuedItem);
+          }, 50);
+          return;
+        }
+
+        // Session is actually busy - add to queue for processing when current item finishes
         setSessions((prev) =>
           prev.map((s) => {
             if (s.id !== activeSessionId) return s;

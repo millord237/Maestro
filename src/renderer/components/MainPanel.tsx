@@ -198,6 +198,7 @@ interface MainPanelProps {
   onSendToAgent?: (tabId: string) => void;
   onCopyContext?: (tabId: string) => void;
   onExportHtml?: (tabId: string) => void;
+  onPublishTabGist?: (tabId: string) => void;
 
   // Context warning sash settings (Phase 6)
   contextWarningsEnabled?: boolean;
@@ -979,6 +980,8 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
               onSummarizeAndContinue={onSummarizeAndContinue}
               onCopyContext={onCopyContext}
               onExportHtml={onExportHtml}
+              onPublishGist={props.onPublishTabGist}
+              ghCliAvailable={props.ghCliAvailable}
               showUnreadOnly={showUnreadOnly}
               onToggleUnreadFilter={onToggleUnreadFilter}
               onOpenTabSearch={onOpenTabSearch}

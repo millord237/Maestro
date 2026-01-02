@@ -485,6 +485,13 @@ describe('marketplace IPC handlers', () => {
       expect(result.playbook).toBeDefined();
       expect(result.playbook.name).toBe('Test Playbook');
       expect(result.importedDocs).toEqual(['phase-1', 'phase-2']);
+
+      // Verify documents have target folder prefixed in their filenames
+      // This ensures the playbook can find documents in subfolders
+      expect(result.playbook.documents).toEqual([
+        { filename: 'My Test Playbook/phase-1', resetOnCompletion: false },
+        { filename: 'My Test Playbook/phase-2', resetOnCompletion: true },
+      ]);
     });
 
     it('should store empty string for null prompt (Maestro default fallback)', async () => {
