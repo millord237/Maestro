@@ -30,6 +30,16 @@ vi.mock('lucide-react', () => ({
     <span data-testid="copy-icon" className={className} style={style}>📋</span>,
   ExternalLink: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
     <span data-testid="external-link-icon" className={className} style={style}>🔗</span>,
+  FileText: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
+    <span data-testid="filetext-icon" className={className} style={style}>📄</span>,
+  Server: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
+    <span data-testid="server-icon" className={className} style={style}>🖥️</span>,
+  GitBranch: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
+    <span data-testid="gitbranch-icon" className={className} style={style}>🌿</span>,
+  Clock: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
+    <span data-testid="clock-icon" className={className} style={style}>🕐</span>,
+  RotateCw: ({ className, style }: { className?: string; style?: React.CSSProperties }) =>
+    <span data-testid="rotatecw-icon" className={className} style={style}>🔃</span>,
 }));
 
 // Mock @tanstack/react-virtual for virtualization
