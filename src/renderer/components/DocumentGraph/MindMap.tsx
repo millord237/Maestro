@@ -345,11 +345,27 @@ interface LayoutResult {
 }
 
 /**
+ * Build an adjacency map from links for efficient neighbor lookups.
+ * This is extracted to allow memoization at the component level.
+ */
+function buildAdjacencyMap(links: MindMapLink[]): Map<string, Set<string>> {
+  const adjacency = new Map<string, Set<string>>();
+  for (const link of links) {
+    if (!adjacency.has(link.source)) adjacency.set(link.source, new Set());
+    if (!adjacency.has(link.target)) adjacency.set(link.target, new Set());
+    adjacency.get(link.source)!.add(link.target);
+    adjacency.get(link.target)!.add(link.source);
+  }
+  return adjacency;
+}
+
+/**
  * Calculate the mind map layout with center node and branching structure
  */
 function calculateMindMapLayout(
   allNodes: MindMapNode[],
   allLinks: MindMapLink[],
+  adjacency: Map<string, Set<string>>,
   centerFilePath: string,
   maxDepth: number,
   canvasWidth: number,
@@ -453,16 +469,7 @@ function calculateMindMapLayout(
     };
   }
 
-  // Build adjacency map from links
-  const adjacency = new Map<string, Set<string>>();
-  allLinks.forEach(link => {
-    if (!adjacency.has(link.source)) adjacency.set(link.source, new Set());
-    if (!adjacency.has(link.target)) adjacency.set(link.target, new Set());
-    adjacency.get(link.source)!.add(link.target);
-    adjacency.get(link.target)!.add(link.source);
-  });
-
-  // BFS to find nodes within maxDepth
+  // BFS to find nodes within maxDepth (adjacency map is pre-built and passed in)
   const visited = new Map<string, number>(); // nodeId -> depth
   const queue: Array<{ id: string; depth: number }> = [{ id: actualCenterNodeId, depth: 0 }];
   visited.set(actualCenterNodeId, 0);
@@ -912,11 +919,15 @@ export function MindMap({
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
   const DOUBLE_CLICK_THRESHOLD = 300;
 
+  // Memoize adjacency map - only rebuilds when links change
+  const adjacencyMap = useMemo(() => buildAdjacencyMap(rawLinks), [rawLinks]);
+
   // Calculate layout
   const layout = useMemo(() => {
     return calculateMindMapLayout(
       rawNodes,
       rawLinks,
+      adjacencyMap,
       centerFilePath,
       maxDepth,
       width,
@@ -924,7 +935,7 @@ export function MindMap({
       showExternalLinks,
       previewCharLimit
     );
-  }, [rawNodes, rawLinks, centerFilePath, maxDepth, width, height, showExternalLinks, previewCharLimit]);
+  }, [rawNodes, rawLinks, adjacencyMap, centerFilePath, maxDepth, width, height, showExternalLinks, previewCharLimit]);
 
   // Set initial focus to center node when center file changes
   useEffect(() => {

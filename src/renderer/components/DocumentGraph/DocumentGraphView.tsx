@@ -480,8 +480,7 @@ export function DocumentGraphView({
     if (!isOpen || !hasLoadedDataRef.current) return;
     // Trigger a graph reload to recalculate node heights with new character limit
     debouncedLoadGraphData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewCharLimit]);
+  }, [previewCharLimit, debouncedLoadGraphData, isOpen]);
 
   /**
    * Cancel debounced load on unmount

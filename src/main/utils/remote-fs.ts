@@ -13,6 +13,7 @@ import { SshRemoteConfig } from '../../shared/types';
 import { execFileNoThrow, ExecResult } from './execFile';
 import { shellEscape } from './shell-escape';
 import { sshRemoteManager } from '../ssh-remote-manager';
+import { logger } from './logger';
 
 /**
  * File or directory entry returned from readDir operations.
@@ -152,8 +153,7 @@ async function execRemoteCommand(
 
     // Log SSH command for debugging connection issues
     if (attempt === 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[remote-fs] SSH to ${config.host}: ssh ${sshArgs.slice(0, -1).join(' ')} "<command>"`);
+      logger.debug(`[remote-fs] SSH to ${config.host}: ssh ${sshArgs.slice(0, -1).join(' ')} "<command>"`);
     }
 
     const result = await deps.execSsh('ssh', sshArgs);
@@ -168,8 +168,7 @@ async function execRemoteCommand(
     const combinedOutput = `${result.stderr} ${result.stdout}`;
     if (isRecoverableSshError(combinedOutput) && attempt < maxRetries) {
       const delay = getBackoffDelay(attempt, baseDelayMs, maxDelayMs);
-      // eslint-disable-next-line no-console
-      console.log(
+      logger.debug(
         `[remote-fs] SSH transient error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms: ${result.stderr.slice(0, 100)}`
       );
       await sleep(delay);

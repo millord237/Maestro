@@ -147,7 +147,6 @@ function getErrorTitleForType(type: AgentError['type']): string {
 }
 
 function MaestroConsoleInner() {
-  console.error('[MaestroConsoleInner] render start');
   // --- LAYER STACK (for blocking shortcuts when modals are open) ---
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
