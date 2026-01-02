@@ -24,6 +24,8 @@ export interface DocumentNodeProps extends NodeProps<DocumentNodeData & {
   searchMatch?: boolean;
   brokenLinks?: string[];
   isLargeFile?: boolean;
+  /** Dynamic character limit for description/preview (from settings) */
+  previewCharLimit?: number;
 }> {
   // Props come from React Flow - data, selected, etc.
 }
@@ -34,9 +36,10 @@ export interface DocumentNodeProps extends NodeProps<DocumentNodeData & {
 const MAX_TITLE_LENGTH = 40;
 
 /**
- * Maximum characters for description before truncation (~100 chars as specified in design)
+ * Default maximum characters for description/preview before truncation
+ * This can be overridden via the previewCharLimit setting
  */
-const MAX_DESCRIPTION_LENGTH = 100;
+const DEFAULT_PREVIEW_CHAR_LIMIT = 100;
 
 /**
  * Truncate text with ellipsis if exceeding max length
@@ -53,7 +56,7 @@ export const DocumentNode = memo(function DocumentNode({
   data,
   selected,
 }: DocumentNodeProps) {
-  const { title, lineCount, wordCount, size, description, filePath, theme, searchActive, searchMatch, brokenLinks, isLargeFile } = data;
+  const { title, lineCount, wordCount, size, description, contentPreview, filePath, theme, searchActive, searchMatch, brokenLinks, isLargeFile, previewCharLimit } = data;
 
   // Check if this document has broken links
   const hasBrokenLinks = brokenLinks && brokenLinks.length > 0;
@@ -99,11 +102,14 @@ export const DocumentNode = memo(function DocumentNode({
     whiteSpace: 'nowrap' as const,
   }), [theme.colors.textMain]);
 
+  // Use description (frontmatter) or fall back to contentPreview (plaintext)
+  const previewText = description || contentPreview;
+
   const statsRowStyle = useMemo(() => ({
     display: 'flex',
     gap: 12,
-    marginBottom: description ? 8 : 0,
-  }), [description]);
+    marginBottom: previewText ? 8 : 0,
+  }), [previewText]);
 
   const statItemStyle = useMemo(() => ({
     display: 'flex',
@@ -143,11 +149,14 @@ export const DocumentNode = memo(function DocumentNode({
   const displayTitle = truncateText(title, MAX_TITLE_LENGTH);
   const isTitleTruncated = title.length > MAX_TITLE_LENGTH;
 
-  // Truncate description if too long
-  const displayDescription = description
-    ? truncateText(description, MAX_DESCRIPTION_LENGTH)
+  // Use dynamic character limit from settings, falling back to default
+  const charLimit = previewCharLimit ?? DEFAULT_PREVIEW_CHAR_LIMIT;
+
+  // Truncate preview text (description or content preview) if too long
+  const displayPreview = previewText
+    ? truncateText(previewText, charLimit)
     : null;
-  const isDescriptionTruncated = description ? description.length > MAX_DESCRIPTION_LENGTH : false;
+  const isPreviewTruncated = previewText ? previewText.length > charLimit : false;
 
   // Build large file tooltip text
   const largeFileTooltip = isLargeFile
@@ -221,13 +230,13 @@ export const DocumentNode = memo(function DocumentNode({
         )}
       </div>
 
-      {/* Optional description - shows tooltip with full text when truncated */}
-      {displayDescription && (
+      {/* Optional preview text (description or content preview) - shows tooltip with full text when truncated */}
+      {displayPreview && (
         <div
           style={descriptionStyle}
-          title={isDescriptionTruncated ? description : undefined}
+          title={isPreviewTruncated ? previewText : undefined}
         >
-          {displayDescription}
+          {displayPreview}
         </div>
       )}
 

@@ -54,6 +54,8 @@ export interface DocumentStats {
   size: string;
   /** Optional description from front matter */
   description?: string;
+  /** Plaintext content preview (fallback when no frontmatter description exists) */
+  contentPreview?: string;
   /** Path to the document file */
   filePath: string;
   /** Paths to broken internal links (links to non-existent files) */
@@ -203,6 +205,113 @@ export function extractDescription(
 }
 
 /**
+ * Maximum characters to extract for content preview (generous limit for truncation elsewhere)
+ */
+const MAX_CONTENT_PREVIEW_LENGTH = 600;
+
+/**
+ * Strip markdown syntax from content and return plaintext.
+ * Removes: headings, bold/italic, links, images, code blocks, blockquotes, lists, etc.
+ *
+ * @param content - Markdown content
+ * @returns Plaintext version of the content
+ */
+function stripMarkdownSyntax(content: string): string {
+  let text = content;
+
+  // Remove front matter (--- ... ---)
+  text = text.replace(/^---[\s\S]*?---\n*/m, '');
+
+  // Remove code blocks (``` ... ```)
+  text = text.replace(/```[\s\S]*?```/g, '');
+
+  // Remove inline code (`code`)
+  text = text.replace(/`[^`]+`/g, '');
+
+  // Remove images ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+
+  // Replace links [text](url) with just the text
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+  // Replace wiki-links [[link]] with just the link text
+  text = text.replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, '$1');
+
+  // Remove HTML tags
+  text = text.replace(/<[^>]+>/g, '');
+
+  // Remove headings (# Heading)
+  text = text.replace(/^#{1,6}\s+/gm, '');
+
+  // Remove blockquotes (> quote)
+  text = text.replace(/^>\s*/gm, '');
+
+  // Remove horizontal rules (---, ***, ___)
+  text = text.replace(/^[-*_]{3,}\s*$/gm, '');
+
+  // Remove emphasis markers (bold/italic) but keep text
+  // Handle ***text***, **text**, *text*, ___text___, __text__, _text_
+  text = text.replace(/(\*{1,3}|_{1,3})([^*_]+)\1/g, '$2');
+
+  // Remove strikethrough ~~text~~
+  text = text.replace(/~~([^~]+)~~/g, '$1');
+
+  // Remove list markers (-, *, +, 1.)
+  text = text.replace(/^[\s]*[-*+]\s+/gm, '');
+  text = text.replace(/^[\s]*\d+\.\s+/gm, '');
+
+  // Remove task list markers [ ] and [x]
+  text = text.replace(/\[[ xX]\]\s*/g, '');
+
+  // Collapse multiple newlines into single space
+  text = text.replace(/\n+/g, ' ');
+
+  // Collapse multiple spaces into single space
+  text = text.replace(/\s+/g, ' ');
+
+  return text.trim();
+}
+
+/**
+ * Extract a plaintext content preview from markdown.
+ * Skips front matter and title, strips markdown syntax, returns clean text.
+ *
+ * @param content - Markdown content
+ * @param title - Document title to skip if it appears at the start
+ * @returns Plaintext preview string, or undefined if no meaningful content
+ */
+export function extractContentPreview(
+  content: string,
+  title: string
+): string | undefined {
+  if (!content || content.trim() === '') {
+    return undefined;
+  }
+
+  // Strip markdown syntax to get plaintext
+  let plaintext = stripMarkdownSyntax(content);
+
+  // Remove the title from the start if it appears there (avoid duplication)
+  if (plaintext.toLowerCase().startsWith(title.toLowerCase())) {
+    plaintext = plaintext.slice(title.length).trim();
+    // Remove any leading punctuation or whitespace left over
+    plaintext = plaintext.replace(/^[:\-–—.!?,;\s]+/, '');
+  }
+
+  // If no meaningful content left, return undefined
+  if (!plaintext || plaintext.length < 10) {
+    return undefined;
+  }
+
+  // Limit to reasonable length (will be truncated further by UI)
+  if (plaintext.length > MAX_CONTENT_PREVIEW_LENGTH) {
+    plaintext = plaintext.slice(0, MAX_CONTENT_PREVIEW_LENGTH);
+  }
+
+  return plaintext;
+}
+
+/**
  * Compute document statistics from markdown content.
  * Handles malformed content gracefully - never throws, always returns valid stats.
  *
@@ -260,12 +369,22 @@ export function computeDocumentStats(
   const size = formatFileSize(safeFileSize);
   const description = extractDescription(frontMatter);
 
+  // Extract plaintext content preview as fallback when no frontmatter description exists
+  let contentPreview: string | undefined;
+  try {
+    contentPreview = extractContentPreview(safeContent, title);
+  } catch (error) {
+    console.warn(`Failed to extract content preview from ${safeFilePath}:`, error);
+    contentPreview = undefined;
+  }
+
   return {
     title,
     lineCount,
     wordCount,
     size,
     description,
+    contentPreview,
     filePath: safeFilePath,
   };
 }

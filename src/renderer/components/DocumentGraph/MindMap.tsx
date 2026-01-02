@@ -33,7 +33,10 @@ export interface MindMapNode {
   nodeType: 'document' | 'external';
   label: string;
   filePath?: string;
+  /** Description from frontmatter */
   description?: string;
+  /** Plaintext content preview (fallback when no description) */
+  contentPreview?: string;
   descriptionExpanded?: boolean;
   domain?: string;
   urls?: string[];
@@ -97,6 +100,8 @@ export interface MindMapProps {
   onOpenFile: (filePath: string) => void;
   /** Search query for highlighting */
   searchQuery: string;
+  /** Character limit for preview text (description or content preview) */
+  previewCharLimit?: number;
   /** Custom position overrides for nodes (from user drag operations) */
   nodePositions?: Map<string, NodePositionOverride>;
   /** Callback when a node position is changed via drag */
@@ -119,12 +124,28 @@ const NODE_WIDTH = 260;
 const NODE_HEADER_HEIGHT = 32;
 /** Sub-header height for folder path */
 const NODE_SUBHEADER_HEIGHT = 22;
-/** Minimum node height (title + folder path) */
+/** Minimum node height (title + folder path, no description) */
 const NODE_HEIGHT_BASE = 56 + NODE_SUBHEADER_HEIGHT;
-/** Node height with description */
-const NODE_HEIGHT_WITH_DESC = 90 + NODE_SUBHEADER_HEIGHT;
-/** Maximum characters per line in description */
-const _DESC_MAX_CHARS_PER_LINE = 32;
+/** Line height for description text */
+const DESC_LINE_HEIGHT = 14;
+/** Approximate characters per line in description (for estimation) */
+const CHARS_PER_LINE = 35;
+/** Padding for description area */
+const DESC_PADDING = 20; // 10px top + 10px bottom
+
+/**
+ * Calculate node height based on preview character limit
+ */
+function calculateNodeHeight(hasPreview: boolean, previewCharLimit: number): number {
+  if (!hasPreview) {
+    return NODE_HEIGHT_BASE;
+  }
+  // Estimate number of lines based on character limit
+  const estimatedLines = Math.ceil(previewCharLimit / CHARS_PER_LINE);
+  // Minimum 2 lines, cap at reasonable max
+  const lines = Math.max(2, Math.min(estimatedLines, 15));
+  return NODE_HEIGHT_BASE + (lines * DESC_LINE_HEIGHT) + DESC_PADDING;
+}
 /** Scale factor for center node */
 const CENTER_NODE_SCALE = 1.15;
 /** External node width (smaller) */
@@ -333,7 +354,8 @@ function calculateMindMapLayout(
   maxDepth: number,
   canvasWidth: number,
   canvasHeight: number,
-  showExternalLinks: boolean
+  showExternalLinks: boolean,
+  previewCharLimit: number = 100
 ): LayoutResult {
   // Find center node - try multiple path variations
   // The centerFilePath might be relative to the root, but node filePaths might be
@@ -473,7 +495,8 @@ function calculateMindMapLayout(
   const centerX = canvasWidth / 2;
   const centerY = canvasHeight / 2 - (showExternalLinks && externalNodes.length > 0 ? 50 : 0);
   const centerWidth = NODE_WIDTH * CENTER_NODE_SCALE;
-  const centerHeight = (centerNode.description ? NODE_HEIGHT_WITH_DESC : NODE_HEIGHT_BASE) * CENTER_NODE_SCALE;
+  const centerHasPreview = !!(centerNode.description || centerNode.contentPreview);
+  const centerHeight = calculateNodeHeight(centerHasPreview, previewCharLimit) * CENTER_NODE_SCALE;
 
   const positionedNodes: MindMapNode[] = [];
   const usedLinks: MindMapLink[] = [];
@@ -518,7 +541,8 @@ function calculateMindMapLayout(
     const leftStartY = centerY - leftTotalHeight / 2 + VERTICAL_SPACING / 2;
 
     leftNodes.forEach((node, index) => {
-      const height = node.description ? NODE_HEIGHT_WITH_DESC : NODE_HEIGHT_BASE;
+      const hasPreview = !!(node.description || node.contentPreview);
+      const height = calculateNodeHeight(hasPreview, previewCharLimit);
       positionedNodes.push({
         ...node,
         x: leftX,
@@ -536,7 +560,8 @@ function calculateMindMapLayout(
     const rightStartY = centerY - rightTotalHeight / 2 + VERTICAL_SPACING / 2;
 
     rightNodes.forEach((node, index) => {
-      const height = node.description ? NODE_HEIGHT_WITH_DESC : NODE_HEIGHT_BASE;
+      const hasPreview = !!(node.description || node.contentPreview);
+      const height = calculateNodeHeight(hasPreview, previewCharLimit);
       positionedNodes.push({
         ...node,
         x: rightX,
@@ -604,14 +629,15 @@ function calculateMindMapLayout(
     }
   });
 
-  // Calculate bounds
+  // Calculate bounds - use max node height for padding
+  const maxNodeHeight = calculateNodeHeight(true, previewCharLimit);
   const xs = positionedNodes.map(n => n.x);
   const ys = positionedNodes.map(n => n.y);
   const bounds = {
     minX: Math.min(...xs) - NODE_WIDTH / 2 - CANVAS_PADDING,
     maxX: Math.max(...xs) + NODE_WIDTH / 2 + CANVAS_PADDING,
-    minY: Math.min(...ys) - NODE_HEIGHT_WITH_DESC / 2 - CANVAS_PADDING,
-    maxY: Math.max(...ys) + NODE_HEIGHT_WITH_DESC / 2 + CANVAS_PADDING,
+    minY: Math.min(...ys) - maxNodeHeight / 2 - CANVAS_PADDING,
+    maxY: Math.max(...ys) + maxNodeHeight / 2 + CANVAS_PADDING,
   };
 
   return { nodes: positionedNodes, links: usedLinks, bounds };
@@ -669,9 +695,12 @@ function renderDocumentNode(
   theme: Theme,
   isHovered: boolean,
   matchesSearch: boolean,
-  searchActive: boolean
+  searchActive: boolean,
+  previewCharLimit: number = 100
 ): void {
-  const { x, y, width, height, label, description, filePath, isSelected, isFocused } = node;
+  const { x, y, width, height, label, description, contentPreview, filePath, isSelected, isFocused } = node;
+  // Use description (frontmatter) or fall back to contentPreview (plaintext)
+  const previewText = description || contentPreview;
 
   // Calculate opacity based on search state
   const alpha = searchActive && !matchesSearch ? 0.3 : 1;
@@ -761,8 +790,8 @@ function renderDocumentNode(
     ctx.fillText(pathText, folderIconX + folderIconSize + 6, subHeaderY + NODE_SUBHEADER_HEIGHT / 2);
   }
 
-  // Description (in body, if present)
-  if (description) {
+  // Preview text (description or content preview, in body, if present)
+  if (previewText) {
     ctx.fillStyle = theme.colors.textDim;
     ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'left';
@@ -770,9 +799,15 @@ function renderDocumentNode(
 
     const bodyPadding = 10;
     const maxDescWidth = width - bodyPadding * 2;
-    const descLines = wrapText(ctx, description, maxDescWidth, 2);
+    // Truncate preview text based on character limit before wrapping
+    const truncatedPreview = previewText.length > previewCharLimit
+      ? previewText.slice(0, previewCharLimit).trim() + '...'
+      : previewText;
+    // Calculate max lines based on character limit (same formula as calculateNodeHeight)
+    const estimatedMaxLines = Math.max(2, Math.min(Math.ceil(previewCharLimit / CHARS_PER_LINE), 15));
+    const descLines = wrapText(ctx, truncatedPreview, maxDescWidth, estimatedMaxLines);
 
-    const lineHeight = 14;
+    const lineHeight = DESC_LINE_HEIGHT;
     const descStartY = nodeTop + NODE_HEADER_HEIGHT + NODE_SUBHEADER_HEIGHT + bodyPadding;
 
     descLines.forEach((line, i) => {
@@ -848,6 +883,7 @@ export function MindMap({
   onNodeContextMenu,
   onOpenFile,
   searchQuery,
+  previewCharLimit = 100,
   nodePositions,
   onNodePositionChange,
   containerRef: externalContainerRef,
@@ -885,9 +921,10 @@ export function MindMap({
       maxDepth,
       width,
       height,
-      showExternalLinks
+      showExternalLinks,
+      previewCharLimit
     );
-  }, [rawNodes, rawLinks, centerFilePath, maxDepth, width, height, showExternalLinks]);
+  }, [rawNodes, rawLinks, centerFilePath, maxDepth, width, height, showExternalLinks, previewCharLimit]);
 
   // Set initial focus to center node when center file changes
   useEffect(() => {
@@ -928,7 +965,8 @@ export function MindMap({
       return (
         (node.label?.toLowerCase().includes(query) ?? false) ||
         (node.filePath?.toLowerCase().includes(query) ?? false) ||
-        (node.description?.toLowerCase().includes(query) ?? false)
+        (node.description?.toLowerCase().includes(query) ?? false) ||
+        (node.contentPreview?.toLowerCase().includes(query) ?? false)
       );
     } else {
       return (
@@ -1058,7 +1096,7 @@ export function MindMap({
       const matchesSearch = nodeMatchesSearch(node);
 
       if (node.nodeType === 'document') {
-        renderDocumentNode(ctx, node, theme, isHovered, matchesSearch, searchActive);
+        renderDocumentNode(ctx, node, theme, isHovered, matchesSearch, searchActive, previewCharLimit);
       } else {
         renderExternalNode(ctx, node, theme, isHovered, matchesSearch, searchActive);
       }
@@ -1440,7 +1478,8 @@ export function MindMap({
  */
 export function convertToMindMapData(
   graphNodes: Array<{ id: string; data: GraphNodeData }>,
-  graphEdges: Array<{ source: string; target: string; type?: string }>
+  graphEdges: Array<{ source: string; target: string; type?: string }>,
+  previewCharLimit: number = 100
 ): { nodes: MindMapNode[]; links: MindMapLink[] } {
   // Build neighbor map for connection counting
   const neighborMap = new Map<string, Set<string>>();
@@ -1473,18 +1512,21 @@ export function convertToMindMapData(
 
     if (node.data.nodeType === 'document') {
       const docData = node.data as DocumentNodeData;
+      // Use description (frontmatter) or contentPreview (plaintext) for display
+      const hasPreviewText = !!(docData.description || docData.contentPreview);
       mindMapNode = {
         id: node.id,
         x: 0,
         y: 0,
         width: NODE_WIDTH,
-        height: docData.description ? NODE_HEIGHT_WITH_DESC : NODE_HEIGHT_BASE,
+        height: calculateNodeHeight(hasPreviewText, previewCharLimit),
         depth: 0,
         side: 'center' as const,
         nodeType: 'document' as const,
         label: docData.title,
         filePath: docData.filePath,
         description: docData.description,
+        contentPreview: docData.contentPreview,
         lineCount: docData.lineCount,
         wordCount: docData.wordCount,
         size: docData.size,

@@ -54,6 +54,8 @@ vi.mock('../../../renderer/utils/tabHelpers', () => ({
         stagedImages: [],
         createdAt: Date.now(),
         state: 'idle',
+        // New fields for context transfer
+        pendingMergedContext: undefined,
       }],
       activeTabId: 'new-tab-id',
       shellLogs: [],

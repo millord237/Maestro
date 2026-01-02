@@ -61,6 +61,8 @@ interface PlaybookDetailViewProps {
   isLoadingDocument: boolean;
   targetFolderName: string;
   isImporting: boolean;
+  /** Whether this is a remote SSH session (disables local folder browsing) */
+  isRemoteSession: boolean;
   onBack: () => void;
   onSelectDocument: (filename: string) => void;
   onTargetFolderChange: (name: string) => void;
@@ -231,6 +233,7 @@ function PlaybookDetailView({
   isLoadingDocument,
   targetFolderName,
   isImporting,
+  isRemoteSession,
   onBack,
   onSelectDocument,
   onTargetFolderChange,
@@ -630,9 +633,12 @@ function PlaybookDetailView({
               />
               <button
                 onClick={onBrowseFolder}
-                className="p-2 rounded border transition-colors hover:bg-white/5"
+                disabled={isRemoteSession}
+                className={`p-2 rounded border transition-colors ${
+                  isRemoteSession ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5'
+                }`}
                 style={{ borderColor: theme.colors.border }}
-                title="Browse for folder"
+                title={isRemoteSession ? 'Browse is not available for remote sessions' : 'Browse for folder'}
               >
                 <FolderOpen className="w-4 h-4" style={{ color: theme.colors.textDim }} />
               </button>
@@ -684,6 +690,9 @@ export function MarketplaceModal({
   const { registerLayer, unregisterLayer } = useLayerStack();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+
+  // SSH remote awareness - local folder browsing is not available for remote sessions
+  const isRemoteSession = !!sshRemoteId;
 
   // Marketplace hook for data and operations
   const {
@@ -863,13 +872,15 @@ export function MarketplaceModal({
     onClose,
   ]);
 
-  // Handle browse folder action
+  // Handle browse folder action (disabled for remote sessions)
   const handleBrowseFolder = useCallback(async () => {
+    // Browse is only available for local sessions
+    if (isRemoteSession) return;
     const folder = await window.maestro.dialog.selectFolder();
     if (folder) {
       setTargetFolderName(folder);
     }
-  }, []);
+  }, [isRemoteSession]);
 
   // Cmd+F to focus search input
   useEffect(() => {
@@ -1030,6 +1041,7 @@ export function MarketplaceModal({
             isLoadingDocument={isLoadingDocument}
             targetFolderName={targetFolderName}
             isImporting={isImporting}
+            isRemoteSession={isRemoteSession}
             onBack={handleBackToList}
             onSelectDocument={handleSelectDocument}
             onTargetFolderChange={setTargetFolderName}

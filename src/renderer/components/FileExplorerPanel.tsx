@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, EyeOff, Target, Copy, ExternalLink, Server, GitBranch, Clock, RotateCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, EyeOff, Target, Copy, ExternalLink, Server, GitBranch, Clock, RotateCw, FileText } from 'lucide-react';
 import type { Session, Theme, FocusArea } from '../types';
 import type { FileNode } from '../types/fileTree';
 import type { FileTreeChanges } from '../utils/fileExplorer';
@@ -269,6 +269,13 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
     }
     setContextMenu(null);
   }, [contextMenu, onFocusFileInGraph]);
+
+  const handlePreviewFile = useCallback(() => {
+    if (contextMenu && contextMenu.node.type === 'file') {
+      handleFileClick(contextMenu.node, contextMenu.path, session);
+    }
+    setContextMenu(null);
+  }, [contextMenu, handleFileClick, session]);
 
   const handleCopyPath = useCallback(() => {
     if (contextMenu) {
@@ -776,21 +783,35 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
           }}
         >
           <div className="p-1">
+            {/* Preview option - for files only */}
+            {contextMenu.node.type === 'file' && (
+              <button
+                onClick={handlePreviewFile}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <FileText className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
+                <span>Preview</span>
+              </button>
+            )}
+
             {/* Document Graph option - only for markdown files */}
             {contextMenu.node.type === 'file' &&
              (contextMenu.node.name.endsWith('.md') || contextMenu.node.name.endsWith('.markdown')) &&
              onFocusFileInGraph && (
-              <>
-                <button
-                  onClick={handleFocusInGraph}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
-                  style={{ color: theme.colors.textMain }}
-                >
-                  <Target className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
-                  <span>Document Graph</span>
-                </button>
-                <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
-              </>
+              <button
+                onClick={handleFocusInGraph}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textMain }}
+              >
+                <Target className="w-3.5 h-3.5" style={{ color: theme.colors.accent }} />
+                <span>Document Graph</span>
+              </button>
+            )}
+
+            {/* Divider after preview/graph options if any were shown */}
+            {contextMenu.node.type === 'file' && (
+              <div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
             )}
 
             {/* Copy Path option */}

@@ -605,36 +605,68 @@ export function useSendToAgentWithSessions(
         sourceSession
       );
 
+      // Format the context as text to be sent to the agent
+      // This will be injected into the first message via pendingMergedContext
+      const formattedContext = sourceContext.logs
+        .filter(log => log.text && log.text.trim() && log.source !== 'system')
+        .map(log => {
+          const role = log.source === 'user' ? 'User' : 'Assistant';
+          return `${role}: ${log.text}`;
+        })
+        .join('\n\n');
+
+      const sourceName = getSessionDisplayName(sourceSession);
+      const sourceAgentName = getAgentDisplayName(sourceSession.toolType);
+
+      // Create the pending context with a clear header explaining what this is
+      const pendingMergedContext = formattedContext
+        ? `# Context from Previous Session
+
+The following is a conversation from another session ("${sourceName}" using ${sourceAgentName}). Please review this context to understand the prior work and decisions made:
+
+---
+
+${formattedContext}
+
+---
+
+Please confirm you've reviewed this context and let me know you're ready to continue.`
+        : undefined;
+
+      // Create session with empty logs - context will be sent via pendingMergedContext
       const { session: newSession } = createMergedSession({
         name: sessionName,
         projectRoot: sourceSession.projectRoot,
         toolType: targetAgent,
-        mergedLogs: sourceContext.logs, // Will be groomed if option was set
+        mergedLogs: [], // Empty - context is sent as message, not pre-populated logs
         groupId: sourceSession.groupId,
       });
 
-      // Add transfer notice
+      // Add transfer notice and set pendingMergedContext on the active tab
       const transferNotice: LogEntry = {
         id: `transfer-notice-${Date.now()}`,
         timestamp: Date.now(),
         source: 'system',
-        text: `Context transferred from ${getAgentDisplayName(sourceSession.toolType)}. ${
+        text: `Context transferred from ${sourceAgentName}. ${
           options.groomContext
             ? `Groomed and optimized for ${getAgentDisplayName(targetAgent)}.`
             : 'Original context preserved.'
-        }`,
+        } Send a message to share the context with the agent.`,
       };
 
       const activeTab = newSession.aiTabs[0];
       if (activeTab) {
-        activeTab.logs = [transferNotice, ...activeTab.logs];
+        activeTab.logs = [transferNotice];
+        // Set pendingMergedContext so it gets injected into the first message
+        activeTab.pendingMergedContext = pendingMergedContext;
+        // Pre-populate the input field with a prompt to send
+        activeTab.inputValue = 'Please review the context above and let me know when you\'re ready to continue.';
       }
 
       // Add new session to state
       setSessions(prev => [...prev, newSession]);
 
       // Log transfer operation to history
-      const sourceAgentName = getAgentDisplayName(sourceSession.toolType);
       const targetAgentName = getAgentDisplayName(targetAgent);
 
       try {

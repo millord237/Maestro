@@ -330,6 +330,7 @@ function MaestroConsoleInner() {
     defaultStatsTimeRange,
     documentGraphShowExternalLinks,
     documentGraphMaxNodes,
+    documentGraphPreviewCharLimit,
 
   } = settings;
 
@@ -8983,6 +8984,8 @@ function MaestroConsoleInner() {
           defaultShowExternalLinks={documentGraphShowExternalLinks}
           onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
           defaultMaxNodes={documentGraphMaxNodes}
+          defaultPreviewCharLimit={documentGraphPreviewCharLimit}
+          onPreviewCharLimitChange={settings.setDocumentGraphPreviewCharLimit}
           sshRemoteId={activeSession?.sshRemoteId}
         />
       )}

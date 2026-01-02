@@ -166,8 +166,10 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
   const handleFileClick = useCallback(async (node: { name: string; type: string }, path: string) => {
     if (!activeSession) return; // Guard against null session
     if (node.type === 'file') {
-      // Construct full file path
-      const fullPath = `${activeSession.fullPath}/${path}`;
+      // Construct full file path using projectRoot (not fullPath which can diverge from file tree root)
+      // The file tree is rooted at projectRoot, so paths are relative to it
+      const treeRoot = activeSession.projectRoot || activeSession.fullPath;
+      const fullPath = `${treeRoot}/${path}`;
 
       // Check if file should be opened externally
       if (shouldOpenExternally(node.name)) {

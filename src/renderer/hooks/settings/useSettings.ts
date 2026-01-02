@@ -288,6 +288,8 @@ export interface UseSettingsReturn {
   setDocumentGraphShowExternalLinks: (value: boolean) => void;
   documentGraphMaxNodes: number;
   setDocumentGraphMaxNodes: (value: number) => void;
+  documentGraphPreviewCharLimit: number;
+  setDocumentGraphPreviewCharLimit: (value: number) => void;
 
   // Stats settings
   statsCollectionEnabled: boolean;
@@ -412,6 +414,7 @@ export function useSettings(): UseSettingsReturn {
   // Document Graph settings
   const [documentGraphShowExternalLinks, setDocumentGraphShowExternalLinksState] = useState(false); // Default: false
   const [documentGraphMaxNodes, setDocumentGraphMaxNodesState] = useState(50); // Default: 50
+  const [documentGraphPreviewCharLimit, setDocumentGraphPreviewCharLimitState] = useState(100); // Default: 100 (matches original hard-coded value)
 
   // Stats settings
   const [statsCollectionEnabled, setStatsCollectionEnabledState] = useState(true); // Default: enabled
@@ -1127,6 +1130,14 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('documentGraphMaxNodes', clampedValue);
   }, []);
 
+  // Document Graph preview character limit
+  const setDocumentGraphPreviewCharLimit = useCallback((value: number) => {
+    // Clamp value between 50 (minimum readable) and 500 (a couple sentences)
+    const clampedValue = Math.max(50, Math.min(500, value));
+    setDocumentGraphPreviewCharLimitState(clampedValue);
+    window.maestro.settings.set('documentGraphPreviewCharLimit', clampedValue);
+  }, []);
+
   // Stats collection enabled
   const setStatsCollectionEnabled = useCallback((value: boolean) => {
     setStatsCollectionEnabledState(value);
@@ -1203,6 +1214,7 @@ export function useSettings(): UseSettingsReturn {
       const savedColorBlindMode = await window.maestro.settings.get('colorBlindMode');
       const savedDocumentGraphShowExternalLinks = await window.maestro.settings.get('documentGraphShowExternalLinks');
       const savedDocumentGraphMaxNodes = await window.maestro.settings.get('documentGraphMaxNodes');
+      const savedDocumentGraphPreviewCharLimit = await window.maestro.settings.get('documentGraphPreviewCharLimit');
       const savedStatsCollectionEnabled = await window.maestro.settings.get('statsCollectionEnabled');
       const savedDefaultStatsTimeRange = await window.maestro.settings.get('defaultStatsTimeRange');
       const savedPreventSleepEnabled = await window.maestro.settings.get('preventSleepEnabled');
@@ -1438,6 +1450,12 @@ export function useSettings(): UseSettingsReturn {
           setDocumentGraphMaxNodesState(maxNodes);
         }
       }
+      if (savedDocumentGraphPreviewCharLimit !== undefined) {
+        const charLimit = savedDocumentGraphPreviewCharLimit as number;
+        if (typeof charLimit === 'number' && charLimit >= 50 && charLimit <= 500) {
+          setDocumentGraphPreviewCharLimitState(charLimit);
+        }
+      }
 
       // Stats settings
       if (savedStatsCollectionEnabled !== undefined) {
@@ -1599,6 +1617,8 @@ export function useSettings(): UseSettingsReturn {
     setDocumentGraphShowExternalLinks,
     documentGraphMaxNodes,
     setDocumentGraphMaxNodes,
+    documentGraphPreviewCharLimit,
+    setDocumentGraphPreviewCharLimit,
     statsCollectionEnabled,
     setStatsCollectionEnabled,
     defaultStatsTimeRange,
@@ -1728,6 +1748,8 @@ export function useSettings(): UseSettingsReturn {
     setDocumentGraphShowExternalLinks,
     documentGraphMaxNodes,
     setDocumentGraphMaxNodes,
+    documentGraphPreviewCharLimit,
+    setDocumentGraphPreviewCharLimit,
     statsCollectionEnabled,
     setStatsCollectionEnabled,
     defaultStatsTimeRange,

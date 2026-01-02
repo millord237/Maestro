@@ -29,6 +29,7 @@ import {
   Calendar,
   CheckSquare,
   Focus,
+  Type,
 } from 'lucide-react';
 import type { Theme } from '../../types';
 import { useLayerStack } from '../../contexts/LayerStackContext';
@@ -100,6 +101,10 @@ export interface DocumentGraphViewProps {
   defaultNeighborDepth?: number;
   /** Callback to persist neighbor depth changes */
   onNeighborDepthChange?: (depth: number) => void;
+  /** Default preview character limit (from settings) */
+  defaultPreviewCharLimit?: number;
+  /** Callback to persist preview character limit changes */
+  onPreviewCharLimitChange?: (limit: number) => void;
   /** Optional SSH remote ID - if provided, shows unavailable message (can't scan remote filesystem) */
   sshRemoteId?: string;
 }
@@ -121,6 +126,8 @@ export function DocumentGraphView({
   defaultMaxNodes = DEFAULT_MAX_NODES,
   defaultNeighborDepth = 2,
   onNeighborDepthChange,
+  defaultPreviewCharLimit = 100,
+  onPreviewCharLimitChange,
   sshRemoteId,
 }: DocumentGraphViewProps) {
   // Graph data state
@@ -135,6 +142,8 @@ export function DocumentGraphView({
   const [includeExternalLinks, setIncludeExternalLinks] = useState(defaultShowExternalLinks);
   const [neighborDepth, setNeighborDepth] = useState(defaultNeighborDepth);
   const [showDepthSlider, setShowDepthSlider] = useState(false);
+  const [previewCharLimit, setPreviewCharLimit] = useState(defaultPreviewCharLimit);
+  const [showPreviewSlider, setShowPreviewSlider] = useState(false);
 
   // Selection state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -369,7 +378,8 @@ export function DocumentGraphView({
       const docOnlyEdges = graphData.edges.filter(e => e.type !== 'external');
       const { nodes: docMindMapNodes, links: docMindMapLinks } = convertToMindMapData(
         docOnlyNodes.map(n => ({ id: n.id, data: n.data })),
-        docOnlyEdges.map(e => ({ source: e.source, target: e.target, type: e.type }))
+        docOnlyEdges.map(e => ({ source: e.source, target: e.target, type: e.type })),
+        previewCharLimit
       );
       setDocumentOnlyNodes(docMindMapNodes);
       setDocumentOnlyLinks(docMindMapLinks);
@@ -379,7 +389,8 @@ export function DocumentGraphView({
       const allEdges = [...docOnlyEdges, ...graphData.cachedExternalData.externalEdges];
       const { nodes: allMindMapNodes, links: allMindMapLinks } = convertToMindMapData(
         allNodes.map(n => ({ id: n.id, data: n.data })),
-        allEdges.map(e => ({ source: e.source, target: e.target, type: e.type }))
+        allEdges.map(e => ({ source: e.source, target: e.target, type: e.type })),
+        previewCharLimit
       );
       setAllNodesWithExternal(allMindMapNodes);
       setAllLinksWithExternal(allMindMapLinks);
@@ -460,6 +471,17 @@ export function DocumentGraphView({
       });
     }
   }, [includeExternalLinks, isOpen, documentOnlyNodes, documentOnlyLinks, allNodesWithExternal, allLinksWithExternal]);
+
+  /**
+   * Recalculate node heights when previewCharLimit changes
+   * The layout is recalculated in MindMap, but we need to update the cached node heights
+   */
+  useEffect(() => {
+    if (!isOpen || !hasLoadedDataRef.current) return;
+    // Trigger a graph reload to recalculate node heights with new character limit
+    debouncedLoadGraphData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewCharLimit]);
 
   /**
    * Cancel debounced load on unmount
@@ -602,6 +624,15 @@ export function DocumentGraphView({
   }, [onNeighborDepthChange]);
 
   /**
+   * Handle preview character limit change
+   */
+  const handlePreviewCharLimitChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newLimit = parseInt(e.target.value, 10);
+    setPreviewCharLimit(newLimit);
+    onPreviewCharLimitChange?.(newLimit);
+  }, [onPreviewCharLimitChange]);
+
+  /**
    * Handle load more
    */
   const handleLoadMore = useCallback(async () => {
@@ -625,7 +656,8 @@ export function DocumentGraphView({
 
       const { nodes: mindMapNodes, links: mindMapLinks } = convertToMindMapData(
         graphData.nodes.map(n => ({ id: n.id, data: n.data })),
-        graphData.edges.map(e => ({ source: e.source, target: e.target, type: e.type }))
+        graphData.edges.map(e => ({ source: e.source, target: e.target, type: e.type })),
+        previewCharLimit
       );
 
       setNodes(mindMapNodes);
@@ -635,7 +667,7 @@ export function DocumentGraphView({
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, maxNodes, rootPath, activeFocusFile, focusFilePath, neighborDepth]);
+  }, [hasMore, loadingMore, maxNodes, rootPath, activeFocusFile, focusFilePath, neighborDepth, previewCharLimit]);
 
   /**
    * Handle context menu open
@@ -1042,6 +1074,67 @@ export function DocumentGraphView({
               )}
             </div>
 
+            {/* Preview Character Limit Slider */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPreviewSlider(!showPreviewSlider)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors"
+                style={{
+                  backgroundColor: previewCharLimit > 100 ? `${theme.colors.accent}25` : `${theme.colors.accent}10`,
+                  color: previewCharLimit > 100 ? theme.colors.accent : theme.colors.textDim,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = `${theme.colors.accent}30`)}
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = previewCharLimit > 100
+                    ? `${theme.colors.accent}25`
+                    : `${theme.colors.accent}10`)
+                }
+                title={`Preview text limit: ${previewCharLimit} characters`}
+              >
+                <Type className="w-4 h-4" />
+                Preview: {previewCharLimit}
+              </button>
+
+              {showPreviewSlider && (
+                <div
+                  className="absolute top-full right-0 mt-2 p-3 rounded-lg shadow-lg z-50"
+                  style={{
+                    backgroundColor: theme.colors.bgActivity,
+                    border: `1px solid ${theme.colors.border}`,
+                    minWidth: 220,
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs" style={{ color: theme.colors.textDim }}>
+                      Preview Characters
+                    </span>
+                    <span className="text-xs font-mono" style={{ color: theme.colors.textMain }}>
+                      {previewCharLimit}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="500"
+                    step="50"
+                    value={previewCharLimit}
+                    onChange={handlePreviewCharLimitChange}
+                    className="w-full"
+                    style={{ accentColor: theme.colors.accent }}
+                  />
+                  <div className="flex justify-between text-xs mt-1" style={{ color: theme.colors.textDim }}>
+                    <span>50</span>
+                    <span>200</span>
+                    <span>350</span>
+                    <span>500</span>
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: theme.colors.textDim }}>
+                    Characters shown in document previews
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* External Links Toggle */}
             <button
               onClick={handleExternalLinksToggle}
@@ -1248,6 +1341,7 @@ export function DocumentGraphView({
               onNodeContextMenu={handleNodeContextMenu}
               onOpenFile={handleOpenFile}
               searchQuery={searchQuery}
+              previewCharLimit={previewCharLimit}
               nodePositions={nodePositions}
               onNodePositionChange={handleNodePositionChange}
               containerRef={mindMapContainerRef}
