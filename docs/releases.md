@@ -1,7 +1,6 @@
 ---
 title: Release Notes
 description: Version history and changelog for Maestro releases
-icon: scroll
 ---
 
 # Release Notes
@@ -14,19 +13,28 @@ Maestro can update itself automatically! This feature was introduced in **v0.8.7
 
 ---
 
-## v0.14.x - Document Graphs
+## v0.14.x - Document Graphs and Agents over SSH
 
-**Latest: v0.14.0** | Released December 31, 1
+**Latest: v0.14.0** | Released January 2, 2026
 
-### Changes
+Two major features in this release:
 
-- Markdown documents graph view! 📈
+🗄️ The first is Document Graphs. Launch from file preview or from the FIle tree panel. Explore relationships between Markdown documents that contain links between documents and to URLs.
+
+📶 The second is SSH support for agents. Manage a remote agent with feature parity over SSH. Includes support for Git and File tree panels. Manage agents on remote systems or in containers. This even works for Group Chat, which is rad as hell.
+
+🎛️ Also, made hefty changes to the User Dashboard, check it out from the hamburger menu, command palette, or hotkey. Get global insights across all providers and agents.
 
 ### Other Changes
-- Support for managing Agents over SSH 🛣️
 - Leaderboard tracking now works across multiple systems 🏆
+- Windows WSL compatibility improvements 🪟
+- Agent duplication. Pro tip: Consider a group of unused "Template" agents ✌️
+- New setting to prevent system from going to sleep while agents are active 🛏️
 - We were not correctly tallying user interactions in the new usage dashboard 🧮
+- Added debug package to the wizard process, if you have issues there, please share the logs! 🧙‍♂️
 - Performance improvement in Auto Run panel editor 🏃‍♂️
+
+Thanks for the contributions: @t1mmen @aejfager @Crumbgrabber @whglaser @b3nw @deandebeer
 
 ---
 
@@ -104,7 +112,7 @@ The big changes in the v0.12.x line are the following three:
 
 ## v0.10.x - Group Chat
 
-**Latest: v0.10.2** | Released December 21, 2025
+**Latest: v0.10.2** | Released December 22, 2025
 
 ### Changes
 
@@ -120,8 +128,8 @@ The big changes in the v0.12.x line are the following three:
 
 ### Previous Releases in this Series
 
-- **v0.10.1** (December 20, 2025) - Group Chat
-- **v0.10.0** (December 20, 2025) - Group Chat
+- **v0.10.1** (December 21, 2025) - Group Chat
+- **v0.10.0** (December 21, 2025) - Group Chat
 
 ---
 
@@ -142,13 +150,13 @@ The big changes in the v0.12.x line are the following three:
 
 ### Previous Releases in this Series
 
-- **v0.9.0** (December 17, 2025) - Codex & OpenCode Support
+- **v0.9.0** (December 18, 2025) - Codex & OpenCode Support
 
 ---
 
 ## v0.8.x - Nudge Messages
 
-**Latest: v0.8.8** | Released December 16, 2025
+**Latest: v0.8.8** | Released December 17, 2025
 
 ### Changes
 
@@ -170,19 +178,19 @@ The big changes in the v0.12.x line are the following three:
 ### Previous Releases in this Series
 
 - **v0.8.7** (December 16, 2025) - Automatic Updates
-- **v0.8.6** (December 15, 2025) - Markdown Improvements
-- **v0.8.5** (December 14, 2025) - Worktrees
+- **v0.8.6** (December 16, 2025) - Markdown Improvements
+- **v0.8.5** (December 15, 2025) - Worktrees
 - **v0.8.4** (December 14, 2025) - Leaderboard
 - **v0.8.3** (December 14, 2025) - Leaderboard
 - **v0.8.2** (December 14, 2025) - RunMaestro.ai Leaderboard
-- **v0.8.1** (December 12, 2025) - RunMaestro.ai Leaderboard (Signed!)
+- **v0.8.1** (December 13, 2025) - RunMaestro.ai Leaderboard (Signed!)
 - **v0.8.0** (December 12, 2025) - RunMaestro.ai Leaderboard
 
 ---
 
 ## v0.7.x - Onboarding and Interface Tour
 
-**Latest: v0.7.4** | Released December 11, 2025
+**Latest: v0.7.4** | Released December 12, 2025
 
 Minor bugfixes on top of v0.7.3:
 
@@ -217,10 +225,10 @@ Minor bugfixes on top of v0.7.3:
 
 ### Previous Releases in this Series
 
-- **v0.7.3** (December 11, 2025) - Onboarding and Interface Tour
+- **v0.7.3** (December 12, 2025) - Onboarding and Interface Tour
 - **v0.7.2** (December 9, 2025)
 - **v0.7.1** (December 8, 2025)
-- **v0.7.0** (December 6, 2025) - Maestro CLI
+- **v0.7.0** (December 7, 2025) - Maestro CLI
 
 ---
 
@@ -363,7 +371,7 @@ Plus the pre-release ALPHA...
 
 ### Previous Releases in this Series
 
-- **v0.2.2** (November 28, 2025)
+- **v0.2.2** (November 29, 2025)
 - **v0.2.1** (November 28, 2025)
 - **v0.2.0** (November 28, 2025) - Web Remote Release
 
@@ -387,11 +395,11 @@ Plus the pre-release ALPHA...
 ### Previous Releases in this Series
 
 - **v0.1.5** (November 27, 2025)
-- **v0.1.4** (November 26, 2025)
-- **v0.1.3** (November 26, 2025)
-- **v0.1.2** (November 26, 2025)
-- **v0.1.1** (November 26, 2025)
-- **v0.1.0** (November 26, 2025)
+- **v0.1.4** (November 27, 2025)
+- **v0.1.3** (November 27, 2025)
+- **v0.1.2** (November 27, 2025)
+- **v0.1.1** (November 27, 2025)
+- **v0.1.0** (November 27, 2025)
 
 ---
 
