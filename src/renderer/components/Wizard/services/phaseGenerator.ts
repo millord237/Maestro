@@ -162,9 +162,9 @@ export function sanitizeFilename(filename: string): string {
 }
 
 /**
- * Generation timeout in milliseconds (5 minutes - generation can take a while for complex projects)
+ * Generation timeout in milliseconds (20 minutes - large codebases need time for exploration)
  */
-const GENERATION_TIMEOUT = 300000;
+const GENERATION_TIMEOUT = 1200000;
 
 /**
  * Debug log entry for wizard troubleshooting

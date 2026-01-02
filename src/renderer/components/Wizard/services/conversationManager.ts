@@ -278,7 +278,7 @@ class ConversationManager {
     return new Promise<SendMessageResult>((resolve) => {
       console.log('[Wizard] Setting up listeners for session:', this.session!.sessionId);
 
-      // Set up timeout (5 minutes for wizard's complex prompts)
+      // Set up timeout (20 minutes for wizard's complex prompts - large codebases need time)
       const timeoutId = setTimeout(() => {
         console.log('[Wizard] TIMEOUT fired! Session:', this.session?.sessionId, 'Buffer length:', this.session?.outputBuffer?.length);
         this.cleanupListeners();
@@ -287,7 +287,7 @@ class ConversationManager {
           error: 'Response timeout - agent did not complete in time',
           rawOutput: this.session?.outputBuffer,
         });
-      }, 300000);
+      }, 1200000);
 
       if (this.session) {
         this.session.responseTimeoutId = timeoutId;
