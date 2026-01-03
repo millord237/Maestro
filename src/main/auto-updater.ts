@@ -22,6 +22,7 @@ export interface UpdateStatus {
 
 let mainWindow: BrowserWindow | null = null;
 let currentStatus: UpdateStatus = { status: 'idle' };
+let ipcHandlersRegistered = false;
 
 /**
  * Initialize the auto-updater and set up event handlers
@@ -80,6 +81,11 @@ function sendStatusToRenderer(): void {
  * Set up IPC handlers for update operations
  */
 function setupIpcHandlers(): void {
+  if (ipcHandlersRegistered) {
+    return;
+  }
+  ipcHandlersRegistered = true;
+
   // Check for updates using electron-updater (different from manual GitHub API check)
   ipcMain.handle('updates:checkAutoUpdater', async () => {
     try {
