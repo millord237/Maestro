@@ -22,6 +22,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Placeholder text styling - ensure clear distinction from actual input values */
+/* Uses lower opacity and italic to clearly indicate placeholder state */
+input::placeholder,
+textarea::placeholder {
+  opacity: 0.35;
+  font-style: italic;
+}
+
 /* Custom scrollbar styles - subtle by default, brighter on hover */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;

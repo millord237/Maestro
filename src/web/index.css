@@ -135,6 +135,14 @@ select {
   border: none;
 }
 
+/* Placeholder text styling - ensure clear distinction from actual input values */
+/* Uses lower opacity and italic to clearly indicate placeholder state */
+input::placeholder,
+textarea::placeholder {
+  opacity: 0.35;
+  font-style: italic;
+}
+
 /* Mobile-specific styles */
 @media (max-width: 767px) {
   /* Prevent text size adjustment */
