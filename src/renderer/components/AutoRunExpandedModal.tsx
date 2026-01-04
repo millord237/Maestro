@@ -321,7 +321,7 @@ export function AutoRunExpandedModal({
                   border: `1px solid ${isStopping ? theme.colors.warning : theme.colors.error}`,
                   pointerEvents: isStopping ? 'none' : 'auto'
                 }}
-                title={isStopping ? 'Stopping after current task...' : 'Stop batch run'}
+                title={isStopping ? 'Stopping after current task...' : 'Stop auto-run'}
               >
                 {isStopping ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -346,7 +346,7 @@ export function AutoRunExpandedModal({
                   color: theme.colors.accentForeground,
                   border: `1px solid ${theme.colors.accent}`
                 }}
-                title={isAgentBusy ? "Cannot run while agent is thinking" : "Run batch processing on Auto Run tasks"}
+                title={isAgentBusy ? "Cannot run while agent is thinking" : "Run auto-run on tasks"}
               >
                 <Play className="w-3.5 h-3.5" />
                 Run

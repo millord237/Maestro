@@ -5303,11 +5303,15 @@ You are taking over this conversation. Based on the context above, provide a bri
     // Use provided targetSessionId, or fall back to first active batch, or active session
     const sessionId = targetSessionId
       ?? (activeBatchSessionIds.length > 0 ? activeBatchSessionIds[0] : activeSession?.id);
+    console.log('[App:handleStopBatchRun] targetSessionId:', targetSessionId, 'resolved sessionId:', sessionId);
     if (!sessionId) return;
     const session = sessions.find(s => s.id === sessionId);
     const agentName = session?.name || 'this session';
     setConfirmModalMessage(`Stop Auto Run for "${agentName}" after the current task completes?`);
-    setConfirmModalOnConfirm(() => () => stopBatchRun(sessionId));
+    setConfirmModalOnConfirm(() => () => {
+      console.log('[App:handleStopBatchRun] Confirmation callback executing for sessionId:', sessionId);
+      stopBatchRun(sessionId);
+    });
     setConfirmModalOpen(true);
   }, [activeBatchSessionIds, activeSession, sessions, stopBatchRun]);
 

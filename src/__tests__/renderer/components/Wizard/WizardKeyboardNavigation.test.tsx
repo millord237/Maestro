@@ -456,6 +456,7 @@ describe('Wizard Keyboard Navigation', () => {
   describe('ConversationScreen', () => {
     function ConversationScreenWrapper({ theme }: { theme: Theme }) {
       const { goToStep, setSelectedAgent, setDirectoryPath } = useWizard();
+      const [showThinking, setShowThinking] = React.useState(false);
 
       React.useEffect(() => {
         setSelectedAgent('claude-code');
@@ -463,7 +464,7 @@ describe('Wizard Keyboard Navigation', () => {
         goToStep('conversation');
       }, [goToStep, setSelectedAgent, setDirectoryPath]);
 
-      return <ConversationScreen theme={theme} />;
+      return <ConversationScreen theme={theme} showThinking={showThinking} setShowThinking={setShowThinking} />;
     }
 
     it('should focus textarea on mount', async () => {
@@ -492,6 +493,7 @@ describe('Wizard Keyboard Navigation', () => {
     it('should go to previous step with Escape', async () => {
       function ConversationWithEscape({ theme }: { theme: Theme }) {
         const { goToStep, setSelectedAgent, setDirectoryPath, state } = useWizard();
+        const [showThinking, setShowThinking] = React.useState(false);
 
         React.useEffect(() => {
           setSelectedAgent('claude-code');
@@ -502,7 +504,7 @@ describe('Wizard Keyboard Navigation', () => {
         return (
           <>
             <div data-testid="current-step">{state.currentStep}</div>
-            <ConversationScreen theme={theme} />
+            <ConversationScreen theme={theme} showThinking={showThinking} setShowThinking={setShowThinking} />
           </>
         );
       }
@@ -519,17 +521,17 @@ describe('Wizard Keyboard Navigation', () => {
       });
     });
 
-    it('should toggle thinking display with Cmd+Shift+K', async () => {
+    it('should toggle thinking display when clicking the thinking button', async () => {
+      // Note: Cmd+Shift+K shortcut is now handled at MaestroWizard level, not in ConversationScreen
+      // This test verifies the button click toggle works correctly
       renderWithProviders(<ConversationScreenWrapper theme={mockTheme} />);
-
-      const container = screen.getByText('Project Understanding Confidence').closest('div[tabindex]');
 
       // Find the thinking button - initially should be dim (off)
       const thinkingButton = screen.getByTitle(/show ai thinking/i);
       expect(thinkingButton).toBeInTheDocument();
 
-      // Press Cmd+Shift+K to toggle thinking display on
-      fireEvent.keyDown(container!, { key: 'k', metaKey: true, shiftKey: true });
+      // Click the button to toggle thinking display on
+      fireEvent.click(thinkingButton);
 
       // Find the thinking button again - should now be highlighted (on)
       await waitFor(() => {
@@ -537,8 +539,9 @@ describe('Wizard Keyboard Navigation', () => {
         expect(thinkingButtonOn).toBeInTheDocument();
       });
 
-      // Press Cmd+Shift+K again to toggle thinking display off
-      fireEvent.keyDown(container!, { key: 'k', metaKey: true, shiftKey: true });
+      // Click again to toggle thinking display off
+      const thinkingButtonOn = screen.getByTitle(/hide ai thinking/i);
+      fireEvent.click(thinkingButtonOn);
 
       // Should be back to off state
       await waitFor(() => {

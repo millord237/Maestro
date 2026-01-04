@@ -90,6 +90,8 @@ export function useSessionDebounce<T>(
   // Cleanup effect: clear all timers synchronously on unmount
   useEffect(() => {
     return () => {
+      // DEBUG: Log unmount
+      console.log('[useSessionDebounce] UNMOUNTING - clearing all timers and pending updates');
       isMountedRef.current = false;
 
       // Clear all timers synchronously
@@ -146,9 +148,17 @@ export function useSessionDebounce<T>(
     }
 
     debounceTimerRefs.current[sessionId] = setTimeout(() => {
+      // DEBUG: Log when timer fires
+      const hasUpdater = !!pendingUpdatesRef.current[sessionId];
+      const mounted = isMountedRef.current;
+      console.log('[useSessionDebounce:timer] Timer fired', { sessionId, hasUpdater, mounted });
+
       const composedUpdater = pendingUpdatesRef.current[sessionId];
       if (composedUpdater && isMountedRef.current) {
+        console.log('[useSessionDebounce:timer] Calling onUpdate');
         onUpdate(sessionId, composedUpdater);
+      } else {
+        console.log('[useSessionDebounce:timer] Skipping onUpdate - composedUpdater:', !!composedUpdater, 'isMounted:', isMountedRef.current);
       }
       delete pendingUpdatesRef.current[sessionId];
       delete debounceTimerRefs.current[sessionId];

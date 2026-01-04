@@ -801,7 +801,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                   color: isCurrentSessionStopping ? theme.colors.bgMain : 'white',
                   pointerEvents: isCurrentSessionStopping ? 'none' : 'auto'
                 }}
-                title={isCurrentSessionStopping ? 'Stopping after current task...' : 'Click to stop batch run'}
+                title={isCurrentSessionStopping ? 'Stopping after current task...' : 'Click to stop auto-run'}
               >
                 {isCurrentSessionStopping ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

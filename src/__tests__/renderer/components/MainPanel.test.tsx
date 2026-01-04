@@ -1269,7 +1269,7 @@ describe('MainPanel', () => {
       render(<MainPanel {...defaultProps} currentSessionBatchState={currentSessionBatchState} />);
 
       const button = screen.getByText('Auto').closest('button');
-      expect(button).toHaveAttribute('title', 'Click to stop batch run');
+      expect(button).toHaveAttribute('title', 'Click to stop auto-run');
     });
 
     it('should display correct tooltip when stopping', () => {

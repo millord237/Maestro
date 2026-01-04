@@ -37,6 +37,10 @@ import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 
 interface ConversationScreenProps {
   theme: Theme;
+  /** Whether to show AI thinking content instead of filler phrases */
+  showThinking: boolean;
+  /** Callback to toggle thinking display (controlled by parent for global shortcut) */
+  setShowThinking: (value: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 /**
@@ -408,7 +412,7 @@ function ThinkingDisplay({
 /**
  * ConversationScreen - Project discovery conversation
  */
-export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Element {
+export function ConversationScreen({ theme, showThinking, setShowThinking }: ConversationScreenProps): JSX.Element {
   const {
     state,
     addMessage,
@@ -436,9 +440,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
   const [fillerPhrase, setFillerPhrase] = useState('');
   // Track detected provider error for showing recovery hints
   const [detectedError, setDetectedError] = useState<WizardError | null>(null);
-  // Show Thinking toggle - shows raw AI reasoning instead of filler phrases
-  const [showThinking, setShowThinking] = useState(false);
-  // Accumulated thinking content when showThinking is enabled
+  // Accumulated thinking content when showThinking is enabled (showThinking prop controls display)
   const [thinkingContent, setThinkingContent] = useState('');
 
   // Screen reader announcement state
@@ -983,6 +985,7 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
   /**
    * Handle keyboard events at container level
    * Note: Cmd+Enter is handled by the textarea directly to avoid double-firing
+   * Note: Cmd+Shift+K is handled at the MaestroWizard level to work from anywhere in modal
    */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -990,11 +993,6 @@ export function ConversationScreen({ theme }: ConversationScreenProps): JSX.Elem
       if (e.key === 'Escape') {
         e.preventDefault();
         previousStep();
-      }
-      // Cmd+Shift+K to toggle thinking display
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setShowThinking((prev) => !prev);
       }
     },
     [previousStep]

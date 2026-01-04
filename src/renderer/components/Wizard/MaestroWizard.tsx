@@ -110,6 +110,9 @@ export function MaestroWizard({
   // State for exit confirmation modal
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  // State for thinking toggle (shared across screens via ref callback)
+  const [showThinking, setShowThinking] = useState(false);
+
   // Track wizard start time for duration calculation
   const wizardStartTimeRef = useRef<number>(0);
   // Track if wizard start has been recorded for this open session
@@ -281,6 +284,30 @@ export function MaestroWizard({
     }
   }, [state.isOpen, showExitConfirm, registerLayer, unregisterLayer, handleCloseRequest]);
 
+  // Capture-phase handler for global shortcuts that should work anywhere in the modal
+  // This ensures Cmd+Shift+K (thinking toggle) works even when focus is on header elements
+  useEffect(() => {
+    if (!state.isOpen) return;
+
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    const handleCaptureKeyDown = (e: KeyboardEvent) => {
+      // Cmd+Shift+K to toggle thinking display (only on conversation step)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+        if (state.currentStep === 'conversation') {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowThinking((prev) => !prev);
+        }
+      }
+    };
+
+    // Use capture phase to intercept before any other handlers
+    modal.addEventListener('keydown', handleCaptureKeyDown, { capture: true });
+    return () => modal.removeEventListener('keydown', handleCaptureKeyDown, { capture: true });
+  }, [state.isOpen, state.currentStep]);
+
   // Bubble-phase handler to stop Cmd+E from reaching the main app after wizard handles it
   // This prevents the wizard's edit/preview toggle from leaking to the AutoRun component
   useEffect(() => {
@@ -372,7 +399,7 @@ export function MaestroWizard({
       case 'directory-selection':
         return <DirectorySelectionScreen theme={theme} />;
       case 'conversation':
-        return <ConversationScreen theme={theme} />;
+        return <ConversationScreen theme={theme} showThinking={showThinking} setShowThinking={setShowThinking} />;
       case 'preparing-plan':
         return <PreparingPlanScreen theme={theme} />;
       case 'phase-review':
@@ -387,7 +414,7 @@ export function MaestroWizard({
       default:
         return null;
     }
-  }, [displayedStep, theme, onLaunchSession, onWizardComplete]);
+  }, [displayedStep, theme, onLaunchSession, onWizardComplete, showThinking]);
 
   // Don't render if wizard is not open
   if (!state.isOpen) {

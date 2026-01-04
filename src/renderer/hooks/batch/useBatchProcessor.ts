@@ -194,10 +194,12 @@ export function useBatchProcessor({
     batchRunStatesRef.current = batchReducer(batchRunStatesRef.current, action);
 
     // DEBUG: Log dispatch to trace state updates
-    if (action.type === 'START_BATCH' || action.type === 'UPDATE_PROGRESS') {
+    if (action.type === 'START_BATCH' || action.type === 'UPDATE_PROGRESS' || action.type === 'SET_STOPPING') {
       const sessionId = action.sessionId;
       console.log('[BatchProcessor:dispatch]', action.type, {
         sessionId,
+        prevIsStopping: prevRef[sessionId]?.isStopping,
+        newIsStopping: batchRunStatesRef.current[sessionId]?.isStopping,
         prevCompleted: prevRef[sessionId]?.completedTasksAcrossAllDocs,
         newCompleted: batchRunStatesRef.current[sessionId]?.completedTasksAcrossAllDocs,
         payload: action.type === 'UPDATE_PROGRESS' ? (action as { payload?: { completedTasksAcrossAllDocs?: number } }).payload?.completedTasksAcrossAllDocs : 'N/A',
@@ -274,48 +276,52 @@ export function useBatchProcessor({
       // Note: We use a ref to capture the new state since dispatch doesn't return it
       let newStateForSession: BatchRunState | null = null;
 
-      // For reducer, we need to convert the updater to an action
-      // Since the updater pattern doesn't map directly to actions, we wrap it
-      // by reading current state and computing the new state
-      const currentState = batchRunStatesRef.current;
-      const newState = updater(currentState);
-      newStateForSession = newState[sessionId] || null;
+      try {
+        // For reducer, we need to convert the updater to an action
+        // Since the updater pattern doesn't map directly to actions, we wrap it
+        // by reading current state and computing the new state
+        const currentState = batchRunStatesRef.current;
+        const newState = updater(currentState);
+        newStateForSession = newState[sessionId] || null;
 
-      // DEBUG: Log to trace progress updates
-      console.log('[BatchProcessor:onUpdate] Debounce fired:', {
-        sessionId,
-        refHasSession: !!currentState[sessionId],
-        refCompletedTasks: currentState[sessionId]?.completedTasksAcrossAllDocs,
-        newCompletedTasks: newStateForSession?.completedTasksAcrossAllDocs,
-      });
-
-      // Dispatch UPDATE_PROGRESS with the computed changes
-      // For complex state changes, we extract the session's new state and dispatch appropriately
-      if (newStateForSession) {
-        const prevSessionState = currentState[sessionId] || DEFAULT_BATCH_STATE;
-
-        // Dispatch UPDATE_PROGRESS with any changed fields
-        dispatch({
-          type: 'UPDATE_PROGRESS',
+        // DEBUG: Log to trace progress updates
+        console.log('[BatchProcessor:onUpdate] Debounce fired:', {
           sessionId,
-          payload: {
-            currentDocumentIndex: newStateForSession.currentDocumentIndex !== prevSessionState.currentDocumentIndex ? newStateForSession.currentDocumentIndex : undefined,
-            currentDocTasksTotal: newStateForSession.currentDocTasksTotal !== prevSessionState.currentDocTasksTotal ? newStateForSession.currentDocTasksTotal : undefined,
-            currentDocTasksCompleted: newStateForSession.currentDocTasksCompleted !== prevSessionState.currentDocTasksCompleted ? newStateForSession.currentDocTasksCompleted : undefined,
-            totalTasksAcrossAllDocs: newStateForSession.totalTasksAcrossAllDocs !== prevSessionState.totalTasksAcrossAllDocs ? newStateForSession.totalTasksAcrossAllDocs : undefined,
-            completedTasksAcrossAllDocs: newStateForSession.completedTasksAcrossAllDocs !== prevSessionState.completedTasksAcrossAllDocs ? newStateForSession.completedTasksAcrossAllDocs : undefined,
-            totalTasks: newStateForSession.totalTasks !== prevSessionState.totalTasks ? newStateForSession.totalTasks : undefined,
-            completedTasks: newStateForSession.completedTasks !== prevSessionState.completedTasks ? newStateForSession.completedTasks : undefined,
-            currentTaskIndex: newStateForSession.currentTaskIndex !== prevSessionState.currentTaskIndex ? newStateForSession.currentTaskIndex : undefined,
-            sessionIds: newStateForSession.sessionIds !== prevSessionState.sessionIds ? newStateForSession.sessionIds : undefined,
-            accumulatedElapsedMs: newStateForSession.accumulatedElapsedMs !== prevSessionState.accumulatedElapsedMs ? newStateForSession.accumulatedElapsedMs : undefined,
-            lastActiveTimestamp: newStateForSession.lastActiveTimestamp !== prevSessionState.lastActiveTimestamp ? newStateForSession.lastActiveTimestamp : undefined,
-            loopIteration: newStateForSession.loopIteration !== prevSessionState.loopIteration ? newStateForSession.loopIteration : undefined,
-          }
+          refHasSession: !!currentState[sessionId],
+          refCompletedTasks: currentState[sessionId]?.completedTasksAcrossAllDocs,
+          newCompletedTasks: newStateForSession?.completedTasksAcrossAllDocs,
         });
-      }
 
-      broadcastAutoRunState(sessionId, newStateForSession);
+        // Dispatch UPDATE_PROGRESS with the computed changes
+        // For complex state changes, we extract the session's new state and dispatch appropriately
+        if (newStateForSession) {
+          const prevSessionState = currentState[sessionId] || DEFAULT_BATCH_STATE;
+
+          // Dispatch UPDATE_PROGRESS with any changed fields
+          dispatch({
+            type: 'UPDATE_PROGRESS',
+            sessionId,
+            payload: {
+              currentDocumentIndex: newStateForSession.currentDocumentIndex !== prevSessionState.currentDocumentIndex ? newStateForSession.currentDocumentIndex : undefined,
+              currentDocTasksTotal: newStateForSession.currentDocTasksTotal !== prevSessionState.currentDocTasksTotal ? newStateForSession.currentDocTasksTotal : undefined,
+              currentDocTasksCompleted: newStateForSession.currentDocTasksCompleted !== prevSessionState.currentDocTasksCompleted ? newStateForSession.currentDocTasksCompleted : undefined,
+              totalTasksAcrossAllDocs: newStateForSession.totalTasksAcrossAllDocs !== prevSessionState.totalTasksAcrossAllDocs ? newStateForSession.totalTasksAcrossAllDocs : undefined,
+              completedTasksAcrossAllDocs: newStateForSession.completedTasksAcrossAllDocs !== prevSessionState.completedTasksAcrossAllDocs ? newStateForSession.completedTasksAcrossAllDocs : undefined,
+              totalTasks: newStateForSession.totalTasks !== prevSessionState.totalTasks ? newStateForSession.totalTasks : undefined,
+              completedTasks: newStateForSession.completedTasks !== prevSessionState.completedTasks ? newStateForSession.completedTasks : undefined,
+              currentTaskIndex: newStateForSession.currentTaskIndex !== prevSessionState.currentTaskIndex ? newStateForSession.currentTaskIndex : undefined,
+              sessionIds: newStateForSession.sessionIds !== prevSessionState.sessionIds ? newStateForSession.sessionIds : undefined,
+              accumulatedElapsedMs: newStateForSession.accumulatedElapsedMs !== prevSessionState.accumulatedElapsedMs ? newStateForSession.accumulatedElapsedMs : undefined,
+              lastActiveTimestamp: newStateForSession.lastActiveTimestamp !== prevSessionState.lastActiveTimestamp ? newStateForSession.lastActiveTimestamp : undefined,
+              loopIteration: newStateForSession.loopIteration !== prevSessionState.loopIteration ? newStateForSession.loopIteration : undefined,
+            }
+          });
+        }
+
+        broadcastAutoRunState(sessionId, newStateForSession);
+      } catch (error) {
+        console.error('[BatchProcessor:onUpdate] ERROR in debounce callback:', error);
+      }
     }, [broadcastAutoRunState])
   });
 
@@ -393,10 +399,43 @@ export function useBatchProcessor({
     updater: (prev: Record<string, BatchRunState>) => Record<string, BatchRunState>,
     immediate: boolean = false
   ) => {
-    // DEBUG: Log when updates are scheduled
-    console.log('[BatchProcessor:updateBatchStateAndBroadcast] Scheduling update', { sessionId, immediate });
-    scheduleDebouncedUpdate(sessionId, updater, immediate);
-  }, [scheduleDebouncedUpdate]);
+    // DEBUG: Bypass debouncing entirely to test if that's the issue
+    // Apply update directly without debouncing
+    const currentState = batchRunStatesRef.current;
+    const newState = updater(currentState);
+    const newStateForSession = newState[sessionId] || null;
+
+    console.log('[BatchProcessor:updateBatchStateAndBroadcast] DIRECT update (no debounce)', {
+      sessionId,
+      prevCompleted: currentState[sessionId]?.completedTasksAcrossAllDocs,
+      newCompleted: newStateForSession?.completedTasksAcrossAllDocs,
+    });
+
+    if (newStateForSession) {
+      const prevSessionState = currentState[sessionId] || DEFAULT_BATCH_STATE;
+
+      dispatch({
+        type: 'UPDATE_PROGRESS',
+        sessionId,
+        payload: {
+          currentDocumentIndex: newStateForSession.currentDocumentIndex !== prevSessionState.currentDocumentIndex ? newStateForSession.currentDocumentIndex : undefined,
+          currentDocTasksTotal: newStateForSession.currentDocTasksTotal !== prevSessionState.currentDocTasksTotal ? newStateForSession.currentDocTasksTotal : undefined,
+          currentDocTasksCompleted: newStateForSession.currentDocTasksCompleted !== prevSessionState.currentDocTasksCompleted ? newStateForSession.currentDocTasksCompleted : undefined,
+          totalTasksAcrossAllDocs: newStateForSession.totalTasksAcrossAllDocs !== prevSessionState.totalTasksAcrossAllDocs ? newStateForSession.totalTasksAcrossAllDocs : undefined,
+          completedTasksAcrossAllDocs: newStateForSession.completedTasksAcrossAllDocs !== prevSessionState.completedTasksAcrossAllDocs ? newStateForSession.completedTasksAcrossAllDocs : undefined,
+          totalTasks: newStateForSession.totalTasks !== prevSessionState.totalTasks ? newStateForSession.totalTasks : undefined,
+          completedTasks: newStateForSession.completedTasks !== prevSessionState.completedTasks ? newStateForSession.completedTasks : undefined,
+          currentTaskIndex: newStateForSession.currentTaskIndex !== prevSessionState.currentTaskIndex ? newStateForSession.currentTaskIndex : undefined,
+          sessionIds: newStateForSession.sessionIds !== prevSessionState.sessionIds ? newStateForSession.sessionIds : undefined,
+          accumulatedElapsedMs: newStateForSession.accumulatedElapsedMs !== prevSessionState.accumulatedElapsedMs ? newStateForSession.accumulatedElapsedMs : undefined,
+          lastActiveTimestamp: newStateForSession.lastActiveTimestamp !== prevSessionState.lastActiveTimestamp ? newStateForSession.lastActiveTimestamp : undefined,
+          loopIteration: newStateForSession.loopIteration !== prevSessionState.loopIteration ? newStateForSession.loopIteration : undefined,
+        }
+      });
+    }
+
+    broadcastAutoRunState(sessionId, newStateForSession);
+  }, [broadcastAutoRunState]);
 
   // Update ref to always have latest updateBatchStateAndBroadcast (fixes HMR stale closure)
   updateBatchStateAndBroadcastRef.current = updateBatchStateAndBroadcast;
@@ -1388,10 +1427,11 @@ export function useBatchProcessor({
 
   /**
    * Request to stop the batch run for a specific session after current task completes
+   * Note: No isMountedRef check here - stop requests should always be honored.
+   * All operations are safe: ref updates, reducer dispatch (React handles gracefully), and broadcasts.
    */
   const stopBatchRun = useCallback((sessionId: string) => {
-    if (!isMountedRef.current) return;
-
+    console.log('[BatchProcessor:stopBatchRun] Called with sessionId:', sessionId);
     stopRequestedRefs.current[sessionId] = true;
     const errorResolution = errorResolutionRefs.current[sessionId];
     if (errorResolution) {
