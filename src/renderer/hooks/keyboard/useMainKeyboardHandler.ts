@@ -160,7 +160,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         }
       }
       else if (ctx.isShortcut(e, 'toggleRightPanel')) { ctx.setRightPanelOpen((p: boolean) => !p); trackShortcut('toggleRightPanel'); }
-      else if (ctx.isShortcut(e, 'newInstance')) { ctx.addNewSession(); trackShortcut('newInstance'); }
+      else if (ctx.isShortcut(e, 'newInstance')) { e.preventDefault(); ctx.addNewSession(); trackShortcut('newInstance'); }
       else if (ctx.isShortcut(e, 'newGroupChat')) {
         e.preventDefault();
         ctx.setShowNewGroupChatModal(true);
@@ -205,8 +205,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         ctx.handleNavForward();
         trackShortcut('navForward');
       }
-      else if (ctx.isShortcut(e, 'toggleMode')) { ctx.toggleInputMode(); trackShortcut('toggleMode'); }
+      else if (ctx.isShortcut(e, 'toggleMode')) { e.preventDefault(); ctx.toggleInputMode(); trackShortcut('toggleMode'); }
       else if (ctx.isShortcut(e, 'quickAction')) {
+        e.preventDefault();
         // Only open quick actions if there are agents
         if (ctx.sessions.length > 0) {
           ctx.setQuickActionInitialMode('main');
@@ -214,8 +215,8 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
           trackShortcut('quickAction');
         }
       }
-      else if (ctx.isShortcut(e, 'help')) { ctx.setShortcutsHelpOpen(true); trackShortcut('help'); }
-      else if (ctx.isShortcut(e, 'settings')) { ctx.setSettingsModalOpen(true); ctx.setSettingsTab('general'); trackShortcut('settings'); }
+      else if (ctx.isShortcut(e, 'help')) { e.preventDefault(); ctx.setShortcutsHelpOpen(true); trackShortcut('help'); }
+      else if (ctx.isShortcut(e, 'settings')) { e.preventDefault(); ctx.setSettingsModalOpen(true); ctx.setSettingsTab('general'); trackShortcut('settings'); }
       else if (ctx.isShortcut(e, 'agentSettings')) {
         // Open agent settings for the current session
         if (ctx.activeSession) {
