@@ -181,7 +181,17 @@ export function useBatchProcessor({
   onProcessQueueAfterCompletion
 }: UseBatchProcessorProps): UseBatchProcessorReturn {
   // Batch states per session using reducer pattern for predictable state transitions
-  const [batchRunStates, dispatch] = useReducer(batchReducer, {});
+  const [batchRunStates, dispatchRaw] = useReducer(batchReducer, {});
+
+  // Wrap dispatch to update ref synchronously, fixing race condition where
+  // debounced callbacks read stale ref state before React re-renders
+  const dispatch = useCallback((action: Parameters<typeof batchReducer>[1]) => {
+    dispatchRaw(action);
+    // Synchronously update ref with the new state so debounced callbacks see it
+    // This must happen after dispatch since the reducer computes the new state
+    // Note: We apply the reducer directly to compute what the new state will be
+    batchRunStatesRef.current = batchReducer(batchRunStatesRef.current, action);
+  }, []);
 
   // Custom prompts per session
   const [customPrompts, setCustomPrompts] = useState<Record<string, string>>({});
@@ -845,6 +855,7 @@ export function useBatchProcessor({
               // This correctly accounts for both completed tasks and newly added tasks
               const nextTotalAcrossAllDocs = Math.max(0, prevState.totalTasksAcrossAllDocs + totalTasksChange);
               const nextTotalTasks = Math.max(0, prevState.totalTasks + totalTasksChange);
+
               return {
                 ...prev,
                 [sessionId]: {

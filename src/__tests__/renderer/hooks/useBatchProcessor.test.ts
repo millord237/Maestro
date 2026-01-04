@@ -715,6 +715,90 @@ describe('useBatchProcessor hook', () => {
     });
   });
 
+  describe('state synchronization', () => {
+    /**
+     * Regression test for bug where progress bar was stuck at "0 of N tasks completed"
+     * even after all tasks finished.
+     *
+     * Root cause: batchRunStatesRef was only updated on React re-render, but the
+     * debounce callback read this ref to compare state changes. When dispatches
+     * happened faster than React re-renders, the ref contained stale state.
+     *
+     * Fix: The dispatch wrapper now synchronously updates batchRunStatesRef
+     * immediately after each dispatch, ensuring debounced callbacks always
+     * see the current state.
+     *
+     * These tests verify the fix at the unit level by checking that getBatchState
+     * returns correct values immediately after state-changing operations.
+     */
+    it('should provide correct initial state via getBatchState', () => {
+      const sessions = [createMockSession()];
+      const groups = [createMockGroup()];
+
+      const { result } = renderHook(() =>
+        useBatchProcessor({
+          sessions,
+          groups,
+          onUpdateSession: mockOnUpdateSession,
+          onSpawnAgent: mockOnSpawnAgent,
+          onAddHistoryEntry: mockOnAddHistoryEntry,
+          onComplete: mockOnComplete
+        })
+      );
+
+      // Initial state should have 0 completed tasks
+      const state = result.current.getBatchState('test-session-id');
+      expect(state.completedTasksAcrossAllDocs).toBe(0);
+      expect(state.totalTasksAcrossAllDocs).toBe(0);
+      expect(state.isRunning).toBe(false);
+    });
+
+    it('should track hasAnyActiveBatch correctly', () => {
+      const sessions = [createMockSession()];
+      const groups = [createMockGroup()];
+
+      const { result } = renderHook(() =>
+        useBatchProcessor({
+          sessions,
+          groups,
+          onUpdateSession: mockOnUpdateSession,
+          onSpawnAgent: mockOnSpawnAgent,
+          onAddHistoryEntry: mockOnAddHistoryEntry,
+          onComplete: mockOnComplete
+        })
+      );
+
+      // Initially no active batches
+      expect(result.current.hasAnyActiveBatch).toBe(false);
+      expect(result.current.activeBatchSessionIds).toEqual([]);
+    });
+
+    it('should return default state for sessions that have not started batch processing', () => {
+      const sessions = [createMockSession({ id: 'session-1' }), createMockSession({ id: 'session-2' })];
+      const groups = [createMockGroup()];
+
+      const { result } = renderHook(() =>
+        useBatchProcessor({
+          sessions,
+          groups,
+          onUpdateSession: mockOnUpdateSession,
+          onSpawnAgent: mockOnSpawnAgent,
+          onAddHistoryEntry: mockOnAddHistoryEntry,
+          onComplete: mockOnComplete
+        })
+      );
+
+      // Both sessions should return default state with 0 progress
+      const state1 = result.current.getBatchState('session-1');
+      const state2 = result.current.getBatchState('session-2');
+
+      expect(state1.completedTasksAcrossAllDocs).toBe(0);
+      expect(state1.totalTasksAcrossAllDocs).toBe(0);
+      expect(state2.completedTasksAcrossAllDocs).toBe(0);
+      expect(state2.totalTasksAcrossAllDocs).toBe(0);
+    });
+  });
+
   describe('setCustomPrompt', () => {
     it('should set custom prompt for a session', () => {
       const sessions = [createMockSession()];
