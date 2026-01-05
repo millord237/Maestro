@@ -55,6 +55,8 @@ export interface WizardConversationViewProps {
   showThinking?: boolean;
   /** Thinking content being streamed from the AI */
   thinkingContent?: string;
+  /** Tool execution events during conversation (shows what agent is doing) */
+  toolExecutions?: Array<{ toolName: string; state?: unknown; timestamp: number }>;
   /** Whether document generation has started (to hide Let's Go button once generation begins) */
   hasStartedGenerating?: boolean;
 }
@@ -195,17 +197,82 @@ function TypingIndicator({
 }
 
 /**
+ * Extract a descriptive detail string from tool input
+ * Looks for common properties like command, pattern, file_path, query
+ */
+function getToolDetail(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null;
+  const inputObj = input as Record<string, unknown>;
+  // Check common tool input properties in order of preference
+  const detail =
+    (inputObj.command as string) ||
+    (inputObj.pattern as string) ||
+    (inputObj.file_path as string) ||
+    (inputObj.query as string) ||
+    (inputObj.path as string) ||
+    null;
+  return detail;
+}
+
+/**
+ * ToolExecutionEntry - Individual tool execution item in thinking display
+ */
+function ToolExecutionEntry({
+  tool,
+  theme,
+}: {
+  tool: { toolName: string; state?: unknown; timestamp: number };
+  theme: Theme;
+}): JSX.Element {
+  const state = tool.state as { status?: string; input?: unknown } | undefined;
+  const status = state?.status || 'running';
+  const toolDetail = getToolDetail(state?.input);
+
+  return (
+    <div
+      className="flex items-start gap-2 py-1 text-xs font-mono"
+      style={{ color: theme.colors.textDim }}
+    >
+      <span
+        className="px-1.5 py-0.5 rounded text-[10px] shrink-0"
+        style={{
+          backgroundColor: status === 'complete' ? `${theme.colors.success}30` : `${theme.colors.accent}30`,
+          color: status === 'complete' ? theme.colors.success : theme.colors.accent,
+        }}
+      >
+        {tool.toolName}
+      </span>
+      {status === 'complete' ? (
+        <span className="shrink-0 pt-0.5" style={{ color: theme.colors.success }}>✓</span>
+      ) : (
+        <span className="animate-pulse shrink-0 pt-0.5" style={{ color: theme.colors.warning }}>●</span>
+      )}
+      {toolDetail && (
+        <span
+          className="opacity-70 break-all whitespace-pre-wrap"
+          style={{ color: theme.colors.textMain }}
+        >
+          {toolDetail}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * ThinkingDisplay - Shows AI thinking content when showThinking is enabled.
- * Displays raw thinking content with styling similar to the normal AI terminal.
+ * Displays raw thinking content and tool executions similar to the normal AI terminal.
  */
 function ThinkingDisplay({
   theme,
   agentName,
   thinkingContent,
+  toolExecutions = [],
 }: {
   theme: Theme;
   agentName: string;
   thinkingContent: string;
+  toolExecutions?: Array<{ toolName: string; state?: unknown; timestamp: number }>;
 }): JSX.Element {
   return (
     <div className="flex justify-start mb-4" data-testid="wizard-thinking-display">
@@ -233,12 +300,23 @@ function ThinkingDisplay({
             thinking
           </span>
         </div>
+
+        {/* Tool executions - show what agent is doing */}
+        {toolExecutions.length > 0 && (
+          <div className="mb-2 border-b pb-2" style={{ borderColor: `${theme.colors.border}60` }}>
+            {toolExecutions.map((tool, idx) => (
+              <ToolExecutionEntry key={`${tool.toolName}-${tool.timestamp}-${idx}`} tool={tool} theme={theme} />
+            ))}
+          </div>
+        )}
+
+        {/* Thinking content or fallback */}
         <div
           className="text-sm whitespace-pre-wrap font-mono"
           style={{ color: theme.colors.textDim, opacity: 0.85 }}
           data-testid="thinking-display-content"
         >
-          {thinkingContent || 'Reasoning...'}
+          {thinkingContent || (toolExecutions.length === 0 ? 'Reasoning...' : '')}
           <span className="animate-pulse ml-1" data-testid="thinking-cursor">▊</span>
         </div>
       </div>
@@ -472,6 +550,7 @@ export function WizardConversationView({
   onClearError,
   showThinking = false,
   thinkingContent = '',
+  toolExecutions = [],
   hasStartedGenerating = false,
 }: WizardConversationViewProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -485,7 +564,7 @@ export function WizardConversationView({
 
   useEffect(() => {
     scrollToBottom();
-  }, [conversationHistory, isLoading, streamingText, thinkingContent, error, scrollToBottom]);
+  }, [conversationHistory, isLoading, streamingText, thinkingContent, toolExecutions, error, scrollToBottom]);
 
   // Get a new filler phrase when requested by the TypingIndicator
   const handleRequestNewPhrase = useCallback(() => {
@@ -599,12 +678,13 @@ export function WizardConversationView({
             agentName={agentName}
             streamingText={streamingText}
           />
-        ) : showThinking && thinkingContent ? (
-          // When showThinking is enabled and we have thinking content, show it
+        ) : showThinking && (thinkingContent || toolExecutions.length > 0) ? (
+          // When showThinking is enabled and we have thinking content or tool executions, show it
           <ThinkingDisplay
             theme={theme}
             agentName={agentName}
             thinkingContent={thinkingContent}
+            toolExecutions={toolExecutions}
           />
         ) : showThinking ? (
           // When showThinking is enabled but no content yet, show minimal thinking display
@@ -612,6 +692,7 @@ export function WizardConversationView({
             theme={theme}
             agentName={agentName}
             thinkingContent=""
+            toolExecutions={[]}
           />
         ) : (
           // Otherwise show the filler phrase typing indicator

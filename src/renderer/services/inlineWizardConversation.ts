@@ -133,6 +133,8 @@ export interface ConversationCallbacks {
   onChunk?: OnChunkCallback;
   /** Called with thinking/reasoning content as it streams */
   onThinkingChunk?: OnChunkCallback;
+  /** Called when a tool execution event is received (for showThinking display) */
+  onToolExecution?: (toolEvent: { toolName: string; state?: unknown; timestamp: number }) => void;
   /** Called when response is complete */
   onComplete?: (result: InlineWizardSendResult) => void;
   /** Called when an error occurs */
@@ -528,6 +530,7 @@ export async function sendWizardMessage(
       }, 300000);
 
       let thinkingListenerCleanup: (() => void) | undefined;
+      let toolExecutionListenerCleanup: (() => void) | undefined;
 
       function cleanupListeners() {
         if (dataListenerCleanup) {
@@ -541,6 +544,10 @@ export async function sendWizardMessage(
         if (thinkingListenerCleanup) {
           thinkingListenerCleanup();
           thinkingListenerCleanup = undefined;
+        }
+        if (toolExecutionListenerCleanup) {
+          toolExecutionListenerCleanup();
+          toolExecutionListenerCleanup = undefined;
         }
       }
 
@@ -557,17 +564,34 @@ export async function sendWizardMessage(
       // Set up thinking chunk listener - uses the dedicated event from process-manager
       // This receives parsed thinking content (isPartial text) that's already extracted
       if (callbacks?.onThinkingChunk) {
-        console.log('[InlineWizard] Setting up onThinkingChunk listener for session:', session.sessionId);
         thinkingListenerCleanup = window.maestro.process.onThinkingChunk(
           (receivedSessionId: string, content: string) => {
-            console.log('[InlineWizard] onThinkingChunk received:', { receivedSessionId, expectedSessionId: session.sessionId, contentLength: content?.length });
             if (receivedSessionId === session.sessionId && content) {
-              callbacks.onThinkingChunk!(content);
+              try {
+                callbacks.onThinkingChunk!(content);
+              } catch (err) {
+                console.error('[InlineWizard] onThinkingChunk callback threw error:', err);
+              }
             }
           }
         );
-      } else {
-        console.log('[InlineWizard] No onThinkingChunk callback provided');
+      }
+
+      // Set up tool execution listener - shows tool use (Read, Write, etc.) when showThinking is enabled
+      // This is important because in batch mode, we don't get streaming assistant messages,
+      // but we DO get tool execution events which show what the agent is doing
+      if (callbacks?.onToolExecution) {
+        toolExecutionListenerCleanup = window.maestro.process.onToolExecution?.(
+          (receivedSessionId: string, toolEvent: { toolName: string; state?: unknown; timestamp: number }) => {
+            if (receivedSessionId === session.sessionId) {
+              try {
+                callbacks.onToolExecution!(toolEvent);
+              } catch (err) {
+                console.error('[InlineWizard] onToolExecution callback threw error:', err);
+              }
+            }
+          }
+        );
       }
 
       // Set up exit listener

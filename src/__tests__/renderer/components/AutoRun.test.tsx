@@ -704,6 +704,43 @@ describe('AutoRun', () => {
     });
   });
 
+  describe('Launch Wizard Button', () => {
+    it('displays wizard button when onLaunchWizard is provided', () => {
+      const onLaunchWizard = vi.fn();
+      const props = createDefaultProps({ onLaunchWizard });
+      renderWithProvider(<AutoRun {...props} />);
+
+      expect(screen.getByTitle('Launch In-Tab Wizard')).toBeInTheDocument();
+    });
+
+    it('does not display wizard button when onLaunchWizard is not provided', () => {
+      const props = createDefaultProps();
+      renderWithProvider(<AutoRun {...props} />);
+
+      expect(screen.queryByTitle('Launch In-Tab Wizard')).not.toBeInTheDocument();
+    });
+
+    it('calls onLaunchWizard when clicking wizard button', () => {
+      const onLaunchWizard = vi.fn();
+      const props = createDefaultProps({ onLaunchWizard });
+      renderWithProvider(<AutoRun {...props} />);
+
+      const wizardButton = screen.getByTitle('Launch In-Tab Wizard');
+      fireEvent.click(wizardButton);
+
+      expect(onLaunchWizard).toHaveBeenCalledTimes(1);
+    });
+
+    it('wizard button is hidden when no folder is configured', () => {
+      const onLaunchWizard = vi.fn();
+      const props = createDefaultProps({ onLaunchWizard, folderPath: null });
+      renderWithProvider(<AutoRun {...props} />);
+
+      // Should not show wizard button when folder isn't set
+      expect(screen.queryByTitle('Launch In-Tab Wizard')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Help Modal', () => {
     it('opens help modal when clicking help button', async () => {
       const props = createDefaultProps();

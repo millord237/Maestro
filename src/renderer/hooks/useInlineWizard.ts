@@ -1136,9 +1136,12 @@ export function useInlineWizard(): UseInlineWizardReturn {
             },
             onComplete: (allDocs) => {
               console.log('[useInlineWizard] All documents complete:', allDocs.length);
-              // Set final progress state
+              // Set final state - mark generation as complete so UI shows Continue button
+              // Don't wait for the service function to return (it may be doing cleanup)
               setTabState(tabId, (prev) => ({
                 ...prev,
+                isGeneratingDocs: false,
+                generatedDocuments: allDocs,
                 generationProgress: {
                   current: allDocs.length,
                   total: allDocs.length,

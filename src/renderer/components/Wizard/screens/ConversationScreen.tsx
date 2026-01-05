@@ -358,17 +358,82 @@ function TypingIndicator({
 }
 
 /**
+ * Extract a descriptive detail string from tool input
+ * Looks for common properties like command, pattern, file_path, query
+ */
+function getToolDetail(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null;
+  const inputObj = input as Record<string, unknown>;
+  // Check common tool input properties in order of preference
+  const detail =
+    (inputObj.command as string) ||
+    (inputObj.pattern as string) ||
+    (inputObj.file_path as string) ||
+    (inputObj.query as string) ||
+    (inputObj.path as string) ||
+    null;
+  return detail;
+}
+
+/**
+ * ToolExecutionEntry - Individual tool execution item in thinking display
+ */
+function ToolExecutionEntry({
+  tool,
+  theme,
+}: {
+  tool: { toolName: string; state?: unknown; timestamp: number };
+  theme: Theme;
+}): JSX.Element {
+  const state = tool.state as { status?: string; input?: unknown } | undefined;
+  const status = state?.status || 'running';
+  const toolDetail = getToolDetail(state?.input);
+
+  return (
+    <div
+      className="flex items-start gap-2 py-1 text-xs font-mono"
+      style={{ color: theme.colors.textDim }}
+    >
+      <span
+        className="px-1.5 py-0.5 rounded text-[10px] shrink-0"
+        style={{
+          backgroundColor: status === 'complete' ? `${theme.colors.success}30` : `${theme.colors.accent}30`,
+          color: status === 'complete' ? theme.colors.success : theme.colors.accent,
+        }}
+      >
+        {tool.toolName}
+      </span>
+      {status === 'complete' ? (
+        <span className="shrink-0 pt-0.5" style={{ color: theme.colors.success }}>✓</span>
+      ) : (
+        <span className="animate-pulse shrink-0 pt-0.5" style={{ color: theme.colors.warning }}>●</span>
+      )}
+      {toolDetail && (
+        <span
+          className="opacity-70 break-all whitespace-pre-wrap"
+          style={{ color: theme.colors.textMain }}
+        >
+          {toolDetail}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * ThinkingDisplay - Shows AI thinking content when showThinking is enabled.
- * Displays raw thinking content with styling similar to the normal AI terminal.
+ * Displays raw thinking content and tool executions similar to the normal AI terminal.
  */
 function ThinkingDisplay({
   theme,
   agentName,
   thinkingContent,
+  toolExecutions,
 }: {
   theme: Theme;
   agentName: string;
   thinkingContent: string;
+  toolExecutions: Array<{ toolName: string; state?: unknown; timestamp: number }>;
 }): JSX.Element {
   return (
     <div className="flex justify-start mb-4" data-testid="wizard-thinking-display">
@@ -396,12 +461,23 @@ function ThinkingDisplay({
             thinking
           </span>
         </div>
+
+        {/* Tool executions - show what agent is doing */}
+        {toolExecutions.length > 0 && (
+          <div className="mb-2 border-b pb-2" style={{ borderColor: `${theme.colors.border}60` }}>
+            {toolExecutions.map((tool, idx) => (
+              <ToolExecutionEntry key={`${tool.toolName}-${tool.timestamp}-${idx}`} tool={tool} theme={theme} />
+            ))}
+          </div>
+        )}
+
+        {/* Thinking content or fallback */}
         <div
           className="text-sm whitespace-pre-wrap font-mono"
           style={{ color: theme.colors.textDim, opacity: 0.85 }}
           data-testid="thinking-display-content"
         >
-          {thinkingContent || 'Reasoning...'}
+          {thinkingContent || (toolExecutions.length === 0 ? 'Reasoning...' : '')}
           <span className="animate-pulse ml-1" data-testid="thinking-cursor">▊</span>
         </div>
       </div>
@@ -442,6 +518,8 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
   const [detectedError, setDetectedError] = useState<WizardError | null>(null);
   // Accumulated thinking content when showThinking is enabled (showThinking prop controls display)
   const [thinkingContent, setThinkingContent] = useState('');
+  // Tool execution events for showThinking display (shows what agent is doing)
+  const [toolExecutions, setToolExecutions] = useState<Array<{ toolName: string; state?: unknown; timestamp: number }>>([]);
 
   // Screen reader announcement state
   const [announcement, setAnnouncement] = useState('');
@@ -452,6 +530,13 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
 
   // Ref to prevent double-adding the initial question (React StrictMode protection)
   const initialQuestionAddedRef = useRef(false);
+
+  // Ref to track current showThinking state for use inside callbacks
+  // This allows the onThinkingChunk callback to always be registered but only accumulate when enabled
+  const showThinkingRef = useRef(showThinking);
+  useEffect(() => {
+    showThinkingRef.current = showThinking;
+  }, [showThinking]);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -610,6 +695,7 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
     setDetectedError(null);
     setStreamingText('');
     setThinkingContent(''); // Clear previous thinking content
+    setToolExecutions([]); // Clear previous tool executions
     setFillerPhrase(getNextFillerPhrase());
 
     // If this is the first message, add the initial question to history first
@@ -695,13 +781,31 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
           },
           // Thinking content comes via the dedicated onThinkingChunk callback
           // This receives parsed thinking content from process-manager's thinking-chunk event
-          onThinkingChunk: showThinking ? (content) => {
-            setThinkingContent((prev) => prev + content);
-          } : undefined,
+          // IMPORTANT: Always register the callback so we capture thinking even if toggled on mid-response
+          // Use ref to check current showThinking state inside callback
+          // Skip JSON-looking content (the structured response) to avoid brief flash of JSON
+          onThinkingChunk: (content) => {
+            if (showThinkingRef.current) {
+              // Don't accumulate JSON responses - they're the final answer, not thinking
+              const trimmed = content.trim();
+              if (trimmed.startsWith('{"') && (trimmed.includes('"confidence"') || trimmed.includes('"message"'))) {
+                return; // Skip structured response JSON
+              }
+              setThinkingContent((prev) => prev + content);
+            }
+          },
+          // Tool execution events show what the agent is doing (Read, Write, etc.)
+          // These are crucial for showThinking mode since batch mode doesn't stream assistant messages
+          onToolExecution: (toolEvent) => {
+            if (showThinkingRef.current) {
+              setToolExecutions((prev) => [...prev, toolEvent]);
+            }
+          },
           onComplete: (sendResult) => {
-            // Clear streaming text and thinking content when response is complete
+            // Clear streaming text, thinking content, and tool executions when response is complete
             setStreamingText('');
             setThinkingContent('');
+            setToolExecutions([]);
 
             console.log('[ConversationScreen] onComplete:', {
               success: sendResult.success,
@@ -804,6 +908,8 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
     setConversationError(null);
     setDetectedError(null);
     setStreamingText('');
+    setThinkingContent(''); // Clear previous thinking content
+    setToolExecutions([]); // Clear previous tool executions
     setFillerPhrase(getNextFillerPhrase());
 
     // Don't show the normal initial question for continue mode
@@ -882,8 +988,28 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
               // Ignore parse errors
             }
           },
+          // Thinking content callback - always register, check ref inside
+          // Skip JSON-looking content (the structured response) to avoid brief flash of JSON
+          onThinkingChunk: (content) => {
+            if (showThinkingRef.current) {
+              // Don't accumulate JSON responses - they're the final answer, not thinking
+              const trimmed = content.trim();
+              if (trimmed.startsWith('{"') && (trimmed.includes('"confidence"') || trimmed.includes('"message"'))) {
+                return; // Skip structured response JSON
+              }
+              setThinkingContent((prev) => prev + content);
+            }
+          },
+          // Tool execution callback - shows what agent is doing
+          onToolExecution: (toolEvent) => {
+            if (showThinkingRef.current) {
+              setToolExecutions((prev) => [...prev, toolEvent]);
+            }
+          },
           onComplete: (sendResult) => {
             setStreamingText('');
+            setThinkingContent('');
+            setToolExecutions([]);
 
             if (sendResult.success && sendResult.response) {
               addMessage(createAssistantMessage(sendResult.response));
@@ -1093,12 +1219,13 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
                 </div>
               </div>
             </div>
-          ) : showThinking && thinkingContent ? (
-            // Show thinking content when enabled and we have content
+          ) : showThinking && (thinkingContent || toolExecutions.length > 0) ? (
+            // Show thinking content and/or tool executions when enabled and we have content
             <ThinkingDisplay
               theme={theme}
               agentName={state.agentName || 'Agent'}
               thinkingContent={thinkingContent}
+              toolExecutions={toolExecutions}
             />
           ) : showThinking ? (
             // Show minimal thinking display when enabled but no content yet
@@ -1106,6 +1233,7 @@ export function ConversationScreen({ theme, showThinking, setShowThinking }: Con
               theme={theme}
               agentName={state.agentName || 'Agent'}
               thinkingContent=""
+              toolExecutions={[]}
             />
           ) : (
             // Show filler phrase typing indicator

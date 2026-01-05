@@ -17,6 +17,7 @@ const mockMaestro = {
     onData: vi.fn(() => vi.fn()),
     onExit: vi.fn(() => vi.fn()),
     onThinkingChunk: vi.fn(() => vi.fn()),
+    onToolExecution: vi.fn(() => vi.fn()),
     kill: vi.fn(),
   },
   autorun: {
@@ -203,6 +204,129 @@ describe('conversationManager (Onboarding Wizard)', () => {
 
       // Verify onThinkingChunk listener was NOT set up
       expect(mockMaestro.process.onThinkingChunk).not.toHaveBeenCalled();
+
+      // Clean up
+      const exitCallback = mockMaestro.process.onExit.mock.calls[0][0];
+      exitCallback(sessionId, 0);
+
+      await messagePromise;
+      await conversationManager.endConversation();
+    });
+
+    it('should set up onToolExecution listener when callback is provided', async () => {
+      const mockAgent = {
+        id: 'claude-code',
+        available: true,
+        command: 'claude',
+        args: [],
+      };
+      mockMaestro.agents.get.mockResolvedValue(mockAgent);
+      mockMaestro.process.spawn.mockResolvedValue(undefined);
+
+      const sessionId = await conversationManager.startConversation({
+        agentType: 'claude-code',
+        directoryPath: '/test/project',
+        projectName: 'Test Project',
+      });
+
+      const onToolExecution = vi.fn();
+
+      const messagePromise = conversationManager.sendMessage(
+        'Hello',
+        [],
+        { onToolExecution }
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Verify onToolExecution listener was set up
+      expect(mockMaestro.process.onToolExecution).toHaveBeenCalled();
+
+      // Simulate receiving a tool execution event
+      const toolEvent = { toolName: 'Read', state: { status: 'running' }, timestamp: Date.now() };
+      const toolCallback = mockMaestro.process.onToolExecution.mock.calls[0][0];
+      toolCallback(sessionId, toolEvent);
+
+      // Verify callback was invoked with the tool event
+      expect(onToolExecution).toHaveBeenCalledWith(toolEvent);
+
+      // Clean up
+      const exitCallback = mockMaestro.process.onExit.mock.calls[0][0];
+      exitCallback(sessionId, 0);
+
+      await messagePromise;
+      await conversationManager.endConversation();
+    });
+
+    it('should not invoke onToolExecution for different session IDs', async () => {
+      const mockAgent = {
+        id: 'claude-code',
+        available: true,
+        command: 'claude',
+        args: [],
+      };
+      mockMaestro.agents.get.mockResolvedValue(mockAgent);
+      mockMaestro.process.spawn.mockResolvedValue(undefined);
+
+      const sessionId = await conversationManager.startConversation({
+        agentType: 'claude-code',
+        directoryPath: '/test/project',
+        projectName: 'Test Project',
+      });
+
+      const onToolExecution = vi.fn();
+
+      const messagePromise = conversationManager.sendMessage(
+        'Hello',
+        [],
+        { onToolExecution }
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Simulate receiving a tool execution from a different session
+      const toolEvent = { toolName: 'Read', state: { status: 'running' }, timestamp: Date.now() };
+      const toolCallback = mockMaestro.process.onToolExecution.mock.calls[0][0];
+      toolCallback('different-session-id', toolEvent);
+
+      // Verify callback was NOT invoked
+      expect(onToolExecution).not.toHaveBeenCalled();
+
+      // Clean up
+      const exitCallback = mockMaestro.process.onExit.mock.calls[0][0];
+      exitCallback(sessionId, 0);
+
+      await messagePromise;
+      await conversationManager.endConversation();
+    });
+
+    it('should not set up onToolExecution listener when callback is not provided', async () => {
+      const mockAgent = {
+        id: 'claude-code',
+        available: true,
+        command: 'claude',
+        args: [],
+      };
+      mockMaestro.agents.get.mockResolvedValue(mockAgent);
+      mockMaestro.process.spawn.mockResolvedValue(undefined);
+
+      const sessionId = await conversationManager.startConversation({
+        agentType: 'claude-code',
+        directoryPath: '/test/project',
+        projectName: 'Test Project',
+      });
+
+      // Send message without onToolExecution callback
+      const messagePromise = conversationManager.sendMessage(
+        'Hello',
+        [],
+        {} // No onToolExecution
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Verify onToolExecution listener was NOT set up
+      expect(mockMaestro.process.onToolExecution).not.toHaveBeenCalled();
 
       // Clean up
       const exitCallback = mockMaestro.process.onExit.mock.calls[0][0];

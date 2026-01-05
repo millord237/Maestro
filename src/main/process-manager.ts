@@ -920,8 +920,25 @@ export class ProcessManager extends EventEmitter {
                     // NOTE: We do NOT emit partial text to 'data' because it causes streaming content
                     // to appear in the main output even when thinking is disabled. The final 'result'
                     // message contains the properly formatted complete response.
+
+                    // DEBUG: Log thinking-chunk emission conditions
+                    if (event.type === 'text') {
+                      logger.debug('[ProcessManager] Checking thinking-chunk conditions', 'ProcessManager', {
+                        sessionId,
+                        eventType: event.type,
+                        isPartial: event.isPartial,
+                        hasText: !!event.text,
+                        textLength: event.text?.length,
+                        textPreview: event.text?.substring(0, 100),
+                      });
+                    }
+
                     if (event.type === 'text' && event.isPartial && event.text) {
                       // Emit thinking chunk for real-time display (renderer shows only if tab.showThinking is true)
+                      logger.debug('[ProcessManager] Emitting thinking-chunk', 'ProcessManager', {
+                        sessionId,
+                        textLength: event.text.length,
+                      });
                       this.emit('thinking-chunk', sessionId, event.text);
 
                       // Accumulate for result fallback (in case result message doesn't have text)

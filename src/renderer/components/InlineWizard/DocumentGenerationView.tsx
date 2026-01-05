@@ -24,20 +24,18 @@ import {
   ChevronRight,
   X,
   Loader2,
+  FileText,
+  Check,
 } from 'lucide-react';
 import type { Theme } from '../../types';
 import type { GeneratedDocument } from '../Wizard/WizardContext';
 import { MermaidRenderer } from '../MermaidRenderer';
 import { useClickOutside } from '../../hooks';
 import { AustinFactsDisplay } from './AustinFactsDisplay';
-import { StreamingDocumentPreview } from './StreamingDocumentPreview';
-import { GenerationCompleteOverlay } from './GenerationCompleteOverlay';
+import { formatSize, formatElapsedTime } from '../../../shared/formatters';
 
 // Memoize remarkPlugins array - it never changes
 const REMARK_PLUGINS = [remarkGfm];
-
-// Auto-save debounce delay in milliseconds
-const AUTO_SAVE_DELAY = 2000;
 
 /**
  * Props for DocumentGenerationView
@@ -796,172 +794,328 @@ function countTasks(content: string): number {
 }
 
 /**
+ * Individual file entry in the created files list
+ */
+function CreatedFileEntry({
+  doc,
+  isExpanded,
+  isNewest,
+  theme,
+  onToggle,
+}: {
+  doc: GeneratedDocument;
+  isExpanded: boolean;
+  isNewest: boolean;
+  theme: Theme;
+  onToggle: () => void;
+}): JSX.Element {
+  const taskCount = countTasks(doc.content);
+  const fileSize = new Blob([doc.content]).size;
+
+  // Extract first paragraph as description
+  const description = useMemo(() => {
+    const lines = doc.content.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip headers and empty lines
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-')) continue;
+      // Return first paragraph, truncated
+      return trimmed.length > 150 ? trimmed.slice(0, 147) + '...' : trimmed;
+    }
+    return null;
+  }, [doc.content]);
+
+  return (
+    <div
+      className="overflow-hidden transition-all duration-300"
+      style={{
+        animation: isNewest ? 'fadeSlideIn 0.3s ease-out' : undefined,
+      }}
+    >
+      {/* Header row - clickable to expand/collapse */}
+      <button
+        onClick={onToggle}
+        className="w-full px-4 py-2.5 flex items-center justify-between text-sm text-left hover:opacity-80 transition-opacity"
+        style={{
+          backgroundColor: isExpanded ? `${theme.colors.accent}10` : 'transparent',
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {isExpanded ? (
+            <ChevronDown
+              className="w-4 h-4 shrink-0 transition-transform duration-200"
+              style={{ color: theme.colors.textDim }}
+            />
+          ) : (
+            <ChevronRight
+              className="w-4 h-4 shrink-0 transition-transform duration-200"
+              style={{ color: theme.colors.textDim }}
+            />
+          )}
+          <span style={{ color: theme.colors.success }}>✓</span>
+          <span
+            className="truncate font-medium"
+            style={{ color: theme.colors.textMain }}
+            title={doc.filename}
+          >
+            {doc.filename}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0 ml-2">
+          {/* Task count badge */}
+          {taskCount > 0 && (
+            <span
+              className="text-xs font-medium px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: `${theme.colors.accent}20`,
+                color: theme.colors.accent,
+              }}
+            >
+              {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
+            </span>
+          )}
+          {/* File size */}
+          <span
+            className="text-xs"
+            style={{ color: theme.colors.textDim }}
+          >
+            {formatSize(fileSize)}
+          </span>
+        </div>
+      </button>
+
+      {/* Description - shown when expanded */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{
+          maxHeight: isExpanded ? '120px' : '0px',
+          opacity: isExpanded ? 1 : 0,
+        }}
+      >
+        {description && (
+          <div
+            className="px-4 pb-3 pl-12 text-xs leading-relaxed"
+            style={{ color: theme.colors.textDim }}
+          >
+            {description}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * List of created files during generation
+ */
+function CreatedFilesList({
+  documents,
+  theme,
+}: {
+  documents: GeneratedDocument[];
+  theme: Theme;
+}): JSX.Element | null {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const userToggledFilesRef = useRef<Set<string>>(new Set());
+  const lastAutoExpandedRef = useRef<string | null>(null);
+
+  // Auto-expand newest file when it's added
+  const prevFilesCountRef = useRef(documents.length);
+  useEffect(() => {
+    if (documents.length > prevFilesCountRef.current && documents.length > 0) {
+      const newestFile = documents[documents.length - 1];
+
+      setExpandedFiles(prev => {
+        const next = new Set(prev);
+
+        // Collapse the previous auto-expanded file (only if user hasn't touched it)
+        if (lastAutoExpandedRef.current && !userToggledFilesRef.current.has(lastAutoExpandedRef.current)) {
+          next.delete(lastAutoExpandedRef.current);
+        }
+
+        // Expand the new file
+        next.add(newestFile.filename);
+        return next;
+      });
+
+      lastAutoExpandedRef.current = newestFile.filename;
+    }
+    prevFilesCountRef.current = documents.length;
+  }, [documents]);
+
+  const toggleFile = useCallback((filename: string) => {
+    userToggledFilesRef.current.add(filename);
+    setExpandedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(filename)) {
+        next.delete(filename);
+      } else {
+        next.add(filename);
+      }
+      return next;
+    });
+  }, []);
+
+  if (documents.length === 0) return null;
+
+  const newestIndex = documents.length - 1;
+
+  return (
+    <div
+      className="mt-6 mx-auto rounded-lg overflow-hidden"
+      style={{
+        backgroundColor: theme.colors.bgActivity,
+        border: `1px solid ${theme.colors.border}`,
+        width: '600px',
+        maxWidth: '100%',
+      }}
+    >
+      <div
+        className="px-4 py-2.5 border-b flex items-center gap-2"
+        style={{
+          backgroundColor: `${theme.colors.success}15`,
+          borderColor: theme.colors.border,
+        }}
+      >
+        <FileText className="w-4 h-4" style={{ color: theme.colors.success }} />
+        <span
+          className="text-xs font-medium uppercase tracking-wide"
+          style={{ color: theme.colors.success }}
+        >
+          Work Plans Drafted ({documents.length})
+        </span>
+      </div>
+      <div
+        className="overflow-y-auto"
+        style={{
+          maxHeight: 'calc(40vh - 100px)',
+        }}
+      >
+        {documents.map((doc, index) => (
+          <div
+            key={doc.filename}
+            style={{
+              borderBottom: index < documents.length - 1 ? `1px solid ${theme.colors.border}` : undefined,
+            }}
+          >
+            <CreatedFileEntry
+              doc={doc}
+              isExpanded={expandedFiles.has(doc.filename)}
+              isNewest={index === newestIndex}
+              theme={theme}
+              onToggle={() => toggleFile(doc.filename)}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Animation styles */}
+      <style>{`
+        @keyframes fadeSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/**
  * DocumentGenerationView - Main component for document generation takeover
  */
 export function DocumentGenerationView({
   theme,
   documents,
-  currentDocumentIndex,
+  currentDocumentIndex: _currentDocumentIndex,
   isGenerating,
-  streamingContent,
+  streamingContent: _streamingContent,
   onComplete,
-  onDocumentSelect,
-  folderPath,
-  onContentChange,
-  progressMessage,
-  currentGeneratingIndex,
-  totalDocuments,
+  onDocumentSelect: _onDocumentSelect,
+  folderPath: _folderPath,
+  onContentChange: _onContentChange,
+  progressMessage: _progressMessage,
+  currentGeneratingIndex: _currentGeneratingIndex,
+  totalDocuments: _totalDocuments,
   onCancel,
 }: DocumentGenerationViewProps): JSX.Element {
-  const currentDoc = documents[currentDocumentIndex];
-  const [localContent, setLocalContent] = useState(currentDoc?.content || '');
-  const [mode, setMode] = useState<'edit' | 'preview'>('preview');
-  const [attachments, setAttachments] = useState<
-    Array<{ filename: string; dataUrl: string }>
-  >([]);
-  const [showCompletion, setShowCompletion] = useState(false);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSavedContentRef = useRef<string>(localContent);
-
-  // Update local content when document changes
-  useEffect(() => {
-    if (currentDoc) {
-      setLocalContent(currentDoc.content);
-      lastSavedContentRef.current = currentDoc.content;
-    }
-  }, [currentDoc]);
-
-  // Show completion overlay when generation finishes
-  useEffect(() => {
-    if (!isGenerating && documents.length > 0 && streamingContent === undefined) {
-      // Small delay to allow final content to settle
-      const timer = setTimeout(() => {
-        setShowCompletion(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    } else {
-      setShowCompletion(false);
-    }
-  }, [isGenerating, documents.length, streamingContent]);
-
-  // Auto-save with debounce
-  useEffect(() => {
-    if (isGenerating || localContent === lastSavedContentRef.current) return;
-
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      if (localContent !== lastSavedContentRef.current && currentDoc && folderPath && onContentChange) {
-        try {
-          await window.maestro.autorun.writeDoc(
-            folderPath,
-            currentDoc.filename,
-            localContent
-          );
-          lastSavedContentRef.current = localContent;
-          onContentChange(localContent, currentDocumentIndex);
-        } catch (err) {
-          console.error('Auto-save failed:', err);
-        }
-      }
-    }, AUTO_SAVE_DELAY);
-
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [localContent, folderPath, currentDoc, currentDocumentIndex, isGenerating, onContentChange]);
-
-  // Handle content change
-  const handleContentChange = useCallback((newContent: string) => {
-    setLocalContent(newContent);
-  }, []);
-
-  // Handle mode change
-  const handleModeChange = useCallback((newMode: 'edit' | 'preview') => {
-    setMode(newMode);
-    setTimeout(() => {
-      if (newMode === 'edit') {
-        textareaRef.current?.focus();
-      } else {
-        previewRef.current?.focus();
-      }
-    }, 50);
-  }, []);
-
-  // Handle adding attachment
-  const handleAddAttachment = useCallback(
-    (filename: string, dataUrl: string) => {
-      setAttachments((prev) => [...prev, { filename, dataUrl }]);
-    },
-    []
-  );
-
-  // Handle removing attachment
-  const handleRemoveAttachment = useCallback(
-    async (filename: string) => {
-      setAttachments((prev) => prev.filter((a) => a.filename !== filename));
-
-      if (folderPath) {
-        await window.maestro.autorun.deleteImage(folderPath, filename);
-      }
-
-      // Remove markdown reference
-      const escapedPath = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const fname = filename.split('/').pop() || filename;
-      const escapedFilename = fname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(
-        `!\\[${escapedFilename}\\]\\(${escapedPath}\\)\\n?`,
-        'g'
-      );
-      setLocalContent((prev) => prev.replace(regex, ''));
-    },
-    [folderPath]
-  );
-
   // Calculate total tasks
   const totalTasks = documents.reduce(
     (sum, doc) => sum + countTasks(doc.content),
     0
   );
 
-  // If generating with actual streaming content, show streaming preview
-  // Only show streaming preview once we have meaningful content (more than a few chars)
-  const hasStreamingContent = streamingContent !== undefined && streamingContent.length > 10;
-  if (isGenerating && hasStreamingContent) {
-    return (
-      <div
-        className="relative flex flex-col h-full"
-        style={{ backgroundColor: theme.colors.bgMain }}
-      >
-        <StreamingDocumentPreview
-          theme={theme}
-          content={streamingContent}
-          filename={progressMessage}
-          currentPhase={currentGeneratingIndex}
-          totalPhases={totalDocuments}
-        />
-        <AustinFactsDisplay theme={theme} isVisible={isGenerating} />
-      </div>
-    );
-  }
+  // Track elapsed time for generation
+  const [startTime] = useState(() => Date.now());
+  const [elapsedMs, setElapsedMs] = useState(0);
 
-  // If generating but no streaming content yet, OR no documents yet, show centered loading state
-  if (isGenerating || documents.length === 0) {
+  useEffect(() => {
+    if (!isGenerating) return;
+
+    // Update immediately
+    setElapsedMs(Date.now() - startTime);
+
+    // Update every second
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - startTime);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isGenerating, startTime]);
+
+  // Determine if generation is complete
+  const isComplete = !isGenerating && documents.length > 0;
+
+  // Fallback - no documents and not generating
+  if (!isGenerating && documents.length === 0) {
     return (
       <div
         className="flex flex-col h-full items-center justify-center p-6"
         style={{ backgroundColor: theme.colors.bgMain }}
       >
-        {/* Main loading content - centered vertically */}
-        <div className="flex flex-col items-center">
-          {/* Animated spinner */}
+        <p style={{ color: theme.colors.textDim }}>No documents generated yet.</p>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="mt-4 px-4 py-2 text-sm rounded"
+            style={{
+              backgroundColor: theme.colors.bgActivity,
+              color: theme.colors.textDim,
+            }}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Main view - same layout for generating and complete states
+  // Only difference: Austin Facts vs completion button at bottom
+  return (
+    <div
+      className="flex flex-col h-full items-center justify-center p-6 overflow-y-auto"
+      style={{ backgroundColor: theme.colors.bgMain }}
+    >
+      {/* Main content - centered vertically */}
+      <div className="flex flex-col items-center">
+        {/* Header: Spinner when generating, Checkmark when complete */}
+        {isComplete ? (
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+            style={{ backgroundColor: `${theme.colors.success}20` }}
+          >
+            <Check
+              className="w-7 h-7"
+              style={{ color: theme.colors.success }}
+            />
+          </div>
+        ) : (
           <div className="relative mb-4">
             <div
               className="w-14 h-14 rounded-full border-4 border-t-transparent animate-spin"
@@ -978,121 +1132,118 @@ export function DocumentGenerationView({
               />
             </div>
           </div>
+        )}
 
-          {/* Message */}
-          <h3
-            className="text-lg font-semibold mb-1 text-center"
-            style={{ color: theme.colors.textMain }}
-          >
-            {progressMessage || 'Preparing Playbooks...'}
-          </h3>
+        {/* Title */}
+        <h3
+          className="text-lg font-semibold mb-1 text-center"
+          style={{ color: theme.colors.textMain }}
+        >
+          {isComplete ? 'Playbook Ready!' : 'Generating Auto Run Documents...'}
+        </h3>
 
-          {/* Subtitle */}
-          <p
-            className="text-sm text-center max-w-md"
-            style={{ color: theme.colors.textDim }}
-          >
-            Creating detailed task documents based on your conversation.
-          </p>
-
-          {/* Cancel button */}
-          {onCancel && (
-            <button
-              onClick={onCancel}
-              className="mt-4 px-4 py-2 text-sm rounded transition-colors hover:opacity-80"
-              style={{
-                backgroundColor: theme.colors.bgActivity,
-                color: theme.colors.textDim,
-                border: `1px solid ${theme.colors.border}`,
-              }}
+        {/* Subtitle with elapsed time (only during generation) */}
+        {!isComplete && (
+          <>
+            <p
+              className="text-sm text-center max-w-md"
+              style={{ color: theme.colors.textDim }}
             >
-              Cancel
-            </button>
-          )}
+              This may take a while. We're creating detailed task documents based on your project requirements.
+            </p>
+            {elapsedMs > 0 && (
+              <p
+                className="text-xs mt-1 font-mono"
+                style={{ color: theme.colors.textDim }}
+              >
+                Elapsed: {formatElapsedTime(elapsedMs)}
+              </p>
+            )}
+          </>
+        )}
 
-          {/* Austin Facts - centered below other content */}
-          <div className="mt-8">
-            <AustinFactsDisplay theme={theme} isVisible={true} centered />
+        {/* Total task count */}
+        {totalTasks > 0 ? (
+          <div className="mt-4 flex items-center gap-2">
+            <span
+              className="text-3xl font-bold"
+              style={{ color: theme.colors.accent }}
+            >
+              {totalTasks}
+            </span>
+            <span
+              className="text-lg font-medium"
+              style={{ color: theme.colors.textMain }}
+            >
+              {totalTasks === 1 ? 'Task' : 'Tasks'} Planned
+            </span>
           </div>
-        </div>
-      </div>
-    );
-  }
+        ) : !isComplete ? (
+          <div className="flex items-center gap-1 mt-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-2 h-2 rounded-full"
+                style={{
+                  backgroundColor: theme.colors.accent,
+                  animation: `bounce-dot 0.8s infinite ${i * 150}ms`,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
 
-  // Calculate dropdown width based on longest filename
-  const longestFilename = documents.reduce(
-    (longest, doc) =>
-      doc.filename.length > longest.length ? doc.filename : longest,
-    ''
-  );
-  const charWidth = 7.5;
-  const padding = 60;
-  const dropdownWidth = Math.min(500, Math.max(280, longestFilename.length * charWidth + padding));
+        {/* Created files list */}
+        <CreatedFilesList documents={documents} theme={theme} />
 
-  // Show document editor/viewer
-  return (
-    <div
-      className="relative flex flex-col h-full"
-      style={{ backgroundColor: theme.colors.bgMain }}
-    >
-      {/* Header with document selector */}
-      <div
-        className="flex items-center justify-center px-4 py-3 border-b"
-        style={{
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.bgSidebar,
-        }}
-      >
-        <div style={{ width: dropdownWidth }}>
-          <DocumentSelector
-            documents={documents}
-            selectedIndex={currentDocumentIndex}
-            onSelect={onDocumentSelect}
-            theme={theme}
-            disabled={isGenerating}
-          />
-        </div>
-      </div>
+        {/* Bottom section: Austin Facts during generation, Completion button when done */}
+        {isComplete ? (
+          <button
+            onClick={onComplete}
+            className="mt-8 px-6 py-3 text-base font-semibold rounded-lg transition-all hover:opacity-90 hover:scale-105"
+            style={{
+              backgroundColor: theme.colors.success,
+              color: 'white',
+            }}
+          >
+            Continue
+          </button>
+        ) : (
+          <>
+            {/* Cancel button */}
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="mt-4 px-4 py-2 text-sm rounded transition-colors hover:opacity-80"
+                style={{
+                  backgroundColor: theme.colors.bgActivity,
+                  color: theme.colors.textDim,
+                  border: `1px solid ${theme.colors.border}`,
+                }}
+              >
+                Cancel
+              </button>
+            )}
 
-      {/* Stats row */}
-      <div className="text-center py-2">
-        <span className="text-xs" style={{ color: theme.colors.textDim }}>
-          {documents.length > 1
-            ? `${totalTasks} total tasks • ${documents.length} documents • ${countTasks(localContent)} tasks in this document`
-            : `${totalTasks} tasks ready to run`}
-        </span>
-      </div>
-
-      {/* Document content */}
-      <div className="flex-1 min-h-0 px-4 pb-4">
-        <DocumentEditor
-          content={localContent}
-          onContentChange={handleContentChange}
-          mode={mode}
-          onModeChange={handleModeChange}
-          folderPath={folderPath}
-          selectedFile={currentDoc?.filename.replace(/\.md$/, '')}
-          attachments={attachments}
-          onAddAttachment={handleAddAttachment}
-          onRemoveAttachment={handleRemoveAttachment}
-          theme={theme}
-          isLocked={isGenerating}
-          textareaRef={textareaRef}
-          previewRef={previewRef}
-        />
+            {/* Austin Facts - shown during generation */}
+            <div className="mt-8">
+              <AustinFactsDisplay theme={theme} isVisible={true} centered />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Austin facts (shown during generation) */}
-      <AustinFactsDisplay theme={theme} isVisible={isGenerating} />
-
-      {/* Completion overlay */}
-      {showCompletion && (
-        <GenerationCompleteOverlay
-          theme={theme}
-          taskCount={totalTasks}
-          onDone={onComplete}
-        />
-      )}
+      {/* Animation styles */}
+      <style>{`
+        @keyframes bounce-dot {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-6px);
+          }
+        }
+      `}</style>
     </div>
   );
 }

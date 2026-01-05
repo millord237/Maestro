@@ -4360,7 +4360,7 @@ You are taking over this conversation. Based on the context above, provide a bri
   // Wrapper for sendInlineWizardMessage that adds thinking content callback
   // This extracts thinking content from the streaming response and stores it in wizardState
   const sendWizardMessageWithThinking = useCallback(async (content: string) => {
-    // Clear previous thinking content when starting a new message
+    // Clear previous thinking content and tool executions when starting a new message
     if (activeSession) {
       const activeTab = getActiveTab(activeSession);
       if (activeTab?.wizardState) {
@@ -4376,6 +4376,7 @@ You are taking over this conversation. Based on the context above, provide a bri
                 wizardState: {
                   ...tab.wizardState,
                   thinkingContent: '', // Clear previous thinking
+                  toolExecutions: [], // Clear previous tool executions
                 }
               };
             })
@@ -4391,15 +4392,28 @@ You are taking over this conversation. Based on the context above, provide a bri
 
     await sendInlineWizardMessage(content, {
       onThinkingChunk: (chunk) => {
-        // Use sessionsRef.current for fresh state, not captured activeSession
-        if (!sessionId || !tabId) return;
+        // Early return if session/tab IDs weren't captured
+        if (!sessionId || !tabId) {
+          return;
+        }
+
+        // Skip JSON-looking content (the structured response) to avoid brief flash of JSON
+        // The wizard expects JSON responses like {"confidence": 80, "ready": true, "message": "..."}
+        const trimmed = chunk.trim();
+        if (trimmed.startsWith('{"') && (trimmed.includes('"confidence"') || trimmed.includes('"message"'))) {
+          return; // Skip structured response JSON
+        }
 
         // Accumulate thinking content in the session state
         // All checks happen inside the updater to use fresh state
         setSessions(prev => prev.map(s => {
           if (s.id !== sessionId) return s;
           const tab = s.aiTabs.find(t => t.id === tabId);
-          if (!tab?.wizardState?.showWizardThinking) return s;
+
+          // Only accumulate if showWizardThinking is enabled
+          if (!tab?.wizardState?.showWizardThinking) {
+            return s;
+          }
 
           return {
             ...s,
@@ -4411,6 +4425,39 @@ You are taking over this conversation. Based on the context above, provide a bri
                 wizardState: {
                   ...t.wizardState,
                   thinkingContent: (t.wizardState.thinkingContent || '') + chunk,
+                }
+              };
+            })
+          };
+        }));
+      },
+      onToolExecution: (toolEvent) => {
+        // Early return if session/tab IDs weren't captured
+        if (!sessionId || !tabId) {
+          return;
+        }
+
+        // Accumulate tool executions in the session state
+        // This is crucial for showThinking mode since batch mode doesn't stream assistant messages
+        setSessions(prev => prev.map(s => {
+          if (s.id !== sessionId) return s;
+          const tab = s.aiTabs.find(t => t.id === tabId);
+
+          // Only accumulate if showWizardThinking is enabled
+          if (!tab?.wizardState?.showWizardThinking) {
+            return s;
+          }
+
+          return {
+            ...s,
+            aiTabs: s.aiTabs.map(t => {
+              if (t.id !== tabId) return t;
+              if (!t.wizardState) return t;
+              return {
+                ...t,
+                wizardState: {
+                  ...t.wizardState,
+                  toolExecutions: [...(t.wizardState.toolExecutions || []), toolEvent],
                 }
               };
             })
@@ -4462,55 +4509,62 @@ You are taking over this conversation. Based on the context above, provide a bri
     }
 
     // Sync the wizard state to this specific tab
-    // IMPORTANT: Preserve showWizardThinking and thinkingContent from current state
-    // These are managed by the toggle and onThinkingChunk callback, not by the hook
-    const newWizardState = {
-      isActive: tabWizardState.isActive,
-      isWaiting: tabWizardState.isWaiting,
-      mode: tabWizardState.mode === 'ask' ? 'new' : tabWizardState.mode, // Map 'ask' to 'new' for session state
-      goal: tabWizardState.goal ?? undefined,
-      confidence: tabWizardState.confidence,
-      ready: tabWizardState.ready,
-      conversationHistory: tabWizardState.conversationHistory.map(msg => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        confidence: msg.confidence,
-        ready: msg.ready,
-      })),
-      previousUIState: tabWizardState.previousUIState ?? {
-        readOnlyMode: false,
-        saveToHistory: true,
-        showThinking: false,
-      },
-      error: tabWizardState.error,
-      isGeneratingDocs: tabWizardState.isGeneratingDocs,
-      generatedDocuments: tabWizardState.generatedDocuments.map(doc => ({
-        filename: doc.filename,
-        content: doc.content,
-        taskCount: doc.taskCount,
-        savedPath: doc.savedPath,
-      })),
-      streamingContent: tabWizardState.streamingContent,
-      currentDocumentIndex: tabWizardState.currentDocumentIndex,
-      currentGeneratingIndex: tabWizardState.generationProgress?.current,
-      totalDocuments: tabWizardState.generationProgress?.total,
-      autoRunFolderPath: tabWizardState.projectPath
-        ? `${tabWizardState.projectPath}/Auto Run Docs`
-        : undefined,
-      // Full path to subfolder where documents are saved (e.g., "/path/Auto Run Docs/Maestro-Marketing")
-      subfolderPath: tabWizardState.subfolderPath ?? undefined,
-      agentSessionId: tabWizardState.agentSessionId ?? undefined,
-      // Track the subfolder name for tab naming after wizard completes
-      subfolderName: tabWizardState.subfolderName ?? undefined,
-      // Preserve thinking state - these are managed separately from hook state
-      showWizardThinking: currentTabWizardState?.showWizardThinking ?? false,
-      thinkingContent: currentTabWizardState?.thinkingContent ?? '',
-    };
-
+    // IMPORTANT: showWizardThinking and thinkingContent are preserved from the LATEST state
+    // inside the setSessions updater to avoid stale closure issues. These are managed by
+    // the toggle and onThinkingChunk callback, not by the hook.
     setSessions(prev => prev.map(s => {
       if (s.id !== activeSession.id) return s;
+
+      // Read the LATEST wizard state from prev, not from captured currentTabWizardState
+      // This prevents stale closure issues when the toggle or callback updates state
+      const latestTab = s.aiTabs.find(tab => tab.id === activeTabId);
+      const latestWizardState = latestTab?.wizardState;
+
+      const newWizardState = {
+        isActive: tabWizardState.isActive,
+        isWaiting: tabWizardState.isWaiting,
+        mode: tabWizardState.mode === 'ask' ? 'new' : tabWizardState.mode, // Map 'ask' to 'new' for session state
+        goal: tabWizardState.goal ?? undefined,
+        confidence: tabWizardState.confidence,
+        ready: tabWizardState.ready,
+        conversationHistory: tabWizardState.conversationHistory.map(msg => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          confidence: msg.confidence,
+          ready: msg.ready,
+        })),
+        previousUIState: tabWizardState.previousUIState ?? {
+          readOnlyMode: false,
+          saveToHistory: true,
+          showThinking: false,
+        },
+        error: tabWizardState.error,
+        isGeneratingDocs: tabWizardState.isGeneratingDocs,
+        generatedDocuments: tabWizardState.generatedDocuments.map(doc => ({
+          filename: doc.filename,
+          content: doc.content,
+          taskCount: doc.taskCount,
+          savedPath: doc.savedPath,
+        })),
+        streamingContent: tabWizardState.streamingContent,
+        currentDocumentIndex: tabWizardState.currentDocumentIndex,
+        currentGeneratingIndex: tabWizardState.generationProgress?.current,
+        totalDocuments: tabWizardState.generationProgress?.total,
+        autoRunFolderPath: tabWizardState.projectPath
+          ? `${tabWizardState.projectPath}/Auto Run Docs`
+          : undefined,
+        // Full path to subfolder where documents are saved (e.g., "/path/Auto Run Docs/Maestro-Marketing")
+        subfolderPath: tabWizardState.subfolderPath ?? undefined,
+        agentSessionId: tabWizardState.agentSessionId ?? undefined,
+        // Track the subfolder name for tab naming after wizard completes
+        subfolderName: tabWizardState.subfolderName ?? undefined,
+        // Preserve thinking state from LATEST state (inside updater) to avoid stale closure
+        showWizardThinking: latestWizardState?.showWizardThinking ?? false,
+        thinkingContent: latestWizardState?.thinkingContent ?? '',
+      };
+
       return {
         ...s,
         aiTabs: s.aiTabs.map(tab =>
@@ -4528,6 +4582,9 @@ You are taking over this conversation. Based on the context above, provide a bri
     getInlineWizardStateForTab,
     setSessions,
   ]);
+
+  // Track previous isGeneratingDocs state to detect completion (used in auto-complete effect below)
+  const prevIsGeneratingDocsRef = useRef<boolean>(false);
 
   // Handler for the built-in /history command
   // Requests a synopsis from the current agent session and saves to history
@@ -4742,6 +4799,65 @@ You are taking over this conversation. Based on the context above, provide a bri
     };
     addLogToActiveTab(activeSession.id, wizardLog);
   }, [activeSession, startInlineWizard, addLogToActiveTab]);
+
+  // Launch wizard in a new tab - triggered from Auto Run panel button
+  const handleLaunchWizardTab = useCallback(() => {
+    if (!activeSession) {
+      console.warn('[handleLaunchWizardTab] No active session');
+      return;
+    }
+
+    // Create a new tab first
+    const result = createTab(activeSession, {
+      name: 'Wizard',
+      saveToHistory: defaultSaveToHistory,
+      showThinking: defaultShowThinking,
+    });
+    if (!result) {
+      console.warn('[handleLaunchWizardTab] Failed to create new tab');
+      return;
+    }
+
+    const newTab = result.tab;
+    const updatedSession = result.session;
+
+    // Update sessions with new tab and switch to it
+    setSessions(prev => prev.map(s => {
+      if (s.id !== activeSession.id) return s;
+      return {
+        ...updatedSession,
+        activeTabId: newTab.id,
+      };
+    }));
+
+    // Capture UI state for the new tab (defaults since it's a fresh tab)
+    const currentUIState: PreviousUIState = {
+      readOnlyMode: false,
+      saveToHistory: defaultSaveToHistory,
+      showThinking: defaultShowThinking,
+    };
+
+    // Start the inline wizard in the new tab
+    // Use setTimeout to ensure state is updated before starting wizard
+    setTimeout(() => {
+      startInlineWizard(
+        undefined, // No args - start fresh
+        currentUIState,
+        activeSession.projectRoot || activeSession.cwd,
+        activeSession.toolType,
+        activeSession.name,
+        newTab.id,
+        activeSession.id
+      );
+
+      // Show a system log entry
+      const wizardLog = {
+        source: 'system' as const,
+        text: 'Starting wizard for Auto Run documents...',
+      };
+      addLogToTab(activeSession.id, wizardLog, newTab.id);
+    }, 0);
+  }, [activeSession, createTab, defaultSaveToHistory, defaultShowThinking, startInlineWizard, addLogToTab]);
 
   // Determine if wizard is active for the current tab
   // We need to check both the context state and that we're on the wizard's tab
@@ -5274,6 +5390,100 @@ You are taking over this conversation. Based on the context above, provide a bri
     autoRunDocumentList,
     startBatchRun,
   });
+
+  // Auto-complete the inline wizard when document generation finishes
+  // This eliminates the document review stage - we go straight back to conversation
+  useEffect(() => {
+    const wasGenerating = prevIsGeneratingDocsRef.current;
+    const isGenerating = inlineWizardIsGeneratingDocs;
+    prevIsGeneratingDocsRef.current = isGenerating;
+
+    // Check if generation just completed (was generating, now not)
+    if (wasGenerating && !isGenerating && inlineWizardGeneratedDocuments.length > 0) {
+      // Get the wizard state for the active tab
+      if (!activeSession) return;
+      const activeTab = getActiveTab(activeSession);
+      const wizardState = activeTab?.wizardState;
+      if (!wizardState) return;
+
+      console.log('[App] Auto-completing wizard after document generation');
+
+      // Convert wizard conversation history to log entries
+      const wizardLogEntries: LogEntry[] = wizardState.conversationHistory.map(msg => ({
+        id: `wizard-${msg.id}`,
+        timestamp: msg.timestamp,
+        source: msg.role === 'user' ? 'user' : 'ai',
+        text: msg.content,
+        delivered: true,
+      }));
+
+      // Create summary message with next steps
+      const generatedDocs = wizardState.generatedDocuments || [];
+      const totalTasks = generatedDocs.reduce((sum, doc) => sum + doc.taskCount, 0);
+      const docNames = generatedDocs.map(d => d.filename).join(', ');
+      const subfolderName = wizardState.subfolderName || '';
+
+      const summaryMessage: LogEntry = {
+        id: `wizard-summary-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'ai',
+        text: `## Playbook Created!\n\n` +
+          `Created ${generatedDocs.length} document${generatedDocs.length !== 1 ? 's' : ''} with ${totalTasks} task${totalTasks !== 1 ? 's' : ''}` +
+          (subfolderName ? ` in **${subfolderName}/**:\n` : ':\n') +
+          `${docNames}\n\n` +
+          `**Next steps:**\n` +
+          `1. Open the **Auto Run** tab in the right panel to view your playbook\n` +
+          `2. Review and edit tasks as needed\n` +
+          `3. Click **Run** to start executing tasks automatically\n\n` +
+          `You can continue chatting here to iterate on your playbook.`,
+        delivered: true,
+      };
+
+      // Derive tab name from the subfolder
+      const tabName = subfolderName ? `Playbook: ${subfolderName}` : 'Playbook';
+      const wizardAgentSessionId = wizardState.agentSessionId;
+      const activeTabId = activeTab.id;
+
+      // Update tab: add logs, switch agentSessionId, rename, and clear wizard state
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+
+        const updatedTabs = s.aiTabs.map(tab => {
+          if (tab.id !== activeTabId) return tab;
+          return {
+            ...tab,
+            logs: [...tab.logs, ...wizardLogEntries, summaryMessage],
+            agentSessionId: wizardAgentSessionId || tab.agentSessionId,
+            name: tabName,
+            wizardState: undefined,
+          };
+        });
+
+        return {
+          ...s,
+          aiTabs: updatedTabs,
+        };
+      }));
+
+      // Reset the useInlineWizard hook state
+      endInlineWizard();
+
+      // Refresh the Auto Run panel
+      handleAutoRunRefresh();
+
+      // Clear any input value
+      setInputValue('');
+    }
+  }, [
+    inlineWizardIsGeneratingDocs,
+    inlineWizardGeneratedDocuments.length,
+    activeSession,
+    getActiveTab,
+    setSessions,
+    endInlineWizard,
+    handleAutoRunRefresh,
+    setInputValue,
+  ]);
 
   // Handler for marketplace import completion - refresh document list
   const handleMarketplaceImportComplete = useCallback(async (folderName: string) => {
@@ -10576,6 +10786,7 @@ You are taking over this conversation. Based on the context above, provide a bri
             onOpenSessionAsTab={handleResumeSession}
             onOpenAboutModal={() => setAboutModalOpen(true)}
             onOpenMarketplace={handleOpenMarketplace}
+            onLaunchWizard={handleLaunchWizardTab}
             onFileClick={async (relativePath: string) => {
               if (!activeSession) return;
               const filename = relativePath.split('/').pop() || relativePath;

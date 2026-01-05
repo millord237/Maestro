@@ -302,9 +302,10 @@ function formatExistingDocsForPrompt(docs: ExistingDocument[]): string {
  * existing documents and the user's goal for extending/modifying plans.
  *
  * @param config Configuration for generation
+ * @param subfolder Optional subfolder name within Auto Run Docs
  * @returns The complete prompt for the agent
  */
-function generateDocumentPrompt(config: DocumentGenerationConfig): string {
+function generateDocumentPrompt(config: DocumentGenerationConfig, subfolder?: string): string {
   const { projectName, directoryPath, conversationHistory, mode, goal, existingDocuments } = config;
   const projectDisplay = projectName || 'this project';
 
@@ -322,11 +323,16 @@ function generateDocumentPrompt(config: DocumentGenerationConfig): string {
     ? wizardInlineIterateGenerationPrompt
     : wizardDocumentGenerationPrompt;
 
+  // Build the full Auto Run folder path (including subfolder if specified)
+  const autoRunFolderPath = subfolder
+    ? `${AUTO_RUN_FOLDER_NAME}/${subfolder}`
+    : AUTO_RUN_FOLDER_NAME;
+
   // Handle wizard-specific template variables
   let prompt = basePrompt
     .replace(/\{\{PROJECT_NAME\}\}/gi, projectDisplay)
     .replace(/\{\{DIRECTORY_PATH\}\}/gi, directoryPath)
-    .replace(/\{\{AUTO_RUN_FOLDER_NAME\}\}/gi, AUTO_RUN_FOLDER_NAME)
+    .replace(/\{\{AUTO_RUN_FOLDER_NAME\}\}/gi, autoRunFolderPath)
     .replace(/\{\{CONVERSATION_SUMMARY\}\}/gi, conversationSummary);
 
   // Handle iterate-mode specific placeholders
@@ -673,8 +679,8 @@ export async function generateInlineDocuments(
       throw new Error(`Agent ${agentType} is not available`);
     }
 
-    // Generate the prompt
-    const prompt = generateDocumentPrompt(config);
+    // Generate the prompt (include subfolder so agent writes to correct location)
+    const prompt = generateDocumentPrompt(config, subfolderName);
 
     callbacks?.onProgress?.('Generating Auto Run Documents...');
 

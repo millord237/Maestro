@@ -71,6 +71,8 @@ export interface ConversationCallbacks {
   onChunk?: OutputChunkCallback;
   /** Called with thinking content chunks from the AI (for showThinking display) */
   onThinkingChunk?: (content: string) => void;
+  /** Called when a tool execution event is received (for showThinking display) */
+  onToolExecution?: (toolEvent: { toolName: string; state?: unknown; timestamp: number }) => void;
   /** Called when response is complete */
   onComplete?: (result: SendMessageResult) => void;
   /** Called when an error occurs */
@@ -105,6 +107,8 @@ interface ConversationSession {
   exitListenerCleanup?: () => void;
   /** Cleanup function for thinking chunk listener */
   thinkingListenerCleanup?: () => void;
+  /** Cleanup function for tool execution listener */
+  toolExecutionListenerCleanup?: () => void;
   /** Timeout ID for response timeout (for cleanup) */
   responseTimeoutId?: NodeJS.Timeout;
 }
@@ -314,6 +318,19 @@ class ConversationManager {
           (sessionId: string, content: string) => {
             if (sessionId === this.session?.sessionId && content) {
               this.session.callbacks?.onThinkingChunk?.(content);
+            }
+          }
+        );
+      }
+
+      // Set up tool execution listener - shows tool use (Read, Write, etc.) when showThinking is enabled
+      // This is important because in batch mode, we don't get streaming assistant messages,
+      // but we DO get tool execution events which show what the agent is doing
+      if (this.session!.callbacks?.onToolExecution) {
+        this.session!.toolExecutionListenerCleanup = window.maestro.process.onToolExecution?.(
+          (sessionId: string, toolEvent: { toolName: string; state?: unknown; timestamp: number }) => {
+            if (sessionId === this.session?.sessionId) {
+              this.session.callbacks?.onToolExecution?.(toolEvent);
             }
           }
         );
@@ -575,6 +592,10 @@ class ConversationManager {
     if (this.session?.thinkingListenerCleanup) {
       this.session.thinkingListenerCleanup();
       this.session.thinkingListenerCleanup = undefined;
+    }
+    if (this.session?.toolExecutionListenerCleanup) {
+      this.session.toolExecutionListenerCleanup();
+      this.session.toolExecutionListenerCleanup = undefined;
     }
     if (this.session?.responseTimeoutId) {
       clearTimeout(this.session.responseTimeoutId);

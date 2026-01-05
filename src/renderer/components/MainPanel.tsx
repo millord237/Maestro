@@ -1124,8 +1124,9 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
             </div>
           ) : (
             <>
-              {/* Logs Area - Show DocumentGenerationView when generating docs OR when docs are generated, WizardConversationView when wizard is active, otherwise show TerminalOutput */}
+              {/* Logs Area - Show DocumentGenerationView while generating OR when docs exist (waiting for user to click Continue), WizardConversationView when wizard is active, otherwise show TerminalOutput */}
               {/* Note: wizardState is per-tab (stored on activeTab), not per-session */}
+              {/* User clicks "Continue" button in DocumentGenerationView which calls onWizardComplete to convert tab to normal session */}
               <div className="flex-1 overflow-hidden flex flex-col" data-tour="main-terminal">
               {activeSession.inputMode === 'ai' && (activeTab?.wizardState?.isGeneratingDocs || (activeTab?.wizardState?.generatedDocuments?.length ?? 0) > 0) ? (
                 <DocumentGenerationView
@@ -1159,6 +1160,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                   onClearError={props.onWizardClearError}
                   showThinking={activeTab.wizardState.showWizardThinking ?? false}
                   thinkingContent={activeTab.wizardState.thinkingContent ?? ''}
+                  toolExecutions={activeTab.wizardState.toolExecutions ?? []}
                   hasStartedGenerating={activeTab.wizardState.isGeneratingDocs || (activeTab.wizardState.generatedDocuments?.length ?? 0) > 0}
                 />
               ) : (

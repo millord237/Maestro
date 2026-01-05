@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo,
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
-import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle, RotateCcw, LayoutGrid, CheckSquare } from 'lucide-react';
+import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2, AlertTriangle, SkipForward, XCircle, RotateCcw, LayoutGrid, CheckSquare, Wand2 } from 'lucide-react';
 import { getEncoder, formatTokenCount } from '../utils/tokenCounter';
 import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
 import type { FileNode } from '../types/fileTree';
@@ -83,6 +83,9 @@ interface AutoRunProps {
 
   // Open marketplace modal
   onOpenMarketplace?: () => void;
+
+  // Launch inline wizard in new tab
+  onLaunchWizard?: () => void;
 
   // Shortcuts for displaying hotkey hints
   shortcuts?: Record<string, Shortcut>;
@@ -356,6 +359,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   sessionState,
   onExpand,
   onOpenMarketplace,
+  onLaunchWizard,
   shortcuts,
   hideTopControls = false,
 }, ref) {
@@ -1497,6 +1501,20 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           >
             <LayoutGrid className="w-3.5 h-3.5" />
             <span className="text-xs font-medium">Exchange</span>
+          </button>
+        )}
+        {/* Launch Wizard button */}
+        {onLaunchWizard && (
+          <button
+            onClick={onLaunchWizard}
+            className="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+            style={{
+              color: theme.colors.accent,
+              border: `1px solid ${theme.colors.border}`
+            }}
+            title="Launch In-Tab Wizard"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
           </button>
         )}
         {/* Help button */}

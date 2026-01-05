@@ -205,7 +205,14 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
         ctx.handleNavForward();
         trackShortcut('navForward');
       }
-      else if (ctx.isShortcut(e, 'toggleMode')) { e.preventDefault(); ctx.toggleInputMode(); trackShortcut('toggleMode'); }
+      else if (ctx.isShortcut(e, 'toggleMode')) {
+        // Disable mode toggle for wizard tabs - they have a unique input that doesn't support CLI switchover
+        const activeTab = ctx.activeSession?.aiTabs?.find((t: AITab) => t.id === ctx.activeSession?.activeTabId);
+        if (activeTab?.wizardState?.isActive) return;
+        e.preventDefault();
+        ctx.toggleInputMode();
+        trackShortcut('toggleMode');
+      }
       else if (ctx.isShortcut(e, 'quickAction')) {
         e.preventDefault();
         // Only open quick actions if there are agents

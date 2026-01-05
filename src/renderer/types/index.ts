@@ -146,6 +146,8 @@ export interface SessionWizardState {
   showWizardThinking?: boolean;
   /** Accumulated thinking content from the AI during conversation */
   thinkingContent?: string;
+  /** Tool execution events during conversation (shows what agent is doing) */
+  toolExecutions?: Array<{ toolName: string; state?: unknown; timestamp: number }>;
 }
 
 export interface Shortcut {

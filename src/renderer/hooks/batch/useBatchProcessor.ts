@@ -194,15 +194,16 @@ export function useBatchProcessor({
     batchRunStatesRef.current = batchReducer(batchRunStatesRef.current, action);
 
     // DEBUG: Log dispatch to trace state updates
-    if (action.type === 'START_BATCH' || action.type === 'UPDATE_PROGRESS' || action.type === 'SET_STOPPING') {
+    if (action.type === 'START_BATCH' || action.type === 'UPDATE_PROGRESS' || action.type === 'SET_STOPPING' || action.type === 'COMPLETE_BATCH') {
       const sessionId = action.sessionId;
       console.log('[BatchProcessor:dispatch]', action.type, {
         sessionId,
+        prevIsRunning: prevRef[sessionId]?.isRunning,
+        newIsRunning: batchRunStatesRef.current[sessionId]?.isRunning,
         prevIsStopping: prevRef[sessionId]?.isStopping,
         newIsStopping: batchRunStatesRef.current[sessionId]?.isStopping,
         prevCompleted: prevRef[sessionId]?.completedTasksAcrossAllDocs,
         newCompleted: batchRunStatesRef.current[sessionId]?.completedTasksAcrossAllDocs,
-        payload: action.type === 'UPDATE_PROGRESS' ? (action as { payload?: { completedTasksAcrossAllDocs?: number } }).payload?.completedTasksAcrossAllDocs : 'N/A',
       });
     }
   }, []);
@@ -228,12 +229,16 @@ export function useBatchProcessor({
   const errorResolutionRefs = useRef<Record<string, ErrorResolutionEntry>>({});
 
   // Track whether the component is still mounted to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(false);
 
-  // Cleanup effect: reject all error resolution promises and clear refs on unmount
+  // Mount/unmount effect: set isMountedRef on mount, clear on unmount
+  // This handles React 18 StrictMode double-render and ensures ref is always correct
   useEffect(() => {
+    isMountedRef.current = true;
+    console.log('[BatchProcessor] Mounted, isMountedRef set to true');
     return () => {
       isMountedRef.current = false;
+      console.log('[BatchProcessor] Unmounting, isMountedRef set to false');
 
       // Reject all pending error resolution promises with 'abort' to unblock any waiting async code
       // This prevents memory leaks from promises that would never resolve
@@ -506,7 +511,7 @@ export function useBatchProcessor({
     // Calculate initial total tasks across all documents
     let initialTotalTasks = 0;
     for (const doc of documents) {
-      const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename);
+      const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename, sshRemoteId);
       initialTotalTasks += taskCount;
     }
 
@@ -710,7 +715,7 @@ export function useBatchProcessor({
         const docEntry = documents[docIndex];
 
         // Read document and count tasks
-        let { taskCount: remainingTasks, content: docContent, checkedCount: docCheckedCount } = await readDocAndCountTasks(folderPath, docEntry.filename);
+        let { taskCount: remainingTasks, content: docContent, checkedCount: docCheckedCount } = await readDocAndCountTasks(folderPath, docEntry.filename, sshRemoteId);
         let docTasksTotal = remainingTasks;
 
         // Handle documents with no unchecked tasks
@@ -720,7 +725,7 @@ export function useBatchProcessor({
             // Use docCheckedCount from readDocAndCountTasks instead of calling countCheckedTasks again
             if (docCheckedCount > 0) {
               const resetContent = uncheckAllTasks(docContent);
-              await window.maestro.autorun.writeDoc(folderPath, docEntry.filename + '.md', resetContent);
+              await window.maestro.autorun.writeDoc(folderPath, docEntry.filename + '.md', resetContent, sshRemoteId);
               // Update task count in state
               const resetTaskCount = countUnfinishedTasks(resetContent);
               updateBatchStateAndBroadcastRef.current!(sessionId, prev => ({
@@ -755,7 +760,7 @@ export function useBatchProcessor({
             effectiveFilename = workingCopyPath;
 
             // Re-read the working copy for task counting
-            const workingCopyResult = await readDocAndCountTasks(folderPath, effectiveFilename);
+            const workingCopyResult = await readDocAndCountTasks(folderPath, effectiveFilename, sshRemoteId);
             remainingTasks = workingCopyResult.taskCount;
             docContent = workingCopyResult.content;
             docCheckedCount = workingCopyResult.checkedCount;
@@ -828,6 +833,7 @@ export function useBatchProcessor({
                 loopIteration: loopIteration + 1, // 1-indexed
                 effectiveCwd,
                 customPrompt: prompt,
+                sshRemoteId,
               },
               effectiveFilename, // Use working copy path for reset-on-completion docs
               docCheckedCount,
@@ -1067,7 +1073,7 @@ export function useBatchProcessor({
           // For loop mode, re-count tasks in the original document for next iteration
           // (original is unchanged, so it still has all unchecked tasks)
           if (loopEnabled) {
-            const { taskCount: resetTaskCount } = await readDocAndCountTasks(folderPath, docEntry.filename);
+            const { taskCount: resetTaskCount } = await readDocAndCountTasks(folderPath, docEntry.filename, sshRemoteId);
             updateBatchStateAndBroadcastRef.current!(sessionId, prev => ({
               ...prev,
               [sessionId]: {
@@ -1135,7 +1141,7 @@ export function useBatchProcessor({
         for (const doc of documents) {
           if (doc.resetOnCompletion) continue;
 
-          const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename);
+          const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename, sshRemoteId);
           if (taskCount > 0) {
             anyNonResetDocsHaveTasks = true;
             break;
@@ -1152,7 +1158,7 @@ export function useBatchProcessor({
       // Re-scan all documents to get fresh task counts for next loop (tasks may have been added/removed)
       let newTotalTasks = 0;
       for (const doc of documents) {
-        const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename);
+        const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename, sshRemoteId);
         newTotalTasks += taskCount;
       }
 
@@ -1372,43 +1378,41 @@ export function useBatchProcessor({
       }
     }
 
-    // Guard against state updates after unmount (async code may still be running)
-    if (isMountedRef.current) {
-      // Flush any pending debounced updates before completing the batch
-      // This ensures progress updates aren't lost if the batch completes quickly
-      console.log('[BatchProcessor:startBatchRun] Flushing debounced updates before COMPLETE_BATCH');
-      flushDebouncedUpdate(sessionId);
+    // Critical: Always flush debounced updates and dispatch COMPLETE_BATCH to clean up state.
+    // These operations are safe regardless of mount state - React handles reducer dispatches gracefully,
+    // and broadcasts are external calls that don't affect React state.
+    console.log('[BatchProcessor:startBatchRun] Flushing debounced updates before COMPLETE_BATCH');
+    flushDebouncedUpdate(sessionId);
 
-      // Reset state for this session using COMPLETE_BATCH action
-      // (not updateBatchStateAndBroadcast which only supports UPDATE_PROGRESS)
-      dispatch({
-        type: 'COMPLETE_BATCH',
+    // Reset state for this session using COMPLETE_BATCH action
+    // (not updateBatchStateAndBroadcast which only supports UPDATE_PROGRESS)
+    dispatch({
+      type: 'COMPLETE_BATCH',
+      sessionId,
+      finalSessionIds: agentSessionIds
+    });
+    // Broadcast state change to web clients
+    broadcastAutoRunState(sessionId, null);
+
+    // Call completion callback if provided (only if still mounted to avoid warnings)
+    if (isMountedRef.current && onComplete) {
+      onComplete({
         sessionId,
-        finalSessionIds: agentSessionIds
+        sessionName: session.name || session.cwd.split('/').pop() || 'Unknown',
+        completedTasks: totalCompletedTasks,
+        totalTasks: initialTotalTasks,
+        wasStopped,
+        elapsedTimeMs: totalElapsedMs
       });
-      // Broadcast state change
-      broadcastAutoRunState(sessionId, null);
+    }
 
-      // Call completion callback if provided
-      if (onComplete) {
-        onComplete({
-          sessionId,
-          sessionName: session.name || session.cwd.split('/').pop() || 'Unknown',
-          completedTasks: totalCompletedTasks,
-          totalTasks: initialTotalTasks,
-          wasStopped,
-          elapsedTimeMs: totalElapsedMs
-        });
-      }
-
-      // Process any queued items that were waiting during batch run
-      // This ensures pending user messages are processed after Auto Run ends
-      if (onProcessQueueAfterCompletion) {
-        // Use setTimeout to let state updates settle before processing queue
-        setTimeout(() => {
-          onProcessQueueAfterCompletion(sessionId);
-        }, 0);
-      }
+    // Process any queued items that were waiting during batch run
+    // This ensures pending user messages are processed after Auto Run ends
+    if (isMountedRef.current && onProcessQueueAfterCompletion) {
+      // Use setTimeout to let state updates settle before processing queue
+      setTimeout(() => {
+        onProcessQueueAfterCompletion(sessionId);
+      }, 0);
     }
 
     // Clean up time tracking, error resolution, and stop request flag
