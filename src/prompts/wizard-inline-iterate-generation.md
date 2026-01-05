@@ -133,6 +133,51 @@ Use sub-bullets to list multiple items within a compound task:
   - Real-time updates via WebSocket connection
 ```
 
+## Structured Output Artifacts
+
+When tasks produce documentation, research, notes, reports, or any knowledge artifacts, instruct the executing agent to create **structured Markdown files** that can be explored via Maestro's DocGraph viewer or tools like Obsidian.
+
+### Default Output Format
+
+Unless the user specifies otherwise, tasks that create non-code artifacts should specify:
+
+1. **YAML Front Matter** - Metadata header for filtering and querying:
+   ```yaml
+   ---
+   type: research | note | report | analysis | reference
+   title: Descriptive Title
+   created: YYYY-MM-DD
+   tags:
+     - relevant-tag
+   related:
+     - "[[Other-Document]]"
+   ---
+   ```
+
+2. **Wiki-Link Cross-References** - Connect related documents using `[[Document-Name]]` syntax
+
+3. **Logical Folder Structure** - Organize by entity type or domain
+
+### Writing Tasks That Produce Structured Output
+
+When a task involves research, documentation, or knowledge capture, include output format hints:
+
+```markdown
+- [ ] Research caching strategies and document findings:
+  - Compare Redis, Memcached, and in-memory options
+  - Create `docs/research/caching/` folder
+  - Write one markdown file per option with front matter (type: research)
+  - Include `[[Caching-Comparison]]` summary linking to each
+```
+
+Apply structured markdown output for:
+- Research findings and competitive analysis
+- Architecture decision records (ADRs)
+- Technical specifications and designs
+- Reference documentation and glossaries
+
+Do NOT apply for source code, config files, or generated assets.
+
 ## Output Format
 
 **Write each document directly to the Auto Run folder as you create or update it.**

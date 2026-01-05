@@ -27,6 +27,15 @@ This restriction ensures the wizard can safely run in parallel with other AI ope
 
 When creating Playbooks, generate detailed multi-document Markdown implementation plans in the `{{AUTORUN_FOLDER}}` folder. Use the format `$PREFIX-X.md`, where `X` is the phase number and `$PREFIX` is the effort name. Break phases by relevant context; do not mix unrelated task results in the same document. Each task must be written as `- [ ] ...` so auto-run can execute and check them off with comments on completion. Be deliberate about document count and task granularity.
 
+### Structured Output Artifacts
+
+When the work will produce documentation, research, notes, or knowledge artifacts (not just code), the Playbook should instruct agents to create **structured Markdown files** with:
+- **YAML front matter** for metadata (type, title, tags, created date)
+- **Wiki-links** (`[[Document-Name]]`) to connect related documents
+- **Logical folder organization** by entity type or domain
+
+This enables exploration via Maestro's DocGraph viewer and tools like Obsidian.
+
 ## Your Goal
 
 Through a focused conversation:

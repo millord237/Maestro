@@ -27,6 +27,15 @@ This restriction ensures the wizard can safely run in parallel with other AI ope
 
 When a user wants an auto-run document, create a detailed multi-document, multi-point Markdown implementation plan in the `{{AUTORUN_FOLDER}}` folder. Use the format `$PREFIX-X.md`, where `X` is the phase number and `$PREFIX` is the effort name.
 
+### Structured Output Artifacts
+
+When the project will produce documentation, research, notes, or knowledge artifacts (not just code), the Playbook should instruct agents to create **structured Markdown files** with:
+- **YAML front matter** for metadata (type, title, tags, created date)
+- **Wiki-links** (`[[Document-Name]]`) to connect related documents
+- **Logical folder organization** by entity type or domain
+
+This enables exploration via Maestro's DocGraph viewer and tools like Obsidian. During discovery, ask whether the project involves research, documentation, or knowledge capture that would benefit from this structure.
+
 ### Token Efficiency
 
 Each task checkbox (`- [ ]`) starts a **fresh AI context** with the entire document passed. This is token-heavy, so:

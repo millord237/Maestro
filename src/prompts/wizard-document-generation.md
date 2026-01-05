@@ -175,6 +175,82 @@ If one item in a group is significantly more complex, give it its own task:
 - Avoid tasks that require user decisions mid-execution
 - No documentation-only tasks (docs can be part of implementation tasks)
 
+## Structured Output Artifacts
+
+When tasks produce documentation, research, notes, reports, or any knowledge artifacts, instruct the executing agent to create **structured Markdown files** that can be explored via Maestro's DocGraph viewer or tools like Obsidian.
+
+### Default Output Format
+
+Unless the user specifies otherwise, tasks that create non-code artifacts should specify:
+
+1. **YAML Front Matter** - Metadata header for filtering and querying:
+   ```yaml
+   ---
+   type: research | note | report | analysis | reference
+   title: Descriptive Title
+   created: YYYY-MM-DD
+   tags:
+     - relevant-tag
+     - another-tag
+   related:
+     - "[[Other-Document]]"
+   ---
+   ```
+
+2. **Wiki-Link Cross-References** - Connect related documents using `[[Document-Name]]` syntax for graph navigation
+
+3. **Logical Folder Structure** - Organize by entity type or domain:
+   ```
+   docs/
+   ├── research/
+   │   ├── competitors/
+   │   │   ├── competitor-a.md
+   │   │   └── competitor-b.md
+   │   └── market-analysis.md
+   ├── architecture/
+   │   ├── system-overview.md
+   │   └── api-design.md
+   └── decisions/
+       └── adr-001-database-choice.md
+   ```
+
+### Writing Tasks That Produce Structured Output
+
+When a task involves research, documentation, or knowledge capture, include output format hints:
+
+```markdown
+- [ ] Research authentication providers and document findings:
+  - Compare Auth0, Clerk, and Supabase Auth
+  - Create `docs/research/auth-providers/` folder
+  - Write one markdown file per provider with front matter:
+    - type: research, tags: [auth, saas, comparison]
+  - Include `[[Auth-Provider-Comparison]]` summary linking to each
+  - Capture: pricing, features, SDK quality, limitations
+```
+
+```markdown
+- [ ] Document API design decisions:
+  - Create `docs/architecture/api-design.md` with front matter
+  - Use `[[Database-Schema]]` and `[[Auth-Flow]]` wiki-links to related docs
+  - Include decision rationale and alternatives considered
+```
+
+### When to Apply This Pattern
+
+Apply structured markdown output for:
+- Research findings and competitive analysis
+- Architecture decision records (ADRs)
+- Technical specifications and designs
+- Meeting notes and project journals
+- Reference documentation and glossaries
+- Any knowledge that should be explorable as a graph
+
+Do NOT apply for:
+- Source code files (use standard conventions)
+- Config files (JSON, YAML, etc.)
+- Generated assets (images, binaries)
+- Temporary/scratch files
+
 ## Output Format
 
 **Write each document directly to the Auto Run folder as you create it.**

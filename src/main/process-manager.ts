@@ -13,6 +13,7 @@ import type { AgentError, SshRemoteConfig } from '../shared/types';
 import { detectNodeVersionManagerBinPaths, expandTilde } from '../shared/pathUtils';
 import { getAgentCapabilities } from './agent-capabilities';
 import { shellEscapeForDoubleQuotes } from './utils/shell-escape';
+import { getExpandedEnv } from './utils/cliDetection';
 
 // Re-export parser types for consumers
 export type { ParsedEvent, AgentOutputParser } from './parsers';
@@ -1814,9 +1815,12 @@ export class ProcessManager extends EventEmitter {
     });
 
     // Spawn the SSH process
+    // Use getExpandedEnv() to ensure SSH can be found in packaged Electron apps
+    // where PATH may not include /usr/bin
+    const expandedEnv = getExpandedEnv();
     const childProcess = spawn('ssh', sshArgs, {
       env: {
-        ...process.env,
+        ...expandedEnv,
         // Ensure SSH can find the key and config
         HOME: process.env.HOME,
         SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
