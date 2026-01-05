@@ -197,47 +197,56 @@ describe('ProcessMonitor', () => {
     });
 
     it('should format minutes and seconds correctly', async () => {
-      const now = Date.now();
+      // Set a fixed time for this test to avoid flakiness
+      const fixedTime = 1700000000000;
+      vi.setSystemTime(fixedTime);
+
       const process = createActiveProcess({
-        startTime: now - 125000, // 2 min 5 sec ago
+        startTime: fixedTime - 125000, // 2 min 5 sec ago
       });
       getActiveProcessesMock().mockResolvedValue([process]);
 
       const session = createSession();
-      render(
-        <ProcessMonitor
-          theme={theme}
-          sessions={[session]}
-          groups={[]}
-          onClose={onClose}
-        />
-      );
+      await act(async () => {
+        render(
+          <ProcessMonitor
+            theme={theme}
+            sessions={[session]}
+            groups={[]}
+            onClose={onClose}
+          />
+        );
+      });
 
       await waitFor(() => {
         expect(screen.queryByText('Loading processes...')).not.toBeInTheDocument();
       });
 
-      // Should display minutes format - use flexible regex to allow for timing variations
-      // Accept any minute/second format since test execution timing can vary in parallel runs
-      expect(screen.getByText(/^\d+m \d+s$/)).toBeInTheDocument();
+      // Should display minutes format
+      expect(screen.getByText('2m 5s')).toBeInTheDocument();
     });
 
     it('should format hours and minutes correctly', async () => {
-      const now = Date.now();
+      // Set a fixed time for this test to avoid flakiness
+      const fixedTime = 1700000000000;
+      vi.setSystemTime(fixedTime);
+
       const process = createActiveProcess({
-        startTime: now - (3600000 + 300000), // 1 hour 5 min ago
+        startTime: fixedTime - (3600000 + 300000), // 1 hour 5 min ago
       });
       getActiveProcessesMock().mockResolvedValue([process]);
 
       const session = createSession();
-      render(
-        <ProcessMonitor
-          theme={theme}
-          sessions={[session]}
-          groups={[]}
-          onClose={onClose}
-        />
-      );
+      await act(async () => {
+        render(
+          <ProcessMonitor
+            theme={theme}
+            sessions={[session]}
+            groups={[]}
+            onClose={onClose}
+          />
+        );
+      });
 
       await waitFor(() => {
         expect(screen.queryByText('Loading processes...')).not.toBeInTheDocument();
@@ -248,21 +257,26 @@ describe('ProcessMonitor', () => {
     });
 
     it('should format days and hours correctly', async () => {
-      const now = Date.now();
+      // Set a fixed time for this test to avoid flakiness
+      const fixedTime = 1700000000000;
+      vi.setSystemTime(fixedTime);
+
       const process = createActiveProcess({
-        startTime: now - (86400000 + 7200000), // 1 day 2 hours ago
+        startTime: fixedTime - (86400000 + 7200000), // 1 day 2 hours ago
       });
       getActiveProcessesMock().mockResolvedValue([process]);
 
       const session = createSession();
-      render(
-        <ProcessMonitor
-          theme={theme}
-          sessions={[session]}
-          groups={[]}
-          onClose={onClose}
-        />
-      );
+      await act(async () => {
+        render(
+          <ProcessMonitor
+            theme={theme}
+            sessions={[session]}
+            groups={[]}
+            onClose={onClose}
+          />
+        );
+      });
 
       await waitFor(() => {
         expect(screen.queryByText('Loading processes...')).not.toBeInTheDocument();
