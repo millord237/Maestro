@@ -703,7 +703,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
                 type="button"
                 className="underline hover:opacity-80"
                 style={{ color: theme.colors.accent }}
-                onClick={() => window.maestro.shell.openExternal('https://github.com/pedramamini/Maestro#environment-variables')}
+                onClick={() => window.maestro.shell.openExternal('https://docs.runmaestro.ai/autorun-playbooks#environment-variables')}
               >
                 MAESTRO_SESSION_RESUMED
               </button>
