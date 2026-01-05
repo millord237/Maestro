@@ -155,9 +155,12 @@ export function extractMentions(
 ): string[] {
   const mentions: string[] = [];
 
-  // Match @Name patterns (alphanumeric, underscores, dots, and hyphens)
-  // Supports names like @RunMaestro.ai, @my-agent, @Maestro-Playbooks, etc.
-  const mentionPattern = /@([\w.-]+)/g;
+  // Match @Name patterns - captures characters after @ excluding:
+  // - Whitespace and @
+  // - Common punctuation that typically follows mentions: :,;!?()[]{}'"<>
+  // This supports names with emojis, Unicode characters, dots, hyphens, underscores, etc.
+  // Examples: @RunMaestro.ai, @my-agent, @✅-autorun-wizard, @日本語
+  const mentionPattern = /@([^\s@:,;!?()\[\]{}'"<>]+)/g;
   let match;
 
   while ((match = mentionPattern.exec(text)) !== null) {
@@ -183,9 +186,12 @@ export function extractMentions(
 export function extractAllMentions(text: string): string[] {
   const mentions: string[] = [];
 
-  // Match @Name patterns (alphanumeric, underscores, dots, and hyphens)
-  // Supports names like @RunMaestro.ai, @my-agent, etc.
-  const mentionPattern = /@([\w.-]+)/g;
+  // Match @Name patterns - captures characters after @ excluding:
+  // - Whitespace and @
+  // - Common punctuation that typically follows mentions: :,;!?()[]{}'"<>
+  // This supports names with emojis, Unicode characters, dots, hyphens, underscores, etc.
+  // Examples: @RunMaestro.ai, @my-agent, @✅-autorun-wizard, @日本語
+  const mentionPattern = /@([^\s@:,;!?()\[\]{}'"<>]+)/g;
   let match;
 
   while ((match = mentionPattern.exec(text)) !== null) {

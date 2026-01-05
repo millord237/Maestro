@@ -236,6 +236,26 @@ describe('group-chat-router', () => {
       const mentions = extractMentions('@Agent1 and @Agent2', participants);
       expect(mentions).toEqual(['Agent1', 'Agent2']);
     });
+
+    it('handles mentions with emojis', () => {
+      const participants: GroupChatParticipant[] = [
+        { name: '✅-autorun-wizard', agentId: 'claude-code', sessionId: '1', addedAt: 0 },
+        { name: '🚀-launcher', agentId: 'claude-code', sessionId: '2', addedAt: 0 },
+      ];
+
+      const mentions = extractMentions('@✅-autorun-wizard and @🚀-launcher please help', participants);
+      expect(mentions).toEqual(['✅-autorun-wizard', '🚀-launcher']);
+    });
+
+    it('handles mentions with mixed unicode characters', () => {
+      const participants: GroupChatParticipant[] = [
+        { name: '日本語-agent', agentId: 'claude-code', sessionId: '1', addedAt: 0 },
+        { name: 'émoji-✨-test', agentId: 'claude-code', sessionId: '2', addedAt: 0 },
+      ];
+
+      const mentions = extractMentions('@日本語-agent and @émoji-✨-test', participants);
+      expect(mentions).toEqual(['日本語-agent', 'émoji-✨-test']);
+    });
   });
 
   // ===========================================================================

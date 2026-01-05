@@ -22,6 +22,7 @@ import {
   ExternalLink,
   FolderOpen,
   HelpCircle,
+  Github,
 } from 'lucide-react';
 import type { Theme } from '../types';
 import type { MarketplacePlaybook } from '../../shared/marketplace-types';
@@ -1132,6 +1133,20 @@ export function MarketplaceModal({
                     </div>
                   )}
                 </div>
+                {/* GitHub submit button */}
+                <button
+                  onClick={() => {
+                    window.maestro.shell.openExternal(
+                      'https://github.com/pedramamini/Maestro-Playbooks'
+                    );
+                  }}
+                  className="px-2 py-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1.5 text-xs"
+                  title="Submit your playbook to the community"
+                  style={{ color: theme.colors.textDim }}
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  <span>Submit Playbook via GitHub</span>
+                </button>
               </div>
               <div className="flex items-center gap-3">
                 {/* Cache status */}
