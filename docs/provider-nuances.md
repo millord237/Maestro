@@ -13,7 +13,7 @@ Each AI provider has unique capabilities and limitations. Maestro adapts its UI 
 | Image attachments | ✅ New and resumed sessions |
 | Session resume | ✅ `--resume` flag |
 | Read-only mode | ✅ `--permission-mode plan` |
-| Slash commands | ✅ `/help`, `/compact`, etc. |
+| Slash commands | ⚠️ Batch-mode commands only ([details](/slash-commands#agent-native-commands)) |
 | Cost tracking | ✅ Full cost breakdown |
 | Model selection | ✅ `--model` flag (via custom CLI args) |
 
