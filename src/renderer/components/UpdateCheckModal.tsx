@@ -181,7 +181,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
       priority={MODAL_PRIORITIES.UPDATE_CHECK}
       onClose={onClose}
       customHeader={customHeader}
-      width={500}
+      width={625}
       maxHeight="80vh"
     >
       <div className="space-y-4 -my-2">
