@@ -4304,6 +4304,8 @@ You are taking over this conversation. Based on the context above, provide a bri
               // Delta mode for multi-device aggregation
               deltaMs: info.elapsedTimeMs,
               deltaRuns: 1,
+              // Client's total time for multi-device discrepancy detection
+              clientTotalTimeMs: updatedCumulativeTimeMs,
             }).then(result => {
             if (result.success) {
               // Update last submission timestamp
@@ -8839,7 +8841,7 @@ You are taking over this conversation. Based on the context above, provide a bri
     } else {
       setStagedImages(prev => prev.filter(i => i !== img));
     }
-  }, []);
+  }, [setStagedImages]);
   const handleCloseAutoRunSetup = useCallback(() => setAutoRunSetupModalOpen(false), []);
   const handleCloseBatchRunner = useCallback(() => setBatchRunnerModalOpen(false), []);
   const handleSaveBatchPrompt = useCallback((prompt: string) => {

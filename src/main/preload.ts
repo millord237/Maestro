@@ -1681,6 +1681,7 @@ contextBridge.exposeInMainWorld('maestro', {
 
   // Leaderboard API (runmaestro.ai integration)
   leaderboard: {
+    getInstallationId: () => ipcRenderer.invoke('leaderboard:getInstallationId') as Promise<string | null>,
     submit: (data: {
       email: string;
       displayName: string;
@@ -1707,6 +1708,9 @@ contextBridge.exposeInMainWorld('maestro', {
       // Delta mode for multi-device aggregation
       deltaMs?: number;
       deltaRuns?: number;
+      // Installation tracking for multi-device differentiation
+      installationId?: string; // Unique GUID per Maestro installation (auto-injected by main process)
+      clientTotalTimeMs?: number; // Client's self-proclaimed total time (for discrepancy detection)
     }) => ipcRenderer.invoke('leaderboard:submit', data),
     pollAuthStatus: (clientToken: string) =>
       ipcRenderer.invoke('leaderboard:pollAuthStatus', clientToken),

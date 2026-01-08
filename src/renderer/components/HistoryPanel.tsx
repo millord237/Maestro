@@ -416,8 +416,10 @@ const MAX_HISTORY_IN_MEMORY = 500;  // Maximum entries to keep in memory
 const _INITIAL_DISPLAY_COUNT = 50;  // Kept for reference, prefixed to satisfy linter
 
 // Estimated row heights for virtualization
-const ESTIMATED_ROW_HEIGHT = 120; // Base height for entry with footer
-const ESTIMATED_ROW_HEIGHT_SIMPLE = 90; // Height for entry without footer
+// Entry breakdown: p-3 (24px padding) + header (~28px) + mb-2 (8px) + summary (~54px for 3 lines)
+// Footer adds: mt-2 pt-2 border-t (~24px)
+const ESTIMATED_ROW_HEIGHT = 156; // Height for entry with footer
+const ESTIMATED_ROW_HEIGHT_SIMPLE = 120; // Height for entry without footer
 
 // Module-level storage for scroll positions (persists across session switches)
 const scrollPositionCache = new Map<string, number>();

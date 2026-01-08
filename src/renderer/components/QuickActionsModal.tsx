@@ -583,6 +583,23 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
         setQuickActionOpen(false);
       }
     }] : []),
+    { id: 'debugCopyInstallGuid', label: 'Debug: Copy Install GUID to Clipboard', subtext: 'Copy your unique installation identifier', action: async () => {
+      try {
+        const installationId = await window.maestro.leaderboard.getInstallationId();
+        if (installationId) {
+          await navigator.clipboard.writeText(installationId);
+          addToast({ type: 'success', title: 'Install GUID Copied', message: installationId });
+          console.log('[Debug] Installation GUID copied to clipboard:', installationId);
+        } else {
+          addToast({ type: 'error', title: 'Error', message: 'No installation GUID found' });
+          console.warn('[Debug] No installation GUID found');
+        }
+      } catch (err) {
+        addToast({ type: 'error', title: 'Error', message: 'Failed to copy installation GUID' });
+        console.error('[Debug] Failed to copy installation GUID:', err);
+      }
+      setQuickActionOpen(false);
+    } },
   ];
 
   const groupActions: QuickAction[] = [

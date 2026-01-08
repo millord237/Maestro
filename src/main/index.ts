@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
 import fsSync from 'fs';
+import crypto from 'crypto';
 import * as Sentry from '@sentry/electron/main';
 import { IPCMode } from '@sentry/electron/main';
 import { ProcessManager } from './process-manager';
@@ -159,6 +160,8 @@ interface MaestroSettings {
   // SSH remote execution
   sshRemotes: SshRemoteConfig[];
   defaultSshRemoteId: string | null;
+  // Unique installation identifier (generated once on first run)
+  installationId: string | null;
 }
 
 const store = new Store<MaestroSettings>({
@@ -197,8 +200,23 @@ const store = new Store<MaestroSettings>({
     webInterfaceCustomPort: 8080,
     sshRemotes: [],
     defaultSshRemoteId: null,
+    installationId: null,
   },
 });
+
+// Generate installation ID on first run (one-time generation)
+// This creates a unique identifier per Maestro installation for telemetry differentiation
+let installationId = store.get('installationId');
+if (!installationId) {
+  installationId = crypto.randomUUID();
+  store.set('installationId', installationId);
+  logger.info('Generated new installation ID', 'Startup', { installationId });
+}
+
+// Add installation ID to Sentry for error correlation across installations
+if (crashReportingEnabled && !isDevelopment) {
+  Sentry.setTag('installationId', installationId);
+}
 
 // Sessions store
 interface SessionsData {
@@ -2001,6 +2019,11 @@ function setupIpcHandlers() {
   // Leaderboard API
   // ==========================================================================
 
+  // Get the unique installation ID for this Maestro installation
+  ipcMain.handle('leaderboard:getInstallationId', async () => {
+    return store.get('installationId') || null;
+  });
+
   // Submit leaderboard entry to runmaestro.ai
   ipcMain.handle(
     'leaderboard:submit',
@@ -2025,6 +2048,9 @@ function setupIpcHandlers() {
         // Delta mode for multi-device aggregation
         deltaMs?: number;     // Time in milliseconds to ADD to server-side cumulative total
         deltaRuns?: number;   // Number of runs to ADD to server-side total runs count
+        // Installation tracking for multi-device differentiation
+        installationId?: string; // Unique GUID per Maestro installation
+        clientTotalTimeMs?: number; // Client's self-proclaimed total time (for discrepancy detection)
       }
     ): Promise<{
       success: boolean;
@@ -2053,13 +2079,25 @@ function setupIpcHandlers() {
       };
     }> => {
       try {
+        // Auto-inject installation ID if not provided
+        const installationId = data.installationId || store.get('installationId') || undefined;
+
         logger.info('Submitting leaderboard entry', 'Leaderboard', {
           displayName: data.displayName,
           email: data.email.substring(0, 3) + '***',
           badgeLevel: data.badgeLevel,
           hasClientToken: !!data.clientToken,
           hasAuthToken: !!data.authToken,
+          hasInstallationId: !!installationId,
+          hasClientTotalTime: !!data.clientTotalTimeMs,
         });
+
+        // Prepare submission data with server-expected field names
+        // Server expects 'installId' not 'installationId'
+        const submissionData = {
+          ...data,
+          installId: installationId, // Map to server field name
+        };
 
         const response = await fetch('https://runmaestro.ai/api/m4estr0/submit', {
           method: 'POST',
@@ -2067,7 +2105,7 @@ function setupIpcHandlers() {
             'Content-Type': 'application/json',
             'User-Agent': `Maestro/${app.getVersion()}`,
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(submissionData),
         });
 
         const result = await response.json() as {

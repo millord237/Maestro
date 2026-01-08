@@ -19,6 +19,9 @@ import { LayerStackProvider } from '../../../renderer/contexts/LayerStackContext
 vi.mock('lucide-react', () => ({
   Copy: () => <svg data-testid="copy-icon" />,
   Check: () => <svg data-testid="check-icon" />,
+  Trash2: () => <svg data-testid="trash-icon" />,
+  AlertTriangle: () => <svg data-testid="alert-triangle-icon" />,
+  X: () => <svg data-testid="x-icon" />,
 }));
 
 // Mock navigator.clipboard
@@ -903,6 +906,221 @@ describe('LightboxModal', () => {
       const image = screen.getByRole('img');
       // The src attribute is set to the string, not executed
       expect(image).toHaveAttribute('src', xssImage);
+    });
+  });
+
+  describe('delete functionality', () => {
+    it('shows delete button when onDelete is provided', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      expect(screen.getByTestId('trash-icon')).toBeInTheDocument();
+      expect(screen.getByText(/Delete to remove/)).toBeInTheDocument();
+    });
+
+    it('does not show delete button when onDelete is not provided', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+        />
+      );
+
+      expect(screen.queryByTestId('trash-icon')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Delete to remove/)).not.toBeInTheDocument();
+    });
+
+    it('opens confirmation modal when delete button is clicked', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      const deleteButton = screen.getByTitle('Delete image (Delete key)');
+      fireEvent.click(deleteButton);
+
+      // ConfirmModal should appear
+      expect(screen.getByText(/Are you sure you want to remove this image/)).toBeInTheDocument();
+    });
+
+    it('opens confirmation modal when Delete key is pressed', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.keyDown(dialog, { key: 'Delete' });
+
+      expect(screen.getByText(/Are you sure you want to remove this image/)).toBeInTheDocument();
+    });
+
+    it('calls onDelete and navigates to next image after confirmation', async () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      // Open confirm modal
+      const deleteButton = screen.getByTitle('Delete image (Delete key)');
+      fireEvent.click(deleteButton);
+
+      // Click confirm
+      const confirmButton = screen.getByRole('button', { name: /confirm/i });
+      fireEvent.click(confirmButton);
+
+      expect(onDelete).toHaveBeenCalledWith(mockImage);
+      // Should navigate to next image (mockImages[1]) since we deleted first
+      expect(onNavigate).toHaveBeenCalledWith(mockImages[1]);
+    });
+
+    it('calls onClose when deleting the only image', async () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={[mockImage]} // Only one image
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      // Open confirm modal
+      const deleteButton = screen.getByTitle('Delete image (Delete key)');
+      fireEvent.click(deleteButton);
+
+      // Click confirm
+      const confirmButton = screen.getByRole('button', { name: /confirm/i });
+      fireEvent.click(confirmButton);
+
+      expect(onDelete).toHaveBeenCalledWith(mockImage);
+      expect(onClose).toHaveBeenCalled();
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
+
+    it('navigates to previous image when deleting the last image', async () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImages[2]} // Last image
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      // Open confirm modal
+      const deleteButton = screen.getByTitle('Delete image (Delete key)');
+      fireEvent.click(deleteButton);
+
+      // Click confirm
+      const confirmButton = screen.getByRole('button', { name: /confirm/i });
+      fireEvent.click(confirmButton);
+
+      expect(onDelete).toHaveBeenCalledWith(mockImages[2]);
+      // Should navigate to previous image (mockImages[1]) since we deleted last
+      expect(onNavigate).toHaveBeenCalledWith(mockImages[1]);
+    });
+
+    it('closes confirmation modal when cancel is clicked', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+      const onDelete = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+          onDelete={onDelete}
+        />
+      );
+
+      // Open confirm modal
+      const deleteButton = screen.getByTitle('Delete image (Delete key)');
+      fireEvent.click(deleteButton);
+
+      expect(screen.getByText(/Are you sure you want to remove this image/)).toBeInTheDocument();
+
+      // Click cancel
+      const cancelButton = screen.getByRole('button', { name: /cancel/i });
+      fireEvent.click(cancelButton);
+
+      // Confirm modal should be closed
+      expect(screen.queryByText(/Are you sure you want to remove this image/)).not.toBeInTheDocument();
+      expect(onDelete).not.toHaveBeenCalled();
+    });
+
+    it('does not respond to Delete key when onDelete is not provided', () => {
+      const onClose = vi.fn();
+      const onNavigate = vi.fn();
+
+      renderWithLayerStack(
+        <LightboxModal
+          image={mockImage}
+          stagedImages={mockImages}
+          onClose={onClose}
+          onNavigate={onNavigate}
+        />
+      );
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.keyDown(dialog, { key: 'Delete' });
+
+      // No confirmation modal should appear
+      expect(screen.queryByText(/Are you sure you want to remove this image/)).not.toBeInTheDocument();
     });
   });
 });

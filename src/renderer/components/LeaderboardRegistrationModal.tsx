@@ -241,6 +241,8 @@ export function LeaderboardRegistrationModal({
         keyboardCoveragePercent,
         keyboardKeysUnlocked,
         keyboardTotalKeys,
+        // Client's total time for multi-device discrepancy detection
+        clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
       });
 
       if (result.success) {
@@ -322,6 +324,8 @@ export function LeaderboardRegistrationModal({
                 keyboardCoveragePercent,
                 keyboardKeysUnlocked,
                 keyboardTotalKeys,
+                // Client's total time for multi-device discrepancy detection
+                clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
               });
 
               if (retryResult.success) {
@@ -404,6 +408,8 @@ export function LeaderboardRegistrationModal({
         keyboardCoveragePercent,
         keyboardKeysUnlocked,
         keyboardTotalKeys,
+        // Client's total time for multi-device discrepancy detection
+        clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
       });
 
       if (result.success) {
