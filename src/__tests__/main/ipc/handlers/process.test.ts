@@ -1084,5 +1084,80 @@ describe('process IPC handlers', () => {
       // The remote path should be embedded in the SSH command args instead
       expect(spawnCall.args.join(' ')).toContain('claude');
     });
+
+    it('should use agent binaryName for SSH remote instead of local path (fixes Codex/Claude remote path issue)', async () => {
+      // This test verifies the fix for GitHub issue #161
+      // The bug: When executing agents on remote hosts, Maestro was using the locally-detected
+      // full path (e.g., /opt/homebrew/bin/codex on macOS) instead of the agent's binary name.
+      // This caused "zsh:1: no such file or directory: /opt/homebrew/bin/codex" on remote hosts.
+      // The fix: Use agent.binaryName (e.g., 'codex') for remote execution, letting the
+      // remote shell's PATH find the binary at its correct location.
+      const mockAgent = {
+        id: 'codex',
+        name: 'Codex',
+        binaryName: 'codex', // Just the binary name, without path
+        path: '/opt/homebrew/bin/codex', // Local macOS path
+        requiresPty: false,
+      };
+
+      mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
+      mockSettingsStore.get.mockImplementation((key, defaultValue) => {
+        if (key === 'sshRemotes') return [mockSshRemote];
+        return defaultValue;
+      });
+      mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+
+      const handler = handlers.get('process:spawn');
+      await handler!({} as any, {
+        sessionId: 'session-1',
+        toolType: 'codex',
+        cwd: '/home/devuser/project',
+        command: '/opt/homebrew/bin/codex', // Local path passed from renderer
+        args: ['exec', '--json'],
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
+      });
+
+      // The SSH command args should contain 'codex' (binaryName), NOT '/opt/homebrew/bin/codex'
+      const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
+      expect(spawnCall.command).toBe('ssh');
+
+      // The remote command in SSH args should use just 'codex', not the full local path
+      const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
+      expect(remoteCommandArg).toContain("'codex'");
+      expect(remoteCommandArg).not.toContain('/opt/homebrew/bin/codex');
+    });
+
+    it('should fall back to config.command when agent.binaryName is not available', async () => {
+      // Edge case: if agent lookup fails or binaryName is undefined, fall back to command
+      mockAgentDetector.getAgent.mockResolvedValue(null); // Agent not found
+      mockSettingsStore.get.mockImplementation((key, defaultValue) => {
+        if (key === 'sshRemotes') return [mockSshRemote];
+        return defaultValue;
+      });
+      mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+
+      const handler = handlers.get('process:spawn');
+      await handler!({} as any, {
+        sessionId: 'session-1',
+        toolType: 'unknown-agent',
+        cwd: '/home/devuser/project',
+        command: 'custom-agent', // When agent not found, this should be used
+        args: ['--help'],
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
+      });
+
+      const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
+      expect(spawnCall.command).toBe('ssh');
+
+      // Should fall back to config.command when agent.binaryName is unavailable
+      const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
+      expect(remoteCommandArg).toContain("'custom-agent'");
+    });
   });
 });

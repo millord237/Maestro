@@ -267,8 +267,14 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           // Build the SSH command that wraps the agent execution
           // The cwd is the local project path which may not exist on remote
           // Remote should use remoteWorkingDir from SSH config if set
+          //
+          // IMPORTANT: For remote execution, use the agent's binaryName (e.g., 'codex', 'claude')
+          // instead of the locally detected full path (e.g., '/opt/homebrew/bin/codex').
+          // The remote shell's PATH will resolve the binary correctly. This fixes the issue
+          // where Maestro would try to execute a local macOS path on a remote Linux host.
+          const remoteCommand = agent?.binaryName || config.command;
           const sshCommand = await buildSshCommand(sshResult.config, {
-            command: config.command,
+            command: remoteCommand,
             args: sshArgs,
             // Use the local cwd - the SSH command builder will handle remote path resolution
             // If SSH config has remoteWorkingDir, that takes precedence
@@ -286,7 +292,8 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
             remoteName: sshResult.config.name,
             remoteHost: sshResult.config.host,
             source: sshResult.source,
-            originalCommand: config.command,
+            localCommand: config.command,
+            remoteCommand: remoteCommand,
             sshCommand: `${sshCommand.command} ${sshCommand.args.join(' ')}`,
           });
         }
