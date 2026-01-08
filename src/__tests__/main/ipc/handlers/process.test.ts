@@ -1130,6 +1130,47 @@ describe('process IPC handlers', () => {
       expect(remoteCommandArg).not.toContain('/opt/homebrew/bin/codex');
     });
 
+    it('should use sessionCustomPath for SSH remote when user specifies a custom path', async () => {
+      // When user sets a custom path for a session, that path should be used on the remote
+      // This allows users to specify the exact binary location on the remote host
+      const mockAgent = {
+        id: 'codex',
+        name: 'Codex',
+        binaryName: 'codex',
+        path: '/opt/homebrew/bin/codex', // Local path
+        requiresPty: false,
+      };
+
+      mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
+      mockSettingsStore.get.mockImplementation((key, defaultValue) => {
+        if (key === 'sshRemotes') return [mockSshRemote];
+        return defaultValue;
+      });
+      mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+
+      const handler = handlers.get('process:spawn');
+      await handler!({} as any, {
+        sessionId: 'session-1',
+        toolType: 'codex',
+        cwd: '/home/devuser/project',
+        command: '/opt/homebrew/bin/codex',
+        args: ['exec', '--json'],
+        sessionCustomPath: '/usr/local/bin/codex', // User's custom path for the remote
+        sessionSshRemoteConfig: {
+          enabled: true,
+          remoteId: 'remote-1',
+        },
+      });
+
+      const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
+      expect(spawnCall.command).toBe('ssh');
+
+      // Should use the custom path, not binaryName or local path
+      const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
+      expect(remoteCommandArg).toContain("'/usr/local/bin/codex'");
+      expect(remoteCommandArg).not.toContain('/opt/homebrew/bin/codex');
+    });
+
     it('should fall back to config.command when agent.binaryName is not available', async () => {
       // Edge case: if agent lookup fails or binaryName is undefined, fall back to command
       mockAgentDetector.getAgent.mockResolvedValue(null); // Agent not found
