@@ -4182,6 +4182,16 @@ You are taking over this conversation. Based on the context above, provide a bri
     }));
   }, []);
 
+  /**
+   * Toggle bookmark state for a session.
+   * Used by keyboard shortcut (Cmd+Shift+B) and UI actions.
+   */
+  const toggleBookmark = useCallback((sessionId: string) => {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, bookmarked: !s.bookmarked } : s
+    ));
+  }, []);
+
   const handleOpenQueueBrowser = useCallback(() => {
     setQueueBrowserOpen(true);
   }, []);
@@ -9181,7 +9191,10 @@ You are taking over this conversation. Based on the context above, provide a bri
     activeBatchRunState,
 
     // Bulk tab close handlers
-    handleCloseAllTabs, handleCloseOtherTabs, handleCloseTabsLeft, handleCloseTabsRight
+    handleCloseAllTabs, handleCloseOtherTabs, handleCloseTabsLeft, handleCloseTabsRight,
+
+    // Session bookmark toggle
+    toggleBookmark
 
   };
 

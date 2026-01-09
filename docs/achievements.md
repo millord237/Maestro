@@ -77,9 +77,7 @@ Your current keyboard mastery level is shown in the status bar. Hover over the k
 
 ## Leaderboard
 
-Compare your progress with the global Maestro community on the **Leaderboard**. Access it via:
-- **Quick Actions**: `Cmd+K` → search "Leaderboard"
-- **Hamburger Menu**: Click → "Leaderboard"
+Opt-in to compete with fellow Maestro users on the global **Leaderboard** at [RunMaestro.ai](https://runmaestro.ai). Sign up to have your stats tracked and compete for top rankings.
 
 ![Leaderboard](./screenshots/leaderboard.png)
 
