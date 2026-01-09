@@ -416,10 +416,10 @@ const MAX_HISTORY_IN_MEMORY = 500;  // Maximum entries to keep in memory
 const _INITIAL_DISPLAY_COUNT = 50;  // Kept for reference, prefixed to satisfy linter
 
 // Estimated row heights for virtualization
-// Entry breakdown: p-3 (24px padding) + header (~28px) + mb-2 (8px) + summary (~54px for 3 lines)
-// Footer adds: mt-2 pt-2 border-t (~24px)
-const ESTIMATED_ROW_HEIGHT = 156; // Height for entry with footer
-const ESTIMATED_ROW_HEIGHT_SIMPLE = 120; // Height for entry without footer
+// Entry breakdown: p-3 (24px padding) + header (~24px) + mb-2 (8px) + summary (~48px for 3 lines)
+// Footer adds: mt-2 pt-2 border-t (~20px)
+const ESTIMATED_ROW_HEIGHT = 124; // Height for entry with footer
+const ESTIMATED_ROW_HEIGHT_SIMPLE = 104; // Height for entry without footer
 
 // Module-level storage for scroll positions (persists across session switches)
 const scrollPositionCache = new Map<string, number>();
@@ -648,7 +648,6 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
   const [graphLookbackHours, setGraphLookbackHours] = useState<number | null>(null); // default to "All time"
 
   const listRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const hasRestoredScroll = useRef<boolean>(false);
 
@@ -767,12 +766,14 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
   }, [allFilteredEntries]);
 
   // Create virtualizer
+  // Note: initialRect prevents flushSync during initial render by providing initial dimensions
   const virtualizer = useVirtualizer({
     count: allFilteredEntries.length,
     getScrollElement: () => listRef.current,
     estimateSize,
     overscan: 5, // Render 5 extra items above/below viewport
     gap: 12, // Space between items (equivalent to space-y-3)
+    initialRect: { width: 300, height: 600 }, // Provide initial dimensions to avoid flushSync during render
   });
 
   // Get virtual items for rendering
@@ -913,7 +914,12 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     }
   }, [activeFilters, searchFilter, setSelectedIndex]);
 
-  // Note: Scroll-to-selected is now handled by the virtualizer effect above
+  // Scroll selected item into view when selectedIndex changes (keyboard navigation)
+  useEffect(() => {
+    if (selectedIndex >= 0 && selectedIndex < allFilteredEntries.length) {
+      virtualizer.scrollToIndex(selectedIndex, { align: 'auto', behavior: 'smooth' });
+    }
+  }, [selectedIndex, allFilteredEntries.length, virtualizer]);
 
   // Keyboard navigation handler - combines hook handler with custom Escape/Cmd+F logic
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -1113,9 +1119,8 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
               return (
                 <div
                   key={entry.id || `entry-${virtualItem.index}`}
-                  ref={(el) => {
-                    itemRefs.current[virtualItem.index] = el;
-                  }}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
                   style={{
                     position: 'absolute',
                     top: 0,
