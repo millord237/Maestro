@@ -219,6 +219,17 @@ export function LeaderboardRegistrationModal({
         longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
       }
 
+      // IMPORTANT: For multi-device support, we use delta mode for stats updates.
+      // Profile-only submissions (when user has no new stats to report) should omit
+      // cumulative fields to avoid overwriting server totals from other devices.
+      // Stats are updated via delta mode only when Auto Runs complete in App.tsx.
+      //
+      // API behavior:
+      // - If deltaMs > 0 is present: Delta mode - adds to server totals
+      // - If only cumulativeTimeMs (no deltaMs): Legacy mode - REPLACES server value
+      //
+      // We send local cumulative as clientTotalTimeMs for discrepancy detection,
+      // but NOT as the primary cumulativeTimeMs to avoid overwrites.
       const result = await window.maestro.leaderboard.submit({
         email: email.trim(),
         displayName: displayName.trim(),
@@ -228,8 +239,10 @@ export function LeaderboardRegistrationModal({
         discordUsername: discordUsername.trim() || undefined,
         badgeLevel,
         badgeName,
-        cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
-        totalRuns: autoRunStats.totalRuns,
+        // Don't send cumulativeTimeMs/totalRuns in legacy mode - they would overwrite server!
+        // For new registrations, server creates with 0 values.
+        // For existing users, server keeps its current totals.
+        // Only send longestRun if it might be a new record (server can compare).
         longestRunMs: autoRunStats.longestRunMs || undefined,
         longestRunDate,
         theme: theme.id,
@@ -241,7 +254,7 @@ export function LeaderboardRegistrationModal({
         keyboardCoveragePercent,
         keyboardKeysUnlocked,
         keyboardTotalKeys,
-        // Client's total time for multi-device discrepancy detection
+        // Client's local total for discrepancy detection (server won't use this to overwrite)
         clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
       });
 
@@ -269,7 +282,8 @@ export function LeaderboardRegistrationModal({
           startPolling(clientToken);
         } else {
           setSubmitState('success');
-          setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
+          // Profile submitted - stats sync via delta mode from Auto Runs or Pull Down
+          setSuccessMessage('Profile submitted! Stats are synced via Auto Runs. Use "Pull Down" to sync from other devices.');
         }
       } else if (result.authTokenRequired) {
         // Email is confirmed but auth token is missing/invalid - try to recover it automatically
@@ -302,6 +316,7 @@ export function LeaderboardRegistrationModal({
                 longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
               }
 
+              // Retry submission with recovered token - same multi-device safe approach
               const retryResult = await window.maestro.leaderboard.submit({
                 email: email.trim(),
                 displayName: displayName.trim(),
@@ -311,8 +326,7 @@ export function LeaderboardRegistrationModal({
                 discordUsername: discordUsername.trim() || undefined,
                 badgeLevel,
                 badgeName,
-                cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
-                totalRuns: autoRunStats.totalRuns,
+                // Don't send cumulativeTimeMs/totalRuns - avoid overwriting server totals
                 longestRunMs: autoRunStats.longestRunMs || undefined,
                 longestRunDate,
                 theme: theme.id,
@@ -324,7 +338,7 @@ export function LeaderboardRegistrationModal({
                 keyboardCoveragePercent,
                 keyboardKeysUnlocked,
                 keyboardTotalKeys,
-                // Client's total time for multi-device discrepancy detection
+                // Client's local total for discrepancy detection
                 clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
               });
 
@@ -386,6 +400,7 @@ export function LeaderboardRegistrationModal({
         longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
       }
 
+      // Manual token submission - same multi-device safe approach
       const result = await window.maestro.leaderboard.submit({
         email: email.trim(),
         displayName: displayName.trim(),
@@ -395,8 +410,7 @@ export function LeaderboardRegistrationModal({
         discordUsername: discordUsername.trim() || undefined,
         badgeLevel,
         badgeName,
-        cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
-        totalRuns: autoRunStats.totalRuns,
+        // Don't send cumulativeTimeMs/totalRuns - avoid overwriting server totals
         longestRunMs: autoRunStats.longestRunMs || undefined,
         longestRunDate,
         theme: theme.id,
@@ -408,13 +422,13 @@ export function LeaderboardRegistrationModal({
         keyboardCoveragePercent,
         keyboardKeysUnlocked,
         keyboardTotalKeys,
-        // Client's total time for multi-device discrepancy detection
+        // Client's local total for discrepancy detection
         clientTotalTimeMs: autoRunStats.cumulativeTimeMs,
       });
 
       if (result.success) {
         setSubmitState('success');
-        setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
+        setSuccessMessage('Your profile has been updated! Use "Pull Down" to sync stats from the server.');
       } else {
         setSubmitState('error');
         setErrorMessage(result.error || result.message || 'Submission failed. Please check your auth token.');

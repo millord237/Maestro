@@ -1350,8 +1350,10 @@ interface MaestroAPI {
       discordUsername?: string;
       badgeLevel: number;
       badgeName: string;
-      cumulativeTimeMs: number;
-      totalRuns: number;
+      // Stats fields are optional for profile-only submissions (multi-device safe)
+      // When omitted, server keeps existing values instead of overwriting
+      cumulativeTimeMs?: number;
+      totalRuns?: number;
       longestRunMs?: number;
       longestRunDate?: string;
       currentRunMs?: number;

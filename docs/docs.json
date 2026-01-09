@@ -65,6 +65,7 @@
               "usage-dashboard",
               "autorun-playbooks",
               "playbook-exchange",
+              "symphony",
               "git-worktrees",
               "group-chat",
               "remote-access",

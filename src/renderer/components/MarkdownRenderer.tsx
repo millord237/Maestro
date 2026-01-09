@@ -15,6 +15,9 @@ import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
 // LocalImage - Loads local images via IPC
 // ============================================================================
 
+// Module-level cache for local images to prevent flicker on re-render
+const localImageCache = new Map<string, string>();
+
 interface LocalImageProps {
   src?: string;
   alt?: string;
@@ -23,30 +26,54 @@ interface LocalImageProps {
   sshRemoteId?: string; // SSH remote ID for remote file operations
 }
 
+// Helper to compute initial image state synchronously from cache
+// This prevents flickering when ReactMarkdown rebuilds the component tree
+function getLocalImageInitialState(src: string | undefined) {
+  if (!src) {
+    return { dataUrl: null, loading: false };
+  }
+
+  // Data URLs are ready immediately
+  if (src.startsWith('data:')) {
+    return { dataUrl: src, loading: false };
+  }
+
+  // HTTP URLs are ready immediately (browser handles loading)
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    return { dataUrl: src, loading: false };
+  }
+
+  // Check cache for file paths
+  let filePath = src;
+  if (src.startsWith('file://')) {
+    filePath = decodeURIComponent(src.replace('file://', ''));
+  }
+
+  if (localImageCache.has(filePath)) {
+    return { dataUrl: localImageCache.get(filePath)!, loading: false };
+  }
+
+  // Need to load
+  return { dataUrl: null, loading: true };
+}
+
 const LocalImage = memo(({ src, alt, theme, width, sshRemoteId }: LocalImageProps) => {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  // Compute initial state synchronously from cache to prevent flicker
+  const initialState = useMemo(() => getLocalImageInitialState(src), [src]);
+
+  const [dataUrl, setDataUrl] = useState<string | null>(initialState.dataUrl);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialState.loading);
 
   useEffect(() => {
-    setError(null);
-    setDataUrl(null);
+    // If we already have data from cache, skip loading
+    if (initialState.dataUrl) {
+      return;
+    }
+
+    let isStale = false;
 
     if (!src) {
-      setLoading(false);
-      return;
-    }
-
-    // If it's already a data URL, use it directly
-    if (src.startsWith('data:')) {
-      setDataUrl(src);
-      setLoading(false);
-      return;
-    }
-
-    // If it's an HTTP(S) URL, use it directly (browser will handle)
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-      setDataUrl(src);
       setLoading(false);
       return;
     }
@@ -57,10 +84,18 @@ const LocalImage = memo(({ src, alt, theme, width, sshRemoteId }: LocalImageProp
       filePath = decodeURIComponent(src.replace('file://', ''));
     }
 
-    setLoading(true);
+    // Double-check cache
+    if (localImageCache.has(filePath)) {
+      setDataUrl(localImageCache.get(filePath)!);
+      setLoading(false);
+      return;
+    }
+
     window.maestro.fs.readFile(filePath, sshRemoteId)
       .then((result) => {
+        if (isStale) return;
         if (result.startsWith('data:')) {
+          localImageCache.set(filePath, result);
           setDataUrl(result);
         } else {
           setError('Invalid image data');
@@ -68,10 +103,15 @@ const LocalImage = memo(({ src, alt, theme, width, sshRemoteId }: LocalImageProp
         setLoading(false);
       })
       .catch((err) => {
+        if (isStale) return;
         setError(`Failed to load image: ${err.message || 'Unknown error'}`);
         setLoading(false);
       });
-  }, [src, sshRemoteId]);
+
+    return () => {
+      isStale = true;
+    };
+  }, [src, sshRemoteId, initialState.dataUrl]);
 
   if (loading) {
     return (

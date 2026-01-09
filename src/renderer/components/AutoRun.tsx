@@ -104,8 +104,56 @@ export interface AutoRunHandle {
   getCompletedTaskCount: () => number;
 }
 
+// Helper to compute initial image state synchronously from cache
+// This prevents flickering when ReactMarkdown rebuilds the component tree
+function getInitialImageState(src: string | undefined, folderPath: string | null) {
+  if (!src) {
+    return { dataUrl: null, loading: false, filename: null };
+  }
+
+  const decodedSrc = decodeURIComponent(src);
+
+  // Check cache for relative paths
+  if (decodedSrc.startsWith('images/') && folderPath) {
+    const cacheKey = `${folderPath}:${decodedSrc}`;
+    if (imageCache.has(cacheKey)) {
+      return {
+        dataUrl: imageCache.get(cacheKey)!,
+        loading: false,
+        filename: decodedSrc.split('/').pop() || decodedSrc,
+      };
+    }
+  }
+
+  // Data URLs are ready immediately
+  if (src.startsWith('data:')) {
+    return { dataUrl: src, loading: false, filename: null };
+  }
+
+  // HTTP URLs are ready immediately (browser handles loading)
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    return { dataUrl: src, loading: false, filename: null };
+  }
+
+  // Check cache for other relative paths
+  if (folderPath) {
+    const cacheKey = `${folderPath}:${src}`;
+    if (imageCache.has(cacheKey)) {
+      return {
+        dataUrl: imageCache.get(cacheKey)!,
+        loading: false,
+        filename: src.split('/').pop() || null,
+      };
+    }
+  }
+
+  // Need to load - return loading state
+  return { dataUrl: null, loading: true, filename: src.split('/').pop() || null };
+}
+
 // Custom image component that loads images from the Auto Run folder or external URLs
-function AttachmentImage({
+// Memoized to prevent re-renders and image reloading when parent updates
+const AttachmentImage = memo(function AttachmentImage({
   src,
   alt,
   folderPath,
@@ -120,12 +168,30 @@ function AttachmentImage({
   theme: any;
   onImageClick?: (filename: string) => void;
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  // Compute initial state synchronously from cache to prevent flicker
+  const initialState = useMemo(
+    () => getInitialImageState(src, folderPath),
+    [src, folderPath]
+  );
+
+  const [dataUrl, setDataUrl] = useState<string | null>(initialState.dataUrl);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [filename, setFilename] = useState<string | null>(null);
+  const [loading, setLoading] = useState(initialState.loading);
+  const [filename, setFilename] = useState<string | null>(initialState.filename);
+
+  // Use ref for onImageClick to avoid re-running effect when callback changes
+  const onImageClickRef = useRef(onImageClick);
+  onImageClickRef.current = onImageClick;
 
   useEffect(() => {
+    // If we already have data from cache (initialState), skip loading
+    if (initialState.dataUrl) {
+      return;
+    }
+
+    // Track whether this effect is stale (component unmounted or src changed)
+    let isStale = false;
+
     if (!src) {
       setLoading(false);
       return;
@@ -140,7 +206,7 @@ function AttachmentImage({
       setFilename(fname);
       const cacheKey = `${folderPath}:${decodedSrc}`;
 
-      // Check cache first
+      // Double-check cache (in case it was populated after initial render)
       if (imageCache.has(cacheKey)) {
         setDataUrl(imageCache.get(cacheKey)!);
         setLoading(false);
@@ -151,6 +217,7 @@ function AttachmentImage({
       const absolutePath = `${folderPath}/${decodedSrc}`;
       window.maestro.fs.readFile(absolutePath, sshRemoteId)
         .then((result) => {
+          if (isStale) return;
           if (result.startsWith('data:')) {
             imageCache.set(cacheKey, result);
             setDataUrl(result);
@@ -160,24 +227,16 @@ function AttachmentImage({
           setLoading(false);
         })
         .catch((err) => {
+          if (isStale) return;
           setError(`Failed to load image: ${err.message || 'Unknown error'}`);
           setLoading(false);
         });
-    } else if (src.startsWith('data:')) {
-      // Already a data URL
-      setDataUrl(src);
-      setFilename(null);
-      setLoading(false);
-    } else if (src.startsWith('http://') || src.startsWith('https://')) {
-      // External URL - just use it directly
-      setDataUrl(src);
-      setFilename(null);
-      setLoading(false);
     } else if (src.startsWith('/')) {
       // Absolute file path - load via IPC
       setFilename(src.split('/').pop() || null);
       window.maestro.fs.readFile(src, sshRemoteId)
         .then((result) => {
+          if (isStale) return;
           if (result.startsWith('data:')) {
             setDataUrl(result);
           } else {
@@ -186,16 +245,30 @@ function AttachmentImage({
           setLoading(false);
         })
         .catch((err) => {
+          if (isStale) return;
           setError(`Failed to load image: ${err.message || 'Unknown error'}`);
           setLoading(false);
         });
     } else {
       // Other relative path - try to load as file from folderPath if available
       setFilename(src.split('/').pop() || null);
+      const cacheKey = folderPath ? `${folderPath}:${src}` : src;
+
+      // Double-check cache
+      if (imageCache.has(cacheKey)) {
+        setDataUrl(imageCache.get(cacheKey)!);
+        setLoading(false);
+        return;
+      }
+
       const pathToLoad = folderPath ? `${folderPath}/${src}` : src;
       window.maestro.fs.readFile(pathToLoad, sshRemoteId)
         .then((result) => {
+          if (isStale) return;
           if (result.startsWith('data:')) {
+            if (folderPath) {
+              imageCache.set(cacheKey, result);
+            }
             setDataUrl(result);
           } else {
             setError('Invalid image data');
@@ -203,11 +276,16 @@ function AttachmentImage({
           setLoading(false);
         })
         .catch((err) => {
+          if (isStale) return;
           setError(`Failed to load image: ${err.message || 'Unknown error'}`);
           setLoading(false);
         });
     }
-  }, [src, folderPath, sshRemoteId]);
+
+    return () => {
+      isStale = true;
+    };
+  }, [src, folderPath, sshRemoteId, initialState.dataUrl]);
 
   if (loading) {
     return (
@@ -243,7 +321,7 @@ function AttachmentImage({
   return (
     <span
       className="inline-block align-middle mx-1 my-1 cursor-pointer group relative"
-      onClick={() => onImageClick?.(decodedSrcForClick)}
+      onClick={() => onImageClickRef.current?.(decodedSrcForClick)}
       title={filename ? `Click to enlarge: ${filename}` : 'Click to enlarge'}
     >
       <img
@@ -266,7 +344,7 @@ function AttachmentImage({
       </span>
     </span>
   );
-}
+})
 
 // Image preview thumbnail for staged images in edit mode
 function ImagePreview({
@@ -794,20 +872,39 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     }
   };
 
-  const handlePreviewScroll = () => {
+  // Debounced preview scroll handler to avoid triggering re-renders on every scroll event
+  // We only save scroll position to ref immediately (for local use), but delay parent notification
+  const previewScrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlePreviewScroll = useCallback(() => {
     if (previewRef.current) {
-      // Save to ref for persistence across re-renders
+      // Save to ref immediately for local persistence
       previewScrollPosRef.current = previewRef.current.scrollTop;
-      if (onStateChange) {
-        onStateChange({
-          mode,
-          cursorPosition: textareaRef.current?.selectionStart || 0,
-          editScrollPos: textareaRef.current?.scrollTop || 0,
-          previewScrollPos: previewRef.current.scrollTop
-        });
+
+      // Debounce the parent state update to avoid cascading re-renders
+      if (previewScrollDebounceRef.current) {
+        clearTimeout(previewScrollDebounceRef.current);
       }
+      previewScrollDebounceRef.current = setTimeout(() => {
+        if (onStateChange && previewRef.current) {
+          onStateChange({
+            mode,
+            cursorPosition: textareaRef.current?.selectionStart || 0,
+            editScrollPos: textareaRef.current?.scrollTop || 0,
+            previewScrollPos: previewRef.current.scrollTop
+          });
+        }
+      }, 500); // Only notify parent after 500ms of no scrolling
     }
-  };
+  }, [mode, onStateChange]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (previewScrollDebounceRef.current) {
+        clearTimeout(previewScrollDebounceRef.current);
+      }
+    };
+  }, []);
 
   // Handle refresh for empty state with animation
   const handleEmptyStateRefresh = useCallback(async () => {

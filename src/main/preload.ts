@@ -1691,8 +1691,10 @@ contextBridge.exposeInMainWorld('maestro', {
       discordUsername?: string;
       badgeLevel: number;
       badgeName: string;
-      cumulativeTimeMs: number;
-      totalRuns: number;
+      // Stats fields are optional for profile-only submissions (multi-device safe)
+      // When omitted, server keeps existing values instead of overwriting
+      cumulativeTimeMs?: number;
+      totalRuns?: number;
       longestRunMs?: number;
       longestRunDate?: string;
       currentRunMs?: number;
@@ -2901,8 +2903,9 @@ export interface MaestroAPI {
       discordUsername?: string;
       badgeLevel: number;
       badgeName: string;
-      cumulativeTimeMs: number;
-      totalRuns: number;
+      // Stats fields are optional for profile-only submissions (multi-device safe)
+      cumulativeTimeMs?: number;
+      totalRuns?: number;
       longestRunMs?: number;
       longestRunDate?: string;
       currentRunMs?: number;
@@ -2915,6 +2918,10 @@ export interface MaestroAPI {
       keyboardCoveragePercent?: number;
       keyboardKeysUnlocked?: number;
       keyboardTotalKeys?: number;
+      // Delta mode for multi-device aggregation
+      deltaMs?: number;
+      deltaRuns?: number;
+      clientTotalTimeMs?: number;
     }) => Promise<{
       success: boolean;
       message: string;

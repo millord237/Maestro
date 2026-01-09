@@ -2024,6 +2024,9 @@ describe('Scroll Position Persistence', () => {
     const preview = screen.getByTestId('react-markdown').parentElement!;
     fireEvent.scroll(preview);
 
+    // onStateChange is debounced by 500ms, so we need to advance timers
+    await vi.advanceTimersByTimeAsync(500);
+
     // onStateChange should be called with scroll position
     expect(onStateChange).toHaveBeenCalled();
   });

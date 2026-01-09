@@ -4309,6 +4309,11 @@ You are taking over this conversation. Based on the context above, provide a bri
           if (!leaderboardRegistration.authToken) {
             console.warn('Leaderboard submission skipped: no auth token');
           } else {
+            // Auto Run completion submission: Use delta mode for multi-device aggregation
+            // API behavior:
+            // - If deltaMs > 0 is present: Server adds deltaMs to running total (delta mode)
+            // - If only cumulativeTimeMs (no deltaMs): Server replaces value (legacy mode)
+            // We send deltaMs to trigger delta mode, ensuring proper aggregation across devices.
             window.maestro.leaderboard.submit({
               email: leaderboardRegistration.email,
               displayName: leaderboardRegistration.displayName,
@@ -4317,6 +4322,7 @@ You are taking over this conversation. Based on the context above, provide a bri
               linkedinHandle: leaderboardRegistration.linkedinHandle,
               badgeLevel: updatedBadgeLevel,
               badgeName: updatedBadgeName,
+              // Legacy fields (server ignores when deltaMs is present)
               cumulativeTimeMs: updatedCumulativeTimeMs,
               totalRuns: updatedTotalRuns,
               longestRunMs: updatedLongestRunMs,
@@ -4324,10 +4330,10 @@ You are taking over this conversation. Based on the context above, provide a bri
               currentRunMs: info.elapsedTimeMs,
               theme: activeThemeId,
               authToken: leaderboardRegistration.authToken,
-              // Delta mode for multi-device aggregation
+              // Delta mode: Server adds these to running totals
               deltaMs: info.elapsedTimeMs,
               deltaRuns: 1,
-              // Client's total time for multi-device discrepancy detection
+              // Client's local total for discrepancy detection
               clientTotalTimeMs: updatedCumulativeTimeMs,
             }).then(result => {
             if (result.success) {

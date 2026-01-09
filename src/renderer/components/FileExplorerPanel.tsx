@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown, ChevronUp, Folder, RefreshCw, Check, Eye, Ey
 import type { Session, Theme, FocusArea } from '../types';
 import type { FileNode } from '../types/fileTree';
 import type { FileTreeChanges } from '../utils/fileExplorer';
+import { removeNodeFromTree, renameNodeInTree, findNodeInTree, countNodesInTree } from '../utils/fileExplorer';
 import { getFileIcon } from '../utils/theme';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -544,14 +545,38 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
       const parentDir = renameModal.absolutePath.substring(0, renameModal.absolutePath.lastIndexOf('/'));
       const newPath = `${parentDir}/${newName}`;
       await window.maestro.fs.rename(renameModal.absolutePath, newPath, sshRemoteId);
+
+      // Update tree locally instead of full refresh
+      const newTree = renameNodeInTree(session.fileTree || [], renameModal.path, newName);
+
+      // Calculate the new path for expanded folder updates
+      const oldPath = renameModal.path;
+      const pathParts = oldPath.split('/');
+      pathParts[pathParts.length - 1] = newName;
+      const newRelativePath = pathParts.join('/');
+
+      setSessions(prev => prev.map(s => {
+        if (s.id !== session.id) return s;
+        return {
+          ...s,
+          fileTree: newTree,
+          // Update expanded folder paths if renamed item was a folder
+          fileExplorerExpanded: renameModal.node.type === 'folder'
+            ? (s.fileExplorerExpanded || []).map(p => {
+                if (p === oldPath) return newRelativePath;
+                if (p.startsWith(oldPath + '/')) return newRelativePath + p.slice(oldPath.length);
+                return p;
+              })
+            : s.fileExplorerExpanded
+        };
+      }));
+
       setRenameModal(null);
-      // Refresh file tree
-      refreshFileTree(session.id);
       onShowFlash?.(`Renamed to "${newName}"`);
     } catch (error) {
       setRenameError(error instanceof Error ? error.message : 'Rename failed');
     }
-  }, [renameModal, renameValue, refreshFileTree, session.id, onShowFlash, sshRemoteId]);
+  }, [renameModal, renameValue, session.id, session.fileTree, onShowFlash, sshRemoteId, setSessions]);
 
   // Open delete confirmation modal
   const handleOpenDelete = useCallback(async () => {
@@ -585,16 +610,52 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
     setIsDeleting(true);
     try {
       await window.maestro.fs.delete(deleteModal.absolutePath, { sshRemoteId });
+
+      // Get the node being deleted to count its contents for stats update
+      const deletedNode = findNodeInTree(session.fileTree || [], deleteModal.path);
+      let deletedFileCount = 0;
+      let deletedFolderCount = 0;
+
+      if (deletedNode) {
+        if (deletedNode.type === 'folder') {
+          deletedFolderCount = 1;
+          if (deletedNode.children) {
+            const childCounts = countNodesInTree(deletedNode.children);
+            deletedFileCount = childCounts.fileCount;
+            deletedFolderCount += childCounts.folderCount;
+          }
+        } else {
+          deletedFileCount = 1;
+        }
+      }
+
+      // Update tree locally instead of full refresh
+      const newTree = removeNodeFromTree(session.fileTree || [], deleteModal.path);
+      setSessions(prev => prev.map(s => {
+        if (s.id !== session.id) return s;
+        return {
+          ...s,
+          fileTree: newTree,
+          fileTreeStats: s.fileTreeStats ? {
+            ...s.fileTreeStats,
+            fileCount: Math.max(0, s.fileTreeStats.fileCount - deletedFileCount),
+            folderCount: Math.max(0, s.fileTreeStats.folderCount - deletedFolderCount),
+          } : undefined,
+          // Also remove from expanded folders if it was a folder
+          fileExplorerExpanded: deleteModal.node.type === 'folder'
+            ? (s.fileExplorerExpanded || []).filter(p => !p.startsWith(deleteModal.path))
+            : s.fileExplorerExpanded
+        };
+      }));
+
       setDeleteModal(null);
-      // Refresh file tree
-      refreshFileTree(session.id);
       onShowFlash?.(`Deleted "${deleteModal.node.name}"`);
     } catch (error) {
       onShowFlash?.(`Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsDeleting(false);
     }
-  }, [deleteModal, refreshFileTree, session.id, onShowFlash, sshRemoteId]);
+  }, [deleteModal, session.id, session.fileTree, onShowFlash, sshRemoteId, setSessions]);
 
   // Close context menu on Escape key
   useEffect(() => {

@@ -261,11 +261,39 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
                         <span className="font-mono font-bold text-sm" style={{ color: theme.colors.accent }}>
                           {release.tag_name}
                         </span>
-                        {release.name && release.name !== release.tag_name && (
-                          <span className="text-xs" style={{ color: theme.colors.textDim }}>
-                            - {release.name}
-                          </span>
-                        )}
+                        {(() => {
+                          // Strip version prefix if name starts with it (e.g., "v0.14.2 | Description" -> "Description")
+                          if (!release.name || release.name === release.tag_name) return null;
+                          const name = release.name;
+                          const tag = release.tag_name;
+                          let displayName: string | null = name;
+
+                          // Check for patterns like "v0.14.2 | Description" or "v0.14.2 - Description"
+                          const pipeIndex = name.indexOf('|');
+                          const dashIndex = name.indexOf(' - ');
+
+                          if (pipeIndex !== -1 && name.substring(0, pipeIndex).trim().toLowerCase() === tag.toLowerCase()) {
+                            displayName = name.substring(pipeIndex + 1).trim();
+                          } else if (dashIndex !== -1 && name.substring(0, dashIndex).trim().toLowerCase() === tag.toLowerCase()) {
+                            displayName = name.substring(dashIndex + 3).trim();
+                          } else if (name.toLowerCase().startsWith(tag.toLowerCase())) {
+                            // If name just starts with the tag, strip it
+                            const remainder = name.substring(tag.length).trim();
+                            // Remove leading separator if present
+                            if (remainder.startsWith('|') || remainder.startsWith('-')) {
+                              displayName = remainder.substring(1).trim();
+                            } else {
+                              displayName = remainder || null;
+                            }
+                          }
+
+                          if (!displayName) return null;
+                          return (
+                            <span className="text-xs" style={{ color: theme.colors.textDim }}>
+                              - {displayName}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <span className="text-xs" style={{ color: theme.colors.textDim }}>
                         {formatDate(release.published_at)}
@@ -273,7 +301,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
                     </button>
                     {expandedReleases.has(release.tag_name) && (
                       <div
-                        className="p-3 border-t text-xs prose prose-sm prose-invert max-w-none"
+                        className="py-3 px-5 border-t text-xs prose prose-sm prose-invert max-w-none"
                         style={{ borderColor: theme.colors.border, color: theme.colors.textDim }}
                       >
                         <ReactMarkdown

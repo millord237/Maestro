@@ -58,6 +58,19 @@ Save your batch configurations for reuse:
 
 ![Playbooks](./screenshots/autorun-2.png)
 
+### Inline Wizard
+
+Generate new playbooks from within an existing session using the **Inline Wizard**:
+
+1. Type `/wizard` in any AI tab (or click the Wizard button in the Auto Run panel)
+2. Have a conversation with the AI about your project goals
+3. Watch the confidence gauge build as the AI understands your requirements
+4. At 80%+ confidence, the AI generates detailed Auto Run documents
+
+![Inline Wizard](./screenshots/wizard-inline.png)
+
+The Inline Wizard creates documents in a unique subfolder under your Auto Run folder, keeping generated playbooks organized. When complete, your tab is renamed to reflect the project and you can immediately start running the generated tasks.
+
 ### Playbook Exchange
 
 Looking for pre-built playbooks? The [Playbook Exchange](./playbook-exchange) offers community-contributed playbooks for common workflows like security audits, code reviews, and documentation generation. Open it via Quick Actions (`Cmd+K`) or click the Exchange button in the Auto Run panel.

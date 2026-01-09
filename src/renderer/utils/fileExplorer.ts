@@ -279,3 +279,152 @@ export function compareFileTrees(
     removedFolders
   };
 }
+
+/**
+ * Remove a node from the file tree at the given path.
+ * Returns a new tree with the node removed.
+ * @param tree - The file tree to modify
+ * @param relativePath - Path relative to tree root (e.g., "folder/file.txt")
+ * @returns New tree with the node removed, or original tree if path not found
+ */
+export function removeNodeFromTree(
+  tree: FileTreeNode[],
+  relativePath: string
+): FileTreeNode[] {
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length === 0) return tree;
+
+  const targetName = parts[parts.length - 1];
+  const parentParts = parts.slice(0, -1);
+
+  // If at root level, filter out the target
+  if (parentParts.length === 0) {
+    return tree.filter(node => node.name !== targetName);
+  }
+
+  // Navigate to parent and remove from there
+  return tree.map(node => {
+    if (node.name === parentParts[0]) {
+      if (parentParts.length === 1) {
+        // This node is the parent - remove target from children
+        return {
+          ...node,
+          children: node.children?.filter(child => child.name !== targetName)
+        };
+      }
+      // Keep navigating
+      return {
+        ...node,
+        children: node.children ? removeNodeFromTree(node.children, parentParts.slice(1).concat(targetName).join('/')) : undefined
+      };
+    }
+    return node;
+  });
+}
+
+/**
+ * Rename a node in the file tree at the given path.
+ * Returns a new tree with the node renamed and re-sorted.
+ * @param tree - The file tree to modify
+ * @param relativePath - Path relative to tree root (e.g., "folder/oldname.txt")
+ * @param newName - The new name for the node
+ * @returns New tree with the node renamed, or original tree if path not found
+ */
+export function renameNodeInTree(
+  tree: FileTreeNode[],
+  relativePath: string,
+  newName: string
+): FileTreeNode[] {
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length === 0) return tree;
+
+  const targetName = parts[parts.length - 1];
+  const parentParts = parts.slice(0, -1);
+
+  const sortNodes = (nodes: FileTreeNode[]): FileTreeNode[] => {
+    return [...nodes].sort((a, b) => {
+      if (a.type === 'folder' && b.type !== 'folder') return -1;
+      if (a.type !== 'folder' && b.type === 'folder') return 1;
+      return a.name.localeCompare(b.name);
+    });
+  };
+
+  // If at root level, rename and re-sort
+  if (parentParts.length === 0) {
+    const renamed = tree.map(node =>
+      node.name === targetName ? { ...node, name: newName } : node
+    );
+    return sortNodes(renamed);
+  }
+
+  // Navigate to parent and rename there
+  return tree.map(node => {
+    if (node.name === parentParts[0]) {
+      if (parentParts.length === 1) {
+        // This node is the parent - rename target in children
+        const renamed = node.children?.map(child =>
+          child.name === targetName ? { ...child, name: newName } : child
+        );
+        return {
+          ...node,
+          children: renamed ? sortNodes(renamed) : undefined
+        };
+      }
+      // Keep navigating
+      return {
+        ...node,
+        children: node.children ? renameNodeInTree(node.children, parentParts.slice(1).concat(targetName).join('/'), newName) : undefined
+      };
+    }
+    return node;
+  });
+}
+
+/**
+ * Count files and folders in a tree node recursively.
+ * Used to update stats when a node is removed.
+ */
+export function countNodesInTree(nodes: FileTreeNode[]): { fileCount: number; folderCount: number } {
+  let fileCount = 0;
+  let folderCount = 0;
+
+  const count = (nodeList: FileTreeNode[]) => {
+    for (const node of nodeList) {
+      if (node.type === 'folder') {
+        folderCount++;
+        if (node.children) {
+          count(node.children);
+        }
+      } else {
+        fileCount++;
+      }
+    }
+  };
+
+  count(nodes);
+  return { fileCount, folderCount };
+}
+
+/**
+ * Find a node in the tree by path.
+ * @param tree - The file tree to search
+ * @param relativePath - Path relative to tree root
+ * @returns The node if found, undefined otherwise
+ */
+export function findNodeInTree(
+  tree: FileTreeNode[],
+  relativePath: string
+): FileTreeNode | undefined {
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length === 0) return undefined;
+
+  let current: FileTreeNode[] = tree;
+  for (let i = 0; i < parts.length; i++) {
+    const node = current.find(n => n.name === parts[i]);
+    if (!node) return undefined;
+    if (i === parts.length - 1) return node;
+    if (!node.children) return undefined;
+    current = node.children;
+  }
+  return undefined;
+}

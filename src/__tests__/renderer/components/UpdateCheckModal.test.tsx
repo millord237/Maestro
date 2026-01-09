@@ -415,6 +415,85 @@ describe('UpdateCheckModal', () => {
       expect(screen.queryByText('- v1.1.0')).not.toBeInTheDocument();
     });
 
+    it('strips version prefix from release name with pipe separator', async () => {
+      (window.maestro as any).updates.check.mockResolvedValue(
+        createMockUpdateResult({
+          releases: [
+            createMockRelease({
+              tag_name: 'v1.1.0',
+              name: 'v1.1.0 | Doc Graphs, SSH Agents',
+            }),
+          ],
+        })
+      );
+
+      render(
+        <UpdateCheckModal
+          theme={createMockTheme()}
+          onClose={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('v1.1.0')).toBeInTheDocument();
+        // Should show just the description, not the version again
+        expect(screen.getByText('- Doc Graphs, SSH Agents')).toBeInTheDocument();
+      });
+
+      // Should not show the full original name with duplicate version
+      expect(screen.queryByText('- v1.1.0 | Doc Graphs, SSH Agents')).not.toBeInTheDocument();
+    });
+
+    it('strips version prefix from release name with dash separator', async () => {
+      (window.maestro as any).updates.check.mockResolvedValue(
+        createMockUpdateResult({
+          releases: [
+            createMockRelease({
+              tag_name: 'v1.1.0',
+              name: 'v1.1.0 - Major Update',
+            }),
+          ],
+        })
+      );
+
+      render(
+        <UpdateCheckModal
+          theme={createMockTheme()}
+          onClose={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('v1.1.0')).toBeInTheDocument();
+        expect(screen.getByText('- Major Update')).toBeInTheDocument();
+      });
+    });
+
+    it('keeps release name when it does not start with version', async () => {
+      (window.maestro as any).updates.check.mockResolvedValue(
+        createMockUpdateResult({
+          releases: [
+            createMockRelease({
+              tag_name: 'v1.1.0',
+              name: 'Big Feature Release',
+            }),
+          ],
+        })
+      );
+
+      render(
+        <UpdateCheckModal
+          theme={createMockTheme()}
+          onClose={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('v1.1.0')).toBeInTheDocument();
+        expect(screen.getByText('- Big Feature Release')).toBeInTheDocument();
+      });
+    });
+
     it('shows fallback text when no release body', async () => {
       (window.maestro as any).updates.check.mockResolvedValue(
         createMockUpdateResult({
