@@ -1545,8 +1545,8 @@ export const TerminalOutput = memo(forwardRef<HTMLDivElement, TerminalOutputProp
           />
         )}
 
-        {/* End ref for scrolling */}
-        {session.state !== 'busy' && <div ref={logsEndRef} />}
+        {/* End ref for scrolling - always rendered so Cmd+Shift+J works even when busy */}
+        <div ref={logsEndRef} />
       </div>
 
       {/* New Message Indicator - floating arrow button (AI mode only, terminal auto-scrolls) */}
