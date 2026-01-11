@@ -822,6 +822,20 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
           <div className="w-20" /> {/* Spacer for centering */}
         </div>
 
+        {/* Detection in progress banner - show when using placeholder agent during SSH detection */}
+        {isDetecting && !detectedConfigAgent && (
+          <div
+            className="flex items-center gap-2 p-3 mb-4 rounded-lg text-sm"
+            style={{ backgroundColor: theme.colors.warning + '20', color: theme.colors.warning }}
+          >
+            <div
+              className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: theme.colors.warning, borderTopColor: 'transparent' }}
+            />
+            Detecting agent on remote host...
+          </div>
+        )}
+
         {/* Configuration Panel */}
         <div className="flex-1 flex justify-center overflow-y-auto">
           <div className="w-full max-w-xl">
