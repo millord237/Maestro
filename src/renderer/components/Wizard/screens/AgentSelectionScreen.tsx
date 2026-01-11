@@ -750,8 +750,23 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   }, [configuringAgentId]);
 
   // Get the agent being configured
-  const configuringAgent = detectedAgents.find(a => a.id === configuringAgentId);
+  // When SSH detection is in progress, detectedAgents may be stale or empty.
+  // Create a fallback agent config from AGENT_TILES to prevent undefined state.
   const configuringTile = AGENT_TILES.find(t => t.id === configuringAgentId);
+  const detectedConfigAgent = detectedAgents.find(a => a.id === configuringAgentId);
+
+  // If agent not in detectedAgents but we have a tile, create a placeholder
+  // This handles the race condition when SSH detection is slow/pending
+  const configuringAgent: AgentConfig | undefined = detectedConfigAgent ?? (
+    configuringAgentId && configuringTile ? {
+      id: configuringAgentId,
+      name: configuringTile.name,
+      available: false, // Will be updated when detection completes
+      path: undefined,
+      hidden: false,
+      capabilities: undefined, // Will be populated when detection completes
+    } : undefined
+  );
 
   // Loading state
   if (isDetecting) {
