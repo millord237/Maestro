@@ -243,7 +243,8 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
       // Per-agent config (path, args, env vars) starts empty - each agent gets its own config
       // No provider-level loading - config is set per-agent during creation
       // Only reset if NOT duplicating (source session will provide values)
-      if (!source) {
+      // Also preserve SSH configs when re-detecting (sshRemoteId is provided during re-detection)
+      if (!source && !sshRemoteId) {
         setCustomAgentPaths({});
         setCustomAgentArgs({});
         setCustomAgentEnvVars({});

@@ -2315,6 +2315,14 @@ describe('NewInstanceModal', () => {
           enabled: true,
         }],
       });
+      // Mock fs.stat for remote path validation
+      vi.mocked(window.maestro.fs.stat).mockResolvedValue({
+        size: 4096,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        modifiedAt: '2024-01-15T12:30:00.000Z',
+        isDirectory: true,
+        isFile: false,
+      });
 
       render(
         <NewInstanceModal
@@ -2370,6 +2378,12 @@ describe('NewInstanceModal', () => {
       // (Skip the placeholder check - JSDOM doesn't reliably update controlled select state)
       const dirInput = screen.getByLabelText('Working Directory');
       fireEvent.change(dirInput, { target: { value: '/test/path' } });
+
+      // Wait for remote path validation to complete (debounced 300ms)
+      // This validates the path exists on the remote and enables the Create button
+      await waitFor(() => {
+        expect(screen.getByText('Remote directory found')).toBeInTheDocument();
+      }, { timeout: 3000 });
 
       // The core verification: clicking Create should pass the SSH config that was pending
       const createButton = screen.getByText('Create Agent');

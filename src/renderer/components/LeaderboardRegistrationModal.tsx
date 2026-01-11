@@ -1016,7 +1016,7 @@ export function LeaderboardRegistrationModal({
         {/* Footer */}
         <div className="p-4 border-t flex justify-center gap-3" style={{ borderColor: theme.colors.border }}>
           {/* Push Up - Submit stats to leaderboard */}
-          {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'polling' && submitState !== 'opted_out' && !showOptOutConfirm && (
+          {submitState !== 'awaiting_confirmation' && submitState !== 'polling' && submitState !== 'opted_out' && !showOptOutConfirm && (
             <button
               onClick={handleSubmit}
               disabled={!isFormValid || submitState === 'submitting' || showManualTokenEntry}
@@ -1042,7 +1042,7 @@ export function LeaderboardRegistrationModal({
           )}
 
           {/* Pull Down - Sync from cloud (only for existing registrations with auth token) */}
-          {existingRegistration?.authToken && !showOptOutConfirm && (submitState === 'idle' || submitState === 'error') && onSyncStats && (
+          {existingRegistration?.authToken && !showOptOutConfirm && (submitState === 'idle' || submitState === 'error' || submitState === 'success') && onSyncStats && (
             <button
               onClick={handleSyncFromServer}
               disabled={isSyncing}
@@ -1068,7 +1068,7 @@ export function LeaderboardRegistrationModal({
           )}
 
           {/* Opt Out */}
-          {existingRegistration && !showOptOutConfirm && submitState === 'idle' && (
+          {existingRegistration && !showOptOutConfirm && (submitState === 'idle' || submitState === 'success') && (
             <button
               onClick={() => setShowOptOutConfirm(true)}
               className="px-4 py-2 text-sm rounded transition-colors flex items-center gap-2"
