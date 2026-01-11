@@ -441,8 +441,11 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 
     return () => { mounted = false; };
     // Only re-run detection when SSH remote config changes, not when selected agent changes
+    // Using JSON.stringify with 'null' fallback to ensure the effect runs when switching
+    // between remote and local (JSON.stringify(undefined) returns undefined, not 'null',
+    // so we need the fallback to ensure React sees it as a real string change)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setAvailableAgents, setSelectedAgent, sshRemoteConfig?.enabled, sshRemoteConfig?.remoteId]);
+  }, [setAvailableAgents, setSelectedAgent, JSON.stringify(sshRemoteConfig) ?? 'null']);
 
   // Load SSH remote configurations on mount
   useEffect(() => {

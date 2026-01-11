@@ -128,17 +128,22 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, existingSes
     setDirectoryWarningAcknowledged(false);
   }, [workingDir]);
 
-  // Check if SSH remote is enabled for the selected agent (moved up for use in validation effect)
+  // Check if SSH remote is enabled for the selected agent or pending config
+  // When no agent is selected, check the _pending_ config (user may select SSH before choosing agent)
   const isSshEnabled = useMemo(() => {
-    if (!selectedAgent) return false;
-    const config = agentSshRemoteConfigs[selectedAgent];
+    const config = selectedAgent
+      ? agentSshRemoteConfigs[selectedAgent]
+      : agentSshRemoteConfigs['_pending_'];
     return config?.enabled && !!config?.remoteId;
   }, [selectedAgent, agentSshRemoteConfigs]);
 
   // Get SSH remote host for display (moved up for use in validation)
+  // Also works with pending config when no agent is selected
   const sshRemoteHost = useMemo(() => {
-    if (!isSshEnabled || !selectedAgent) return undefined;
-    const config = agentSshRemoteConfigs[selectedAgent];
+    if (!isSshEnabled) return undefined;
+    const config = selectedAgent
+      ? agentSshRemoteConfigs[selectedAgent]
+      : agentSshRemoteConfigs['_pending_'];
     if (!config?.remoteId) return undefined;
     const remote = sshRemotes.find(r => r.id === config.remoteId);
     return remote?.host;

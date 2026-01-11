@@ -673,12 +673,12 @@ export function LeaderboardRegistrationModal({
               <Trophy className="w-4 h-4" style={{ color: '#FFD700' }} />
               <span className="text-xs font-medium" style={{ color: theme.colors.textMain }}>Your Current Stats</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
+            <div className="flex gap-2 text-xs">
+              <div className="flex-[3]">
                 <span style={{ color: theme.colors.textDim }}>Badge: </span>
                 <span className="font-medium" style={{ color: theme.colors.accent }}>{badgeName}</span>
               </div>
-              <div>
+              <div className="flex-[2]">
                 <span style={{ color: theme.colors.textDim }}>Total Runs: </span>
                 <span className="font-medium" style={{ color: theme.colors.textMain }}>{autoRunStats.totalRuns}</span>
               </div>
