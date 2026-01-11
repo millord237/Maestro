@@ -72,13 +72,13 @@ describe('estimateContextUsage', () => {
     it('should use claude default context window (200k)', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'claude');
-      expect(result).toBe(8);
+      expect(result).toBe(5);
     });
 
     it('should use codex default context window (200k)', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'codex');
-      expect(result).toBe(8);
+      expect(result).toBe(5);
     });
 
     it('should use opencode default context window (128k)', () => {
@@ -91,7 +91,7 @@ describe('estimateContextUsage', () => {
     it('should use aider default context window (128k)', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'aider');
-      expect(result).toBe(12);
+      expect(result).toBe(8);
     });
 
     it('should return null for terminal agent', () => {
@@ -151,7 +151,7 @@ describe('estimateContextUsage', () => {
       const stats = createStats({ contextWindow: -100 });
       const result = estimateContextUsage(stats, 'claude-code');
       // Should use fallback since contextWindow is invalid
-      expect(result).toBe(8);
+      expect(result).toBe(5);
     });
 
     it('should handle undefined context window', () => {
@@ -160,7 +160,7 @@ describe('estimateContextUsage', () => {
       stats.contextWindow = undefined;
       const result = estimateContextUsage(stats, 'claude-code');
       // Should use fallback
-      expect(result).toBe(8);
+      expect(result).toBe(5);
     });
 
     it('should handle very large token counts', () => {

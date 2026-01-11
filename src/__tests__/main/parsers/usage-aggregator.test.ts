@@ -99,7 +99,8 @@ describe('estimateContextUsage', () => {
         contextWindow: 200000,
       });
       const result = estimateContextUsage(stats, 'claude-code');
-      expect(result).toBe(100);
+      // Output tokens excluded; 150k / 200k = 75%
+      expect(result).toBe(75);
     });
   });
 
@@ -113,7 +114,7 @@ describe('estimateContextUsage', () => {
     it('should use codex default context window (200k)', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'codex');
-      expect(result).toBe(8);
+      expect(result).toBe(5);
     });
 
     it('should use opencode default context window (128k)', () => {

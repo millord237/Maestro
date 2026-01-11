@@ -642,7 +642,7 @@ describe('HistoryDetailModal', () => {
             usageStats: {
               inputTokens: 74000,
               outputTokens: 1000,
-              cacheReadInputTokens: 0,
+              cacheReadInputTokens: 1000,
               cacheCreationInputTokens: 0,
               contextWindow: 100000,
               totalCostUsd: 0,
@@ -652,7 +652,7 @@ describe('HistoryDetailModal', () => {
         />
       );
 
-      // (74000 + 1000) / 100000 = 75%
+      // (74000 + 1000 cache read) / 100000 = 75%
       expect(screen.getByText('75%')).toBeInTheDocument();
     });
 
