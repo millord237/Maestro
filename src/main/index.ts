@@ -23,6 +23,7 @@ import { updateParticipant, loadGroupChat, updateGroupChat } from './group-chat/
 import { needsSessionRecovery, initiateSessionRecovery } from './group-chat/session-recovery';
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
+import { calculateContextTokens } from './parsers/usage-aggregator';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
@@ -3141,11 +3142,9 @@ function setupProcessListeners() {
       if (participantUsageInfo) {
         const { groupChatId, participantName } = participantUsageInfo;
 
-        // Calculate context usage percentage (include cache read tokens for actual prompt size)
-        const totalContextTokens =
-          usageStats.inputTokens +
-          (usageStats.cacheCreationInputTokens || 0) +
-          (usageStats.cacheReadInputTokens || 0);
+        // Calculate context usage percentage using agent-specific logic
+        // Note: For group chat, we don't have agent type here, defaults to Claude behavior
+        const totalContextTokens = calculateContextTokens(usageStats);
         const contextUsage = usageStats.contextWindow > 0
           ? Math.round((totalContextTokens / usageStats.contextWindow) * 100)
           : 0;
@@ -3174,11 +3173,9 @@ function setupProcessListeners() {
       const moderatorMatch = sessionId.match(/^group-chat-(.+)-moderator-/);
       if (moderatorMatch) {
         const groupChatId = moderatorMatch[1];
-        // Calculate context usage percentage for moderator display (include cache read tokens)
-        const totalContextTokens =
-          usageStats.inputTokens +
-          (usageStats.cacheCreationInputTokens || 0) +
-          (usageStats.cacheReadInputTokens || 0);
+        // Calculate context usage percentage using agent-specific logic
+        // Note: Moderator is typically Claude, defaults to Claude behavior
+        const totalContextTokens = calculateContextTokens(usageStats);
         const contextUsage = usageStats.contextWindow > 0
           ? Math.round((totalContextTokens / usageStats.contextWindow) * 100)
           : 0;

@@ -51,13 +51,49 @@ export const DEFAULT_CONTEXT_WINDOWS: Record<ToolType, number> = {
 };
 
 /**
+ * Agents that use combined input+output context windows.
+ * OpenAI models (Codex, o3, o4-mini) have a single context window that includes
+ * both input and output tokens, unlike Claude which has separate limits.
+ */
+const COMBINED_CONTEXT_AGENTS: Set<ToolType> = new Set(['codex']);
+
+/**
+ * Calculate total context tokens based on agent-specific semantics.
+ *
+ * Claude models: Context = input + cacheCreation + cacheRead (output excluded)
+ * OpenAI models: Context = input + output + cacheRead (combined limit)
+ *
+ * @param stats - The usage statistics containing token counts
+ * @param agentId - The agent identifier for agent-specific calculation
+ * @returns Total context tokens used
+ */
+export function calculateContextTokens(
+  stats: Pick<UsageStats, 'inputTokens' | 'outputTokens' | 'cacheReadInputTokens' | 'cacheCreationInputTokens'>,
+  agentId?: ToolType
+): number {
+  const baseTokens =
+    stats.inputTokens +
+    (stats.cacheCreationInputTokens || 0) +
+    (stats.cacheReadInputTokens || 0);
+
+  // OpenAI models have combined input+output context limits
+  if (agentId && COMBINED_CONTEXT_AGENTS.has(agentId)) {
+    return baseTokens + stats.outputTokens;
+  }
+
+  // Claude models: output tokens don't consume context window
+  return baseTokens;
+}
+
+/**
  * Estimate context usage percentage when the agent doesn't provide it directly.
  * Uses agent-specific default context window sizes for accurate estimation.
  *
- * IMPORTANT: The actual prompt sent to the API includes:
- * - inputTokens: new tokens in this turn
- * - outputTokens: response tokens
- * - cacheReadInputTokens: cached conversation history sent with each request
+ * IMPORTANT: Context calculation varies by agent:
+ * - Claude models: inputTokens + cacheCreationInputTokens + cacheReadInputTokens
+ *   (output tokens are separate from context window)
+ * - OpenAI models (Codex): inputTokens + outputTokens + cacheReadInputTokens
+ *   (combined context window includes both input and output)
  *
  * The cacheReadInputTokens are critical because they represent the full
  * conversation context being sent, even though they're served from cache
@@ -71,12 +107,8 @@ export function estimateContextUsage(
   stats: Pick<UsageStats, 'inputTokens' | 'outputTokens' | 'cacheReadInputTokens' | 'cacheCreationInputTokens' | 'contextWindow'>,
   agentId?: ToolType
 ): number | null {
-  // Calculate total context: new input + cache writes + cached conversation history
-  // Matches Claude Code/Claude Agent SDK: output tokens are excluded from context sizing
-  const totalContextTokens =
-    stats.inputTokens +
-    (stats.cacheCreationInputTokens || 0) +
-    (stats.cacheReadInputTokens || 0);
+  // Calculate total context using agent-specific semantics
+  const totalContextTokens = calculateContextTokens(stats, agentId);
 
   // If context window is provided and valid, use it
   if (stats.contextWindow && stats.contextWindow > 0) {

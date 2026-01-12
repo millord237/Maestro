@@ -9,6 +9,7 @@ import type { AITab, LogEntry, Session } from '../types';
 import type { ContextSource, DuplicateDetectionResult, DuplicateInfo } from '../types/contextMerge';
 import type { ToolType } from '../../shared/types';
 import { countTokens, estimateTokens } from './tokenCounter';
+import { calculateContextTokens } from './contextUsage';
 
 /**
  * Extract context from an AI tab's conversation logs.
@@ -436,14 +437,17 @@ function mapHeaderToSource(header: string): LogEntry['source'] {
  * console.log(`Approximately ${tokens} tokens`);
  */
 export function estimateTokenCount(context: ContextSource): number {
-  // If we have usage stats, use the actual token counts
+  // If we have usage stats, use the actual token counts with agent-specific logic
   if (context.usageStats) {
-    const {
-      inputTokens = 0,
-      cacheCreationInputTokens = 0,
-      cacheReadInputTokens = 0,
-    } = context.usageStats;
-    return inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+    return calculateContextTokens(
+      {
+        inputTokens: context.usageStats.inputTokens ?? 0,
+        outputTokens: context.usageStats.outputTokens ?? 0,
+        cacheCreationInputTokens: context.usageStats.cacheCreationInputTokens ?? 0,
+        cacheReadInputTokens: context.usageStats.cacheReadInputTokens ?? 0,
+      },
+      context.agentType
+    );
   }
 
   // Otherwise, estimate from log content
@@ -471,14 +475,17 @@ export function estimateTokenCount(context: ContextSource): number {
  * @returns Promise resolving to accurate token count
  */
 export async function countContextTokens(context: ContextSource): Promise<number> {
-  // If we have usage stats, use the actual token counts
+  // If we have usage stats, use the actual token counts with agent-specific logic
   if (context.usageStats) {
-    const {
-      inputTokens = 0,
-      cacheCreationInputTokens = 0,
-      cacheReadInputTokens = 0,
-    } = context.usageStats;
-    return inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+    return calculateContextTokens(
+      {
+        inputTokens: context.usageStats.inputTokens ?? 0,
+        outputTokens: context.usageStats.outputTokens ?? 0,
+        cacheCreationInputTokens: context.usageStats.cacheCreationInputTokens ?? 0,
+        cacheReadInputTokens: context.usageStats.cacheReadInputTokens ?? 0,
+      },
+      context.agentType
+    );
   }
 
   // Count tokens for all log content

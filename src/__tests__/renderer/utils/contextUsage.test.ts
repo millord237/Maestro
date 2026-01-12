@@ -2,7 +2,7 @@
  * Tests for context usage estimation utilities
  */
 
-import { estimateContextUsage, DEFAULT_CONTEXT_WINDOWS } from '../../../renderer/utils/contextUsage';
+import { estimateContextUsage, calculateContextTokens, DEFAULT_CONTEXT_WINDOWS } from '../../../renderer/utils/contextUsage';
 import type { UsageStats } from '../../../shared/types';
 
 describe('estimateContextUsage', () => {
@@ -75,10 +75,11 @@ describe('estimateContextUsage', () => {
       expect(result).toBe(5);
     });
 
-    it('should use codex default context window (200k)', () => {
+    it('should use codex default context window (200k) and include output tokens', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'codex');
-      expect(result).toBe(5);
+      // Codex includes output tokens: (10000 + 5000 + 0) / 200000 = 7.5% -> 8%
+      expect(result).toBe(8);
     });
 
     it('should use opencode default context window (128k)', () => {
@@ -185,6 +186,71 @@ describe('estimateContextUsage', () => {
       const result = estimateContextUsage(stats, 'claude-code');
       // (100 + 50 + 0) / 200000 = 0.075% -> 0%
       expect(result).toBe(0);
+    });
+  });
+});
+
+describe('calculateContextTokens', () => {
+  const createStats = (overrides: Partial<UsageStats> = {}): Pick<UsageStats, 'inputTokens' | 'outputTokens' | 'cacheReadInputTokens' | 'cacheCreationInputTokens'> => ({
+    inputTokens: 10000,
+    outputTokens: 5000,
+    cacheReadInputTokens: 2000,
+    cacheCreationInputTokens: 1000,
+    ...overrides,
+  });
+
+  describe('Claude agents (excludes output tokens)', () => {
+    it('should exclude output tokens for claude-code', () => {
+      const stats = createStats();
+      const result = calculateContextTokens(stats, 'claude-code');
+      // 10000 + 1000 + 2000 = 13000 (no output tokens)
+      expect(result).toBe(13000);
+    });
+
+    it('should exclude output tokens for claude', () => {
+      const stats = createStats();
+      const result = calculateContextTokens(stats, 'claude');
+      expect(result).toBe(13000);
+    });
+
+    it('should exclude output tokens when agent is undefined', () => {
+      const stats = createStats();
+      const result = calculateContextTokens(stats);
+      // Defaults to Claude behavior
+      expect(result).toBe(13000);
+    });
+  });
+
+  describe('OpenAI agents (includes output tokens)', () => {
+    it('should include output tokens for codex', () => {
+      const stats = createStats();
+      const result = calculateContextTokens(stats, 'codex');
+      // 10000 + 5000 + 1000 + 2000 = 18000 (includes output)
+      expect(result).toBe(18000);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle zero values', () => {
+      const stats = createStats({
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      });
+      const result = calculateContextTokens(stats, 'claude-code');
+      expect(result).toBe(0);
+    });
+
+    it('should handle undefined cache tokens', () => {
+      const stats = {
+        inputTokens: 10000,
+        outputTokens: 5000,
+        cacheReadInputTokens: undefined as unknown as number,
+        cacheCreationInputTokens: undefined as unknown as number,
+      };
+      const result = calculateContextTokens(stats, 'claude-code');
+      expect(result).toBe(10000);
     });
   });
 });

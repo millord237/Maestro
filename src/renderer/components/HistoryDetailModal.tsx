@@ -8,6 +8,7 @@ import { formatElapsedTime } from '../utils/formatters';
 import { stripAnsiCodes } from '../../shared/stringUtils';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { generateTerminalProseStyles } from '../utils/markdownConfig';
+import { calculateContextTokens } from '../utils/contextUsage';
 
 // Double checkmark SVG component for validated entries
 const DoubleCheck = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
@@ -343,11 +344,14 @@ export function HistoryDetailModal({
                     </span>
                   </div>
                   {(() => {
-                    // Context usage = (input + cache creation + cache read) / context window
-                    const contextTokens =
-                      entry.usageStats!.inputTokens +
-                      (entry.usageStats!.cacheCreationInputTokens || 0) +
-                      (entry.usageStats!.cacheReadInputTokens || 0);
+                    // Context usage using agent-specific calculation
+                    // Note: History entries don't store agent type, defaults to Claude behavior
+                    const contextTokens = calculateContextTokens({
+                      inputTokens: entry.usageStats!.inputTokens,
+                      outputTokens: entry.usageStats!.outputTokens,
+                      cacheCreationInputTokens: entry.usageStats!.cacheCreationInputTokens ?? 0,
+                      cacheReadInputTokens: entry.usageStats!.cacheReadInputTokens ?? 0,
+                    });
                     const contextUsage = Math.min(100, Math.round((contextTokens / entry.usageStats!.contextWindow) * 100));
                     return (
                       <div className="flex flex-col gap-1">

@@ -12,6 +12,7 @@ import { WizardConversationView, DocumentGenerationView } from './InlineWizard';
 import { gitService } from '../services/git';
 import { useGitStatus } from '../contexts/GitStatusContext';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
+import { calculateContextTokens } from '../utils/contextUsage';
 import { useAgentCapabilities, useHoverTooltip } from '../hooks';
 import type { Session, Theme, Shortcut, FocusArea, BatchRunState } from '../types';
 
@@ -401,13 +402,21 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
   }, [configuredContextWindow, activeTab?.usageStats?.contextWindow]);
 
   // Compute context usage percentage from active tab's usage stats
+  // Uses agent-specific calculation (Codex includes output tokens, Claude doesn't)
   const activeTabContextUsage = useMemo(() => {
     if (!activeTab?.usageStats) return 0;
-    const { inputTokens, cacheReadInputTokens = 0, cacheCreationInputTokens = 0 } = activeTab.usageStats;
     if (!activeTabContextWindow || activeTabContextWindow === 0) return 0;
-    const contextTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+    const contextTokens = calculateContextTokens(
+      {
+        inputTokens: activeTab.usageStats.inputTokens,
+        outputTokens: activeTab.usageStats.outputTokens,
+        cacheCreationInputTokens: activeTab.usageStats.cacheCreationInputTokens ?? 0,
+        cacheReadInputTokens: activeTab.usageStats.cacheReadInputTokens ?? 0,
+      },
+      activeSession?.toolType
+    );
     return Math.min(Math.round((contextTokens / activeTabContextWindow) * 100), 100);
-  }, [activeTab?.usageStats, activeTabContextWindow]);
+  }, [activeTab?.usageStats, activeTabContextWindow, activeSession?.toolType]);
 
   // PERF: Track panel width for responsive widget hiding with threshold-based updates
   // Only update state when width crosses a meaningful threshold (20px) to prevent

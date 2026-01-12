@@ -39,20 +39,35 @@ import { useMobileAutoReconnect } from '../hooks/useMobileAutoReconnect';
 
 
 /**
- * Calculate context usage percentage from usage stats
- * Includes cache read + cache creation; excludes output tokens to mirror Claude Code behavior
+ * Agents that use combined input+output context windows.
+ * OpenAI models (Codex, o3, o4-mini) have a single context window that includes
+ * both input and output tokens, unlike Claude which has separate limits.
  */
-function calculateContextUsage(usageStats?: Session['usageStats'] | null): number | null {
+const COMBINED_CONTEXT_AGENTS = new Set(['codex']);
+
+/**
+ * Calculate context usage percentage from usage stats
+ * Uses agent-specific calculation:
+ * - Claude models: input + cacheCreation + cacheRead (output excluded)
+ * - OpenAI models (Codex): input + output + cacheRead (combined limit)
+ */
+function calculateContextUsage(usageStats?: Session['usageStats'] | null, toolType?: string): number | null {
   if (!usageStats) return null;
-  const { inputTokens, cacheReadInputTokens, cacheCreationInputTokens, contextWindow } = usageStats;
+  const { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, contextWindow } = usageStats;
   if (inputTokens == null || contextWindow == null || contextWindow === 0) {
     return null;
   }
-  // Include cache read + cache creation tokens - they represent the full conversation context
-  const totalTokens =
+  // Base tokens: input + cache creation + cache read
+  let totalTokens =
     inputTokens +
     (cacheCreationInputTokens || 0) +
     (cacheReadInputTokens || 0);
+
+  // OpenAI models have combined input+output context limits
+  if (toolType && COMBINED_CONTEXT_AGENTS.has(toolType)) {
+    totalTokens += outputTokens || 0;
+  }
+
   return Math.min(Math.round((totalTokens / contextWindow) * 100), 100);
 }
 
@@ -85,7 +100,7 @@ function MobileHeader({ activeSession }: MobileHeaderProps) {
   // Use tab's usageStats if available, otherwise fall back to session-level (deprecated)
   const tabUsageStats = activeTab?.usageStats;
   const cost = tabUsageStats?.totalCostUsd ?? activeSession?.usageStats?.totalCostUsd;
-  const contextUsage = calculateContextUsage(tabUsageStats ?? activeSession?.usageStats);
+  const contextUsage = calculateContextUsage(tabUsageStats ?? activeSession?.usageStats, activeSession?.toolType);
 
   // Get status dot color
   const getStatusDotColor = () => {

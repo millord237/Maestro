@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, Star } from 'lucide-react';
-import type { AITab, Theme, Shortcut } from '../types';
+import type { AITab, Theme, Shortcut, ToolType } from '../types';
 import { fuzzyMatchWithScore } from '../utils/search';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { useListNavigation } from '../hooks';
@@ -8,6 +8,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { getContextColor } from '../utils/theme';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { formatTokensCompact, formatRelativeTime, formatCost } from '../utils/formatters';
+import { calculateContextTokens } from '../utils/contextUsage';
 
 /** Named session from the store (not currently open) */
 interface NamedSession {
@@ -49,13 +50,21 @@ function getTabLastActivity(tab: AITab): number | undefined {
 
 /**
  * Get context usage percentage from usage stats
- * Uses inputTokens + cache creation + cache read (outputs excluded) to match Claude Code behavior
+ * Uses agent-specific calculation (Codex includes output tokens, Claude doesn't)
  */
-function getContextPercentage(tab: AITab): number {
+function getContextPercentage(tab: AITab, agentId?: ToolType): number {
   if (!tab.usageStats) return 0;
-  const { inputTokens, cacheCreationInputTokens = 0, cacheReadInputTokens = 0, contextWindow } = tab.usageStats;
+  const { contextWindow } = tab.usageStats;
   if (!contextWindow || contextWindow === 0) return 0;
-  const contextTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+  const contextTokens = calculateContextTokens(
+    {
+      inputTokens: tab.usageStats.inputTokens,
+      outputTokens: tab.usageStats.outputTokens,
+      cacheCreationInputTokens: tab.usageStats.cacheCreationInputTokens ?? 0,
+      cacheReadInputTokens: tab.usageStats.cacheReadInputTokens ?? 0,
+    },
+    agentId
+  );
   return Math.min(100, Math.round((contextTokens / contextWindow) * 100));
 }
 
@@ -513,7 +522,7 @@ export function TabSwitcherModal({
               const isActive = tab.id === activeTabId;
               const displayName = getTabDisplayName(tab);
               const uuidPill = getUuidPill(tab.agentSessionId);
-              const contextPct = getContextPercentage(tab);
+              const contextPct = getContextPercentage(tab, agentId as ToolType);
               const cost = tab.usageStats?.totalCostUsd || 0;
 
               return (

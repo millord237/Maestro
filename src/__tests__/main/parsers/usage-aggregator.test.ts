@@ -5,6 +5,7 @@
 import {
   aggregateModelUsage,
   estimateContextUsage,
+  calculateContextTokens,
   DEFAULT_CONTEXT_WINDOWS,
   type UsageStats,
   type ModelStats,
@@ -111,10 +112,11 @@ describe('estimateContextUsage', () => {
       expect(result).toBe(5);
     });
 
-    it('should use codex default context window (200k)', () => {
+    it('should use codex default context window (200k) and include output tokens', () => {
       const stats = createStats({ contextWindow: 0 });
       const result = estimateContextUsage(stats, 'codex');
-      expect(result).toBe(5);
+      // Codex includes output tokens: (10000 + 5000 + 0) / 200000 = 7.5% -> 8%
+      expect(result).toBe(8);
     });
 
     it('should use opencode default context window (128k)', () => {
@@ -144,6 +146,36 @@ describe('estimateContextUsage', () => {
       const result = estimateContextUsage(stats, 'claude-code');
       expect(result).toBe(0);
     });
+  });
+});
+
+describe('calculateContextTokens', () => {
+  const createStats = (overrides: Partial<UsageStats> = {}): Pick<UsageStats, 'inputTokens' | 'outputTokens' | 'cacheReadInputTokens' | 'cacheCreationInputTokens'> => ({
+    inputTokens: 10000,
+    outputTokens: 5000,
+    cacheReadInputTokens: 2000,
+    cacheCreationInputTokens: 1000,
+    ...overrides,
+  });
+
+  it('should exclude output tokens for Claude agents', () => {
+    const stats = createStats();
+    const result = calculateContextTokens(stats, 'claude-code');
+    // 10000 + 1000 + 2000 = 13000 (no output tokens)
+    expect(result).toBe(13000);
+  });
+
+  it('should include output tokens for Codex agents', () => {
+    const stats = createStats();
+    const result = calculateContextTokens(stats, 'codex');
+    // 10000 + 5000 + 1000 + 2000 = 18000 (includes output)
+    expect(result).toBe(18000);
+  });
+
+  it('should default to Claude behavior when agent is undefined', () => {
+    const stats = createStats();
+    const result = calculateContextTokens(stats);
+    expect(result).toBe(13000);
   });
 });
 
