@@ -1098,8 +1098,8 @@ class PhaseGenerator {
         agentCommand: agent.command,
         argsCount: argsForSpawn.length,
         promptLength: prompt.length,
-        hasRemoteSsh: !!config.sessionSshRemoteConfig?.enabled,
-        remoteId: config.sessionSshRemoteConfig?.remoteId || null,
+        hasRemoteSsh: !!config.sshRemoteConfig?.enabled,
+        remoteId: config.sshRemoteConfig?.remoteId || null,
       });
       window.maestro.process
         .spawn({
