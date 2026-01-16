@@ -1813,7 +1813,18 @@ export class ProcessManager extends EventEmitter {
 
 		// Emit accumulated data
 		if (managedProcess.dataBuffer) {
-			this.emit('data', sessionId, managedProcess.dataBuffer);
+			try {
+				this.emit('data', sessionId, managedProcess.dataBuffer);
+			} catch (err) {
+				logger.error(
+					'[ProcessManager] Error flushing data buffer',
+					'ProcessManager',
+					{
+						sessionId,
+						error: String(err)
+					}
+				);
+			}
 			managedProcess.dataBuffer = undefined;
 		}
 	}
@@ -1962,6 +1973,12 @@ export class ProcessManager extends EventEmitter {
 		if (!process) return false;
 
 		try {
+			// Clear any pending buffer timeout
+			if (process.dataBufferTimeout) {
+				clearTimeout(process.dataBufferTimeout);
+			}
+			this.flushDataBuffer(sessionId);
+
 			if (process.isTerminal && process.ptyProcess) {
 				process.ptyProcess.kill();
 			} else if (process.childProcess) {
