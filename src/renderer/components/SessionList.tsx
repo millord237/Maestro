@@ -551,6 +551,7 @@ function HamburgerMenuContent({
 
 // ============================================================================
 // SessionTooltipContent - Shared tooltip content for session hover previews
+// PERF: Memoized to prevent re-renders when parent list re-renders
 // ============================================================================
 
 interface SessionTooltipContentProps {
@@ -561,7 +562,7 @@ interface SessionTooltipContentProps {
   isInBatch?: boolean; // Whether session is running in auto mode
 }
 
-function SessionTooltipContent({
+const SessionTooltipContent = memo(function SessionTooltipContent({
   session,
   theme,
   gitFileCount,
@@ -728,7 +729,7 @@ function SessionTooltipContent({
       </div>
     </>
   );
-}
+});
 
 // Pre-compiled emoji regex for better performance (compiled once at module load)
 // Matches common emoji patterns at the start of the string including:

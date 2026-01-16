@@ -960,13 +960,17 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
         // Scroll to current match
         const currentRange = allRanges[targetIndex];
         const rect = currentRange.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const scrollParent = contentRef.current;
 
         if (scrollParent && rect) {
-          // Calculate scroll position to center the match
-          const scrollTop = scrollParent.scrollTop + rect.top - containerRect.top - scrollParent.clientHeight / 2 + rect.height / 2;
-          scrollParent.scrollTo({ top: scrollTop, behavior: 'smooth' });
+          // Calculate position of the match relative to the scroll container's top
+          // rect.top is viewport-relative, so we need to account for current scroll
+          // and the scroll container's viewport position
+          const scrollContainerRect = scrollParent.getBoundingClientRect();
+          const matchOffsetInScrollContainer = rect.top - scrollContainerRect.top + scrollParent.scrollTop;
+          // Calculate scroll position to center the match vertically
+          const scrollTop = matchOffsetInScrollContainer - scrollParent.clientHeight / 2 + rect.height / 2;
+          scrollParent.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
         }
       } else {
         (CSS as any).highlights.delete('search-results');
@@ -1104,9 +1108,18 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
     return formatShortcutKeys(shortcut.keys);
   };
 
-  // Handle search in edit mode - jump to and select the match in textarea
+  // Track previous search query and match index for edit mode navigation
+  const prevSearchQueryRef = useRef<string>('');
+  const prevMatchIndexRef = useRef<number>(0);
+
+  // Handle search in edit mode - count matches and update state
+  // Note: We separate counting from selection to avoid stealing focus while typing
   useEffect(() => {
     if (!isEditableText || !markdownEditMode || !searchQuery.trim() || !textareaRef.current) {
+      if (isEditableText && markdownEditMode) {
+        setTotalMatches(0);
+        setCurrentMatchIndex(0);
+      }
       return;
     }
 
@@ -1134,20 +1147,29 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
       return;
     }
 
-    // Select the current match in the textarea
-    const currentMatch = matches[validIndex];
-    if (currentMatch) {
-      const textarea = textareaRef.current;
-      textarea.focus();
-      textarea.setSelectionRange(currentMatch.start, currentMatch.end);
+    // Only scroll and select when navigating between matches (Enter/Shift+Enter)
+    // or when search query is complete (user stopped typing)
+    // We detect navigation by checking if currentMatchIndex changed without searchQuery changing
+    const isNavigating = prevSearchQueryRef.current === searchQuery && prevMatchIndexRef.current !== currentMatchIndex;
+    prevSearchQueryRef.current = searchQuery;
+    prevMatchIndexRef.current = currentMatchIndex;
 
-      // Scroll to make the selection visible
-      // Calculate approximate line number and scroll to it
-      const textBeforeMatch = content.substring(0, currentMatch.start);
-      const lineNumber = textBeforeMatch.split('\n').length;
-      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 24;
-      const targetScroll = (lineNumber - 5) * lineHeight; // Leave some lines above
-      textarea.scrollTop = Math.max(0, targetScroll);
+    // Select the current match in the textarea only when navigating
+    if (isNavigating) {
+      const currentMatch = matches[validIndex];
+      if (currentMatch) {
+        const textarea = textareaRef.current;
+        textarea.focus();
+        textarea.setSelectionRange(currentMatch.start, currentMatch.end);
+
+        // Scroll to make the selection visible
+        // Calculate approximate line number and scroll to it
+        const textBeforeMatch = content.substring(0, currentMatch.start);
+        const lineNumber = textBeforeMatch.split('\n').length;
+        const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 24;
+        const targetScroll = (lineNumber - 5) * lineHeight; // Leave some lines above
+        textarea.scrollTop = Math.max(0, targetScroll);
+      }
     }
   }, [searchQuery, currentMatchIndex, isEditableText, markdownEditMode, editContent]);
 

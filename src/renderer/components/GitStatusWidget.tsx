@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { GitBranch, Plus, Minus, FileEdit, FileDiff } from 'lucide-react';
 import type { Theme } from '../types';
 import { useGitStatus, type GitFileChange } from '../contexts/GitStatusContext';
@@ -22,8 +22,10 @@ interface GitStatusWidgetProps {
  *
  * The context provides detailed file changes (with line additions/deletions)
  * only for the active session. Non-active sessions will show basic file counts.
+ *
+ * PERF: Memoized to prevent re-renders when parent re-renders with same props.
  */
-export function GitStatusWidget({ sessionId, isGitRepo, theme, onViewDiff, compact = false }: GitStatusWidgetProps) {
+export const GitStatusWidget = memo(function GitStatusWidget({ sessionId, isGitRepo, theme, onViewDiff, compact = false }: GitStatusWidgetProps) {
   // Tooltip hover state with timeout for smooth UX
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,4 +221,4 @@ export function GitStatusWidget({ sessionId, isGitRepo, theme, onViewDiff, compa
       )}
     </div>
   );
-}
+});
