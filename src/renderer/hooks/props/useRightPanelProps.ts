@@ -56,11 +56,11 @@ export interface UseRightPanelPropsDeps {
 	autoRunDocumentTaskCounts: Map<string, DocumentTaskCount> | undefined;
 
 	// Batch processing
-	activeBatchRunState: BatchRunState | null;
-	currentSessionBatchState: BatchRunState | null;
+	activeBatchRunState: BatchRunState | undefined;
+	currentSessionBatchState: BatchRunState | undefined;
 
 	// Document Graph
-	lastGraphFocusFilePath: string;
+	lastGraphFocusFilePath: string | undefined;
 
 	// Refs
 	fileTreeContainerRef: React.RefObject<HTMLDivElement>;

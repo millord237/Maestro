@@ -18,11 +18,13 @@ import type {
 	FocusArea,
 	BatchRunState,
 	LogEntry,
-	UsageStats
+	UsageStats,
+	AITab
 } from '../../types';
 import type { TabCompletionSuggestion, TabCompletionFilter } from '../input/useTabCompletion';
 import type { SummarizeProgress, SummarizeResult, GroomingProgress, MergeResult } from '../../types/contextMerge';
 import type { FileNode } from '../../types/fileTree';
+import type { DocumentGenerationCallbacks } from '../../services/inlineWizardDocumentGeneration';
 
 /**
  * Dependencies for computing MainPanel props.
@@ -80,9 +82,9 @@ export interface UseMainPanelPropsDeps {
 	}>;
 	selectedAtMentionIndex: number;
 
-	// Batch run state
-	activeBatchRunState: BatchRunState | null;
-	currentSessionBatchState: BatchRunState | null;
+	// Batch run state (undefined matches component prop type)
+	activeBatchRunState: BatchRunState | undefined;
+	currentSessionBatchState: BatchRunState | undefined;
 
 	// File tree
 	fileTree: FileNode[];
@@ -95,7 +97,7 @@ export interface UseMainPanelPropsDeps {
 	filePreviewHistoryIndex: number;
 
 	// Active tab for error handling
-	activeTab: { agentError?: unknown } | null;
+	activeTab: AITab | undefined;
 
 	// Worktree
 	isWorktreeChild: boolean;
@@ -115,8 +117,8 @@ export interface UseMainPanelPropsDeps {
 	mergeProgress: GroomingProgress | null;
 	mergeStartTime: number;
 	isMerging: boolean;
-	mergeSourceName: string;
-	mergeTargetName: string;
+	mergeSourceName: string | undefined;
+	mergeTargetName: string | undefined;
 
 	// Gist publishing
 	ghCliAvailable: boolean;
@@ -250,14 +252,21 @@ export interface UseMainPanelPropsDeps {
 	setIsGraphViewOpen: (open: boolean) => void;
 
 	// Wizard callbacks
-	generateInlineWizardDocuments: (content?: string, tabId?: string) => void;
+	generateInlineWizardDocuments: (callbacks?: DocumentGenerationCallbacks, tabId?: string) => Promise<void>;
 	retryInlineWizardMessage: () => void;
 	clearInlineWizardError: () => void;
 	endInlineWizard: () => void;
 	handleAutoRunRefresh: () => void;
 
+	// Complex wizard handlers (passed through from App.tsx)
+	onWizardComplete?: () => void;
+	onWizardLetsGo?: () => void;
+	onWizardRetry?: () => void;
+	onWizardClearError?: () => void;
+	onToggleWizardShowThinking?: () => void;
+
 	// Helper functions
-	getActiveTab: (session: Session) => { id: string; wizardState?: unknown } | null;
+	getActiveTab: (session: Session) => AITab | undefined;
 }
 
 /**
@@ -463,6 +472,12 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 		// Inline wizard callbacks handled inline to maintain closure access
 		onExitWizard: deps.endInlineWizard,
 		onWizardCancelGeneration: deps.endInlineWizard,
+		// Complex wizard handlers (passed through from App.tsx)
+		onWizardComplete: deps.onWizardComplete,
+		onWizardLetsGo: deps.onWizardLetsGo,
+		onWizardRetry: deps.onWizardRetry,
+		onWizardClearError: deps.onWizardClearError,
+		onToggleWizardShowThinking: deps.onToggleWizardShowThinking,
 	}), [
 		// Primitive dependencies for minimal re-computation
 		deps.logViewerOpen,
@@ -628,6 +643,12 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 		deps.setLastGraphFocusFilePath,
 		deps.setIsGraphViewOpen,
 		deps.endInlineWizard,
+		// Complex wizard handlers
+		deps.onWizardComplete,
+		deps.onWizardLetsGo,
+		deps.onWizardRetry,
+		deps.onWizardClearError,
+		deps.onToggleWizardShowThinking,
 		// Refs (stable, but included for completeness)
 		deps.inputRef,
 		deps.logsEndRef,
