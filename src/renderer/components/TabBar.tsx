@@ -44,37 +44,45 @@ interface TabBarProps {
 
 interface TabProps {
   tab: AITab;
+  tabId: string;
   isActive: boolean;
   theme: Theme;
   canClose: boolean;
-  onSelect: () => void;
-  onClose: () => void;
-  onMiddleClick: () => void;
-  onDragStart: (e: React.DragEvent) => void;
-  onDragOver: (e: React.DragEvent) => void;
+  /** Stable callback - receives tabId as first argument */
+  onSelect: (tabId: string) => void;
+  /** Stable callback - receives tabId as first argument */
+  onClose: (tabId: string) => void;
+  /** Stable callback - receives tabId and event */
+  onDragStart: (tabId: string, e: React.DragEvent) => void;
+  /** Stable callback - receives tabId and event */
+  onDragOver: (tabId: string, e: React.DragEvent) => void;
   onDragEnd: () => void;
-  onDrop: (e: React.DragEvent) => void;
+  /** Stable callback - receives tabId and event */
+  onDrop: (tabId: string, e: React.DragEvent) => void;
   isDragging: boolean;
   isDragOver: boolean;
-  onRename: () => void;
-  onStar?: (starred: boolean) => void;
-  onMarkUnread?: () => void;
-  /** Handler to open merge session modal with this tab as source */
-  onMergeWith?: () => void;
-  /** Handler to open send to agent modal with this tab as source */
-  onSendToAgent?: () => void;
-  /** Handler to summarize and continue in a new tab */
-  onSummarizeAndContinue?: () => void;
-  /** Handler to copy context to clipboard */
-  onCopyContext?: () => void;
-  /** Handler to export tab as HTML */
-  onExportHtml?: () => void;
-  /** Handler to publish tab context as GitHub Gist */
-  onPublishGist?: () => void;
-  /** Handler to move tab to first position */
-  onMoveToFirst?: () => void;
-  /** Handler to move tab to last position */
-  onMoveToLast?: () => void;
+  /** Stable callback - receives tabId */
+  onRename: (tabId: string) => void;
+  /** Stable callback - receives tabId and starred boolean */
+  onStar?: (tabId: string, starred: boolean) => void;
+  /** Stable callback - receives tabId */
+  onMarkUnread?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onMergeWith?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onSendToAgent?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onSummarizeAndContinue?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onCopyContext?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onExportHtml?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onPublishGist?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onMoveToFirst?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onMoveToLast?: (tabId: string) => void;
   /** Is this the first tab? */
   isFirstTab?: boolean;
   /** Is this the last tab? */
@@ -82,14 +90,14 @@ interface TabProps {
   shortcutHint?: number | null;
   registerRef?: (el: HTMLDivElement | null) => void;
   hasDraft?: boolean;
-  /** Handler to close all tabs */
+  /** Stable callback - closes all tabs */
   onCloseAllTabs?: () => void;
-  /** Handler to close other tabs (all except this one) */
-  onCloseOtherTabs?: () => void;
-  /** Handler to close tabs to the left of this tab */
-  onCloseTabsLeft?: () => void;
-  /** Handler to close tabs to the right of this tab */
-  onCloseTabsRight?: () => void;
+  /** Stable callback - receives tabId */
+  onCloseOtherTabs?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onCloseTabsLeft?: (tabId: string) => void;
+  /** Stable callback - receives tabId */
+  onCloseTabsRight?: (tabId: string) => void;
   /** Total number of tabs */
   totalTabs?: number;
   /** Tab index in the full list (0-based) */
@@ -146,12 +154,12 @@ function getTabDisplayName(tab: AITab): string {
  */
 const Tab = memo(function Tab({
   tab,
+  tabId,
   isActive,
   theme,
   canClose,
   onSelect,
   onClose,
-  onMiddleClick,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -231,118 +239,136 @@ const Tab = memo(function Tab({
     }, 100);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Event handlers using stable tabId to avoid inline closure captures
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Middle-click to close
     if (e.button === 1 && canClose) {
       e.preventDefault();
-      onMiddleClick();
+      onClose(tabId);
     }
-  };
+  }, [canClose, onClose, tabId]);
 
-  const handleCloseClick = (e: React.MouseEvent) => {
+  const handleCloseClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onClose();
-  };
+    onClose(tabId);
+  }, [onClose, tabId]);
 
-  const handleCopySessionId = (e: React.MouseEvent) => {
+  const handleCopySessionId = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (tab.agentSessionId) {
       navigator.clipboard.writeText(tab.agentSessionId);
       setShowCopied(true);
       setTimeout(() => setShowCopied(false), 1500);
     }
-  };
+  }, [tab.agentSessionId]);
 
-  const handleStarClick = (e: React.MouseEvent) => {
+  const handleStarClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onStar?.(!tab.starred);
-  };
+    onStar?.(tabId, !tab.starred);
+  }, [onStar, tabId, tab.starred]);
 
-  const handleRenameClick = (e: React.MouseEvent) => {
+  const handleRenameClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     // Call rename immediately (before closing overlay) to ensure prompt isn't blocked
     // Browsers block window.prompt() when called from setTimeout since it's not a direct user action
-    onRename();
+    onRename(tabId);
     setOverlayOpen(false);
-  };
+  }, [onRename, tabId]);
 
-  const handleMarkUnreadClick = (e: React.MouseEvent) => {
+  const handleMarkUnreadClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onMarkUnread?.();
+    onMarkUnread?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onMarkUnread, tabId]);
 
-  const handleMergeWithClick = (e: React.MouseEvent) => {
+  const handleMergeWithClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onMergeWith?.();
+    onMergeWith?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onMergeWith, tabId]);
 
-  const handleSendToAgentClick = (e: React.MouseEvent) => {
+  const handleSendToAgentClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onSendToAgent?.();
+    onSendToAgent?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onSendToAgent, tabId]);
 
-  const handleSummarizeAndContinueClick = (e: React.MouseEvent) => {
+  const handleSummarizeAndContinueClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onSummarizeAndContinue?.();
+    onSummarizeAndContinue?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onSummarizeAndContinue, tabId]);
 
-  const handleMoveToFirstClick = (e: React.MouseEvent) => {
+  const handleMoveToFirstClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onMoveToFirst?.();
+    onMoveToFirst?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onMoveToFirst, tabId]);
 
-  const handleMoveToLastClick = (e: React.MouseEvent) => {
+  const handleMoveToLastClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onMoveToLast?.();
+    onMoveToLast?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onMoveToLast, tabId]);
 
-  const handleCopyContextClick = (e: React.MouseEvent) => {
+  const handleCopyContextClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onCopyContext?.();
+    onCopyContext?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onCopyContext, tabId]);
 
-  const handleExportHtmlClick = (e: React.MouseEvent) => {
+  const handleExportHtmlClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onExportHtml?.();
+    onExportHtml?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onExportHtml, tabId]);
 
-  const handlePublishGistClick = (e: React.MouseEvent) => {
+  const handlePublishGistClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onPublishGist?.();
+    onPublishGist?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onPublishGist, tabId]);
 
-  const handleCloseTabClick = (e: React.MouseEvent) => {
+  const handleCloseTabClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onClose();
+    onClose(tabId);
     setOverlayOpen(false);
-  };
+  }, [onClose, tabId]);
 
-  const handleCloseOtherTabsClick = (e: React.MouseEvent) => {
+  const handleCloseOtherTabsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onCloseOtherTabs?.();
+    onCloseOtherTabs?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onCloseOtherTabs, tabId]);
 
-  const handleCloseTabsLeftClick = (e: React.MouseEvent) => {
+  const handleCloseTabsLeftClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onCloseTabsLeft?.();
+    onCloseTabsLeft?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onCloseTabsLeft, tabId]);
 
-  const handleCloseTabsRightClick = (e: React.MouseEvent) => {
+  const handleCloseTabsRightClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onCloseTabsRight?.();
+    onCloseTabsRight?.(tabId);
     setOverlayOpen(false);
-  };
+  }, [onCloseTabsRight, tabId]);
+
+  // Handlers for drag events using stable tabId
+  const handleTabSelect = useCallback(() => {
+    onSelect(tabId);
+  }, [onSelect, tabId]);
+
+  const handleTabDragStart = useCallback((e: React.DragEvent) => {
+    onDragStart(tabId, e);
+  }, [onDragStart, tabId]);
+
+  const handleTabDragOver = useCallback((e: React.DragEvent) => {
+    onDragOver(tabId, e);
+  }, [onDragOver, tabId]);
+
+  const handleTabDrop = useCallback((e: React.DragEvent) => {
+    onDrop(tabId, e);
+  }, [onDrop, tabId]);
 
   // Memoize display name to avoid recalculation on every render
   const displayName = useMemo(() => getTabDisplayName(tab), [tab.name, tab.agentSessionId]);
@@ -383,15 +409,15 @@ const Tab = memo(function Tab({
         ${isDragOver ? 'ring-2 ring-inset' : ''}
       `}
       style={tabStyle}
-      onClick={onSelect}
+      onClick={handleTabSelect}
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
+      onDragStart={handleTabDragStart}
+      onDragOver={handleTabDragOver}
       onDragEnd={onDragEnd}
-      onDrop={onDrop}
+      onDrop={handleTabDrop}
     >
       {/* Busy indicator - pulsing dot for tabs in write mode */}
       {tab.state === 'busy' && (
@@ -901,6 +927,64 @@ function TabBarInner({
     }
   }, [tabs, onTabReorder]);
 
+  // Stable callback wrappers that receive tabId from the Tab component
+  // These avoid creating new function references on each render
+  const handleTabStar = useCallback((tabId: string, starred: boolean) => {
+    onTabStar?.(tabId, starred);
+  }, [onTabStar]);
+
+  const handleTabMarkUnread = useCallback((tabId: string) => {
+    onTabMarkUnread?.(tabId);
+  }, [onTabMarkUnread]);
+
+  const handleTabMergeWith = useCallback((tabId: string) => {
+    onMergeWith?.(tabId);
+  }, [onMergeWith]);
+
+  const handleTabSendToAgent = useCallback((tabId: string) => {
+    onSendToAgent?.(tabId);
+  }, [onSendToAgent]);
+
+  const handleTabSummarizeAndContinue = useCallback((tabId: string) => {
+    onSummarizeAndContinue?.(tabId);
+  }, [onSummarizeAndContinue]);
+
+  const handleTabCopyContext = useCallback((tabId: string) => {
+    onCopyContext?.(tabId);
+  }, [onCopyContext]);
+
+  const handleTabExportHtml = useCallback((tabId: string) => {
+    onExportHtml?.(tabId);
+  }, [onExportHtml]);
+
+  const handleTabPublishGist = useCallback((tabId: string) => {
+    onPublishGist?.(tabId);
+  }, [onPublishGist]);
+
+  const handleTabCloseOther = useCallback((tabId: string) => {
+    // Close all tabs except the one with this tabId
+    onCloseOtherTabs?.();
+  }, [onCloseOtherTabs]);
+
+  const handleTabCloseLeft = useCallback((tabId: string) => {
+    // Close all tabs to the left of this tabId
+    onCloseTabsLeft?.();
+  }, [onCloseTabsLeft]);
+
+  const handleTabCloseRight = useCallback((tabId: string) => {
+    // Close all tabs to the right of this tabId
+    onCloseTabsRight?.();
+  }, [onCloseTabsRight]);
+
+  // Stable registerRef callback that manages tab refs
+  const registerTabRef = useCallback((tabId: string, el: HTMLDivElement | null) => {
+    if (el) {
+      tabRefs.current.set(tabId, el);
+    } else {
+      tabRefs.current.delete(tabId);
+    }
+  }, []);
+
   return (
     <div
       ref={tabBarRef}
@@ -980,44 +1064,38 @@ function TabBarInner({
             )}
             <Tab
               tab={tab}
+              tabId={tab.id}
               isActive={isActive}
               theme={theme}
               canClose={canClose}
-              onSelect={() => onTabSelect(tab.id)}
-              onClose={() => onTabClose(tab.id)}
-              onMiddleClick={() => canClose && onTabClose(tab.id)}
-              onDragStart={(e) => handleDragStart(tab.id, e)}
-              onDragOver={(e) => handleDragOver(tab.id, e)}
+              onSelect={onTabSelect}
+              onClose={onTabClose}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
-              onDrop={(e) => handleDrop(tab.id, e)}
+              onDrop={handleDrop}
               isDragging={draggingTabId === tab.id}
               isDragOver={dragOverTabId === tab.id}
-              onRename={() => handleRenameRequest(tab.id)}
-              onStar={onTabStar && tab.agentSessionId ? (starred) => onTabStar(tab.id, starred) : undefined}
-              onMarkUnread={onTabMarkUnread ? () => onTabMarkUnread(tab.id) : undefined}
-              onMergeWith={onMergeWith && tab.agentSessionId ? () => onMergeWith(tab.id) : undefined}
-              onSendToAgent={onSendToAgent && tab.agentSessionId ? () => onSendToAgent(tab.id) : undefined}
-              onSummarizeAndContinue={onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5 ? () => onSummarizeAndContinue(tab.id) : undefined}
-              onCopyContext={onCopyContext && (tab.logs?.length ?? 0) >= 1 ? () => onCopyContext(tab.id) : undefined}
-              onExportHtml={onExportHtml ? () => onExportHtml(tab.id) : undefined}
-              onPublishGist={onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1 ? () => onPublishGist(tab.id) : undefined}
-              onMoveToFirst={!isFirstTab && onTabReorder ? () => handleMoveToFirst(tab.id) : undefined}
-              onMoveToLast={!isLastTab && onTabReorder ? () => handleMoveToLast(tab.id) : undefined}
+              onRename={handleRenameRequest}
+              onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
+              onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
+              onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
+              onSendToAgent={onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined}
+              onSummarizeAndContinue={onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5 ? handleTabSummarizeAndContinue : undefined}
+              onCopyContext={onCopyContext && (tab.logs?.length ?? 0) >= 1 ? handleTabCopyContext : undefined}
+              onExportHtml={onExportHtml ? handleTabExportHtml : undefined}
+              onPublishGist={onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1 ? handleTabPublishGist : undefined}
+              onMoveToFirst={!isFirstTab && onTabReorder ? handleMoveToFirst : undefined}
+              onMoveToLast={!isLastTab && onTabReorder ? handleMoveToLast : undefined}
               isFirstTab={isFirstTab}
               isLastTab={isLastTab}
               shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
               hasDraft={hasDraft(tab)}
-              registerRef={(el) => {
-                if (el) {
-                  tabRefs.current.set(tab.id, el);
-                } else {
-                  tabRefs.current.delete(tab.id);
-                }
-              }}
+              registerRef={(el) => registerTabRef(tab.id, el)}
               onCloseAllTabs={onCloseAllTabs}
-              onCloseOtherTabs={onCloseOtherTabs}
-              onCloseTabsLeft={onCloseTabsLeft}
-              onCloseTabsRight={onCloseTabsRight}
+              onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
+              onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
+              onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
               totalTabs={tabs.length}
               tabIndex={originalIndex}
             />

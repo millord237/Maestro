@@ -10,7 +10,7 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { TabBar } from './TabBar';
 import { WizardConversationView, DocumentGenerationView } from './InlineWizard';
 import { gitService } from '../services/git';
-import { useGitStatus } from '../contexts/GitStatusContext';
+import { useGitBranch, useGitDetail, useGitFileStatus } from '../contexts/GitStatusContext';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { calculateContextTokens } from '../utils/contextUsage';
 import { useAgentCapabilities, useHoverTooltip } from '../hooks';
@@ -483,18 +483,22 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
   const useCompactGitWidget = panelWidth < 550;
   const useCompactContext = panelWidth < 700; // Both label and gauge shrink together
 
-  // Git status from centralized context (replaces local polling)
-  // The context handles polling for all sessions and provides detailed data for the active session
-  const { getStatus, refreshGitStatus } = useGitStatus();
-  const gitStatusData = activeSession ? getStatus(activeSession.id) : undefined;
+  // Git status from focused contexts (reduces cascade re-renders)
+  // Branch info: branch name, remote, ahead/behind - rarely changes
+  const { getBranchInfo } = useGitBranch();
+  // File counts: file count per session - changes on file operations
+  const { getFileCount } = useGitFileStatus();
+  // Detail info: detailed file changes, refreshGitStatus - only for active session
+  const { refreshGitStatus } = useGitDetail();
 
-  // Derive gitInfo format from context data for backward compatibility with existing UI code
-  const gitInfo = gitStatusData && activeSession?.isGitRepo ? {
-    branch: gitStatusData.branch || '',
-    remote: gitStatusData.remote || '',
-    behind: gitStatusData.behind,
-    ahead: gitStatusData.ahead,
-    uncommittedChanges: gitStatusData.fileCount,
+  // Derive gitInfo format from focused context data for backward compatibility
+  const branchInfo = activeSession ? getBranchInfo(activeSession.id) : undefined;
+  const gitInfo = branchInfo && activeSession?.isGitRepo ? {
+    branch: branchInfo.branch || '',
+    remote: branchInfo.remote || '',
+    behind: branchInfo.behind,
+    ahead: branchInfo.ahead,
+    uncommittedChanges: getFileCount(activeSession.id),
   } : null;
 
   // Copy notification state (centered flash notice)

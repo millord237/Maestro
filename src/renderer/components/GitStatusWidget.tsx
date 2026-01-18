@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import { GitBranch, Plus, Minus, FileEdit, FileDiff } from 'lucide-react';
 import type { Theme } from '../types';
-import { useGitStatus, type GitFileChange } from '../contexts/GitStatusContext';
+import { useGitFileStatus, useGitDetail, type GitFileChange } from '../contexts/GitStatusContext';
 
 interface GitStatusWidgetProps {
   /** Session ID to look up git status from context */
@@ -17,8 +17,9 @@ interface GitStatusWidgetProps {
 /**
  * GitStatusWidget - Displays git file changes with GitHub-style diff bars
  *
- * Consumes git status data from the centralized GitStatusContext instead of
- * polling independently. This reduces redundant git process spawns.
+ * Consumes git status data from focused contexts to reduce cascade re-renders:
+ * - useGitFileStatus for file counts (changes on file operations)
+ * - useGitDetail for detailed file changes (only for active session)
  *
  * The context provides detailed file changes (with line additions/deletions)
  * only for the active session. Non-active sessions will show basic file counts.
@@ -30,9 +31,12 @@ export const GitStatusWidget = memo(function GitStatusWidget({ sessionId, isGitR
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Get git status from centralized context
-  const { getStatus } = useGitStatus();
-  const statusData = getStatus(sessionId);
+  // Get git status from focused contexts
+  const { getFileCount } = useGitFileStatus();
+  const { getFileDetails } = useGitDetail();
+
+  const fileCount = getFileCount(sessionId);
+  const fileDetails = getFileDetails(sessionId);
 
   // Cleanup hover timeout on unmount
   useEffect(() => {
@@ -43,16 +47,16 @@ export const GitStatusWidget = memo(function GitStatusWidget({ sessionId, isGitR
     };
   }, []);
 
-  // Don't render if not a git repo or no status data or no changes
-  if (!isGitRepo || !statusData || statusData.fileCount === 0) {
+  // Don't render if not a git repo or no file count or no changes
+  if (!isGitRepo || fileCount === 0) {
     return null;
   }
 
   // Use detailed file changes if available (active session), otherwise show basic counts
-  const fileChanges = statusData.fileChanges || [];
-  const additions = statusData.totalAdditions;
-  const deletions = statusData.totalDeletions;
-  const modified = statusData.modifiedCount;
+  const fileChanges = fileDetails?.fileChanges || [];
+  const additions = fileDetails?.totalAdditions ?? 0;
+  const deletions = fileDetails?.totalDeletions ?? 0;
+  const modified = fileDetails?.modifiedCount ?? 0;
   const totalChanges = additions + deletions + modified;
 
   return (
@@ -83,7 +87,7 @@ export const GitStatusWidget = memo(function GitStatusWidget({ sessionId, isGitR
           // Compact mode: just show file count
           <span className="flex items-center gap-1">
             <FileDiff className="w-3 h-3" style={{ color: theme.colors.textDim }} />
-            <span style={{ color: theme.colors.textDim }}>{statusData.fileCount}</span>
+            <span style={{ color: theme.colors.textDim }}>{fileCount}</span>
           </span>
         ) : (
           // Full mode: show breakdown by type

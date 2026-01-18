@@ -15,15 +15,37 @@ import { GitStatusWidget } from '../../../renderer/components/GitStatusWidget';
 import type { Theme } from '../../../renderer/types';
 import type { GitStatusData, GitFileChange } from '../../../renderer/contexts/GitStatusContext';
 
-// Mock the GitStatusContext hook
-const mockGetStatus = vi.fn<[string], GitStatusData | undefined>();
+// Mock the GitStatusContext hooks (focused contexts)
 const mockGetFileCount = vi.fn<[string], number>();
+const mockGetFileDetails = vi.fn<[string], { fileChanges?: GitFileChange[]; totalAdditions: number; totalDeletions: number; modifiedCount: number } | undefined>();
 const mockRefreshGitStatus = vi.fn<[], Promise<void>>();
 
 vi.mock('../../../renderer/contexts/GitStatusContext', () => ({
+  // Focused hooks used by GitStatusWidget
+  useGitFileStatus: () => ({
+    getFileCount: mockGetFileCount,
+    hasChanges: (sessionId: string) => mockGetFileCount(sessionId) > 0,
+    isLoading: false,
+  }),
+  useGitDetail: () => ({
+    getFileDetails: mockGetFileDetails,
+    refreshGitStatus: mockRefreshGitStatus,
+  }),
+  // Legacy hook (still exported for backwards compatibility)
   useGitStatus: () => ({
     gitStatusMap: new Map(),
-    getStatus: mockGetStatus,
+    getStatus: (sessionId: string) => {
+      const fileCount = mockGetFileCount(sessionId);
+      const details = mockGetFileDetails(sessionId);
+      if (fileCount === 0 && !details) return undefined;
+      return {
+        fileCount,
+        ...details,
+        ahead: 0,
+        behind: 0,
+        lastUpdated: Date.now(),
+      };
+    },
     getFileCount: mockGetFileCount,
     refreshGitStatus: mockRefreshGitStatus,
     isLoading: false,
@@ -42,6 +64,24 @@ const createGitStatusData = (overrides: Partial<GitStatusData> = {}): GitStatusD
   fileChanges: [{ path: 'file.ts', additions: 10, deletions: 5 }],
   ...overrides,
 });
+
+// Helper to set up mock for GitStatusData (updates both focused mocks)
+const mockGetStatus = {
+  mockReturnValue: (data: GitStatusData | undefined) => {
+    if (data === undefined) {
+      mockGetFileCount.mockReturnValue(0);
+      mockGetFileDetails.mockReturnValue(undefined);
+    } else {
+      mockGetFileCount.mockReturnValue(data.fileCount);
+      mockGetFileDetails.mockReturnValue({
+        fileChanges: data.fileChanges,
+        totalAdditions: data.totalAdditions,
+        totalDeletions: data.totalDeletions,
+        modifiedCount: data.modifiedCount,
+      });
+    }
+  },
+};
 
 // Create a mock theme
 const mockTheme: Theme = {
@@ -116,19 +156,19 @@ describe('GitStatusWidget', () => {
   });
 
   describe('Git Data Loading', () => {
-    it('should call getStatus with the session ID', () => {
+    it('should call getFileCount with the session ID', () => {
       mockGetStatus.mockReturnValue(createGitStatusData());
       render(<GitStatusWidget {...defaultProps} />);
-      expect(mockGetStatus).toHaveBeenCalledWith('test-session-id');
+      expect(mockGetFileCount).toHaveBeenCalledWith('test-session-id');
     });
 
     it('should reload git status on sessionId change', () => {
       mockGetStatus.mockReturnValue(createGitStatusData());
       const { rerender } = render(<GitStatusWidget {...defaultProps} />);
-      expect(mockGetStatus).toHaveBeenCalledWith('test-session-id');
+      expect(mockGetFileCount).toHaveBeenCalledWith('test-session-id');
 
       rerender(<GitStatusWidget {...defaultProps} sessionId="another-session" />);
-      expect(mockGetStatus).toHaveBeenCalledWith('another-session');
+      expect(mockGetFileCount).toHaveBeenCalledWith('another-session');
     });
 
     it('should handle git service errors gracefully', () => {

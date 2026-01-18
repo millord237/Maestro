@@ -13,7 +13,7 @@ import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { SessionItem } from './SessionItem';
 import { GroupChatList } from './GroupChatList';
 import { useLiveOverlay, useClickOutside } from '../hooks';
-import { useGitStatus } from '../contexts/GitStatusContext';
+import { useGitFileStatus } from '../contexts/GitStatusContext';
 
 // ============================================================================
 // SessionContextMenu - Right-click context menu for session items
@@ -1056,17 +1056,10 @@ function SessionListInner(props: SessionListProps) {
     return () => window.removeEventListener('tour:action', handleTourAction);
   }, []);
 
-  // Get git file change counts per session from centralized context
-  // The context is provided by GitStatusProvider in App.tsx and handles all git polling
-  const { gitStatusMap } = useGitStatus();
-  // Create a simple Map<sessionId, fileCount> for backward compatibility with existing code
-  const gitFileCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    gitStatusMap.forEach((status, sessionId) => {
-      counts.set(sessionId, status.fileCount);
-    });
-    return counts;
-  }, [gitStatusMap]);
+  // Get git file change counts per session from focused context
+  // Using useGitFileStatus instead of full useGitStatus reduces re-renders
+  // when only branch data changes (we only need file counts here)
+  const { getFileCount } = useGitFileStatus();
 
   const worktreeChildrenByParentId = useMemo(() => {
     const map = new Map<string, Session[]>();
@@ -1172,7 +1165,7 @@ function SessionListInner(props: SessionListProps) {
                 <SessionTooltipContent
                   session={s}
                   theme={theme}
-                  gitFileCount={gitFileCounts.get(s.id)}
+                  gitFileCount={getFileCount(s.id)}
                   isInBatch={isInBatch}
                 />
               </div>
@@ -1264,7 +1257,7 @@ function SessionListInner(props: SessionListProps) {
           leftSidebarOpen={leftSidebarOpen}
           group={options.group}
           groupId={options.groupId}
-          gitFileCount={gitFileCounts.get(session.id)}
+          gitFileCount={getFileCount(session.id)}
           isInBatch={activeBatchSessionIds.includes(session.id)}
           jumpNumber={getSessionJumpNumber(session.id)}
           onSelect={selectHandlers.get(session.id)!}
@@ -1323,7 +1316,7 @@ function SessionListInner(props: SessionListProps) {
                     isDragging={draggingSessionId === child.id}
                     isEditing={editingSessionId === `worktree-${session.id}-${child.id}`}
                     leftSidebarOpen={leftSidebarOpen}
-                    gitFileCount={gitFileCounts.get(child.id)}
+                    gitFileCount={getFileCount(child.id)}
                     isInBatch={activeBatchSessionIds.includes(child.id)}
                     jumpNumber={getSessionJumpNumber(child.id)}
                     onSelect={selectHandlers.get(child.id)!}
@@ -2418,7 +2411,7 @@ function SessionListInner(props: SessionListProps) {
                 <SessionTooltipContent
                   session={session}
                   theme={theme}
-                  gitFileCount={gitFileCounts.get(session.id)}
+                  gitFileCount={getFileCount(session.id)}
                   groupName={groups.find(g => g.id === session.groupId)?.name}
                   isInBatch={isInBatch}
                 />
