@@ -3882,6 +3882,10 @@ function MaestroConsoleInner() {
 		return THEMES[activeThemeId];
 	}, [activeThemeId, customThemeColors]);
 
+	// Ref for theme (for use in memoized callbacks that need current theme without re-creating)
+	const themeRef = useRef(theme);
+	themeRef.current = theme;
+
 	// Memoized cwd for git viewers (prevents re-renders from inline computation)
 	const gitViewerCwd = useMemo(
 		() =>
@@ -5939,6 +5943,75 @@ You are taking over this conversation. Based on the context above, provide a bri
 					message: 'Failed to copy context to clipboard.'
 				});
 			});
+	}, []);
+
+	// Memoized handler for exporting tab as HTML
+	const handleExportHtml = useCallback(async (tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		try {
+			const { downloadTabExport } = await import('./utils/tabExport');
+			await downloadTabExport(
+				tab,
+				{
+					name: currentSession.name,
+					cwd: currentSession.cwd,
+					toolType: currentSession.toolType
+				},
+				themeRef.current
+			);
+			addToastRef.current({
+				type: 'success',
+				title: 'Export Complete',
+				message: 'Conversation exported as HTML.'
+			});
+		} catch (err) {
+			console.error('Failed to export tab:', err);
+			addToastRef.current({
+				type: 'error',
+				title: 'Export Failed',
+				message: 'Failed to export conversation as HTML.'
+			});
+		}
+	}, []);
+
+	// Memoized handler for publishing tab as GitHub Gist
+	const handlePublishTabGist = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		// Convert logs to markdown-like text format
+		const content = formatLogsForClipboard(tab.logs);
+		// Generate filename based on tab name or session ID
+		const tabName = tab.name || (tab.agentSessionId?.slice(0, 8) ?? 'conversation');
+		const filename = `${tabName.replace(/[^a-zA-Z0-9-_]/g, '_')}_context.md`;
+
+		// Set content and open the modal
+		setTabGistContent({ filename, content });
+		setGistPublishModalOpen(true);
+	}, []);
+
+	// Memoized handler for clearing agent error (wraps handleClearAgentError with session/tab context)
+	const handleClearAgentErrorForMainPanel = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const activeTab = currentSession.aiTabs.find(t => t.id === currentSession.activeTabId);
+		if (!activeTab?.agentError) return;
+		handleClearAgentError(currentSession.id, activeTab.id);
+	}, [handleClearAgentError]);
+
+	// Memoized handler for showing agent error modal
+	const handleShowAgentErrorModal = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const activeTab = currentSession.aiTabs.find(t => t.id === currentSession.activeTabId);
+		if (!activeTab?.agentError) return;
+		setAgentErrorModalSessionId(currentSession.id);
 	}, []);
 
 	// Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now updated in useAgentExecution hook
@@ -13452,16 +13525,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 						forwardHistory={forwardHistory}
 						currentHistoryIndex={filePreviewHistoryIndex}
 						onNavigateToIndex={handleNavigateToIndex}
-						onClearAgentError={
-							activeTab?.agentError && activeSession
-								? () => handleClearAgentError(activeSession.id, activeTab.id)
-								: undefined
-						}
-						onShowAgentErrorModal={
-							activeTab?.agentError && activeSession
-								? () => setAgentErrorModalSessionId(activeSession.id)
-								: undefined
-						}
+						onClearAgentError={activeTab?.agentError ? handleClearAgentErrorForMainPanel : undefined}
+						onShowAgentErrorModal={activeTab?.agentError ? handleShowAgentErrorModal : undefined}
 						showFlashNotification={showSuccessFlash}
 						onOpenFuzzySearch={handleOpenFuzzySearch}
 						onOpenWorktreeConfig={handleOpenWorktreeConfig}
@@ -13471,57 +13536,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 						onMergeWith={handleMergeWith}
 						onSendToAgent={handleOpenSendToAgentModal}
 						onCopyContext={handleCopyContext}
-						onExportHtml={async (tabId: string) => {
-							// Export tab conversation as HTML
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							try {
-								const { downloadTabExport } = await import('./utils/tabExport');
-								await downloadTabExport(
-									tab,
-									{
-										name: activeSession.name,
-										cwd: activeSession.cwd,
-										toolType: activeSession.toolType
-									},
-									theme
-								);
-								addToast({
-									type: 'success',
-									title: 'Export Complete',
-									message: 'Conversation exported as HTML.'
-								});
-							} catch (err) {
-								console.error('Failed to export tab:', err);
-								addToast({
-									type: 'error',
-									title: 'Export Failed',
-									message: 'Failed to export conversation as HTML.'
-								});
-							}
-						}}
-						onPublishTabGist={(tabId: string) => {
-							// Publish tab conversation context as GitHub Gist
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							// Convert logs to markdown-like text format
-							const content = formatLogsForClipboard(tab.logs);
-							// Generate filename based on tab name or session ID
-							const tabName =
-								tab.name || (tab.agentSessionId?.slice(0, 8) ?? 'conversation');
-							const filename = `${tabName.replace(
-								/[^a-zA-Z0-9-_]/g,
-								'_'
-							)}_context.md`;
-
-							// Set content and open the modal
-							setTabGistContent({ filename, content });
-							setGistPublishModalOpen(true);
-						}}
+						onExportHtml={handleExportHtml}
+						onPublishTabGist={handlePublishTabGist}
 						// Context warning sash settings (Phase 6)
 						contextWarningsEnabled={
 							contextManagementSettings.contextWarningsEnabled

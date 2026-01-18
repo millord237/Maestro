@@ -1617,10 +1617,15 @@ function SessionListInner(props: SessionListProps) {
             const handleMouseMove = (e: MouseEvent) => {
               const delta = e.clientX - startX;
               currentWidth = Math.max(256, Math.min(600, startWidth + delta));
-              setLeftSidebarWidthState(currentWidth);
+              // Direct DOM update during drag for performance (avoids ~60 re-renders/sec)
+              if (sidebarContainerRef?.current) {
+                sidebarContainerRef.current.style.width = `${currentWidth}px`;
+              }
             };
 
             const handleMouseUp = () => {
+              // Only update React state once on mouseup
+              setLeftSidebarWidthState(currentWidth);
               window.maestro.settings.set('leftSidebarWidth', currentWidth);
               document.removeEventListener('mousemove', handleMouseMove);
               document.removeEventListener('mouseup', handleMouseUp);

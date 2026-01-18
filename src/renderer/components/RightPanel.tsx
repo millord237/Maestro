@@ -133,6 +133,7 @@ export const RightPanel = memo(forwardRef<RightPanelHandle, RightPanelProps>(fun
 
   const historyPanelRef = useRef<HistoryPanelHandle>(null);
   const autoRunRef = useRef<AutoRunHandle>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Elapsed time for Auto Run display - tracks wall clock time from startTime
   const [elapsedTime, setElapsedTime] = useState<string>('');
@@ -303,6 +304,7 @@ export const RightPanel = memo(forwardRef<RightPanelHandle, RightPanelProps>(fun
 
   return (
     <div
+      ref={panelRef}
       tabIndex={0}
       className={`border-l flex flex-col transition-all duration-300 outline-none relative ${rightPanelOpen ? '' : 'w-0 overflow-hidden opacity-0'} ${activeFocus === 'right' ? 'ring-1 ring-inset z-10' : ''}`}
       style={{
@@ -327,10 +329,15 @@ export const RightPanel = memo(forwardRef<RightPanelHandle, RightPanelProps>(fun
             const handleMouseMove = (e: MouseEvent) => {
               const delta = startX - e.clientX; // Reversed for right panel
               currentWidth = Math.max(384, Math.min(800, startWidth + delta));
-              setRightPanelWidthState(currentWidth);
+              // Direct DOM update during drag for performance (avoids ~60 re-renders/sec)
+              if (panelRef.current) {
+                panelRef.current.style.width = `${currentWidth}px`;
+              }
             };
 
             const handleMouseUp = () => {
+              // Only update React state once on mouseup
+              setRightPanelWidthState(currentWidth);
               window.maestro.settings.set('rightPanelWidth', currentWidth);
               document.removeEventListener('mousemove', handleMouseMove);
               document.removeEventListener('mouseup', handleMouseUp);
