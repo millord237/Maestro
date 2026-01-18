@@ -198,9 +198,11 @@ export function useMobileSessionManagement(
   const previousSessionStatesRef = useRef<Map<string, string>>(new Map());
 
   // Ref to track activeSessionId for use in callbacks (avoids stale closure issues)
-  const activeSessionIdRef = useRef<string | null>(null);
+  // Initialize with same value as state to avoid race condition where WebSocket
+  // messages arrive before useEffect syncs the ref
+  const activeSessionIdRef = useRef<string | null>(urlSessionId || savedActiveSessionId);
   // Ref to track activeTabId for use in callbacks (avoids stale closure issues)
-  const activeTabIdRef = useRef<string | null>(null);
+  const activeTabIdRef = useRef<string | null>(urlTabId || savedActiveTabId);
 
   // Keep activeSessionIdRef in sync with state
   useEffect(() => {

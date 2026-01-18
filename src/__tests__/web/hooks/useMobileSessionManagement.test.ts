@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useMobileSessionManagement, type UseMobileSessionManagementDeps } from '../../../web/hooks/useMobileSessionManagement';
 import type { Session } from '../../../web/hooks/useSessions';
 
@@ -82,9 +82,8 @@ describe('useMobileSessionManagement', () => {
       savedActiveTabId: 'tab-1',
     }));
 
-    await waitFor(() => {
-      expect(result.current.activeSessionIdRef.current).toBe('session-1');
-    });
+    // Refs should be initialized immediately with saved values (no race condition)
+    expect(result.current.activeSessionIdRef.current).toBe('session-1');
 
     act(() => {
       result.current.sessionsHandlers.onSessionOutput('session-1', 'hello', 'ai', 'tab-1');
