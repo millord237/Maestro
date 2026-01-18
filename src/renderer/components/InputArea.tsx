@@ -70,8 +70,9 @@ interface InputAreaProps {
   atMentionSuggestions?: Array<{ value: string; type: 'file' | 'folder'; displayText: string; fullPath: string; source?: 'project' | 'autorun' }>;
   selectedAtMentionIndex?: number;
   setSelectedAtMentionIndex?: (index: number) => void;
-  // ThinkingStatusPill props - sessions is used to compute thinkingSessions
-  sessions?: Session[];
+  // ThinkingStatusPill props - PERF: receive pre-filtered thinkingSessions instead of full sessions
+  // This prevents re-renders when unrelated session updates occur (e.g., terminal output)
+  thinkingSessions?: Session[];
   namedSessions?: Record<string, string>;
   onSessionClick?: (sessionId: string, tabId?: string) => void;
   autoRunState?: BatchRunState;
@@ -141,7 +142,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
     atMentionStartIndex = -1, setAtMentionStartIndex,
     atMentionSuggestions = [], selectedAtMentionIndex = 0,
     setSelectedAtMentionIndex,
-    sessions = [], namedSessions, onSessionClick, autoRunState, onStopAutoRun,
+    thinkingSessions = [], namedSessions, onSessionClick, autoRunState, onStopAutoRun,
     onOpenQueueBrowser,
     tabReadOnlyMode = false, onToggleTabReadOnlyMode,
     tabSaveToHistory = false, onToggleTabSaveToHistory,
@@ -219,11 +220,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
   // Filter slash commands based on input and current mode
   const isTerminalMode = session.inputMode === 'terminal';
 
-  // PERF: Precompute thinkingSessions to avoid O(n) filter in ThinkingStatusPill on every keystroke
-  const thinkingSessions = useMemo(
-    () => sessions.filter(s => s.state === 'busy' && s.busySource === 'ai'),
-    [sessions]
-  );
+  // thinkingSessions is now passed directly from App.tsx (pre-filtered) for better performance
 
   // Get the appropriate command history based on current mode
   // Fall back to legacy commandHistory for sessions created before the split

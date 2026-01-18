@@ -37,7 +37,9 @@ interface MainPanelProps {
   agentSessionsOpen: boolean;
   activeAgentSessionId: string | null;
   activeSession: Session | null;
-  sessions: Session[]; // All sessions for InputArea's ThinkingStatusPill
+  // PERF: Receive pre-filtered thinkingSessions instead of full sessions array.
+  // This prevents cascade re-renders when unrelated session updates occur.
+  thinkingSessions: Session[];
   theme: Theme;
   fontFamily: string;
   isMobileLandscape?: boolean;
@@ -265,7 +267,7 @@ interface MainPanelProps {
 // due to input value changes. The component will only re-render when its props actually change.
 export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
   const {
-    logViewerOpen, agentSessionsOpen, activeAgentSessionId, activeSession, sessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
+    logViewerOpen, agentSessionsOpen, activeAgentSessionId, activeSession, thinkingSessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSendAI, enterToSendTerminal, stagedImages, commandHistoryOpen, commandHistoryFilter,
     commandHistorySelectedIndex, slashCommandOpen, slashCommands, selectedSlashCommandIndex,
     tabCompletionOpen, tabCompletionSuggestions, selectedTabCompletionIndex, tabCompletionFilter,
@@ -1289,7 +1291,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                 onInputFocus={handleInputFocus}
                 onInputBlur={props.onInputBlur}
                 isAutoModeActive={isCurrentSessionAutoMode}
-                sessions={sessions}
+                thinkingSessions={thinkingSessions}
                 onSessionClick={handleSessionClick}
                 autoRunState={currentSessionBatchState || undefined}
                 onStopAutoRun={onStopBatchRun}

@@ -662,6 +662,12 @@ function MaestroConsoleInner() {
 	const [terminalInputValue, setTerminalInputValue] = useState('');
 	const [aiInputValueLocal, setAiInputValueLocal] = useState('');
 
+	// PERF: Refs to access current input values without triggering re-renders in memoized callbacks
+	const terminalInputValueRef = useRef(terminalInputValue);
+	const aiInputValueLocalRef = useRef(aiInputValueLocal);
+	useEffect(() => { terminalInputValueRef.current = terminalInputValue; }, [terminalInputValue]);
+	useEffect(() => { aiInputValueLocalRef.current = aiInputValueLocal; }, [aiInputValueLocal]);
+
 	// Completion states from InputContext (these change infrequently)
 	const {
 		slashCommandOpen,
@@ -719,6 +725,8 @@ function MaestroConsoleInner() {
 	const [lastGraphFocusFilePath, setLastGraphFocusFilePath] = useState<
 		string | undefined
 	>(undefined);
+	// PERF: Ref to access lastGraphFocusFilePath in memoized callbacks without causing re-renders
+	const lastGraphFocusFilePathRef = useRef(lastGraphFocusFilePath);
 
 	// GitHub CLI availability (for gist publishing)
 	const [ghCliAvailable, setGhCliAvailable] = useState(false);
@@ -3797,6 +3805,16 @@ function MaestroConsoleInner() {
 		[activeSession?.filePreviewHistoryIndex]
 	);
 
+	// PERF: Memoize sliced history arrays to prevent new array creation on every render
+	const backHistory = useMemo(
+		() => filePreviewHistory.slice(0, filePreviewHistoryIndex),
+		[filePreviewHistory, filePreviewHistoryIndex]
+	);
+	const forwardHistory = useMemo(
+		() => filePreviewHistory.slice(filePreviewHistoryIndex + 1),
+		[filePreviewHistory, filePreviewHistoryIndex]
+	);
+
 	// Helper to update file preview history for the active session
 	const setFilePreviewHistory = useCallback(
 		(history: { name: string; content: string; path: string }[]) => {
@@ -4867,7 +4885,27 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 	// Use local state for responsive typing - no session state update on every keystroke
 	const inputValue = isAiMode ? aiInputValueLocal : terminalInputValue;
-	const setInputValue = isAiMode ? setAiInputValueLocal : setTerminalInputValue;
+	// PERF: Memoize setInputValue to maintain stable reference - prevents child re-renders
+	// when this callback is passed as a prop. The conditional selection based on isAiMode
+	// was creating new function references on every render.
+	const setInputValue = useCallback(
+		(value: string | ((prev: string) => string)) => {
+			if (activeSession?.inputMode === 'ai') {
+				setAiInputValueLocal(value);
+			} else {
+				setTerminalInputValue(value);
+			}
+		},
+		[activeSession?.inputMode]
+	);
+
+	// PERF: Memoize thinkingSessions at App level to avoid passing full sessions array to children.
+	// This prevents InputArea from re-rendering on unrelated session updates (e.g., terminal output).
+	// The computation is O(n) but only runs when sessions array changes, not on every keystroke.
+	const thinkingSessions = useMemo(
+		() => sessions.filter(s => s.state === 'busy' && s.busySource === 'ai'),
+		[sessions]
+	);
 
 	// Images are stored per-tab and only used in AI mode
 	// Get staged images from the active tab
@@ -5307,6 +5345,600 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 	const handleOpenQueueBrowser = useCallback(() => {
 		setQueueBrowserOpen(true);
+	}, []);
+
+	// PERF: Memoized callback for deleting log entries
+	// Extracted from inline function to prevent MainPanel re-renders
+	const handleDeleteLog = useCallback((logId: string): number | null => {
+		// Use refs to access current state without adding dependencies
+		const currentSession = sessionsRef.current.find(
+			s => s.id === activeSessionIdRef.current
+		);
+		if (!currentSession) return null;
+
+		const isAIMode = currentSession.inputMode === 'ai';
+
+		// For AI mode, use the active tab's logs; for terminal mode, use shellLogs
+		const currentActiveTab = isAIMode ? getActiveTab(currentSession) : null;
+		const logs = isAIMode
+			? currentActiveTab?.logs || []
+			: currentSession.shellLogs;
+
+		// Find the log entry and its index
+		const logIndex = logs.findIndex(log => log.id === logId);
+		if (logIndex === -1) return null;
+
+		const log = logs[logIndex];
+		if (log.source !== 'user') return null; // Only delete user commands/messages
+
+		// Find the next user command index (or end of array)
+		let endIndex = logs.length;
+		for (let i = logIndex + 1; i < logs.length; i++) {
+			if (logs[i].source === 'user') {
+				endIndex = i;
+				break;
+			}
+		}
+
+		// Remove logs from logIndex to endIndex (exclusive)
+		const newLogs = [
+			...logs.slice(0, logIndex),
+			...logs.slice(endIndex)
+		];
+
+		// Find the index of the next user command in the NEW array
+		// This is the command that was at endIndex, now at logIndex position
+		let nextUserCommandIndex: number | null = null;
+		for (let i = logIndex; i < newLogs.length; i++) {
+			if (newLogs[i].source === 'user') {
+				nextUserCommandIndex = i;
+				break;
+			}
+		}
+		// If no next command, try to find the previous user command
+		if (nextUserCommandIndex === null) {
+			for (let i = logIndex - 1; i >= 0; i--) {
+				if (newLogs[i].source === 'user') {
+					nextUserCommandIndex = i;
+					break;
+				}
+			}
+		}
+
+		if (isAIMode && currentActiveTab) {
+			// For AI mode, also delete from the Claude session JSONL file
+			// This ensures the context is actually removed for future interactions
+			// Use the active tab's agentSessionId, not the deprecated session-level one
+			const agentSessionId = currentActiveTab.agentSessionId;
+			if (agentSessionId && currentSession.cwd) {
+				// Delete asynchronously - don't block the UI update
+				window.maestro.claude
+					.deleteMessagePair(
+						currentSession.cwd,
+						agentSessionId,
+						logId, // This is the UUID if loaded from Claude session
+						log.text // Fallback: match by content if UUID doesn't match
+					)
+					.then(result => {
+						if (!result.success) {
+							console.warn(
+								'[handleDeleteLog] Failed to delete from Claude session:',
+								result.error
+							);
+						}
+					})
+					.catch(err => {
+						console.error(
+							'[handleDeleteLog] Error deleting from Claude session:',
+							err
+						);
+					});
+			}
+
+			// Update the active tab's logs and aiCommandHistory
+			const commandText = log.text.trim();
+
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== currentSession.id) return s;
+					const newAICommandHistory = (
+						s.aiCommandHistory || []
+					).filter(cmd => cmd !== commandText);
+					return {
+						...s,
+						aiCommandHistory: newAICommandHistory,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === currentActiveTab.id
+								? { ...tab, logs: newLogs }
+								: tab
+						)
+					};
+				})
+			);
+		} else {
+			// Terminal mode - update shellLogs and shellCommandHistory
+			const commandText = log.text.trim();
+
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== currentSession.id) return s;
+					const newShellCommandHistory = (
+						s.shellCommandHistory || []
+					).filter(cmd => cmd !== commandText);
+					return {
+						...s,
+						shellLogs: newLogs,
+						shellCommandHistory: newShellCommandHistory
+					};
+				})
+			);
+		}
+
+		return nextUserCommandIndex;
+	}, []);
+
+	// PERF: Memoized callbacks for MainPanel tab management props
+	// These were previously inline arrow functions, causing MainPanel re-renders on every keystroke
+	const handleRequestTabRename = useCallback((tabId: string) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const tab = session.aiTabs?.find(t => t.id === tabId);
+		if (tab) {
+			setRenameTabId(tabId);
+			setRenameTabInitialName(getInitialRenameValue(tab));
+			setRenameTabModalOpen(true);
+		}
+	}, []);
+
+	const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current || !s.aiTabs) return s;
+				const tabs = [...s.aiTabs];
+				const [movedTab] = tabs.splice(fromIndex, 1);
+				tabs.splice(toIndex, 0, movedTab);
+				return { ...s, aiTabs: tabs };
+			})
+		);
+	}, []);
+
+	const handleUpdateTabByClaudeSessionId = useCallback((
+		agentSessionId: string,
+		updates: { name?: string | null; starred?: boolean }
+	) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				const tabIndex = s.aiTabs.findIndex(tab => tab.agentSessionId === agentSessionId);
+				if (tabIndex === -1) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.agentSessionId === agentSessionId
+							? {
+								...tab,
+								...(updates.name !== undefined ? { name: updates.name } : {}),
+								...(updates.starred !== undefined ? { starred: updates.starred } : {})
+							}
+							: tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleTabStar = useCallback((tabId: string, starred: boolean) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const tabToStar = session.aiTabs.find(t => t.id === tabId);
+		if (!tabToStar?.agentSessionId) return;
+
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				const tab = s.aiTabs.find(t => t.id === tabId);
+				if (tab?.agentSessionId) {
+					const agentId = s.toolType || 'claude-code';
+					if (agentId === 'claude-code') {
+						window.maestro.claude
+							.updateSessionStarred(s.projectRoot, tab.agentSessionId, starred)
+							.catch(err => console.error('Failed to persist tab starred:', err));
+					} else {
+						window.maestro.agentSessions
+							.setSessionStarred(agentId, s.projectRoot, tab.agentSessionId, starred)
+							.catch(err => console.error('Failed to persist tab starred:', err));
+					}
+				}
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(t => t.id === tabId ? { ...t, starred } : t)
+				};
+			})
+		);
+	}, []);
+
+	const handleTabMarkUnread = useCallback((tabId: string) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(t => t.id === tabId ? { ...t, hasUnread: true } : t)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabReadOnlyMode = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabSaveToHistory = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabShowThinking = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab => {
+						if (tab.id !== activeTab.id) return tab;
+						if (tab.showThinking) {
+							return {
+								...tab,
+								showThinking: false,
+								logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
+							};
+						}
+						return { ...tab, showThinking: true };
+					})
+				};
+			})
+		);
+	}, []);
+
+	const handleScrollPositionChange = useCallback((scrollTop: number) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		if (session.inputMode === 'ai') {
+			const activeTab = getActiveTab(session);
+			if (!activeTab) return;
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== activeSessionIdRef.current) return s;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === activeTab.id ? { ...tab, scrollTop } : tab
+						)
+					};
+				})
+			);
+		} else {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === activeSessionIdRef.current ? { ...s, terminalScrollTop: scrollTop } : s
+				)
+			);
+		}
+	}, []);
+
+	const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		if (session.inputMode === 'ai') {
+			const activeTab = getActiveTab(session);
+			if (!activeTab) return;
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== activeSessionIdRef.current) return s;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === activeTab.id
+								? { ...tab, isAtBottom, hasUnread: isAtBottom ? false : tab.hasUnread }
+								: tab
+						)
+					};
+				})
+			);
+		}
+	}, []);
+
+	const handleMainPanelInputBlur = useCallback(() => {
+		// Access current values via refs to avoid dependencies
+		const currentIsAiMode = sessionsRef.current.find(s => s.id === activeSessionIdRef.current)?.inputMode === 'ai';
+		if (currentIsAiMode) {
+			syncAiInputToSession(aiInputValueLocalRef.current);
+		} else {
+			syncTerminalInputToSession(terminalInputValueRef.current);
+		}
+	}, [syncAiInputToSession, syncTerminalInputToSession]);
+
+	// PERF: Ref to access processInput without dependency - will be set after processInput is defined
+	const processInputRef = useRef<(text?: string) => void>(() => {});
+
+	const handleReplayMessage = useCallback((text: string, images?: string[]) => {
+		if (images && images.length > 0) {
+			setStagedImages(images);
+		}
+		setTimeout(() => processInputRef.current(text), 0);
+	}, [setStagedImages]);
+
+	const handleOpenTabSearch = useCallback(() => {
+		setTabSwitcherOpen(true);
+	}, []);
+
+	const handleOpenPromptComposer = useCallback(() => {
+		setPromptComposerOpen(true);
+	}, []);
+
+	const handleOpenFuzzySearch = useCallback(() => {
+		setFuzzyFileSearchOpen(true);
+	}, []);
+
+	const handleOpenWorktreeConfig = useCallback(() => {
+		setWorktreeConfigModalOpen(true);
+	}, []);
+
+	const handleOpenCreatePR = useCallback(() => {
+		setCreatePRModalOpen(true);
+	}, []);
+
+	const handleOpenAboutModal = useCallback(() => {
+		setAboutModalOpen(true);
+	}, []);
+
+	const handleFocusFileInGraph = useCallback((relativePath: string) => {
+		setGraphFocusFilePath(relativePath);
+		setLastGraphFocusFilePath(relativePath);
+		setIsGraphViewOpen(true);
+	}, []);
+
+	const handleOpenLastDocumentGraph = useCallback(() => {
+		// Use ref pattern to access current value without dependency
+		const path = lastGraphFocusFilePathRef.current;
+		if (path) {
+			setGraphFocusFilePath(path);
+			setIsGraphViewOpen(true);
+		}
+	}, []);
+
+	// Sync lastGraphFocusFilePath ref for use in memoized callbacks
+	useEffect(() => { lastGraphFocusFilePathRef.current = lastGraphFocusFilePath; }, [lastGraphFocusFilePath]);
+
+	// PERF: Memoized callbacks for SessionList props - these were inline arrow functions
+	const handleEditAgent = useCallback((session: Session) => {
+		setEditAgentSession(session);
+		setEditAgentModalOpen(true);
+	}, []);
+
+	const handleOpenCreatePRSession = useCallback((session: Session) => {
+		setCreatePRSession(session);
+		setCreatePRModalOpen(true);
+	}, []);
+
+	const handleQuickCreateWorktree = useCallback((session: Session) => {
+		setCreateWorktreeSession(session);
+		setCreateWorktreeModalOpen(true);
+	}, []);
+
+	const handleOpenWorktreeConfigSession = useCallback((session: Session) => {
+		setActiveSessionId(session.id);
+		setWorktreeConfigModalOpen(true);
+	}, []);
+
+	const handleDeleteWorktreeSession = useCallback((session: Session) => {
+		setDeleteWorktreeSession(session);
+		setDeleteWorktreeModalOpen(true);
+	}, []);
+
+	const handleToggleWorktreeExpanded = useCallback((sessionId: string) => {
+		setSessions(prev =>
+			prev.map(s =>
+				s.id === sessionId
+					? { ...s, worktreesExpanded: !(s.worktreesExpanded ?? true) }
+					: s
+			)
+		);
+	}, []);
+
+	const handleStartTour = useCallback(() => {
+		setTourFromWizard(false);
+		setTourOpen(true);
+	}, []);
+
+	const handleNewGroupChat = useCallback(() => {
+		setShowNewGroupChatModal(true);
+	}, []);
+
+	const handleEditGroupChat = useCallback((id: string) => {
+		setShowEditGroupChatModal(id);
+	}, []);
+
+	const handleOpenRenameGroupChatModal = useCallback((id: string) => {
+		setShowRenameGroupChatModal(id);
+	}, []);
+
+	const handleOpenDeleteGroupChatModal = useCallback((id: string) => {
+		setShowDeleteGroupChatModal(id);
+	}, []);
+
+	// PERF: Memoized callbacks for MainPanel file preview navigation
+	// These were inline arrow functions causing MainPanel re-renders on every keystroke
+	const handleMainPanelFileClick = useCallback(async (relativePath: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const filename = relativePath.split('/').pop() || relativePath;
+
+		// Get SSH remote ID
+		const sshRemoteId =
+			currentSession.sshRemoteId ||
+			currentSession.sessionSshRemoteConfig?.remoteId ||
+			undefined;
+
+		// Check if file should be opened externally (PDF, etc.)
+		if (!sshRemoteId && shouldOpenExternally(filename)) {
+			const fullPath = `${currentSession.fullPath}/${relativePath}`;
+			window.maestro.shell.openExternal(`file://${fullPath}`);
+			return;
+		}
+
+		try {
+			const fullPath = `${currentSession.fullPath}/${relativePath}`;
+			const content = await window.maestro.fs.readFile(fullPath, sshRemoteId);
+			const newFile = { name: filename, content, path: fullPath };
+
+			const history = currentSession.filePreviewHistory ?? [];
+			const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+			const currentFile = history[historyIndex];
+
+			if (!currentFile || currentFile.path !== fullPath) {
+				const newHistory = history.slice(0, historyIndex + 1);
+				newHistory.push(newFile);
+				setSessions(prev =>
+					prev.map(s =>
+						s.id === currentSession.id
+							? { ...s, filePreviewHistory: newHistory, filePreviewHistoryIndex: newHistory.length - 1 }
+							: s
+					)
+				);
+			}
+			setPreviewFile(newFile);
+			setActiveFocus('main');
+		} catch (error) {
+			console.error('[onFileClick] Failed to read file:', error);
+		}
+	}, []);
+
+	const handleNavigateBack = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (historyIndex > 0) {
+			const newIndex = historyIndex - 1;
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: newIndex } : s
+				)
+			);
+			setPreviewFile(history[newIndex]);
+		}
+	}, []);
+
+	const handleNavigateForward = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (historyIndex < history.length - 1) {
+			const newIndex = historyIndex + 1;
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: newIndex } : s
+				)
+			);
+			setPreviewFile(history[newIndex]);
+		}
+	}, []);
+
+	const handleNavigateToIndex = useCallback((index: number) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (index >= 0 && index < history.length) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: index } : s
+				)
+			);
+			setPreviewFile(history[index]);
+		}
+	}, []);
+
+	const handleMergeWith = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (currentSession) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, activeTabId: tabId } : s
+				)
+			);
+		}
+		setMergeSessionModalOpen(true);
+	}, []);
+
+	const handleOpenSendToAgentModal = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (currentSession) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, activeTabId: tabId } : s
+				)
+			);
+		}
+		setSendToAgentModalOpen(true);
+	}, []);
+
+	const handleCopyContext = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		const text = formatLogsForClipboard(tab.logs);
+		navigator.clipboard
+			.writeText(text)
+			.then(() => {
+				addToastRef.current({
+					type: 'success',
+					title: 'Context Copied',
+					message: 'Conversation copied to clipboard.'
+				});
+			})
+			.catch(err => {
+				console.error('Failed to copy context:', err);
+				addToastRef.current({
+					type: 'error',
+					title: 'Copy Failed',
+					message: 'Failed to copy context to clipboard.'
+				});
+			});
 	}, []);
 
 	// Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now updated in useAgentExecution hook
@@ -6307,7 +6939,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 	]);
 
 	// Input processing hook - handles sending messages and commands
-	const { processInput, processInputRef: _processInputRef } =
+	const { processInput, processInputRef: hookProcessInputRef } =
 		useInputProcessing({
 			activeSession,
 			activeSessionId,
@@ -6334,6 +6966,11 @@ You are taking over this conversation. Based on the context above, provide a bri
 		});
 
 	// Auto-send context when a tab with autoSendOnActivate becomes active
+	// PERF: Sync processInputRef from hook to our local ref for use in memoized callbacks
+	useEffect(() => {
+		processInputRef.current = processInput;
+	}, [processInput]);
+
 	// This is used by context transfer to automatically send the transferred context to the agent
 	useEffect(() => {
 		if (!activeSession) return;
@@ -7900,11 +8537,12 @@ You are taking over this conversation. Based on the context above, provide a bri
 		}
 	};
 
-	const showConfirmation = (message: string, onConfirm: () => void) => {
+	// PERF: Memoize to prevent breaking React.memo on MainPanel
+	const showConfirmation = useCallback((message: string, onConfirm: () => void) => {
 		setConfirmModalMessage(message);
 		setConfirmModalOnConfirm(() => onConfirm);
 		setConfirmModalOpen(true);
-	};
+	}, []);
 
 	// Delete group chat with confirmation dialog (for keyboard shortcut and CMD+K)
 	const deleteGroupChatWithConfirmation = useCallback(
@@ -12505,57 +13143,26 @@ You are taking over this conversation. Based on the context above, provide a bri
 							setRenameInstanceModalOpen={setRenameInstanceModalOpen}
 							setRenameInstanceValue={setRenameInstanceValue}
 							setRenameInstanceSessionId={setRenameInstanceSessionId}
-							onEditAgent={session => {
-								setEditAgentSession(session);
-								setEditAgentModalOpen(true);
-							}}
-							onOpenCreatePR={session => {
-								setCreatePRSession(session);
-								setCreatePRModalOpen(true);
-							}}
-							onQuickCreateWorktree={session => {
-								setCreateWorktreeSession(session);
-								setCreateWorktreeModalOpen(true);
-							}}
-							onOpenWorktreeConfig={session => {
-								// Set the active session to the one we're configuring, then open the modal
-								setActiveSessionId(session.id);
-								setWorktreeConfigModalOpen(true);
-							}}
-							onDeleteWorktree={session => {
-								// Show delete worktree modal with options
-								setDeleteWorktreeSession(session);
-								setDeleteWorktreeModalOpen(true);
-							}}
-							onToggleWorktreeExpanded={sessionId => {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === sessionId
-											? {
-													...s,
-													worktreesExpanded: !(s.worktreesExpanded ?? true)
-											  }
-											: s
-									)
-								);
-							}}
+							onEditAgent={handleEditAgent}
+							onOpenCreatePR={handleOpenCreatePRSession}
+							onQuickCreateWorktree={handleQuickCreateWorktree}
+							onOpenWorktreeConfig={handleOpenWorktreeConfigSession}
+							onDeleteWorktree={handleDeleteWorktreeSession}
+							onToggleWorktreeExpanded={handleToggleWorktreeExpanded}
 							activeBatchSessionIds={activeBatchSessionIds}
 							showSessionJumpNumbers={showSessionJumpNumbers}
 							visibleSessions={visibleSessions}
 							autoRunStats={autoRunStats}
 							openWizard={openWizardModal}
-							startTour={() => {
-								setTourFromWizard(false);
-								setTourOpen(true);
-							}}
+							startTour={handleStartTour}
 							// Group Chat Props
 							groupChats={groupChats}
 							activeGroupChatId={activeGroupChatId}
 							onOpenGroupChat={handleOpenGroupChat}
-							onNewGroupChat={() => setShowNewGroupChatModal(true)}
-							onEditGroupChat={id => setShowEditGroupChatModal(id)}
-							onRenameGroupChat={id => setShowRenameGroupChatModal(id)}
-							onDeleteGroupChat={id => setShowDeleteGroupChatModal(id)}
+							onNewGroupChat={handleNewGroupChat}
+							onEditGroupChat={handleEditGroupChat}
+							onRenameGroupChat={handleOpenRenameGroupChatModal}
+							onDeleteGroupChat={handleOpenDeleteGroupChatModal}
 							groupChatsExpanded={groupChatsExpanded}
 							onGroupChatsExpandedChange={setGroupChatsExpanded}
 							groupChatState={groupChatState}
@@ -12720,7 +13327,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 						agentSessionsOpen={agentSessionsOpen}
 						activeAgentSessionId={activeAgentSessionId}
 						activeSession={activeSession}
-						sessions={sessions}
+						thinkingSessions={thinkingSessions}
 						theme={theme}
 						fontFamily={fontFamily}
 						isMobileLandscape={isMobileLandscape}
@@ -12805,130 +13412,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 						currentSessionBatchState={currentSessionBatchState}
 						onStopBatchRun={handleStopBatchRun}
 						showConfirmation={showConfirmation}
-						onDeleteLog={(logId: string): number | null => {
-							if (!activeSession) return null;
-
-							const isAIMode = activeSession.inputMode === 'ai';
-
-							// For AI mode, use the active tab's logs; for terminal mode, use shellLogs
-							const activeTab = isAIMode ? getActiveTab(activeSession) : null;
-							const logs = isAIMode
-								? activeTab?.logs || []
-								: activeSession.shellLogs;
-
-							// Find the log entry and its index
-							const logIndex = logs.findIndex(log => log.id === logId);
-							if (logIndex === -1) return null;
-
-							const log = logs[logIndex];
-							if (log.source !== 'user') return null; // Only delete user commands/messages
-
-							// Find the next user command index (or end of array)
-							let endIndex = logs.length;
-							for (let i = logIndex + 1; i < logs.length; i++) {
-								if (logs[i].source === 'user') {
-									endIndex = i;
-									break;
-								}
-							}
-
-							// Remove logs from logIndex to endIndex (exclusive)
-							const newLogs = [
-								...logs.slice(0, logIndex),
-								...logs.slice(endIndex)
-							];
-
-							// Find the index of the next user command in the NEW array
-							// This is the command that was at endIndex, now at logIndex position
-							let nextUserCommandIndex: number | null = null;
-							for (let i = logIndex; i < newLogs.length; i++) {
-								if (newLogs[i].source === 'user') {
-									nextUserCommandIndex = i;
-									break;
-								}
-							}
-							// If no next command, try to find the previous user command
-							if (nextUserCommandIndex === null) {
-								for (let i = logIndex - 1; i >= 0; i--) {
-									if (newLogs[i].source === 'user') {
-										nextUserCommandIndex = i;
-										break;
-									}
-								}
-							}
-
-							if (isAIMode && activeTab) {
-								// For AI mode, also delete from the Claude session JSONL file
-								// This ensures the context is actually removed for future interactions
-								// Use the active tab's agentSessionId, not the deprecated session-level one
-								const agentSessionId = activeTab.agentSessionId;
-								if (agentSessionId && activeSession.cwd) {
-									// Delete asynchronously - don't block the UI update
-									window.maestro.claude
-										.deleteMessagePair(
-											activeSession.cwd,
-											agentSessionId,
-											logId, // This is the UUID if loaded from Claude session
-											log.text // Fallback: match by content if UUID doesn't match
-										)
-										.then(result => {
-											if (!result.success) {
-												console.warn(
-													'[onDeleteLog] Failed to delete from Claude session:',
-													result.error
-												);
-											}
-										})
-										.catch(err => {
-											console.error(
-												'[onDeleteLog] Error deleting from Claude session:',
-												err
-											);
-										});
-								}
-
-								// Update the active tab's logs and aiCommandHistory
-								const commandText = log.text.trim();
-								const newAICommandHistory = (
-									activeSession.aiCommandHistory || []
-								).filter(cmd => cmd !== commandText);
-
-								setSessions(
-									sessions.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiCommandHistory: newAICommandHistory,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id
-													? { ...tab, logs: newLogs }
-													: tab
-											)
-										};
-									})
-								);
-							} else {
-								// Terminal mode - update shellLogs and shellCommandHistory
-								const commandText = log.text.trim();
-								const newShellCommandHistory = (
-									activeSession.shellCommandHistory || []
-								).filter(cmd => cmd !== commandText);
-
-								setSessions(
-									sessions.map(s =>
-										s.id === activeSession.id
-											? {
-													...s,
-													shellLogs: newLogs,
-													shellCommandHistory: newShellCommandHistory
-											  }
-											: s
-									)
-								);
-							}
-
-							return nextUserCommandIndex;
-						}}
+						onDeleteLog={handleDeleteLog}
 						onRemoveQueuedItem={handleRemoveQueuedItem}
 						onOpenQueueBrowser={handleOpenQueueBrowser}
 						audioFeedbackCommand={audioFeedbackCommand}
@@ -12936,343 +13420,38 @@ You are taking over this conversation. Based on the context above, provide a bri
 						onTabSelect={handleTabSelect}
 						onTabClose={handleTabClose}
 						onNewTab={handleNewTab}
-						onRequestTabRename={(tabId: string) => {
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs?.find(t => t.id === tabId);
-							if (tab) {
-								setRenameTabId(tabId);
-								setRenameTabInitialName(getInitialRenameValue(tab));
-								setRenameTabModalOpen(true);
-							}
-						}}
-						onTabReorder={(fromIndex: number, toIndex: number) => {
-							if (!activeSession) return;
-							// Use functional setState to compute from fresh state (avoids stale closure issues)
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id || !s.aiTabs) return s;
-									const tabs = [...s.aiTabs];
-									const [movedTab] = tabs.splice(fromIndex, 1);
-									tabs.splice(toIndex, 0, movedTab);
-									return { ...s, aiTabs: tabs };
-								})
-							);
-						}}
-						onUpdateTabByClaudeSessionId={(
-							agentSessionId: string,
-							updates: { name?: string | null; starred?: boolean }
-						) => {
-							// Update the AITab that matches this Claude session ID
-							// This is called when a session is renamed or starred in the AgentSessionsBrowser
-							if (!activeSession) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									const tabIndex = s.aiTabs.findIndex(
-										tab => tab.agentSessionId === agentSessionId
-									);
-									if (tabIndex === -1) return s; // Session not open as a tab
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.agentSessionId === agentSessionId
-												? {
-														...tab,
-														...(updates.name !== undefined
-															? { name: updates.name }
-															: {}),
-														...(updates.starred !== undefined
-															? { starred: updates.starred }
-															: {})
-												  }
-												: tab
-										)
-									};
-								})
-							);
-						}}
-						onTabStar={(tabId: string, starred: boolean) => {
-							if (!activeSession) return;
-							// Find the tab first to check if it has a session ID
-							const tabToStar = activeSession.aiTabs.find(t => t.id === tabId);
-							// Don't allow starring tabs without a session ID (new/empty tabs)
-							if (!tabToStar?.agentSessionId) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									// Find the tab to get its agentSessionId for persistence
-									const tab = s.aiTabs.find(t => t.id === tabId);
-									if (tab?.agentSessionId) {
-										// Persist starred status to session metadata (async, fire and forget)
-										// Use projectRoot (not cwd) since session storage is keyed by initial project path
-										const agentId = s.toolType || 'claude-code';
-										if (agentId === 'claude-code') {
-											window.maestro.claude
-												.updateSessionStarred(
-													s.projectRoot,
-													tab.agentSessionId,
-													starred
-												)
-												.catch(err =>
-													console.error('Failed to persist tab starred:', err)
-												);
-										} else {
-											window.maestro.agentSessions
-												.setSessionStarred(
-													agentId,
-													s.projectRoot,
-													tab.agentSessionId,
-													starred
-												)
-												.catch(err =>
-													console.error('Failed to persist tab starred:', err)
-												);
-										}
-									}
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(t =>
-											t.id === tabId ? { ...t, starred } : t
-										)
-									};
-								})
-							);
-						}}
-						onTabMarkUnread={(tabId: string) => {
-							if (!activeSession) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(t =>
-											t.id === tabId ? { ...t, hasUnread: true } : t
-										)
-									};
-								})
-							);
-						}}
-						onToggleTabReadOnlyMode={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.id === activeTab.id
-												? { ...tab, readOnlyMode: !tab.readOnlyMode }
-												: tab
-										)
-									};
-								})
-							);
-						}}
+						onRequestTabRename={handleRequestTabRename}
+						onTabReorder={handleTabReorder}
+						onUpdateTabByClaudeSessionId={handleUpdateTabByClaudeSessionId}
+						onTabStar={handleTabStar}
+						onTabMarkUnread={handleTabMarkUnread}
+						onToggleTabReadOnlyMode={handleToggleTabReadOnlyMode}
 						showUnreadOnly={showUnreadOnly}
 						onToggleUnreadFilter={toggleUnreadFilter}
-						onOpenTabSearch={() => setTabSwitcherOpen(true)}
+						onOpenTabSearch={handleOpenTabSearch}
 						onCloseAllTabs={handleCloseAllTabs}
 						onCloseOtherTabs={handleCloseOtherTabs}
 						onCloseTabsLeft={handleCloseTabsLeft}
 						onCloseTabsRight={handleCloseTabsRight}
-						onToggleTabSaveToHistory={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.id === activeTab.id
-												? { ...tab, saveToHistory: !tab.saveToHistory }
-												: tab
-										)
-									};
-								})
-							);
-						}}
-						onToggleTabShowThinking={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab => {
-											if (tab.id !== activeTab.id) return tab;
-											// When turning OFF, clear any thinking/tool logs
-											if (tab.showThinking) {
-												return {
-													...tab,
-													showThinking: false,
-													logs: tab.logs.filter(
-														l => l.source !== 'thinking' && l.source !== 'tool'
-													)
-												};
-											}
-											return { ...tab, showThinking: true };
-										})
-									};
-								})
-							);
-						}}
-						onScrollPositionChange={(scrollTop: number) => {
-							if (!activeSession) return;
-							// Save scroll position for the current view (AI tab or terminal)
-							if (activeSession.inputMode === 'ai') {
-								// Save to active AI tab's scrollTop
-								const activeTab = getActiveTab(activeSession);
-								if (!activeTab) return;
-								setSessions(prev =>
-									prev.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id ? { ...tab, scrollTop } : tab
-											)
-										};
-									})
-								);
-							} else {
-								// Save to session's terminalScrollTop
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id
-											? { ...s, terminalScrollTop: scrollTop }
-											: s
-									)
-								);
-							}
-						}}
-						onAtBottomChange={(isAtBottom: boolean) => {
-							if (!activeSession) return;
-							// Save isAtBottom state for the current view (AI tab only - terminal auto-scrolls)
-							if (activeSession.inputMode === 'ai') {
-								const activeTab = getActiveTab(activeSession);
-								if (!activeTab) return;
-								setSessions(prev =>
-									prev.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id
-													? {
-															...tab,
-															isAtBottom,
-															// Clear hasUnread when user scrolls to bottom
-															hasUnread: isAtBottom ? false : tab.hasUnread
-													  }
-													: tab
-											)
-										};
-									})
-								);
-							}
-						}}
-						onInputBlur={() => {
-							// Persist input to session state on blur
-							if (isAiMode) {
-								syncAiInputToSession(aiInputValueLocal);
-							} else {
-								syncTerminalInputToSession(terminalInputValue);
-							}
-						}}
-						onOpenPromptComposer={() => setPromptComposerOpen(true)}
-						onReplayMessage={(text: string, images?: string[]) => {
-							// Set staged images if the message had any
-							if (images && images.length > 0) {
-								setStagedImages(images);
-							}
-							// Use setTimeout to ensure state updates are applied before processing
-							setTimeout(() => processInput(text), 0);
-						}}
+						onToggleTabSaveToHistory={handleToggleTabSaveToHistory}
+						onToggleTabShowThinking={handleToggleTabShowThinking}
+						onScrollPositionChange={handleScrollPositionChange}
+						onAtBottomChange={handleAtBottomChange}
+						onInputBlur={handleMainPanelInputBlur}
+						onOpenPromptComposer={handleOpenPromptComposer}
+						onReplayMessage={handleReplayMessage}
 						fileTree={activeSession?.fileTree}
-						onFileClick={async (relativePath: string) => {
-							if (!activeSession) return;
-							const filename = relativePath.split('/').pop() || relativePath;
-
-							// Get SSH remote ID - use sshRemoteId (set after AI spawns) or fall back to sessionSshRemoteConfig
-							// (set before spawn). This ensures file operations work for both AI and terminal-only SSH sessions.
-							const sshRemoteId =
-								activeSession.sshRemoteId ||
-								activeSession.sessionSshRemoteConfig?.remoteId ||
-								undefined;
-
-							// Check if file should be opened externally (PDF, etc.) - only for local files
-							if (!sshRemoteId && shouldOpenExternally(filename)) {
-								const fullPath = `${activeSession.fullPath}/${relativePath}`;
-								window.maestro.shell.openExternal(`file://${fullPath}`);
-								return;
-							}
-
-							try {
-								const fullPath = `${activeSession.fullPath}/${relativePath}`;
-								const content = await window.maestro.fs.readFile(
-									fullPath,
-									sshRemoteId
-								);
-								const newFile = {
-									name: filename,
-									content,
-									path: fullPath
-								};
-
-								// Only add to history if it's a different file than the current one
-								const currentFile = filePreviewHistory[filePreviewHistoryIndex];
-								if (!currentFile || currentFile.path !== fullPath) {
-									// Add to navigation history (truncate forward history if we're not at the end)
-									const newHistory = filePreviewHistory.slice(
-										0,
-										filePreviewHistoryIndex + 1
-									);
-									newHistory.push(newFile);
-									setFilePreviewHistory(newHistory);
-									setFilePreviewHistoryIndex(newHistory.length - 1);
-								}
-
-								setPreviewFile(newFile);
-								setActiveFocus('main');
-							} catch (error) {
-								console.error('[onFileClick] Failed to read file:', error);
-							}
-						}}
+						onFileClick={handleMainPanelFileClick}
 						canGoBack={filePreviewHistoryIndex > 0}
 						canGoForward={
 							filePreviewHistoryIndex < filePreviewHistory.length - 1
 						}
-						onNavigateBack={() => {
-							if (filePreviewHistoryIndex > 0) {
-								const newIndex = filePreviewHistoryIndex - 1;
-								setFilePreviewHistoryIndex(newIndex);
-								setPreviewFile(filePreviewHistory[newIndex]);
-							}
-						}}
-						onNavigateForward={() => {
-							if (filePreviewHistoryIndex < filePreviewHistory.length - 1) {
-								const newIndex = filePreviewHistoryIndex + 1;
-								setFilePreviewHistoryIndex(newIndex);
-								setPreviewFile(filePreviewHistory[newIndex]);
-							}
-						}}
-						backHistory={filePreviewHistory.slice(0, filePreviewHistoryIndex)}
-						forwardHistory={filePreviewHistory.slice(
-							filePreviewHistoryIndex + 1
-						)}
+						onNavigateBack={handleNavigateBack}
+						onNavigateForward={handleNavigateForward}
+						backHistory={backHistory}
+						forwardHistory={forwardHistory}
 						currentHistoryIndex={filePreviewHistoryIndex}
-						onNavigateToIndex={(index: number) => {
-							if (index >= 0 && index < filePreviewHistory.length) {
-								setFilePreviewHistoryIndex(index);
-								setPreviewFile(filePreviewHistory[index]);
-							}
-						}}
+						onNavigateToIndex={handleNavigateToIndex}
 						onClearAgentError={
 							activeTab?.agentError && activeSession
 								? () => handleClearAgentError(activeSession.id, activeTab.id)
@@ -13283,62 +13462,15 @@ You are taking over this conversation. Based on the context above, provide a bri
 								? () => setAgentErrorModalSessionId(activeSession.id)
 								: undefined
 						}
-						showFlashNotification={(message: string) => {
-							setSuccessFlashNotification(message);
-							setTimeout(() => setSuccessFlashNotification(null), 2000);
-						}}
-						onOpenFuzzySearch={() => setFuzzyFileSearchOpen(true)}
-						onOpenWorktreeConfig={() => setWorktreeConfigModalOpen(true)}
-						onOpenCreatePR={() => setCreatePRModalOpen(true)}
+						showFlashNotification={showSuccessFlash}
+						onOpenFuzzySearch={handleOpenFuzzySearch}
+						onOpenWorktreeConfig={handleOpenWorktreeConfig}
+						onOpenCreatePR={handleOpenCreatePR}
 						isWorktreeChild={!!activeSession?.parentSessionId}
 						onSummarizeAndContinue={handleSummarizeAndContinue}
-						onMergeWith={(tabId: string) => {
-							// First select the tab to make it active, then open merge modal
-							if (activeSession) {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
-									)
-								);
-							}
-							setMergeSessionModalOpen(true);
-						}}
-						onSendToAgent={(tabId: string) => {
-							// First select the tab to make it active, then open send modal
-							if (activeSession) {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
-									)
-								);
-							}
-							setSendToAgentModalOpen(true);
-						}}
-						onCopyContext={(tabId: string) => {
-							// Copy tab conversation context to clipboard
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							const text = formatLogsForClipboard(tab.logs);
-							navigator.clipboard
-								.writeText(text)
-								.then(() => {
-									addToast({
-										type: 'success',
-										title: 'Context Copied',
-										message: 'Conversation copied to clipboard.'
-									});
-								})
-								.catch(err => {
-									console.error('Failed to copy context:', err);
-									addToast({
-										type: 'error',
-										title: 'Copy Failed',
-										message: 'Failed to copy context to clipboard.'
-									});
-								});
-						}}
+						onMergeWith={handleMergeWith}
+						onSendToAgent={handleOpenSendToAgentModal}
+						onCopyContext={handleCopyContext}
 						onExportHtml={async (tabId: string) => {
 							// Export tab conversation as HTML
 							if (!activeSession) return;
@@ -13654,72 +13786,13 @@ You are taking over this conversation. Based on the context above, provide a bri
 								onJumpToAgentSession={handleJumpToAgentSession}
 								onResumeSession={handleResumeSession}
 								onOpenSessionAsTab={handleResumeSession}
-								onOpenAboutModal={() => setAboutModalOpen(true)}
+								onOpenAboutModal={handleOpenAboutModal}
 								onOpenMarketplace={handleOpenMarketplace}
 								onLaunchWizard={handleLaunchWizardTab}
-								onFileClick={async (relativePath: string) => {
-									if (!activeSession) return;
-									const filename =
-										relativePath.split('/').pop() || relativePath;
-
-									// Get SSH remote ID - use sshRemoteId (set after AI spawns) or fall back to sessionSshRemoteConfig
-									// (set before spawn). This ensures file operations work for both AI and terminal-only SSH sessions.
-									const sshRemoteId =
-										activeSession.sshRemoteId ||
-										activeSession.sessionSshRemoteConfig?.remoteId ||
-										undefined;
-
-									// Check if file should be opened externally (PDF, etc.) - only for local files
-									if (!sshRemoteId && shouldOpenExternally(filename)) {
-										const fullPath = `${activeSession.fullPath}/${relativePath}`;
-										window.maestro.shell.openExternal(`file://${fullPath}`);
-										return;
-									}
-
-									try {
-										const fullPath = `${activeSession.fullPath}/${relativePath}`;
-										const content = await window.maestro.fs.readFile(
-											fullPath,
-											sshRemoteId
-										);
-										const newFile = {
-											name: filename,
-											content,
-											path: fullPath
-										};
-
-										// Only add to history if it's a different file than the current one
-										const currentFile =
-											filePreviewHistory[filePreviewHistoryIndex];
-										if (!currentFile || currentFile.path !== fullPath) {
-											// Add to navigation history (truncate forward history if we're not at the end)
-											const newHistory = filePreviewHistory.slice(
-												0,
-												filePreviewHistoryIndex + 1
-											);
-											newHistory.push(newFile);
-											setFilePreviewHistory(newHistory);
-											setFilePreviewHistoryIndex(newHistory.length - 1);
-										}
-
-										setPreviewFile(newFile);
-										setActiveFocus('main');
-									} catch (error) {
-										console.error('[onFileClick] Failed to read file:', error);
-									}
-								}}
-								onFocusFileInGraph={(relativePath: string) => {
-									setGraphFocusFilePath(relativePath);
-									setLastGraphFocusFilePath(relativePath); // Track for "Last Document Graph" in command palette
-									setIsGraphViewOpen(true);
-								}}
+								onFileClick={handleMainPanelFileClick}
+								onFocusFileInGraph={handleFocusFileInGraph}
 								lastGraphFocusFile={lastGraphFocusFilePath}
-								onOpenLastDocumentGraph={() => {
-									if (lastGraphFocusFilePath) {
-										setGraphFocusFilePath(lastGraphFocusFilePath);
-										setIsGraphViewOpen(true);
-									}
-								}}
+								onOpenLastDocumentGraph={handleOpenLastDocumentGraph}
 							/>
 						</ErrorBoundary>
 					)}
