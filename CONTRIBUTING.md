@@ -213,6 +213,11 @@ git commit --no-verify -m "emergency fix"
 npx lint-staged
 ```
 
+**Troubleshooting:**
+- **Hooks not running** — Check if `.husky/pre-commit` has executable permissions: `chmod +x .husky/pre-commit`
+- **Wrong tool version** — Ensure `npx` is using local `node_modules`: delete `node_modules` and run `npm install`
+- **Hook fails in CI/Docker** — The `prepare` script uses `husky || true` to gracefully skip in environments without `.git`
+
 ### Manual Linting
 
 Run TypeScript type checking and ESLint to catch errors before building:
