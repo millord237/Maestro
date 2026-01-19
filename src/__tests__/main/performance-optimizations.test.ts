@@ -8,7 +8,7 @@
  * - Debug logging conditional behavior
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // ============================================================================
 // Regex Pattern Tests
@@ -512,6 +512,3 @@ describe('parseParticipantSessionId', () => {
 		expect(result?.participantName).toBe('Agent');
 	});
 });
-
-// Need to import beforeEach for buffer tests
-import { beforeEach } from 'vitest';
