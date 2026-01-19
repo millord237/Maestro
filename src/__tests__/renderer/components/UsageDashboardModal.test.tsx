@@ -143,6 +143,7 @@ const createSampleData = () => ({
     { date: '2024-01-18', count: 7 },
   ],
   avgSessionDuration: 144000,
+  byAgentByDay: {},
 });
 
 describe('UsageDashboardModal', () => {
@@ -1731,10 +1732,10 @@ describe('UsageDashboardModal', () => {
       expect(screen.getByTestId('section-summary-cards')).toHaveAttribute('aria-label', 'Summary Cards');
 
       expect(screen.getByTestId('section-agent-comparison')).toHaveAttribute('tabIndex', '0');
-      expect(screen.getByTestId('section-agent-comparison')).toHaveAttribute('aria-label', 'Agent Comparison Chart');
+      expect(screen.getByTestId('section-agent-comparison')).toHaveAttribute('aria-label', 'Provider Comparison Chart');
 
       expect(screen.getByTestId('section-source-distribution')).toHaveAttribute('tabIndex', '0');
-      expect(screen.getByTestId('section-source-distribution')).toHaveAttribute('aria-label', 'Source Distribution Chart');
+      expect(screen.getByTestId('section-source-distribution')).toHaveAttribute('aria-label', 'Session Type Chart');
 
       expect(screen.getByTestId('section-activity-heatmap')).toHaveAttribute('tabIndex', '0');
       expect(screen.getByTestId('section-activity-heatmap')).toHaveAttribute('aria-label', 'Activity Heatmap');

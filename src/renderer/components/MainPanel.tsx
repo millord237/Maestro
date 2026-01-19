@@ -10,7 +10,7 @@ import { AgentSessionsBrowser } from './AgentSessionsBrowser';
 import { TabBar } from './TabBar';
 import { WizardConversationView, DocumentGenerationView } from './InlineWizard';
 import { gitService } from '../services/git';
-import { useGitStatus } from '../contexts/GitStatusContext';
+import { useGitBranch, useGitDetail, useGitFileStatus } from '../contexts/GitStatusContext';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { calculateContextTokens } from '../utils/contextUsage';
 import { useAgentCapabilities, useHoverTooltip } from '../hooks';
@@ -37,7 +37,9 @@ interface MainPanelProps {
   agentSessionsOpen: boolean;
   activeAgentSessionId: string | null;
   activeSession: Session | null;
-  sessions: Session[]; // All sessions for InputArea's ThinkingStatusPill
+  // PERF: Receive pre-filtered thinkingSessions instead of full sessions array.
+  // This prevents cascade re-renders when unrelated session updates occur.
+  thinkingSessions: Session[];
   theme: Theme;
   fontFamily: string;
   isMobileLandscape?: boolean;
@@ -265,7 +267,7 @@ interface MainPanelProps {
 // due to input value changes. The component will only re-render when its props actually change.
 export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(function MainPanel(props, ref) {
   const {
-    logViewerOpen, agentSessionsOpen, activeAgentSessionId, activeSession, sessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
+    logViewerOpen, agentSessionsOpen, activeAgentSessionId, activeSession, thinkingSessions, theme, activeFocus, outputSearchOpen, outputSearchQuery,
     inputValue, enterToSendAI, enterToSendTerminal, stagedImages, commandHistoryOpen, commandHistoryFilter,
     commandHistorySelectedIndex, slashCommandOpen, slashCommands, selectedSlashCommandIndex,
     tabCompletionOpen, tabCompletionSuggestions, selectedTabCompletionIndex, tabCompletionFilter,
@@ -401,12 +403,12 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
     return configured > 0 ? configured : reported;
   }, [configuredContextWindow, activeTab?.usageStats?.contextWindow]);
 
-  // Compute context usage percentage from active tab's usage stats
-  // Uses agent-specific calculation (Codex includes output tokens, Claude doesn't)
-  const activeTabContextUsage = useMemo(() => {
+  // Compute context tokens using agent-specific calculation
+  // Claude: input + cacheCreation (excludes cacheRead which is cumulative)
+  // Codex: input + output (combined limit)
+  const activeTabContextTokens = useMemo(() => {
     if (!activeTab?.usageStats) return 0;
-    if (!activeTabContextWindow || activeTabContextWindow === 0) return 0;
-    const contextTokens = calculateContextTokens(
+    return calculateContextTokens(
       {
         inputTokens: activeTab.usageStats.inputTokens,
         outputTokens: activeTab.usageStats.outputTokens,
@@ -415,8 +417,14 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
       },
       activeSession?.toolType
     );
-    return Math.min(Math.round((contextTokens / activeTabContextWindow) * 100), 100);
-  }, [activeTab?.usageStats, activeTabContextWindow, activeSession?.toolType]);
+  }, [activeTab?.usageStats, activeSession?.toolType]);
+
+  // Compute context usage percentage from context tokens and window size
+  const activeTabContextUsage = useMemo(() => {
+    if (!activeTabContextWindow || activeTabContextWindow === 0) return 0;
+    if (activeTabContextTokens === 0) return 0;
+    return Math.min(Math.round((activeTabContextTokens / activeTabContextWindow) * 100), 100);
+  }, [activeTabContextTokens, activeTabContextWindow]);
 
   // PERF: Track panel width for responsive widget hiding with threshold-based updates
   // Only update state when width crosses a meaningful threshold (20px) to prevent
@@ -481,18 +489,22 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
   const useCompactGitWidget = panelWidth < 550;
   const useCompactContext = panelWidth < 700; // Both label and gauge shrink together
 
-  // Git status from centralized context (replaces local polling)
-  // The context handles polling for all sessions and provides detailed data for the active session
-  const { getStatus, refreshGitStatus } = useGitStatus();
-  const gitStatusData = activeSession ? getStatus(activeSession.id) : undefined;
+  // Git status from focused contexts (reduces cascade re-renders)
+  // Branch info: branch name, remote, ahead/behind - rarely changes
+  const { getBranchInfo } = useGitBranch();
+  // File counts: file count per session - changes on file operations
+  const { getFileCount } = useGitFileStatus();
+  // Detail info: detailed file changes, refreshGitStatus - only for active session
+  const { refreshGitStatus } = useGitDetail();
 
-  // Derive gitInfo format from context data for backward compatibility with existing UI code
-  const gitInfo = gitStatusData && activeSession?.isGitRepo ? {
-    branch: gitStatusData.branch || '',
-    remote: gitStatusData.remote || '',
-    behind: gitStatusData.behind,
-    ahead: gitStatusData.ahead,
-    uncommittedChanges: gitStatusData.fileCount,
+  // Derive gitInfo format from focused context data for backward compatibility
+  const branchInfo = activeSession ? getBranchInfo(activeSession.id) : undefined;
+  const gitInfo = branchInfo && activeSession?.isGitRepo ? {
+    branch: branchInfo.branch || '',
+    remote: branchInfo.remote || '',
+    behind: branchInfo.behind,
+    ahead: branchInfo.ahead,
+    uncommittedChanges: getFileCount(activeSession.id),
   } : null;
 
   // Copy notification state (centered flash notice)
@@ -957,10 +969,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                             <div className="flex justify-between items-center">
                               <span className="text-xs font-bold" style={{ color: theme.colors.textDim }}>Context Tokens</span>
                               <span className="text-xs font-mono font-bold" style={{ color: theme.colors.accent }}>
-                                {(
-                                  (activeTab?.usageStats?.inputTokens ?? 0) +
-                                  (activeTab?.usageStats?.outputTokens ?? 0)
-                                ).toLocaleString()}
+                                {activeTabContextTokens.toLocaleString()}
                               </span>
                             </div>
                             <div className="flex justify-between items-center mt-1">
@@ -1289,7 +1298,7 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
                 onInputFocus={handleInputFocus}
                 onInputBlur={props.onInputBlur}
                 isAutoModeActive={isCurrentSessionAutoMode}
-                sessions={sessions}
+                thinkingSessions={thinkingSessions}
                 onSessionClick={handleSessionClick}
                 autoRunState={currentSessionBatchState || undefined}
                 onStopAutoRun={onStopBatchRun}

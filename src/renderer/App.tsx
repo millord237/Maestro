@@ -3,7 +3,8 @@ import React, {
 	useEffect,
 	useRef,
 	useMemo,
-	useCallback
+	useCallback,
+	useDeferredValue
 } from 'react';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionList } from './components/SessionList';
@@ -94,6 +95,11 @@ import {
 	useAutoRunHandlers
 } from './hooks';
 import type { TabCompletionSuggestion, TabCompletionFilter } from './hooks';
+import {
+	useMainPanelProps,
+	useSessionListProps,
+	useRightPanelProps
+} from './hooks/props';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -662,6 +668,12 @@ function MaestroConsoleInner() {
 	const [terminalInputValue, setTerminalInputValue] = useState('');
 	const [aiInputValueLocal, setAiInputValueLocal] = useState('');
 
+	// PERF: Refs to access current input values without triggering re-renders in memoized callbacks
+	const terminalInputValueRef = useRef(terminalInputValue);
+	const aiInputValueLocalRef = useRef(aiInputValueLocal);
+	useEffect(() => { terminalInputValueRef.current = terminalInputValue; }, [terminalInputValue]);
+	useEffect(() => { aiInputValueLocalRef.current = aiInputValueLocal; }, [aiInputValueLocal]);
+
 	// Completion states from InputContext (these change infrequently)
 	const {
 		slashCommandOpen,
@@ -719,6 +731,8 @@ function MaestroConsoleInner() {
 	const [lastGraphFocusFilePath, setLastGraphFocusFilePath] = useState<
 		string | undefined
 	>(undefined);
+	// PERF: Ref to access lastGraphFocusFilePath in memoized callbacks without causing re-renders
+	const lastGraphFocusFilePathRef = useRef(lastGraphFocusFilePath);
 
 	// GitHub CLI availability (for gist publishing)
 	const [ghCliAvailable, setGhCliAvailable] = useState(false);
@@ -3797,6 +3811,16 @@ function MaestroConsoleInner() {
 		[activeSession?.filePreviewHistoryIndex]
 	);
 
+	// PERF: Memoize sliced history arrays to prevent new array creation on every render
+	const backHistory = useMemo(
+		() => filePreviewHistory.slice(0, filePreviewHistoryIndex),
+		[filePreviewHistory, filePreviewHistoryIndex]
+	);
+	const forwardHistory = useMemo(
+		() => filePreviewHistory.slice(filePreviewHistoryIndex + 1),
+		[filePreviewHistory, filePreviewHistoryIndex]
+	);
+
 	// Helper to update file preview history for the active session
 	const setFilePreviewHistory = useCallback(
 		(history: { name: string; content: string; path: string }[]) => {
@@ -3863,6 +3887,10 @@ function MaestroConsoleInner() {
 		}
 		return THEMES[activeThemeId];
 	}, [activeThemeId, customThemeColors]);
+
+	// Ref for theme (for use in memoized callbacks that need current theme without re-creating)
+	const themeRef = useRef(theme);
+	themeRef.current = theme;
 
 	// Memoized cwd for git viewers (prevents re-renders from inline computation)
 	const gitViewerCwd = useMemo(
@@ -4867,7 +4895,34 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 	// Use local state for responsive typing - no session state update on every keystroke
 	const inputValue = isAiMode ? aiInputValueLocal : terminalInputValue;
-	const setInputValue = isAiMode ? setAiInputValueLocal : setTerminalInputValue;
+
+	// PERF: useDeferredValue allows React to defer re-renders of expensive components
+	// that consume the input value for filtering/preview purposes. InputArea uses inputValue
+	// directly for responsive typing, while non-critical consumers like slash command filtering
+	// and prompt composer can use the deferred value to avoid blocking keystrokes.
+	const deferredInputValue = useDeferredValue(inputValue);
+
+	// PERF: Memoize setInputValue to maintain stable reference - prevents child re-renders
+	// when this callback is passed as a prop. The conditional selection based on isAiMode
+	// was creating new function references on every render.
+	const setInputValue = useCallback(
+		(value: string | ((prev: string) => string)) => {
+			if (activeSession?.inputMode === 'ai') {
+				setAiInputValueLocal(value);
+			} else {
+				setTerminalInputValue(value);
+			}
+		},
+		[activeSession?.inputMode]
+	);
+
+	// PERF: Memoize thinkingSessions at App level to avoid passing full sessions array to children.
+	// This prevents InputArea from re-rendering on unrelated session updates (e.g., terminal output).
+	// The computation is O(n) but only runs when sessions array changes, not on every keystroke.
+	const thinkingSessions = useMemo(
+		() => sessions.filter(s => s.state === 'busy' && s.busySource === 'ai'),
+		[sessions]
+	);
 
 	// Images are stored per-tab and only used in AI mode
 	// Get staged images from the active tab
@@ -5307,6 +5362,669 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 	const handleOpenQueueBrowser = useCallback(() => {
 		setQueueBrowserOpen(true);
+	}, []);
+
+	// PERF: Memoized callback for deleting log entries
+	// Extracted from inline function to prevent MainPanel re-renders
+	const handleDeleteLog = useCallback((logId: string): number | null => {
+		// Use refs to access current state without adding dependencies
+		const currentSession = sessionsRef.current.find(
+			s => s.id === activeSessionIdRef.current
+		);
+		if (!currentSession) return null;
+
+		const isAIMode = currentSession.inputMode === 'ai';
+
+		// For AI mode, use the active tab's logs; for terminal mode, use shellLogs
+		const currentActiveTab = isAIMode ? getActiveTab(currentSession) : null;
+		const logs = isAIMode
+			? currentActiveTab?.logs || []
+			: currentSession.shellLogs;
+
+		// Find the log entry and its index
+		const logIndex = logs.findIndex(log => log.id === logId);
+		if (logIndex === -1) return null;
+
+		const log = logs[logIndex];
+		if (log.source !== 'user') return null; // Only delete user commands/messages
+
+		// Find the next user command index (or end of array)
+		let endIndex = logs.length;
+		for (let i = logIndex + 1; i < logs.length; i++) {
+			if (logs[i].source === 'user') {
+				endIndex = i;
+				break;
+			}
+		}
+
+		// Remove logs from logIndex to endIndex (exclusive)
+		const newLogs = [
+			...logs.slice(0, logIndex),
+			...logs.slice(endIndex)
+		];
+
+		// Find the index of the next user command in the NEW array
+		// This is the command that was at endIndex, now at logIndex position
+		let nextUserCommandIndex: number | null = null;
+		for (let i = logIndex; i < newLogs.length; i++) {
+			if (newLogs[i].source === 'user') {
+				nextUserCommandIndex = i;
+				break;
+			}
+		}
+		// If no next command, try to find the previous user command
+		if (nextUserCommandIndex === null) {
+			for (let i = logIndex - 1; i >= 0; i--) {
+				if (newLogs[i].source === 'user') {
+					nextUserCommandIndex = i;
+					break;
+				}
+			}
+		}
+
+		if (isAIMode && currentActiveTab) {
+			// For AI mode, also delete from the Claude session JSONL file
+			// This ensures the context is actually removed for future interactions
+			// Use the active tab's agentSessionId, not the deprecated session-level one
+			const agentSessionId = currentActiveTab.agentSessionId;
+			if (agentSessionId && currentSession.cwd) {
+				// Delete asynchronously - don't block the UI update
+				window.maestro.claude
+					.deleteMessagePair(
+						currentSession.cwd,
+						agentSessionId,
+						logId, // This is the UUID if loaded from Claude session
+						log.text // Fallback: match by content if UUID doesn't match
+					)
+					.then(result => {
+						if (!result.success) {
+							console.warn(
+								'[handleDeleteLog] Failed to delete from Claude session:',
+								result.error
+							);
+						}
+					})
+					.catch(err => {
+						console.error(
+							'[handleDeleteLog] Error deleting from Claude session:',
+							err
+						);
+					});
+			}
+
+			// Update the active tab's logs and aiCommandHistory
+			const commandText = log.text.trim();
+
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== currentSession.id) return s;
+					const newAICommandHistory = (
+						s.aiCommandHistory || []
+					).filter(cmd => cmd !== commandText);
+					return {
+						...s,
+						aiCommandHistory: newAICommandHistory,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === currentActiveTab.id
+								? { ...tab, logs: newLogs }
+								: tab
+						)
+					};
+				})
+			);
+		} else {
+			// Terminal mode - update shellLogs and shellCommandHistory
+			const commandText = log.text.trim();
+
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== currentSession.id) return s;
+					const newShellCommandHistory = (
+						s.shellCommandHistory || []
+					).filter(cmd => cmd !== commandText);
+					return {
+						...s,
+						shellLogs: newLogs,
+						shellCommandHistory: newShellCommandHistory
+					};
+				})
+			);
+		}
+
+		return nextUserCommandIndex;
+	}, []);
+
+	// PERF: Memoized callbacks for MainPanel tab management props
+	// These were previously inline arrow functions, causing MainPanel re-renders on every keystroke
+	const handleRequestTabRename = useCallback((tabId: string) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const tab = session.aiTabs?.find(t => t.id === tabId);
+		if (tab) {
+			setRenameTabId(tabId);
+			setRenameTabInitialName(getInitialRenameValue(tab));
+			setRenameTabModalOpen(true);
+		}
+	}, []);
+
+	const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current || !s.aiTabs) return s;
+				const tabs = [...s.aiTabs];
+				const [movedTab] = tabs.splice(fromIndex, 1);
+				tabs.splice(toIndex, 0, movedTab);
+				return { ...s, aiTabs: tabs };
+			})
+		);
+	}, []);
+
+	const handleUpdateTabByClaudeSessionId = useCallback((
+		agentSessionId: string,
+		updates: { name?: string | null; starred?: boolean }
+	) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				const tabIndex = s.aiTabs.findIndex(tab => tab.agentSessionId === agentSessionId);
+				if (tabIndex === -1) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.agentSessionId === agentSessionId
+							? {
+								...tab,
+								...(updates.name !== undefined ? { name: updates.name } : {}),
+								...(updates.starred !== undefined ? { starred: updates.starred } : {})
+							}
+							: tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleTabStar = useCallback((tabId: string, starred: boolean) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const tabToStar = session.aiTabs.find(t => t.id === tabId);
+		if (!tabToStar?.agentSessionId) return;
+
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				const tab = s.aiTabs.find(t => t.id === tabId);
+				if (tab?.agentSessionId) {
+					const agentId = s.toolType || 'claude-code';
+					if (agentId === 'claude-code') {
+						window.maestro.claude
+							.updateSessionStarred(s.projectRoot, tab.agentSessionId, starred)
+							.catch(err => console.error('Failed to persist tab starred:', err));
+					} else {
+						window.maestro.agentSessions
+							.setSessionStarred(agentId, s.projectRoot, tab.agentSessionId, starred)
+							.catch(err => console.error('Failed to persist tab starred:', err));
+					}
+				}
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(t => t.id === tabId ? { ...t, starred } : t)
+				};
+			})
+		);
+	}, []);
+
+	const handleTabMarkUnread = useCallback((tabId: string) => {
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(t => t.id === tabId ? { ...t, hasUnread: true } : t)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabReadOnlyMode = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.id === activeTab.id ? { ...tab, readOnlyMode: !tab.readOnlyMode } : tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabSaveToHistory = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab =>
+						tab.id === activeTab.id ? { ...tab, saveToHistory: !tab.saveToHistory } : tab
+					)
+				};
+			})
+		);
+	}, []);
+
+	const handleToggleTabShowThinking = useCallback(() => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		const activeTab = getActiveTab(session);
+		if (!activeTab) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSessionIdRef.current) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab => {
+						if (tab.id !== activeTab.id) return tab;
+						if (tab.showThinking) {
+							return {
+								...tab,
+								showThinking: false,
+								logs: tab.logs.filter(l => l.source !== 'thinking' && l.source !== 'tool')
+							};
+						}
+						return { ...tab, showThinking: true };
+					})
+				};
+			})
+		);
+	}, []);
+
+	const handleScrollPositionChange = useCallback((scrollTop: number) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		if (session.inputMode === 'ai') {
+			const activeTab = getActiveTab(session);
+			if (!activeTab) return;
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== activeSessionIdRef.current) return s;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === activeTab.id ? { ...tab, scrollTop } : tab
+						)
+					};
+				})
+			);
+		} else {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === activeSessionIdRef.current ? { ...s, terminalScrollTop: scrollTop } : s
+				)
+			);
+		}
+	}, []);
+
+	const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
+		const session = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!session) return;
+		if (session.inputMode === 'ai') {
+			const activeTab = getActiveTab(session);
+			if (!activeTab) return;
+			setSessions(prev =>
+				prev.map(s => {
+					if (s.id !== activeSessionIdRef.current) return s;
+					return {
+						...s,
+						aiTabs: s.aiTabs.map(tab =>
+							tab.id === activeTab.id
+								? { ...tab, isAtBottom, hasUnread: isAtBottom ? false : tab.hasUnread }
+								: tab
+						)
+					};
+				})
+			);
+		}
+	}, []);
+
+	const handleMainPanelInputBlur = useCallback(() => {
+		// Access current values via refs to avoid dependencies
+		const currentIsAiMode = sessionsRef.current.find(s => s.id === activeSessionIdRef.current)?.inputMode === 'ai';
+		if (currentIsAiMode) {
+			syncAiInputToSession(aiInputValueLocalRef.current);
+		} else {
+			syncTerminalInputToSession(terminalInputValueRef.current);
+		}
+	}, [syncAiInputToSession, syncTerminalInputToSession]);
+
+	// PERF: Ref to access processInput without dependency - will be set after processInput is defined
+	const processInputRef = useRef<(text?: string) => void>(() => {});
+
+	const handleReplayMessage = useCallback((text: string, images?: string[]) => {
+		if (images && images.length > 0) {
+			setStagedImages(images);
+		}
+		setTimeout(() => processInputRef.current(text), 0);
+	}, [setStagedImages]);
+
+	const handleOpenTabSearch = useCallback(() => {
+		setTabSwitcherOpen(true);
+	}, []);
+
+	const handleOpenPromptComposer = useCallback(() => {
+		setPromptComposerOpen(true);
+	}, []);
+
+	const handleOpenFuzzySearch = useCallback(() => {
+		setFuzzyFileSearchOpen(true);
+	}, []);
+
+	const handleOpenWorktreeConfig = useCallback(() => {
+		setWorktreeConfigModalOpen(true);
+	}, []);
+
+	const handleOpenCreatePR = useCallback(() => {
+		setCreatePRModalOpen(true);
+	}, []);
+
+	const handleOpenAboutModal = useCallback(() => {
+		setAboutModalOpen(true);
+	}, []);
+
+	const handleFocusFileInGraph = useCallback((relativePath: string) => {
+		setGraphFocusFilePath(relativePath);
+		setLastGraphFocusFilePath(relativePath);
+		setIsGraphViewOpen(true);
+	}, []);
+
+	const handleOpenLastDocumentGraph = useCallback(() => {
+		// Use ref pattern to access current value without dependency
+		const path = lastGraphFocusFilePathRef.current;
+		if (path) {
+			setGraphFocusFilePath(path);
+			setIsGraphViewOpen(true);
+		}
+	}, []);
+
+	// Sync lastGraphFocusFilePath ref for use in memoized callbacks
+	useEffect(() => { lastGraphFocusFilePathRef.current = lastGraphFocusFilePath; }, [lastGraphFocusFilePath]);
+
+	// PERF: Memoized callbacks for SessionList props - these were inline arrow functions
+	const handleEditAgent = useCallback((session: Session) => {
+		setEditAgentSession(session);
+		setEditAgentModalOpen(true);
+	}, []);
+
+	const handleOpenCreatePRSession = useCallback((session: Session) => {
+		setCreatePRSession(session);
+		setCreatePRModalOpen(true);
+	}, []);
+
+	const handleQuickCreateWorktree = useCallback((session: Session) => {
+		setCreateWorktreeSession(session);
+		setCreateWorktreeModalOpen(true);
+	}, []);
+
+	const handleOpenWorktreeConfigSession = useCallback((session: Session) => {
+		setActiveSessionId(session.id);
+		setWorktreeConfigModalOpen(true);
+	}, []);
+
+	const handleDeleteWorktreeSession = useCallback((session: Session) => {
+		setDeleteWorktreeSession(session);
+		setDeleteWorktreeModalOpen(true);
+	}, []);
+
+	const handleToggleWorktreeExpanded = useCallback((sessionId: string) => {
+		setSessions(prev =>
+			prev.map(s =>
+				s.id === sessionId
+					? { ...s, worktreesExpanded: !(s.worktreesExpanded ?? true) }
+					: s
+			)
+		);
+	}, []);
+
+	const handleStartTour = useCallback(() => {
+		setTourFromWizard(false);
+		setTourOpen(true);
+	}, []);
+
+	const handleNewGroupChat = useCallback(() => {
+		setShowNewGroupChatModal(true);
+	}, []);
+
+	const handleEditGroupChat = useCallback((id: string) => {
+		setShowEditGroupChatModal(id);
+	}, []);
+
+	const handleOpenRenameGroupChatModal = useCallback((id: string) => {
+		setShowRenameGroupChatModal(id);
+	}, []);
+
+	const handleOpenDeleteGroupChatModal = useCallback((id: string) => {
+		setShowDeleteGroupChatModal(id);
+	}, []);
+
+	// PERF: Memoized callbacks for MainPanel file preview navigation
+	// These were inline arrow functions causing MainPanel re-renders on every keystroke
+	const handleMainPanelFileClick = useCallback(async (relativePath: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const filename = relativePath.split('/').pop() || relativePath;
+
+		// Get SSH remote ID
+		const sshRemoteId =
+			currentSession.sshRemoteId ||
+			currentSession.sessionSshRemoteConfig?.remoteId ||
+			undefined;
+
+		// Check if file should be opened externally (PDF, etc.)
+		if (!sshRemoteId && shouldOpenExternally(filename)) {
+			const fullPath = `${currentSession.fullPath}/${relativePath}`;
+			window.maestro.shell.openExternal(`file://${fullPath}`);
+			return;
+		}
+
+		try {
+			const fullPath = `${currentSession.fullPath}/${relativePath}`;
+			const content = await window.maestro.fs.readFile(fullPath, sshRemoteId);
+			const newFile = { name: filename, content, path: fullPath };
+
+			const history = currentSession.filePreviewHistory ?? [];
+			const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+			const currentFile = history[historyIndex];
+
+			if (!currentFile || currentFile.path !== fullPath) {
+				const newHistory = history.slice(0, historyIndex + 1);
+				newHistory.push(newFile);
+				setSessions(prev =>
+					prev.map(s =>
+						s.id === currentSession.id
+							? { ...s, filePreviewHistory: newHistory, filePreviewHistoryIndex: newHistory.length - 1 }
+							: s
+					)
+				);
+			}
+			setPreviewFile(newFile);
+			setActiveFocus('main');
+		} catch (error) {
+			console.error('[onFileClick] Failed to read file:', error);
+		}
+	}, []);
+
+	const handleNavigateBack = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (historyIndex > 0) {
+			const newIndex = historyIndex - 1;
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: newIndex } : s
+				)
+			);
+			setPreviewFile(history[newIndex]);
+		}
+	}, []);
+
+	const handleNavigateForward = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const historyIndex = currentSession.filePreviewHistoryIndex ?? -1;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (historyIndex < history.length - 1) {
+			const newIndex = historyIndex + 1;
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: newIndex } : s
+				)
+			);
+			setPreviewFile(history[newIndex]);
+		}
+	}, []);
+
+	const handleNavigateToIndex = useCallback((index: number) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const history = currentSession.filePreviewHistory ?? [];
+		if (index >= 0 && index < history.length) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, filePreviewHistoryIndex: index } : s
+				)
+			);
+			setPreviewFile(history[index]);
+		}
+	}, []);
+
+	const handleMergeWith = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (currentSession) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, activeTabId: tabId } : s
+				)
+			);
+		}
+		setMergeSessionModalOpen(true);
+	}, []);
+
+	const handleOpenSendToAgentModal = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (currentSession) {
+			setSessions(prev =>
+				prev.map(s =>
+					s.id === currentSession.id ? { ...s, activeTabId: tabId } : s
+				)
+			);
+		}
+		setSendToAgentModalOpen(true);
+	}, []);
+
+	const handleCopyContext = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		const text = formatLogsForClipboard(tab.logs);
+		navigator.clipboard
+			.writeText(text)
+			.then(() => {
+				addToastRef.current({
+					type: 'success',
+					title: 'Context Copied',
+					message: 'Conversation copied to clipboard.'
+				});
+			})
+			.catch(err => {
+				console.error('Failed to copy context:', err);
+				addToastRef.current({
+					type: 'error',
+					title: 'Copy Failed',
+					message: 'Failed to copy context to clipboard.'
+				});
+			});
+	}, []);
+
+	// Memoized handler for exporting tab as HTML
+	const handleExportHtml = useCallback(async (tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		try {
+			const { downloadTabExport } = await import('./utils/tabExport');
+			await downloadTabExport(
+				tab,
+				{
+					name: currentSession.name,
+					cwd: currentSession.cwd,
+					toolType: currentSession.toolType
+				},
+				themeRef.current
+			);
+			addToastRef.current({
+				type: 'success',
+				title: 'Export Complete',
+				message: 'Conversation exported as HTML.'
+			});
+		} catch (err) {
+			console.error('Failed to export tab:', err);
+			addToastRef.current({
+				type: 'error',
+				title: 'Export Failed',
+				message: 'Failed to export conversation as HTML.'
+			});
+		}
+	}, []);
+
+	// Memoized handler for publishing tab as GitHub Gist
+	const handlePublishTabGist = useCallback((tabId: string) => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const tab = currentSession.aiTabs.find(t => t.id === tabId);
+		if (!tab || !tab.logs || tab.logs.length === 0) return;
+
+		// Convert logs to markdown-like text format
+		const content = formatLogsForClipboard(tab.logs);
+		// Generate filename based on tab name or session ID
+		const tabName = tab.name || (tab.agentSessionId?.slice(0, 8) ?? 'conversation');
+		const filename = `${tabName.replace(/[^a-zA-Z0-9-_]/g, '_')}_context.md`;
+
+		// Set content and open the modal
+		setTabGistContent({ filename, content });
+		setGistPublishModalOpen(true);
+	}, []);
+
+	// Memoized handler for clearing agent error (wraps handleClearAgentError with session/tab context)
+	const handleClearAgentErrorForMainPanel = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const activeTab = currentSession.aiTabs.find(t => t.id === currentSession.activeTabId);
+		if (!activeTab?.agentError) return;
+		handleClearAgentError(currentSession.id, activeTab.id);
+	}, [handleClearAgentError]);
+
+	// Memoized handler for showing agent error modal
+	const handleShowAgentErrorModal = useCallback(() => {
+		const currentSession = sessionsRef.current.find(s => s.id === activeSessionIdRef.current);
+		if (!currentSession) return;
+		const activeTab = currentSession.aiTabs.find(t => t.id === currentSession.activeTabId);
+		if (!activeTab?.agentError) return;
+		setAgentErrorModalSessionId(currentSession.id);
 	}, []);
 
 	// Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now updated in useAgentExecution hook
@@ -6307,7 +7025,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 	]);
 
 	// Input processing hook - handles sending messages and commands
-	const { processInput, processInputRef: _processInputRef } =
+	const { processInput, processInputRef: hookProcessInputRef } =
 		useInputProcessing({
 			activeSession,
 			activeSessionId,
@@ -6334,6 +7052,11 @@ You are taking over this conversation. Based on the context above, provide a bri
 		});
 
 	// Auto-send context when a tab with autoSendOnActivate becomes active
+	// PERF: Sync processInputRef from hook to our local ref for use in memoized callbacks
+	useEffect(() => {
+		processInputRef.current = processInput;
+	}, [processInput]);
+
 	// This is used by context transfer to automatically send the transferred context to the agent
 	useEffect(() => {
 		if (!activeSession) return;
@@ -7900,11 +8623,12 @@ You are taking over this conversation. Based on the context above, provide a bri
 		}
 	};
 
-	const showConfirmation = (message: string, onConfirm: () => void) => {
+	// PERF: Memoize to prevent breaking React.memo on MainPanel
+	const showConfirmation = useCallback((message: string, onConfirm: () => void) => {
 		setConfirmModalMessage(message);
 		setConfirmModalOnConfirm(() => onConfirm);
 		setConfirmModalOpen(true);
-	};
+	}, []);
 
 	// Delete group chat with confirmation dialog (for keyboard shortcut and CMD+K)
 	const deleteGroupChatWithConfirmation = useCallback(
@@ -11232,24 +11956,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 		() => setEnterToSendAI(!enterToSendAI),
 		[enterToSendAI]
 	);
-	// OpenSpec command injection - sets prompt content into input field
-	const handleInjectOpenSpecPrompt = useCallback(
-		(prompt: string) => {
-			if (activeGroupChatId) {
-				// Update group chat draft
-				setGroupChats(prev =>
-					prev.map(c =>
-						c.id === activeGroupChatId ? { ...c, draftMessage: prompt } : c
-					)
-				);
-			} else {
-				setInputValue(prompt);
-			}
-			// Focus the input so user can edit/send the injected prompt
-			setTimeout(() => inputRef.current?.focus(), 0);
-		},
-		[activeGroupChatId, setInputValue]
-	);
 
 	// QuickActionsModal stable callbacks
 	const handleQuickActionsRenameTab = useCallback(() => {
@@ -11803,6 +12509,547 @@ You are taking over this conversation. Based on the context above, provide a bri
 		hasOpenModal
 	]);
 
+	// ============================================================================
+	// MEMOIZED WIZARD HANDLERS FOR PROPS HOOKS
+	// ============================================================================
+
+	// Wizard complete handler - converts wizard tab to normal session with context
+	const handleWizardComplete = useCallback(() => {
+		if (!activeSession) return;
+		const activeTabLocal = getActiveTab(activeSession);
+		const wizardState = activeTabLocal?.wizardState;
+		if (!wizardState) return;
+
+		// Convert wizard conversation history to log entries
+		const wizardLogEntries: LogEntry[] =
+			wizardState.conversationHistory.map(msg => ({
+				id: `wizard-${msg.id}`,
+				timestamp: msg.timestamp,
+				source: msg.role === 'user' ? 'user' : 'ai',
+				text: msg.content,
+				delivered: true
+			}));
+
+		// Create summary message with next steps
+		const generatedDocs = wizardState.generatedDocuments || [];
+		const totalTasks = generatedDocs.reduce(
+			(sum, doc) => sum + doc.taskCount,
+			0
+		);
+		const docNames = generatedDocs.map(d => d.filename).join(', ');
+
+		const summaryMessage: LogEntry = {
+			id: `wizard-summary-${Date.now()}`,
+			timestamp: Date.now(),
+			source: 'ai',
+			text:
+				`## Wizard Complete\n\n` +
+				`Created ${generatedDocs.length} document${
+					generatedDocs.length !== 1 ? 's' : ''
+				} with ${totalTasks} task${totalTasks !== 1 ? 's' : ''}:\n` +
+				`${docNames}\n\n` +
+				`**Next steps:**\n` +
+				`1. Open the **Auto Run** tab in the right panel to view your playbook\n` +
+				`2. Review and edit tasks as needed\n` +
+				`3. Click **Run** to start executing tasks automatically\n\n` +
+				`You can continue chatting to iterate on your playbook - the AI has full context of what was created.`,
+			delivered: true
+		};
+
+		const subfolderName = wizardState.subfolderName || '';
+		const tabName = subfolderName || 'Wizard';
+		const wizardAgentSessionId = wizardState.agentSessionId;
+		const activeTabId = activeTabLocal.id;
+
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSession.id) return s;
+				const updatedTabs = s.aiTabs.map(tab => {
+					if (tab.id !== activeTabId) return tab;
+					return {
+						...tab,
+						logs: [...tab.logs, ...wizardLogEntries, summaryMessage],
+						agentSessionId: wizardAgentSessionId || tab.agentSessionId,
+						name: tabName,
+						wizardState: undefined
+					};
+				});
+				return { ...s, aiTabs: updatedTabs };
+			})
+		);
+
+		endInlineWizard();
+		handleAutoRunRefresh();
+		setInputValue('');
+	}, [activeSession, getActiveTab, setSessions, endInlineWizard, handleAutoRunRefresh, setInputValue]);
+
+	// Wizard lets go handler - generates documents for active tab
+	const handleWizardLetsGo = useCallback(() => {
+		const activeTabLocal = activeSession ? getActiveTab(activeSession) : null;
+		if (activeTabLocal) {
+			generateInlineWizardDocuments(undefined, activeTabLocal.id);
+		}
+	}, [activeSession, getActiveTab, generateInlineWizardDocuments]);
+
+	// Wizard toggle thinking handler
+	const handleToggleWizardShowThinking = useCallback(() => {
+		if (!activeSession) return;
+		const activeTabLocal = getActiveTab(activeSession);
+		if (!activeTabLocal?.wizardState) return;
+		setSessions(prev =>
+			prev.map(s => {
+				if (s.id !== activeSession.id) return s;
+				return {
+					...s,
+					aiTabs: s.aiTabs.map(tab => {
+						if (tab.id !== activeTabLocal.id) return tab;
+						if (!tab.wizardState) return tab;
+						return {
+							...tab,
+							wizardState: {
+								...tab.wizardState,
+								showWizardThinking: !tab.wizardState.showWizardThinking,
+								thinkingContent: !tab.wizardState.showWizardThinking
+									? ''
+									: tab.wizardState.thinkingContent
+							}
+						};
+					})
+				};
+			})
+		);
+	}, [activeSession, getActiveTab, setSessions]);
+
+	// ============================================================================
+	// PROPS HOOKS FOR MAJOR COMPONENTS
+	// These hooks memoize the props objects for MainPanel, SessionList, and RightPanel
+	// to prevent re-evaluating 50-100+ props on every state change.
+	// ============================================================================
+
+	const mainPanelProps = useMainPanelProps({
+		// Core state
+		logViewerOpen,
+		agentSessionsOpen,
+		activeAgentSessionId,
+		activeSession,
+		thinkingSessions,
+		theme,
+		fontFamily,
+		isMobileLandscape,
+		activeFocus,
+		outputSearchOpen,
+		outputSearchQuery,
+		inputValue,
+		enterToSendAI,
+		enterToSendTerminal,
+		stagedImages,
+		commandHistoryOpen,
+		commandHistoryFilter,
+		commandHistorySelectedIndex,
+		slashCommandOpen,
+		slashCommands: allSlashCommands,
+		selectedSlashCommandIndex,
+		previewFile,
+		filePreviewLoading,
+		markdownEditMode,
+		shortcuts,
+		rightPanelOpen,
+		maxOutputLines,
+		gitDiffPreview,
+		fileTreeFilterOpen,
+		logLevel,
+		logViewerSelectedLevels,
+
+		// Tab completion state
+		tabCompletionOpen,
+		tabCompletionSuggestions,
+		selectedTabCompletionIndex,
+		tabCompletionFilter,
+
+		// @ mention completion state
+		atMentionOpen,
+		atMentionFilter,
+		atMentionStartIndex,
+		atMentionSuggestions,
+		selectedAtMentionIndex,
+
+		// Batch run state (convert null to undefined for component props)
+		activeBatchRunState: activeBatchRunState ?? undefined,
+		currentSessionBatchState: currentSessionBatchState ?? undefined,
+
+		// File tree
+		fileTree: activeSession?.fileTree || [],
+
+		// File preview navigation
+		canGoBack: filePreviewHistoryIndex > 0,
+		canGoForward: filePreviewHistoryIndex < filePreviewHistory.length - 1,
+		backHistory,
+		forwardHistory,
+		filePreviewHistoryIndex,
+
+		// Active tab for error handling
+		activeTab,
+
+		// Worktree
+		isWorktreeChild: !!activeSession?.parentSessionId,
+
+		// Context management settings
+		contextWarningsEnabled: contextManagementSettings.contextWarningsEnabled,
+		contextWarningYellowThreshold: contextManagementSettings.contextWarningYellowThreshold,
+		contextWarningRedThreshold: contextManagementSettings.contextWarningRedThreshold,
+
+		// Summarization progress
+		summarizeProgress,
+		summarizeResult,
+		summarizeStartTime: startTime,
+		isSummarizing: summarizeState === 'summarizing',
+
+		// Merge progress
+		mergeProgress,
+		mergeStartTime,
+		isMerging: mergeState === 'merging',
+		mergeSourceName,
+		mergeTargetName,
+
+		// Gist publishing
+		ghCliAvailable,
+		hasGist: previewFile ? !!fileGistUrls[previewFile.path] : false,
+
+		// Unread filter
+		showUnreadOnly,
+
+		// Audio feedback
+		audioFeedbackCommand,
+
+		// Setters
+		setLogViewerSelectedLevels,
+		setGitDiffPreview,
+		setLogViewerOpen,
+		setAgentSessionsOpen,
+		setActiveAgentSessionId,
+		setActiveFocus,
+		setOutputSearchOpen,
+		setOutputSearchQuery,
+		setInputValue,
+		setEnterToSendAI,
+		setEnterToSendTerminal,
+		setStagedImages,
+		setCommandHistoryOpen,
+		setCommandHistoryFilter,
+		setCommandHistorySelectedIndex,
+		setSlashCommandOpen,
+		setSelectedSlashCommandIndex,
+		setTabCompletionOpen,
+		setSelectedTabCompletionIndex,
+		setTabCompletionFilter,
+		setAtMentionOpen,
+		setAtMentionFilter,
+		setAtMentionStartIndex,
+		setSelectedAtMentionIndex,
+		setPreviewFile,
+		setMarkdownEditMode,
+		setAboutModalOpen,
+		setRightPanelOpen,
+		setGitLogOpen,
+
+		// Refs
+		inputRef,
+		logsEndRef,
+		terminalOutputRef,
+		fileTreeContainerRef,
+		fileTreeFilterInputRef,
+
+		// Handlers
+		handleResumeSession,
+		handleNewAgentSession,
+		toggleInputMode,
+		processInput,
+		handleInterrupt,
+		handleInputKeyDown,
+		handlePaste,
+		handleDrop,
+		getContextColor,
+		setActiveSessionId,
+		handleStopBatchRun,
+		showConfirmation,
+		handleDeleteLog,
+		handleRemoveQueuedItem,
+		handleOpenQueueBrowser,
+
+		// Tab management handlers
+		handleTabSelect,
+		handleTabClose,
+		handleNewTab,
+		handleRequestTabRename,
+		handleTabReorder,
+		handleUpdateTabByClaudeSessionId,
+		handleTabStar,
+		handleTabMarkUnread,
+		handleToggleTabReadOnlyMode,
+		handleToggleTabSaveToHistory,
+		handleToggleTabShowThinking,
+		toggleUnreadFilter,
+		handleOpenTabSearch,
+		handleCloseAllTabs,
+		handleCloseOtherTabs,
+		handleCloseTabsLeft,
+		handleCloseTabsRight,
+		handleScrollPositionChange,
+		handleAtBottomChange,
+		handleMainPanelInputBlur,
+		handleOpenPromptComposer,
+		handleReplayMessage,
+		handleMainPanelFileClick,
+		handleNavigateBack,
+		handleNavigateForward,
+		handleNavigateToIndex,
+		handleClearAgentErrorForMainPanel,
+		handleShowAgentErrorModal,
+		showSuccessFlash,
+		handleOpenFuzzySearch,
+		handleOpenWorktreeConfig,
+		handleOpenCreatePR,
+		handleSummarizeAndContinue,
+		handleMergeWith,
+		handleOpenSendToAgentModal,
+		handleCopyContext,
+		handleExportHtml,
+		handlePublishTabGist,
+		cancelTab,
+		cancelMergeTab,
+		recordShortcutUsage,
+		onKeyboardMasteryLevelUp,
+		handleSetLightboxImage,
+
+		// Gist publishing
+		setGistPublishModalOpen,
+
+		// Document Graph
+		setGraphFocusFilePath,
+		setLastGraphFocusFilePath,
+		setIsGraphViewOpen,
+
+		// Wizard callbacks
+		generateInlineWizardDocuments,
+		retryInlineWizardMessage,
+		clearInlineWizardError,
+		endInlineWizard,
+		handleAutoRunRefresh,
+
+		// Complex wizard handlers
+		onWizardComplete: handleWizardComplete,
+		onWizardLetsGo: handleWizardLetsGo,
+		onWizardRetry: retryInlineWizardMessage,
+		onWizardClearError: clearInlineWizardError,
+		onToggleWizardShowThinking: handleToggleWizardShowThinking,
+
+		// Helper functions
+		getActiveTab,
+	});
+
+	const sessionListProps = useSessionListProps({
+		// Core state
+		theme,
+		sessions,
+		groups,
+		sortedSessions,
+		activeSessionId,
+		leftSidebarOpen,
+		leftSidebarWidth,
+		activeFocus,
+		selectedSidebarIndex,
+		editingGroupId,
+		editingSessionId,
+		draggingSessionId,
+		shortcuts,
+
+		// Global Live Mode
+		isLiveMode,
+		webInterfaceUrl,
+
+		// Web Interface Port Settings
+		webInterfaceUseCustomPort: settings.webInterfaceUseCustomPort,
+		webInterfaceCustomPort: settings.webInterfaceCustomPort,
+
+		// Folder states
+		bookmarksCollapsed,
+		ungroupedCollapsed: settings.ungroupedCollapsed,
+
+		// Auto mode
+		activeBatchSessionIds,
+
+		// Session jump shortcuts
+		showSessionJumpNumbers,
+		visibleSessions,
+
+		// Achievement system
+		autoRunStats,
+
+		// Group Chat state
+		groupChats,
+		activeGroupChatId,
+		groupChatsExpanded,
+		groupChatState,
+		participantStates,
+		groupChatStates,
+		allGroupChatParticipantStates,
+
+		// Setters
+		setWebInterfaceUseCustomPort: settings.setWebInterfaceUseCustomPort,
+		setWebInterfaceCustomPort: settings.setWebInterfaceCustomPort,
+		setBookmarksCollapsed,
+		setUngroupedCollapsed: settings.setUngroupedCollapsed,
+		setActiveFocus,
+		setActiveSessionId,
+		setLeftSidebarOpen,
+		setLeftSidebarWidth,
+		setShortcutsHelpOpen,
+		setSettingsModalOpen,
+		setSettingsTab,
+		setAboutModalOpen,
+		setUpdateCheckModalOpen,
+		setLogViewerOpen,
+		setProcessMonitorOpen,
+		setUsageDashboardOpen,
+		setGroups,
+		setSessions,
+		setRenameInstanceModalOpen,
+		setRenameInstanceValue,
+		setRenameInstanceSessionId,
+		setDuplicatingSessionId,
+		setGroupChatsExpanded,
+
+		// Handlers
+		toggleGlobalLive,
+		restartWebServer,
+		toggleGroup,
+		handleDragStart,
+		handleDragOver,
+		handleDropOnGroup,
+		handleDropOnUngrouped,
+		finishRenamingGroup,
+		finishRenamingSession,
+		startRenamingGroup,
+		startRenamingSession,
+		showConfirmation,
+		createNewGroup,
+		handleCreateGroupAndMove,
+		addNewSession,
+		deleteSession,
+		deleteWorktreeGroup,
+		handleEditAgent,
+		handleOpenCreatePRSession,
+		handleQuickCreateWorktree,
+		handleOpenWorktreeConfigSession,
+		handleDeleteWorktreeSession,
+		handleToggleWorktreeExpanded,
+		openWizardModal,
+		handleStartTour,
+
+		// Group Chat handlers
+		handleOpenGroupChat,
+		handleNewGroupChat,
+		handleEditGroupChat,
+		handleOpenRenameGroupChatModal,
+		handleOpenDeleteGroupChatModal,
+
+		// Ref
+		sidebarContainerRef,
+	});
+
+	const rightPanelProps = useRightPanelProps({
+		// Session & Theme
+		activeSession,
+		theme,
+		shortcuts,
+
+		// Panel state
+		rightPanelOpen,
+		rightPanelWidth,
+
+		// Tab state
+		activeRightTab,
+
+		// Focus management
+		activeFocus,
+
+		// File explorer state
+		fileTreeFilter,
+		fileTreeFilterOpen,
+		filteredFileTree,
+		selectedFileIndex,
+		previewFile,
+		showHiddenFiles,
+
+		// Auto Run state
+		autoRunDocumentList,
+		autoRunDocumentTree,
+		autoRunIsLoadingDocuments,
+		autoRunDocumentTaskCounts,
+
+		// Batch processing (convert null to undefined for component props)
+		activeBatchRunState: activeBatchRunState ?? undefined,
+		currentSessionBatchState: currentSessionBatchState ?? undefined,
+
+		// Document Graph
+		lastGraphFocusFilePath: lastGraphFocusFilePath || undefined,
+
+		// Refs
+		fileTreeContainerRef,
+		fileTreeFilterInputRef,
+
+		// Setters
+		setRightPanelOpen,
+		setRightPanelWidth,
+		setActiveFocus,
+		setFileTreeFilter,
+		setFileTreeFilterOpen,
+		setSelectedFileIndex,
+		setShowHiddenFiles,
+		setSessions,
+
+		// Handlers
+		handleSetActiveRightTab,
+		toggleFolder,
+		handleFileClick,
+		expandAllFolders,
+		collapseAllFolders,
+		updateSessionWorkingDirectory,
+		refreshFileTree,
+		handleAutoRefreshChange,
+		showSuccessFlash,
+
+		// Auto Run handlers
+		handleAutoRunContentChange,
+		handleAutoRunModeChange,
+		handleAutoRunStateChange,
+		handleAutoRunSelectDocument,
+		handleAutoRunCreateDocument,
+		handleAutoRunRefresh,
+		handleAutoRunOpenSetup,
+
+		// Batch processing handlers
+		handleOpenBatchRunner,
+		handleStopBatchRun,
+		handleSkipCurrentDocument,
+		handleAbortBatchOnError,
+		handleResumeAfterError,
+		handleJumpToAgentSession,
+		handleResumeSession,
+
+		// Modal handlers
+		handleOpenAboutModal,
+		handleOpenMarketplace,
+		handleLaunchWizardTab,
+
+		// File linking
+		handleMainPanelFileClick,
+
+		// Document Graph handlers
+		handleFocusFileInGraph,
+		handleOpenLastDocumentGraph,
+	});
+
 	return (
 		<GitStatusProvider
 			sessions={sessions}
@@ -12097,7 +13344,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 					isFilePreviewOpen={previewFile !== null}
 					ghCliAvailable={ghCliAvailable}
 					onPublishGist={() => setGistPublishModalOpen(true)}
-					onInjectOpenSpecPrompt={handleInjectOpenSpecPrompt}
 					lastGraphFocusFile={lastGraphFocusFilePath}
 					onOpenLastDocumentGraph={() => {
 						if (lastGraphFocusFilePath) {
@@ -12147,7 +13393,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 						activeGroupChatId
 							? groupChats.find(c => c.id === activeGroupChatId)
 									?.draftMessage || ''
-							: inputValue
+							: deferredInputValue
 					}
 					onPromptComposerSubmit={handlePromptComposerSubmit}
 					onPromptComposerSend={handlePromptComposerSend}
@@ -12445,128 +13691,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 				{/* --- LEFT SIDEBAR (hidden in mobile landscape and when no sessions) --- */}
 				{!isMobileLandscape && sessions.length > 0 && (
 					<ErrorBoundary>
-						<SessionList
-							theme={theme}
-							sessions={sessions}
-							groups={groups}
-							sortedSessions={sortedSessions}
-							activeSessionId={activeSessionId}
-							leftSidebarOpen={leftSidebarOpen}
-							leftSidebarWidthState={leftSidebarWidth}
-							activeFocus={activeFocus}
-							selectedSidebarIndex={selectedSidebarIndex}
-							editingGroupId={editingGroupId}
-							editingSessionId={editingSessionId}
-							draggingSessionId={draggingSessionId}
-							shortcuts={shortcuts}
-							isLiveMode={isLiveMode}
-							webInterfaceUrl={webInterfaceUrl}
-							toggleGlobalLive={toggleGlobalLive}
-							webInterfaceUseCustomPort={settings.webInterfaceUseCustomPort}
-							setWebInterfaceUseCustomPort={
-								settings.setWebInterfaceUseCustomPort
-							}
-							webInterfaceCustomPort={settings.webInterfaceCustomPort}
-							setWebInterfaceCustomPort={settings.setWebInterfaceCustomPort}
-							restartWebServer={restartWebServer}
-							bookmarksCollapsed={bookmarksCollapsed}
-							setBookmarksCollapsed={setBookmarksCollapsed}
-							ungroupedCollapsed={settings.ungroupedCollapsed}
-							setUngroupedCollapsed={settings.setUngroupedCollapsed}
-							setActiveFocus={setActiveFocus}
-							setActiveSessionId={setActiveSessionId}
-							setLeftSidebarOpen={setLeftSidebarOpen}
-							setLeftSidebarWidthState={setLeftSidebarWidth}
-							setShortcutsHelpOpen={setShortcutsHelpOpen}
-							setSettingsModalOpen={setSettingsModalOpen}
-							setSettingsTab={setSettingsTab}
-							setAboutModalOpen={setAboutModalOpen}
-							setUpdateCheckModalOpen={setUpdateCheckModalOpen}
-							setLogViewerOpen={setLogViewerOpen}
-							setProcessMonitorOpen={setProcessMonitorOpen}
-							setUsageDashboardOpen={setUsageDashboardOpen}
-							toggleGroup={toggleGroup}
-							handleDragStart={handleDragStart}
-							handleDragOver={handleDragOver}
-							handleDropOnGroup={handleDropOnGroup}
-							handleDropOnUngrouped={handleDropOnUngrouped}
-							finishRenamingGroup={finishRenamingGroup}
-							finishRenamingSession={finishRenamingSession}
-							startRenamingGroup={startRenamingGroup}
-							startRenamingSession={startRenamingSession}
-							showConfirmation={showConfirmation}
-							setGroups={setGroups}
-							setSessions={setSessions}
-							createNewGroup={createNewGroup}
-							onCreateGroupAndMove={handleCreateGroupAndMove}
-							addNewSession={addNewSession}
-							onDeleteSession={deleteSession}
-							onDeleteWorktreeGroup={deleteWorktreeGroup}
-							setRenameInstanceModalOpen={setRenameInstanceModalOpen}
-							setRenameInstanceValue={setRenameInstanceValue}
-							setRenameInstanceSessionId={setRenameInstanceSessionId}
-							onEditAgent={session => {
-								setEditAgentSession(session);
-								setEditAgentModalOpen(true);
-							}}
-							onOpenCreatePR={session => {
-								setCreatePRSession(session);
-								setCreatePRModalOpen(true);
-							}}
-							onQuickCreateWorktree={session => {
-								setCreateWorktreeSession(session);
-								setCreateWorktreeModalOpen(true);
-							}}
-							onOpenWorktreeConfig={session => {
-								// Set the active session to the one we're configuring, then open the modal
-								setActiveSessionId(session.id);
-								setWorktreeConfigModalOpen(true);
-							}}
-							onDeleteWorktree={session => {
-								// Show delete worktree modal with options
-								setDeleteWorktreeSession(session);
-								setDeleteWorktreeModalOpen(true);
-							}}
-							onToggleWorktreeExpanded={sessionId => {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === sessionId
-											? {
-													...s,
-													worktreesExpanded: !(s.worktreesExpanded ?? true)
-											  }
-											: s
-									)
-								);
-							}}
-							activeBatchSessionIds={activeBatchSessionIds}
-							showSessionJumpNumbers={showSessionJumpNumbers}
-							visibleSessions={visibleSessions}
-							autoRunStats={autoRunStats}
-							openWizard={openWizardModal}
-							startTour={() => {
-								setTourFromWizard(false);
-								setTourOpen(true);
-							}}
-							// Group Chat Props
-							groupChats={groupChats}
-							activeGroupChatId={activeGroupChatId}
-							onOpenGroupChat={handleOpenGroupChat}
-							onNewGroupChat={() => setShowNewGroupChatModal(true)}
-							onEditGroupChat={id => setShowEditGroupChatModal(id)}
-							onRenameGroupChat={id => setShowRenameGroupChatModal(id)}
-							onDeleteGroupChat={id => setShowDeleteGroupChatModal(id)}
-							groupChatsExpanded={groupChatsExpanded}
-							onGroupChatsExpandedChange={setGroupChatsExpanded}
-							groupChatState={groupChatState}
-							participantStates={participantStates}
-							groupChatStates={groupChatStates}
-							allGroupChatParticipantStates={allGroupChatParticipantStates}
-							sidebarContainerRef={sidebarContainerRef}
-							// Duplicate agent handlers
-							onNewAgentSession={addNewSession}
-							setDuplicatingSessionId={setDuplicatingSessionId}
-						/>
+						<SessionList {...sessionListProps} />
 					</ErrorBoundary>
 				)}
 
@@ -12716,876 +13841,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 				{sessions.length > 0 && !activeGroupChatId && !logViewerOpen && (
 					<MainPanel
 						ref={mainPanelRef}
-						logViewerOpen={logViewerOpen}
-						agentSessionsOpen={agentSessionsOpen}
-						activeAgentSessionId={activeAgentSessionId}
-						activeSession={activeSession}
-						sessions={sessions}
-						theme={theme}
-						fontFamily={fontFamily}
-						isMobileLandscape={isMobileLandscape}
-						activeFocus={activeFocus}
-						outputSearchOpen={outputSearchOpen}
-						outputSearchQuery={outputSearchQuery}
-						inputValue={inputValue}
-						enterToSendAI={enterToSendAI}
-						enterToSendTerminal={enterToSendTerminal}
-						stagedImages={stagedImages}
-						commandHistoryOpen={commandHistoryOpen}
-						commandHistoryFilter={commandHistoryFilter}
-						commandHistorySelectedIndex={commandHistorySelectedIndex}
-						slashCommandOpen={slashCommandOpen}
-						slashCommands={allSlashCommands}
-						selectedSlashCommandIndex={selectedSlashCommandIndex}
-						previewFile={previewFile}
-						filePreviewLoading={filePreviewLoading}
-						markdownEditMode={markdownEditMode}
-						shortcuts={shortcuts}
-						rightPanelOpen={rightPanelOpen}
-						maxOutputLines={maxOutputLines}
-						gitDiffPreview={gitDiffPreview}
-						fileTreeFilterOpen={fileTreeFilterOpen}
-						logLevel={logLevel}
-						logViewerSelectedLevels={logViewerSelectedLevels}
-						setLogViewerSelectedLevels={setLogViewerSelectedLevels}
-						setGitDiffPreview={setGitDiffPreview}
-						setLogViewerOpen={setLogViewerOpen}
-						setAgentSessionsOpen={setAgentSessionsOpen}
-						setActiveAgentSessionId={setActiveAgentSessionId}
-						onResumeAgentSession={handleResumeSession}
-						onNewAgentSession={handleNewAgentSession}
-						setActiveFocus={setActiveFocus}
-						setOutputSearchOpen={setOutputSearchOpen}
-						setOutputSearchQuery={setOutputSearchQuery}
-						setInputValue={setInputValue}
-						setEnterToSendAI={setEnterToSendAI}
-						setEnterToSendTerminal={setEnterToSendTerminal}
-						setStagedImages={setStagedImages}
-						setLightboxImage={handleSetLightboxImage}
-						setCommandHistoryOpen={setCommandHistoryOpen}
-						setCommandHistoryFilter={setCommandHistoryFilter}
-						setCommandHistorySelectedIndex={setCommandHistorySelectedIndex}
-						setSlashCommandOpen={setSlashCommandOpen}
-						setSelectedSlashCommandIndex={setSelectedSlashCommandIndex}
-						tabCompletionOpen={tabCompletionOpen}
-						setTabCompletionOpen={setTabCompletionOpen}
-						tabCompletionSuggestions={tabCompletionSuggestions}
-						selectedTabCompletionIndex={selectedTabCompletionIndex}
-						setSelectedTabCompletionIndex={setSelectedTabCompletionIndex}
-						tabCompletionFilter={tabCompletionFilter}
-						setTabCompletionFilter={setTabCompletionFilter}
-						atMentionOpen={atMentionOpen}
-						setAtMentionOpen={setAtMentionOpen}
-						atMentionFilter={atMentionFilter}
-						setAtMentionFilter={setAtMentionFilter}
-						atMentionStartIndex={atMentionStartIndex}
-						setAtMentionStartIndex={setAtMentionStartIndex}
-						atMentionSuggestions={atMentionSuggestions}
-						selectedAtMentionIndex={selectedAtMentionIndex}
-						setSelectedAtMentionIndex={setSelectedAtMentionIndex}
-						setPreviewFile={setPreviewFile}
-						setMarkdownEditMode={setMarkdownEditMode}
-						setAboutModalOpen={setAboutModalOpen}
-						setRightPanelOpen={setRightPanelOpen}
-						setGitLogOpen={setGitLogOpen}
-						inputRef={inputRef}
-						logsEndRef={logsEndRef}
-						terminalOutputRef={terminalOutputRef}
-						fileTreeContainerRef={fileTreeContainerRef}
-						fileTreeFilterInputRef={fileTreeFilterInputRef}
-						toggleInputMode={toggleInputMode}
-						processInput={processInput}
-						handleInterrupt={handleInterrupt}
-						handleInputKeyDown={handleInputKeyDown}
-						handlePaste={handlePaste}
-						handleDrop={handleDrop}
-						getContextColor={getContextColor}
-						setActiveSessionId={setActiveSessionId}
-						batchRunState={activeBatchRunState}
-						currentSessionBatchState={currentSessionBatchState}
-						onStopBatchRun={handleStopBatchRun}
-						showConfirmation={showConfirmation}
-						onDeleteLog={(logId: string): number | null => {
-							if (!activeSession) return null;
-
-							const isAIMode = activeSession.inputMode === 'ai';
-
-							// For AI mode, use the active tab's logs; for terminal mode, use shellLogs
-							const activeTab = isAIMode ? getActiveTab(activeSession) : null;
-							const logs = isAIMode
-								? activeTab?.logs || []
-								: activeSession.shellLogs;
-
-							// Find the log entry and its index
-							const logIndex = logs.findIndex(log => log.id === logId);
-							if (logIndex === -1) return null;
-
-							const log = logs[logIndex];
-							if (log.source !== 'user') return null; // Only delete user commands/messages
-
-							// Find the next user command index (or end of array)
-							let endIndex = logs.length;
-							for (let i = logIndex + 1; i < logs.length; i++) {
-								if (logs[i].source === 'user') {
-									endIndex = i;
-									break;
-								}
-							}
-
-							// Remove logs from logIndex to endIndex (exclusive)
-							const newLogs = [
-								...logs.slice(0, logIndex),
-								...logs.slice(endIndex)
-							];
-
-							// Find the index of the next user command in the NEW array
-							// This is the command that was at endIndex, now at logIndex position
-							let nextUserCommandIndex: number | null = null;
-							for (let i = logIndex; i < newLogs.length; i++) {
-								if (newLogs[i].source === 'user') {
-									nextUserCommandIndex = i;
-									break;
-								}
-							}
-							// If no next command, try to find the previous user command
-							if (nextUserCommandIndex === null) {
-								for (let i = logIndex - 1; i >= 0; i--) {
-									if (newLogs[i].source === 'user') {
-										nextUserCommandIndex = i;
-										break;
-									}
-								}
-							}
-
-							if (isAIMode && activeTab) {
-								// For AI mode, also delete from the Claude session JSONL file
-								// This ensures the context is actually removed for future interactions
-								// Use the active tab's agentSessionId, not the deprecated session-level one
-								const agentSessionId = activeTab.agentSessionId;
-								if (agentSessionId && activeSession.cwd) {
-									// Delete asynchronously - don't block the UI update
-									window.maestro.claude
-										.deleteMessagePair(
-											activeSession.cwd,
-											agentSessionId,
-											logId, // This is the UUID if loaded from Claude session
-											log.text // Fallback: match by content if UUID doesn't match
-										)
-										.then(result => {
-											if (!result.success) {
-												console.warn(
-													'[onDeleteLog] Failed to delete from Claude session:',
-													result.error
-												);
-											}
-										})
-										.catch(err => {
-											console.error(
-												'[onDeleteLog] Error deleting from Claude session:',
-												err
-											);
-										});
-								}
-
-								// Update the active tab's logs and aiCommandHistory
-								const commandText = log.text.trim();
-								const newAICommandHistory = (
-									activeSession.aiCommandHistory || []
-								).filter(cmd => cmd !== commandText);
-
-								setSessions(
-									sessions.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiCommandHistory: newAICommandHistory,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id
-													? { ...tab, logs: newLogs }
-													: tab
-											)
-										};
-									})
-								);
-							} else {
-								// Terminal mode - update shellLogs and shellCommandHistory
-								const commandText = log.text.trim();
-								const newShellCommandHistory = (
-									activeSession.shellCommandHistory || []
-								).filter(cmd => cmd !== commandText);
-
-								setSessions(
-									sessions.map(s =>
-										s.id === activeSession.id
-											? {
-													...s,
-													shellLogs: newLogs,
-													shellCommandHistory: newShellCommandHistory
-											  }
-											: s
-									)
-								);
-							}
-
-							return nextUserCommandIndex;
-						}}
-						onRemoveQueuedItem={handleRemoveQueuedItem}
-						onOpenQueueBrowser={handleOpenQueueBrowser}
-						audioFeedbackCommand={audioFeedbackCommand}
-						// Tab management handlers (memoized for performance)
-						onTabSelect={handleTabSelect}
-						onTabClose={handleTabClose}
-						onNewTab={handleNewTab}
-						onRequestTabRename={(tabId: string) => {
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs?.find(t => t.id === tabId);
-							if (tab) {
-								setRenameTabId(tabId);
-								setRenameTabInitialName(getInitialRenameValue(tab));
-								setRenameTabModalOpen(true);
-							}
-						}}
-						onTabReorder={(fromIndex: number, toIndex: number) => {
-							if (!activeSession) return;
-							// Use functional setState to compute from fresh state (avoids stale closure issues)
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id || !s.aiTabs) return s;
-									const tabs = [...s.aiTabs];
-									const [movedTab] = tabs.splice(fromIndex, 1);
-									tabs.splice(toIndex, 0, movedTab);
-									return { ...s, aiTabs: tabs };
-								})
-							);
-						}}
-						onUpdateTabByClaudeSessionId={(
-							agentSessionId: string,
-							updates: { name?: string | null; starred?: boolean }
-						) => {
-							// Update the AITab that matches this Claude session ID
-							// This is called when a session is renamed or starred in the AgentSessionsBrowser
-							if (!activeSession) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									const tabIndex = s.aiTabs.findIndex(
-										tab => tab.agentSessionId === agentSessionId
-									);
-									if (tabIndex === -1) return s; // Session not open as a tab
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.agentSessionId === agentSessionId
-												? {
-														...tab,
-														...(updates.name !== undefined
-															? { name: updates.name }
-															: {}),
-														...(updates.starred !== undefined
-															? { starred: updates.starred }
-															: {})
-												  }
-												: tab
-										)
-									};
-								})
-							);
-						}}
-						onTabStar={(tabId: string, starred: boolean) => {
-							if (!activeSession) return;
-							// Find the tab first to check if it has a session ID
-							const tabToStar = activeSession.aiTabs.find(t => t.id === tabId);
-							// Don't allow starring tabs without a session ID (new/empty tabs)
-							if (!tabToStar?.agentSessionId) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									// Find the tab to get its agentSessionId for persistence
-									const tab = s.aiTabs.find(t => t.id === tabId);
-									if (tab?.agentSessionId) {
-										// Persist starred status to session metadata (async, fire and forget)
-										// Use projectRoot (not cwd) since session storage is keyed by initial project path
-										const agentId = s.toolType || 'claude-code';
-										if (agentId === 'claude-code') {
-											window.maestro.claude
-												.updateSessionStarred(
-													s.projectRoot,
-													tab.agentSessionId,
-													starred
-												)
-												.catch(err =>
-													console.error('Failed to persist tab starred:', err)
-												);
-										} else {
-											window.maestro.agentSessions
-												.setSessionStarred(
-													agentId,
-													s.projectRoot,
-													tab.agentSessionId,
-													starred
-												)
-												.catch(err =>
-													console.error('Failed to persist tab starred:', err)
-												);
-										}
-									}
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(t =>
-											t.id === tabId ? { ...t, starred } : t
-										)
-									};
-								})
-							);
-						}}
-						onTabMarkUnread={(tabId: string) => {
-							if (!activeSession) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(t =>
-											t.id === tabId ? { ...t, hasUnread: true } : t
-										)
-									};
-								})
-							);
-						}}
-						onToggleTabReadOnlyMode={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.id === activeTab.id
-												? { ...tab, readOnlyMode: !tab.readOnlyMode }
-												: tab
-										)
-									};
-								})
-							);
-						}}
-						showUnreadOnly={showUnreadOnly}
-						onToggleUnreadFilter={toggleUnreadFilter}
-						onOpenTabSearch={() => setTabSwitcherOpen(true)}
-						onCloseAllTabs={handleCloseAllTabs}
-						onCloseOtherTabs={handleCloseOtherTabs}
-						onCloseTabsLeft={handleCloseTabsLeft}
-						onCloseTabsRight={handleCloseTabsRight}
-						onToggleTabSaveToHistory={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab =>
-											tab.id === activeTab.id
-												? { ...tab, saveToHistory: !tab.saveToHistory }
-												: tab
-										)
-									};
-								})
-							);
-						}}
-						onToggleTabShowThinking={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab => {
-											if (tab.id !== activeTab.id) return tab;
-											// When turning OFF, clear any thinking/tool logs
-											if (tab.showThinking) {
-												return {
-													...tab,
-													showThinking: false,
-													logs: tab.logs.filter(
-														l => l.source !== 'thinking' && l.source !== 'tool'
-													)
-												};
-											}
-											return { ...tab, showThinking: true };
-										})
-									};
-								})
-							);
-						}}
-						onScrollPositionChange={(scrollTop: number) => {
-							if (!activeSession) return;
-							// Save scroll position for the current view (AI tab or terminal)
-							if (activeSession.inputMode === 'ai') {
-								// Save to active AI tab's scrollTop
-								const activeTab = getActiveTab(activeSession);
-								if (!activeTab) return;
-								setSessions(prev =>
-									prev.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id ? { ...tab, scrollTop } : tab
-											)
-										};
-									})
-								);
-							} else {
-								// Save to session's terminalScrollTop
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id
-											? { ...s, terminalScrollTop: scrollTop }
-											: s
-									)
-								);
-							}
-						}}
-						onAtBottomChange={(isAtBottom: boolean) => {
-							if (!activeSession) return;
-							// Save isAtBottom state for the current view (AI tab only - terminal auto-scrolls)
-							if (activeSession.inputMode === 'ai') {
-								const activeTab = getActiveTab(activeSession);
-								if (!activeTab) return;
-								setSessions(prev =>
-									prev.map(s => {
-										if (s.id !== activeSession.id) return s;
-										return {
-											...s,
-											aiTabs: s.aiTabs.map(tab =>
-												tab.id === activeTab.id
-													? {
-															...tab,
-															isAtBottom,
-															// Clear hasUnread when user scrolls to bottom
-															hasUnread: isAtBottom ? false : tab.hasUnread
-													  }
-													: tab
-											)
-										};
-									})
-								);
-							}
-						}}
-						onInputBlur={() => {
-							// Persist input to session state on blur
-							if (isAiMode) {
-								syncAiInputToSession(aiInputValueLocal);
-							} else {
-								syncTerminalInputToSession(terminalInputValue);
-							}
-						}}
-						onOpenPromptComposer={() => setPromptComposerOpen(true)}
-						onReplayMessage={(text: string, images?: string[]) => {
-							// Set staged images if the message had any
-							if (images && images.length > 0) {
-								setStagedImages(images);
-							}
-							// Use setTimeout to ensure state updates are applied before processing
-							setTimeout(() => processInput(text), 0);
-						}}
-						fileTree={activeSession?.fileTree}
-						onFileClick={async (relativePath: string) => {
-							if (!activeSession) return;
-							const filename = relativePath.split('/').pop() || relativePath;
-
-							// Get SSH remote ID - use sshRemoteId (set after AI spawns) or fall back to sessionSshRemoteConfig
-							// (set before spawn). This ensures file operations work for both AI and terminal-only SSH sessions.
-							const sshRemoteId =
-								activeSession.sshRemoteId ||
-								activeSession.sessionSshRemoteConfig?.remoteId ||
-								undefined;
-
-							// Check if file should be opened externally (PDF, etc.) - only for local files
-							if (!sshRemoteId && shouldOpenExternally(filename)) {
-								const fullPath = `${activeSession.fullPath}/${relativePath}`;
-								window.maestro.shell.openExternal(`file://${fullPath}`);
-								return;
-							}
-
-							try {
-								const fullPath = `${activeSession.fullPath}/${relativePath}`;
-								const content = await window.maestro.fs.readFile(
-									fullPath,
-									sshRemoteId
-								);
-								const newFile = {
-									name: filename,
-									content,
-									path: fullPath
-								};
-
-								// Only add to history if it's a different file than the current one
-								const currentFile = filePreviewHistory[filePreviewHistoryIndex];
-								if (!currentFile || currentFile.path !== fullPath) {
-									// Add to navigation history (truncate forward history if we're not at the end)
-									const newHistory = filePreviewHistory.slice(
-										0,
-										filePreviewHistoryIndex + 1
-									);
-									newHistory.push(newFile);
-									setFilePreviewHistory(newHistory);
-									setFilePreviewHistoryIndex(newHistory.length - 1);
-								}
-
-								setPreviewFile(newFile);
-								setActiveFocus('main');
-							} catch (error) {
-								console.error('[onFileClick] Failed to read file:', error);
-							}
-						}}
-						canGoBack={filePreviewHistoryIndex > 0}
-						canGoForward={
-							filePreviewHistoryIndex < filePreviewHistory.length - 1
-						}
-						onNavigateBack={() => {
-							if (filePreviewHistoryIndex > 0) {
-								const newIndex = filePreviewHistoryIndex - 1;
-								setFilePreviewHistoryIndex(newIndex);
-								setPreviewFile(filePreviewHistory[newIndex]);
-							}
-						}}
-						onNavigateForward={() => {
-							if (filePreviewHistoryIndex < filePreviewHistory.length - 1) {
-								const newIndex = filePreviewHistoryIndex + 1;
-								setFilePreviewHistoryIndex(newIndex);
-								setPreviewFile(filePreviewHistory[newIndex]);
-							}
-						}}
-						backHistory={filePreviewHistory.slice(0, filePreviewHistoryIndex)}
-						forwardHistory={filePreviewHistory.slice(
-							filePreviewHistoryIndex + 1
-						)}
-						currentHistoryIndex={filePreviewHistoryIndex}
-						onNavigateToIndex={(index: number) => {
-							if (index >= 0 && index < filePreviewHistory.length) {
-								setFilePreviewHistoryIndex(index);
-								setPreviewFile(filePreviewHistory[index]);
-							}
-						}}
-						onClearAgentError={
-							activeTab?.agentError && activeSession
-								? () => handleClearAgentError(activeSession.id, activeTab.id)
-								: undefined
-						}
-						onShowAgentErrorModal={
-							activeTab?.agentError && activeSession
-								? () => setAgentErrorModalSessionId(activeSession.id)
-								: undefined
-						}
-						showFlashNotification={(message: string) => {
-							setSuccessFlashNotification(message);
-							setTimeout(() => setSuccessFlashNotification(null), 2000);
-						}}
-						onOpenFuzzySearch={() => setFuzzyFileSearchOpen(true)}
-						onOpenWorktreeConfig={() => setWorktreeConfigModalOpen(true)}
-						onOpenCreatePR={() => setCreatePRModalOpen(true)}
-						isWorktreeChild={!!activeSession?.parentSessionId}
-						onSummarizeAndContinue={handleSummarizeAndContinue}
-						onMergeWith={(tabId: string) => {
-							// First select the tab to make it active, then open merge modal
-							if (activeSession) {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
-									)
-								);
-							}
-							setMergeSessionModalOpen(true);
-						}}
-						onSendToAgent={(tabId: string) => {
-							// First select the tab to make it active, then open send modal
-							if (activeSession) {
-								setSessions(prev =>
-									prev.map(s =>
-										s.id === activeSession.id ? { ...s, activeTabId: tabId } : s
-									)
-								);
-							}
-							setSendToAgentModalOpen(true);
-						}}
-						onCopyContext={(tabId: string) => {
-							// Copy tab conversation context to clipboard
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							const text = formatLogsForClipboard(tab.logs);
-							navigator.clipboard
-								.writeText(text)
-								.then(() => {
-									addToast({
-										type: 'success',
-										title: 'Context Copied',
-										message: 'Conversation copied to clipboard.'
-									});
-								})
-								.catch(err => {
-									console.error('Failed to copy context:', err);
-									addToast({
-										type: 'error',
-										title: 'Copy Failed',
-										message: 'Failed to copy context to clipboard.'
-									});
-								});
-						}}
-						onExportHtml={async (tabId: string) => {
-							// Export tab conversation as HTML
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							try {
-								const { downloadTabExport } = await import('./utils/tabExport');
-								await downloadTabExport(
-									tab,
-									{
-										name: activeSession.name,
-										cwd: activeSession.cwd,
-										toolType: activeSession.toolType
-									},
-									theme
-								);
-								addToast({
-									type: 'success',
-									title: 'Export Complete',
-									message: 'Conversation exported as HTML.'
-								});
-							} catch (err) {
-								console.error('Failed to export tab:', err);
-								addToast({
-									type: 'error',
-									title: 'Export Failed',
-									message: 'Failed to export conversation as HTML.'
-								});
-							}
-						}}
-						onPublishTabGist={(tabId: string) => {
-							// Publish tab conversation context as GitHub Gist
-							if (!activeSession) return;
-							const tab = activeSession.aiTabs.find(t => t.id === tabId);
-							if (!tab || !tab.logs || tab.logs.length === 0) return;
-
-							// Convert logs to markdown-like text format
-							const content = formatLogsForClipboard(tab.logs);
-							// Generate filename based on tab name or session ID
-							const tabName =
-								tab.name || (tab.agentSessionId?.slice(0, 8) ?? 'conversation');
-							const filename = `${tabName.replace(
-								/[^a-zA-Z0-9-_]/g,
-								'_'
-							)}_context.md`;
-
-							// Set content and open the modal
-							setTabGistContent({ filename, content });
-							setGistPublishModalOpen(true);
-						}}
-						// Context warning sash settings (Phase 6)
-						contextWarningsEnabled={
-							contextManagementSettings.contextWarningsEnabled
-						}
-						contextWarningYellowThreshold={
-							contextManagementSettings.contextWarningYellowThreshold
-						}
-						contextWarningRedThreshold={
-							contextManagementSettings.contextWarningRedThreshold
-						}
-						// Summarization progress props (non-blocking, per-tab)
-						summarizeProgress={summarizeProgress}
-						summarizeResult={summarizeResult}
-						summarizeStartTime={startTime}
-						isSummarizing={summarizeState === 'summarizing'}
-						onCancelSummarize={() => {
-							if (activeSession?.activeTabId) {
-								cancelTab(activeSession.activeTabId);
-							}
-						}}
-						// Merge progress props (non-blocking, per-tab)
-						mergeProgress={mergeProgress}
-						mergeResult={null}
-						mergeStartTime={mergeStartTime}
-						isMerging={mergeState === 'merging'}
-						mergeSourceName={mergeSourceName}
-						mergeTargetName={mergeTargetName}
-						onCancelMerge={() => {
-							if (activeSession?.activeTabId) {
-								cancelMergeTab(activeSession.activeTabId);
-							}
-						}}
-						onShortcutUsed={(shortcutId: string) => {
-							const result = recordShortcutUsage(shortcutId);
-							if (result.newLevel !== null) {
-								onKeyboardMasteryLevelUp(result.newLevel);
-							}
-						}}
-						ghCliAvailable={ghCliAvailable}
-						onPublishGist={() => setGistPublishModalOpen(true)}
-						hasGist={previewFile ? !!fileGistUrls[previewFile.path] : false}
-						onOpenInGraph={() => {
-							if (previewFile && activeSession) {
-								// Use the same rootPath that DocumentGraphView will use
-								const graphRootPath =
-									activeSession.projectRoot || activeSession.cwd || '';
-								// Compute relative path from the preview file
-								const relativePath = previewFile.path.startsWith(
-									graphRootPath + '/'
-								)
-									? previewFile.path.slice(graphRootPath.length + 1)
-									: previewFile.path.startsWith(graphRootPath)
-									? previewFile.path.slice(graphRootPath.length + 1)
-									: previewFile.name;
-								setGraphFocusFilePath(relativePath);
-								setLastGraphFocusFilePath(relativePath); // Track for "Last Document Graph" in command palette
-								setIsGraphViewOpen(true);
-							}
-						}}
-						// Inline wizard completion callback - switches tab to wizard session for context continuity
-						onWizardComplete={() => {
-							if (!activeSession) return;
-							// Get wizard state from the active tab (not session level)
-							const activeTab = getActiveTab(activeSession);
-							const wizardState = activeTab?.wizardState;
-							if (!wizardState) return;
-
-							// Convert wizard conversation history to log entries
-							const wizardLogEntries: import('./types').LogEntry[] =
-								wizardState.conversationHistory.map(msg => ({
-									id: `wizard-${msg.id}`,
-									timestamp: msg.timestamp,
-									source: msg.role === 'user' ? 'user' : 'ai',
-									text: msg.content,
-									delivered: true
-								}));
-
-							// Create summary message with next steps
-							const generatedDocs = wizardState.generatedDocuments || [];
-							const totalTasks = generatedDocs.reduce(
-								(sum, doc) => sum + doc.taskCount,
-								0
-							);
-							const docNames = generatedDocs.map(d => d.filename).join(', ');
-
-							const summaryMessage: import('./types').LogEntry = {
-								id: `wizard-summary-${Date.now()}`,
-								timestamp: Date.now(),
-								source: 'ai',
-								text:
-									`## Wizard Complete\n\n` +
-									`Created ${generatedDocs.length} document${
-										generatedDocs.length !== 1 ? 's' : ''
-									} with ${totalTasks} task${totalTasks !== 1 ? 's' : ''}:\n` +
-									`${docNames}\n\n` +
-									`**Next steps:**\n` +
-									`1. Open the **Auto Run** tab in the right panel to view your playbook\n` +
-									`2. Review and edit tasks as needed\n` +
-									`3. Click **Run** to start executing tasks automatically\n\n` +
-									`You can continue chatting to iterate on your playbook - the AI has full context of what was created.`,
-								delivered: true
-							};
-
-							// Derive tab name from the subfolder where documents were saved
-							// The subfolderName is stored in the wizard state after generation completes
-							const subfolderName = wizardState.subfolderName || '';
-							const tabName = subfolderName || 'Wizard';
-
-							// Get the wizard's agentSessionId for tab context switching
-							const wizardAgentSessionId = wizardState.agentSessionId;
-
-							// Add wizard logs to active tab, switch to wizard session, rename tab, and clear wizard state
-							const activeTabId = activeTab.id;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-
-									// Update tab: add logs, switch agentSessionId, rename, and clear wizard state
-									const updatedTabs = s.aiTabs.map(tab => {
-										if (tab.id !== activeTabId) return tab;
-										return {
-											...tab,
-											logs: [...tab.logs, ...wizardLogEntries, summaryMessage],
-											// Switch to wizard's agentSessionId so user can continue iterating with full context
-											agentSessionId:
-												wizardAgentSessionId || tab.agentSessionId,
-											// Name the tab to indicate it's a project from the wizard
-											name: tabName,
-											// Clear wizard state from the tab
-											wizardState: undefined
-										};
-									});
-
-									return {
-										...s,
-										aiTabs: updatedTabs
-									};
-								})
-							);
-
-							// CRITICAL: Also reset the useInlineWizard hook state
-							// Without this, the hook remains active and will re-sync its state back to session.wizardState
-							endInlineWizard();
-
-							// Refresh the Auto Run panel to show newly generated documents
-							handleAutoRunRefresh();
-
-							// Clear the input value that may have wizard-related text
-							setInputValue('');
-						}}
-						// Inline wizard callbacks
-						onWizardLetsGo={() => {
-							// Pass the active tab ID to ensure we generate for the correct tab
-							const activeTab = activeSession
-								? getActiveTab(activeSession)
-								: null;
-							if (activeTab) {
-								generateInlineWizardDocuments(undefined, activeTab.id);
-							}
-						}}
-						onWizardRetry={retryInlineWizardMessage}
-						onWizardClearError={clearInlineWizardError}
-						// Inline wizard exit handler (for WizardInputPanel)
-						onExitWizard={endInlineWizard}
-						// Cancel generation and exit wizard
-						onWizardCancelGeneration={endInlineWizard}
-						// Wizard thinking toggle
-						onToggleWizardShowThinking={() => {
-							if (!activeSession) return;
-							const activeTab = getActiveTab(activeSession);
-							if (!activeTab?.wizardState) return;
-							setSessions(prev =>
-								prev.map(s => {
-									if (s.id !== activeSession.id) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map(tab => {
-											if (tab.id !== activeTab.id) return tab;
-											if (!tab.wizardState) return tab;
-											// Toggle showWizardThinking and clear thinkingContent when turning off
-											return {
-												...tab,
-												wizardState: {
-													...tab.wizardState,
-													showWizardThinking:
-														!tab.wizardState.showWizardThinking,
-													thinkingContent: !tab.wizardState.showWizardThinking
-														? ''
-														: tab.wizardState.thinkingContent
-												}
-											};
-										})
-									};
-								})
-							);
-						}}
+						{...mainPanelProps}
 					/>
 				)}
 
@@ -13597,129 +13853,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 						<ErrorBoundary>
 							<RightPanel
 								ref={rightPanelRef}
-								session={activeSession}
-								theme={theme}
-								shortcuts={shortcuts}
-								rightPanelOpen={rightPanelOpen}
-								setRightPanelOpen={setRightPanelOpen}
-								rightPanelWidth={rightPanelWidth}
-								setRightPanelWidthState={setRightPanelWidth}
-								activeRightTab={activeRightTab}
-								setActiveRightTab={handleSetActiveRightTab}
-								activeFocus={activeFocus}
-								setActiveFocus={setActiveFocus}
-								fileTreeFilter={fileTreeFilter}
-								setFileTreeFilter={setFileTreeFilter}
-								fileTreeFilterOpen={fileTreeFilterOpen}
-								setFileTreeFilterOpen={setFileTreeFilterOpen}
-								filteredFileTree={filteredFileTree}
-								selectedFileIndex={selectedFileIndex}
-								setSelectedFileIndex={setSelectedFileIndex}
-								previewFile={previewFile}
-								fileTreeContainerRef={fileTreeContainerRef}
-								fileTreeFilterInputRef={fileTreeFilterInputRef}
-								toggleFolder={toggleFolder}
-								handleFileClick={handleFileClick}
-								expandAllFolders={expandAllFolders}
-								collapseAllFolders={collapseAllFolders}
-								updateSessionWorkingDirectory={updateSessionWorkingDirectory}
-								refreshFileTree={refreshFileTree}
-								setSessions={setSessions}
-								onAutoRefreshChange={handleAutoRefreshChange}
-								onShowFlash={showSuccessFlash}
-								showHiddenFiles={showHiddenFiles}
-								setShowHiddenFiles={setShowHiddenFiles}
-								autoRunDocumentList={autoRunDocumentList}
-								autoRunDocumentTree={autoRunDocumentTree}
-								autoRunContent={activeSession?.autoRunContent || ''}
-								autoRunContentVersion={
-									activeSession?.autoRunContentVersion || 0
-								}
-								autoRunIsLoadingDocuments={autoRunIsLoadingDocuments}
-								autoRunDocumentTaskCounts={autoRunDocumentTaskCounts}
-								onAutoRunContentChange={handleAutoRunContentChange}
-								onAutoRunModeChange={handleAutoRunModeChange}
-								onAutoRunStateChange={handleAutoRunStateChange}
-								onAutoRunSelectDocument={handleAutoRunSelectDocument}
-								onAutoRunCreateDocument={handleAutoRunCreateDocument}
-								onAutoRunRefresh={handleAutoRunRefresh}
-								onAutoRunOpenSetup={handleAutoRunOpenSetup}
-								batchRunState={activeBatchRunState}
-								currentSessionBatchState={currentSessionBatchState}
-								onOpenBatchRunner={handleOpenBatchRunner}
-								onStopBatchRun={handleStopBatchRun}
-								onSkipCurrentDocument={handleSkipCurrentDocument}
-								onAbortBatchOnError={handleAbortBatchOnError}
-								onResumeAfterError={handleResumeAfterError}
-								onJumpToAgentSession={handleJumpToAgentSession}
-								onResumeSession={handleResumeSession}
-								onOpenSessionAsTab={handleResumeSession}
-								onOpenAboutModal={() => setAboutModalOpen(true)}
-								onOpenMarketplace={handleOpenMarketplace}
-								onLaunchWizard={handleLaunchWizardTab}
-								onFileClick={async (relativePath: string) => {
-									if (!activeSession) return;
-									const filename =
-										relativePath.split('/').pop() || relativePath;
-
-									// Get SSH remote ID - use sshRemoteId (set after AI spawns) or fall back to sessionSshRemoteConfig
-									// (set before spawn). This ensures file operations work for both AI and terminal-only SSH sessions.
-									const sshRemoteId =
-										activeSession.sshRemoteId ||
-										activeSession.sessionSshRemoteConfig?.remoteId ||
-										undefined;
-
-									// Check if file should be opened externally (PDF, etc.) - only for local files
-									if (!sshRemoteId && shouldOpenExternally(filename)) {
-										const fullPath = `${activeSession.fullPath}/${relativePath}`;
-										window.maestro.shell.openExternal(`file://${fullPath}`);
-										return;
-									}
-
-									try {
-										const fullPath = `${activeSession.fullPath}/${relativePath}`;
-										const content = await window.maestro.fs.readFile(
-											fullPath,
-											sshRemoteId
-										);
-										const newFile = {
-											name: filename,
-											content,
-											path: fullPath
-										};
-
-										// Only add to history if it's a different file than the current one
-										const currentFile =
-											filePreviewHistory[filePreviewHistoryIndex];
-										if (!currentFile || currentFile.path !== fullPath) {
-											// Add to navigation history (truncate forward history if we're not at the end)
-											const newHistory = filePreviewHistory.slice(
-												0,
-												filePreviewHistoryIndex + 1
-											);
-											newHistory.push(newFile);
-											setFilePreviewHistory(newHistory);
-											setFilePreviewHistoryIndex(newHistory.length - 1);
-										}
-
-										setPreviewFile(newFile);
-										setActiveFocus('main');
-									} catch (error) {
-										console.error('[onFileClick] Failed to read file:', error);
-									}
-								}}
-								onFocusFileInGraph={(relativePath: string) => {
-									setGraphFocusFilePath(relativePath);
-									setLastGraphFocusFilePath(relativePath); // Track for "Last Document Graph" in command palette
-									setIsGraphViewOpen(true);
-								}}
-								lastGraphFocusFile={lastGraphFocusFilePath}
-								onOpenLastDocumentGraph={() => {
-									if (lastGraphFocusFilePath) {
-										setGraphFocusFilePath(lastGraphFocusFilePath);
-										setIsGraphViewOpen(true);
-									}
-								}}
+								{...rightPanelProps}
 							/>
 						</ErrorBoundary>
 					)}

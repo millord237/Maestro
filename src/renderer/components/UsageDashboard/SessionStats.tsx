@@ -187,7 +187,7 @@ export function SessionStats({ sessions, theme, colorBlindMode = false }: Sessio
           className="text-sm font-medium mb-4"
           style={{ color: theme.colors.textMain }}
         >
-          Session Statistics
+          Agent Statistics
         </h3>
         <div
           className="flex items-center justify-center h-24"
@@ -208,13 +208,13 @@ export function SessionStats({ sessions, theme, colorBlindMode = false }: Sessio
         className="text-sm font-medium mb-4"
         style={{ color: theme.colors.textMain }}
       >
-        Session Statistics
+        Agent Statistics
       </h3>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatCard
-          label="Total Sessions"
+          label="Total Agents"
           value={stats.total}
           icon={<Monitor className="w-4 h-4" style={{ color: theme.colors.accent }} />}
           theme={theme}
@@ -234,7 +234,7 @@ export function SessionStats({ sessions, theme, colorBlindMode = false }: Sessio
           theme={theme}
         />
         <StatCard
-          label="Local Sessions"
+          label="Local Agents"
           value={stats.localSessions}
           icon={<Laptop className="w-4 h-4" style={{ color: theme.colors.accent }} />}
           theme={theme}
