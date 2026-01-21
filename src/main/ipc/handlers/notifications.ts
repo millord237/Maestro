@@ -5,6 +5,9 @@
  * - Showing OS notifications
  * - Text-to-speech (TTS) functionality with queueing
  * - Stopping active TTS processes
+ *
+ * Security Note: TTS commands are validated against a whitelist to prevent
+ * command injection attacks from the renderer process.
  */
 
 import { ipcMain, Notification, BrowserWindow } from 'electron';
@@ -27,6 +30,33 @@ import { logger } from '../../utils/logger';
  * multiple notifications trigger in quick succession.
  */
 const TTS_MIN_DELAY_MS = 15000;
+
+/**
+ * Maximum number of items allowed in the TTS queue.
+ * Prevents memory issues if TTS requests accumulate faster than they can be processed.
+ */
+const TTS_MAX_QUEUE_SIZE = 10;
+
+/**
+ * Whitelist of allowed TTS commands to prevent command injection.
+ *
+ * These are common TTS commands across different platforms:
+ * - say: macOS built-in TTS
+ * - espeak: Linux TTS (common on Ubuntu/Debian)
+ * - espeak-ng: Modern fork of espeak
+ * - spd-say: Speech Dispatcher client (Linux)
+ * - festival: Festival TTS system (Linux)
+ * - flite: Lightweight TTS (Linux)
+ *
+ * SECURITY: Only the base command name is checked. Arguments are NOT allowed
+ * to be passed through the command parameter to prevent injection attacks.
+ */
+const ALLOWED_TTS_COMMANDS = ['say', 'espeak', 'espeak-ng', 'spd-say', 'festival', 'flite'];
+
+/**
+ * Default TTS command (macOS)
+ */
+const DEFAULT_TTS_COMMAND = 'say';
 
 // ==========================================================================
 // Types
@@ -90,11 +120,70 @@ let isTtsProcessing = false;
 // ==========================================================================
 
 /**
+ * Validate and sanitize TTS command to prevent command injection.
+ *
+ * SECURITY: This function is critical for preventing arbitrary command execution.
+ * It ensures only whitelisted commands can be executed, with no arguments allowed
+ * through the command parameter.
+ *
+ * @param command - The requested TTS command
+ * @returns Object with validated command or error
+ */
+export function validateTtsCommand(command?: string): {
+	valid: boolean;
+	command: string;
+	error?: string;
+} {
+	// Use default if no command provided
+	if (!command || command.trim() === '') {
+		return { valid: true, command: DEFAULT_TTS_COMMAND };
+	}
+
+	// Extract the base command (first word only, no arguments allowed)
+	const trimmedCommand = command.trim();
+	const baseCommand = trimmedCommand.split(/\s+/)[0];
+
+	// Check if the base command is in the whitelist
+	if (!ALLOWED_TTS_COMMANDS.includes(baseCommand)) {
+		logger.warn('TTS command rejected - not in whitelist', 'TTS', {
+			requestedCommand: baseCommand,
+			allowedCommands: ALLOWED_TTS_COMMANDS,
+		});
+		return {
+			valid: false,
+			command: DEFAULT_TTS_COMMAND,
+			error: `Invalid TTS command '${baseCommand}'. Allowed commands: ${ALLOWED_TTS_COMMANDS.join(', ')}`,
+		};
+	}
+
+	// If the command has arguments, reject it for security
+	if (trimmedCommand !== baseCommand) {
+		logger.warn('TTS command rejected - arguments not allowed', 'TTS', {
+			requestedCommand: trimmedCommand,
+			baseCommand,
+		});
+		return {
+			valid: false,
+			command: DEFAULT_TTS_COMMAND,
+			error: `TTS command arguments are not allowed for security reasons. Use only the command name: ${baseCommand}`,
+		};
+	}
+
+	return { valid: true, command: baseCommand };
+}
+
+/**
  * Execute TTS - the actual implementation
  * Returns a Promise that resolves when the TTS process completes (not just when it starts)
  */
 async function executeTts(text: string, command?: string): Promise<TtsResponse> {
-	const fullCommand = command || 'say'; // Default to macOS 'say' command
+	// Validate and sanitize the command
+	const validation = validateTtsCommand(command);
+	if (!validation.valid) {
+		return { success: false, error: validation.error };
+	}
+
+	const fullCommand = validation.command;
 	const textLength = text?.length || 0;
 	const textPreview = text
 		? text.length > 200
@@ -116,10 +205,11 @@ async function executeTts(text: string, command?: string): Promise<TtsResponse> 
 			textLength,
 		});
 
-		// Spawn the TTS process with shell mode to support pipes and command chaining
+		// Spawn the TTS process WITHOUT shell mode to prevent injection
+		// The text is passed via stdin, not as command arguments
 		const child = spawn(fullCommand, [], {
 			stdio: ['pipe', 'ignore', 'pipe'], // stdin: pipe, stdout: ignore, stderr: pipe for errors
-			shell: true,
+			shell: false, // SECURITY: shell: false prevents command injection
 		});
 
 		// Generate a unique ID for this TTS process
@@ -242,11 +332,15 @@ async function executeTts(text: string, command?: string): Promise<TtsResponse> 
  * This ensures only one processNextTts call can proceed at a time.
  */
 async function processNextTts(): Promise<void> {
-	// Set flag BEFORE checking queue to prevent race condition
+	// Check queue first - if empty, nothing to do
+	if (ttsQueue.length === 0) return;
+
+	// Set flag BEFORE processing to prevent race condition
 	// where multiple calls could pass the isTtsProcessing check simultaneously
 	if (isTtsProcessing) return;
 	isTtsProcessing = true;
 
+	// Double-check queue after setting flag (another call might have emptied it)
 	if (ttsQueue.length === 0) {
 		isTtsProcessing = false;
 		return;
@@ -313,6 +407,18 @@ export function registerNotificationsHandlers(): void {
 	ipcMain.handle(
 		'notification:speak',
 		async (_event, text: string, command?: string): Promise<TtsResponse> => {
+			// Check queue size limit to prevent memory issues
+			if (ttsQueue.length >= TTS_MAX_QUEUE_SIZE) {
+				logger.warn('TTS queue is full, rejecting request', 'TTS', {
+					queueLength: ttsQueue.length,
+					maxSize: TTS_MAX_QUEUE_SIZE,
+				});
+				return {
+					success: false,
+					error: `TTS queue is full (max ${TTS_MAX_QUEUE_SIZE} items). Please wait for current items to complete.`,
+				};
+			}
+
 			// Add to queue and return a promise that resolves when this TTS completes
 			return new Promise<TtsResponse>((resolve) => {
 				ttsQueue.push({ text, command, resolve });
@@ -387,4 +493,18 @@ export function resetTtsState(): void {
 	ttsProcessIdCounter = 0;
 	lastTtsEndTime = 0;
 	isTtsProcessing = false;
+}
+
+/**
+ * Get the maximum TTS queue size (for testing)
+ */
+export function getTtsMaxQueueSize(): number {
+	return TTS_MAX_QUEUE_SIZE;
+}
+
+/**
+ * Get the list of allowed TTS commands (for testing)
+ */
+export function getAllowedTtsCommands(): string[] {
+	return [...ALLOWED_TTS_COMMANDS];
 }

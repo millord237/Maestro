@@ -22,6 +22,12 @@ import type { MaestroSettings } from './persistence';
 const LEADERBOARD_API_BASE = 'https://runmaestro.ai/api';
 const M4ESTR0_API_BASE = 'https://runmaestro.ai/api/m4estr0';
 
+/**
+ * Default timeout for fetch requests in milliseconds.
+ * 30 seconds is reasonable for API calls that may have some latency.
+ */
+const FETCH_TIMEOUT_MS = 30000;
+
 // ==========================================================================
 // Types
 // ==========================================================================
@@ -182,6 +188,37 @@ export interface LeaderboardHandlerDependencies {
 }
 
 // ==========================================================================
+// Helper Functions
+// ==========================================================================
+
+/**
+ * Creates a fetch request with timeout support.
+ *
+ * @param url - The URL to fetch
+ * @param options - Fetch options
+ * @param timeoutMs - Timeout in milliseconds (default: FETCH_TIMEOUT_MS)
+ * @returns Promise that resolves to the Response or rejects on timeout
+ */
+async function fetchWithTimeout(
+	url: string,
+	options: RequestInit = {},
+	timeoutMs: number = FETCH_TIMEOUT_MS
+): Promise<Response> {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+	try {
+		const response = await fetch(url, {
+			...options,
+			signal: controller.signal,
+		});
+		return response;
+	} finally {
+		clearTimeout(timeoutId);
+	}
+}
+
+// ==========================================================================
 // Handler Registration
 // ==========================================================================
 
@@ -222,7 +259,7 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					installId: installationId,
 				};
 
-				const response = await fetch(`${M4ESTR0_API_BASE}/submit`, {
+				const response = await fetchWithTimeout(`${M4ESTR0_API_BASE}/submit`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
@@ -276,6 +313,15 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Leaderboard submission timed out', 'Leaderboard');
+					return {
+						success: false,
+						message: 'Request timed out',
+						error: 'Request timed out. Please check your network connection and try again.',
+					};
+				}
 				logger.error('Error submitting to leaderboard', 'Leaderboard', error);
 				return {
 					success: false,
@@ -293,7 +339,7 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 			try {
 				logger.debug('Polling leaderboard auth status', 'Leaderboard');
 
-				const response = await fetch(
+				const response = await fetchWithTimeout(
 					`${M4ESTR0_API_BASE}/auth-status?clientToken=${encodeURIComponent(clientToken)}`,
 					{
 						headers: {
@@ -324,6 +370,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Leaderboard auth poll timed out', 'Leaderboard');
+					return {
+						status: 'error',
+						error: 'Request timed out',
+					};
+				}
 				logger.error('Error polling leaderboard auth status', 'Leaderboard', error);
 				return {
 					status: 'error',
@@ -345,7 +399,7 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					email: data.email.substring(0, 3) + '***',
 				});
 
-				const response = await fetch(`${M4ESTR0_API_BASE}/resend-confirmation`, {
+				const response = await fetchWithTimeout(`${M4ESTR0_API_BASE}/resend-confirmation`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
@@ -376,6 +430,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Leaderboard resend confirmation timed out', 'Leaderboard');
+					return {
+						success: false,
+						error: 'Request timed out',
+					};
+				}
 				logger.error('Error resending leaderboard confirmation', 'Leaderboard', error);
 				return {
 					success: false,
@@ -391,11 +453,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 		async (_event, options?: { limit?: number }): Promise<LeaderboardGetResponse> => {
 			try {
 				const limit = options?.limit || 50;
-				const response = await fetch(`${LEADERBOARD_API_BASE}/leaderboard?limit=${limit}`, {
-					headers: {
-						'User-Agent': `Maestro/${app.getVersion()}`,
-					},
-				});
+				const response = await fetchWithTimeout(
+					`${LEADERBOARD_API_BASE}/leaderboard?limit=${limit}`,
+					{
+						headers: {
+							'User-Agent': `Maestro/${app.getVersion()}`,
+						},
+					}
+				);
 
 				if (response.ok) {
 					const data = (await response.json()) as { entries?: LeaderboardEntry[] };
@@ -410,6 +475,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Leaderboard fetch timed out', 'Leaderboard');
+					return {
+						success: false,
+						error: 'Request timed out',
+					};
+				}
 				logger.error('Error fetching leaderboard', 'Leaderboard', error);
 				return {
 					success: false,
@@ -425,11 +498,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 		async (_event, options?: { limit?: number }): Promise<LongestRunsGetResponse> => {
 			try {
 				const limit = options?.limit || 50;
-				const response = await fetch(`${LEADERBOARD_API_BASE}/longest-runs?limit=${limit}`, {
-					headers: {
-						'User-Agent': `Maestro/${app.getVersion()}`,
-					},
-				});
+				const response = await fetchWithTimeout(
+					`${LEADERBOARD_API_BASE}/longest-runs?limit=${limit}`,
+					{
+						headers: {
+							'User-Agent': `Maestro/${app.getVersion()}`,
+						},
+					}
+				);
 
 				if (response.ok) {
 					const data = (await response.json()) as { entries?: LongestRunEntry[] };
@@ -444,6 +520,14 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Longest runs fetch timed out', 'Leaderboard');
+					return {
+						success: false,
+						error: 'Request timed out',
+					};
+				}
 				logger.error('Error fetching longest runs leaderboard', 'Leaderboard', error);
 				return {
 					success: false,
@@ -465,7 +549,7 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					email: data.email.substring(0, 3) + '***',
 				});
 
-				const response = await fetch(`${M4ESTR0_API_BASE}/sync`, {
+				const response = await fetchWithTimeout(`${M4ESTR0_API_BASE}/sync`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
@@ -536,6 +620,15 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 					};
 				}
 			} catch (error) {
+				// Handle timeout specifically
+				if (error instanceof Error && error.name === 'AbortError') {
+					logger.error('Leaderboard sync timed out', 'Leaderboard');
+					return {
+						success: false,
+						found: false,
+						error: 'Request timed out',
+					};
+				}
 				logger.error('Error syncing from leaderboard server', 'Leaderboard', error);
 				return {
 					success: false,
@@ -546,3 +639,19 @@ export function registerLeaderboardHandlers(deps: LeaderboardHandlerDependencies
 		}
 	);
 }
+
+// ==========================================================================
+// Exports for Testing
+// ==========================================================================
+
+/**
+ * Get the default fetch timeout in milliseconds (for testing)
+ */
+export function getFetchTimeoutMs(): number {
+	return FETCH_TIMEOUT_MS;
+}
+
+/**
+ * Exposed for testing - fetch with timeout helper
+ */
+export { fetchWithTimeout };
