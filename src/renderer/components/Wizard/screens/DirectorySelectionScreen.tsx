@@ -93,8 +93,8 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
 	const continueButtonRef = useRef<HTMLButtonElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
-  	// Ref for debouncing validation
-  	const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	// Ref for debouncing validation
+	const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	/**
 	 * Fetch agent config when selected agent changes
@@ -133,9 +133,9 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
 	 */
 	useEffect(() => {
 		return () => {
-		if (validationTimeoutRef.current) {
-			clearTimeout(validationTimeoutRef.current);
-		}
+			if (validationTimeoutRef.current) {
+				clearTimeout(validationTimeoutRef.current);
+			}
 		};
 	}, []);
 
@@ -239,10 +239,10 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
 					return;
 				}
 
-      // Directory exists, now check if it's a git repo
-      const isRepo = await window.maestro.git.isRepo(path, sshRemoteId);
-      setIsGitRepo(isRepo);
-      setDirectoryError(null);
+				// Directory exists, now check if it's a git repo
+				const isRepo = await window.maestro.git.isRepo(path, sshRemoteId);
+				setIsGitRepo(isRepo);
+				setDirectoryError(null);
 
 				// Check for existing Auto Run Docs folder (unless we're skipping because user already made a choice)
 				if (!skipExistingDocsCheck && !state.existingDocsChoice) {
@@ -302,24 +302,32 @@ export function DirectorySelectionScreen({ theme }: DirectorySelectionScreenProp
 			const newPath = e.target.value;
 			setDirectoryPath(newPath);
 
-    // Clear any pending validation
-    if (validationTimeoutRef.current) {
-      clearTimeout(validationTimeoutRef.current);
-      validationTimeoutRef.current = null;
-    }
+			// Clear any pending validation
+			if (validationTimeoutRef.current) {
+				clearTimeout(validationTimeoutRef.current);
+				validationTimeoutRef.current = null;
+			}
 
-    // Debounce validation to avoid excessive API calls while typing (especially over SSH)
-    if (newPath.trim()) {
-      validationTimeoutRef.current = setTimeout(() => {
-        validateDirectory(newPath);
-        validationTimeoutRef.current = null;
-      }, 800); // 800ms debounce for SSH remote checks
-    } else {
-      setDirectoryError(null);
-      setIsGitRepo(false);
-      setHasExistingAutoRunDocs(false, 0);
-    }
-  }, [setDirectoryPath, setDirectoryError, setIsGitRepo, setHasExistingAutoRunDocs, validateDirectory]);
+			// Debounce validation to avoid excessive API calls while typing (especially over SSH)
+			if (newPath.trim()) {
+				validationTimeoutRef.current = setTimeout(() => {
+					validateDirectory(newPath);
+					validationTimeoutRef.current = null;
+				}, 800); // 800ms debounce for SSH remote checks
+			} else {
+				setDirectoryError(null);
+				setIsGitRepo(false);
+				setHasExistingAutoRunDocs(false, 0);
+			}
+		},
+		[
+			setDirectoryPath,
+			setDirectoryError,
+			setIsGitRepo,
+			setHasExistingAutoRunDocs,
+			validateDirectory,
+		]
+	);
 
 	/**
 	 * Handle browse button click - open native folder picker

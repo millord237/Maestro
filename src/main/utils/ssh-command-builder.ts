@@ -104,7 +104,9 @@ export function buildRemoteCommand(options: RemoteCommandOptions): string {
 	// If command expects JSON via stdin (stream-json), use exec to replace the
 	// shell process so stdin is delivered directly to the agent binary and no
 	// intermediate shell produces control sequences that could corrupt the stream.
-	const hasStreamJsonInput = options.useStdin ? true : (Array.isArray(args) && args.includes('--input-format') && args.includes('stream-json'));
+	const hasStreamJsonInput = options.useStdin
+		? true
+		: Array.isArray(args) && args.includes('--input-format') && args.includes('stream-json');
 	const finalCommandWithArgs = hasStreamJsonInput ? `exec ${commandWithArgs}` : commandWithArgs;
 
 	// Combine env exports with command
@@ -190,7 +192,9 @@ export async function buildSshCommand(
 	// that explicitly require it (e.g., `--print` without `--input-format stream-json`).
 	const remoteArgs = remoteOptions.args || [];
 	const hasPrintFlag = remoteArgs.includes('--print');
-	const hasStreamJsonInput = remoteOptions.useStdin ? true : (remoteArgs.includes('--input-format') && remoteArgs.includes('stream-json'));
+	const hasStreamJsonInput = remoteOptions.useStdin
+		? true
+		: remoteArgs.includes('--input-format') && remoteArgs.includes('stream-json');
 	const forceTty = Boolean(hasPrintFlag && !hasStreamJsonInput);
 
 	// Log the decision so callers can debug why a TTY was or was not forced
@@ -202,10 +206,10 @@ export async function buildSshCommand(
 		forceTty,
 	});
 
-  if (forceTty) {
-    // -tt must come first for reliable forced allocation in some SSH implementations
-    args.push('-tt');
-  }
+	if (forceTty) {
+		// -tt must come first for reliable forced allocation in some SSH implementations
+		args.push('-tt');
+	}
 
 	// When using SSH config, we let SSH handle authentication settings
 	// Only add explicit overrides if provided
@@ -221,14 +225,14 @@ export async function buildSshCommand(
 
 	// Default SSH options for non-interactive operation
 	// These are always needed to ensure BatchMode behavior. If `forceTty` is true,
-  	// override RequestTTY to `force` so SSH will allocate a TTY even in non-interactive contexts.
+	// override RequestTTY to `force` so SSH will allocate a TTY even in non-interactive contexts.
 	for (const [key, value] of Object.entries(DEFAULT_SSH_OPTIONS)) {
-    // If we will force a TTY for this command, override the RequestTTY option
-    if (key === 'RequestTTY' && forceTty) {
-      args.push('-o', `${key}=force`);
-    } else {
-  		args.push('-o', `${key}=${value}`);
-    }
+		// If we will force a TTY for this command, override the RequestTTY option
+		if (key === 'RequestTTY' && forceTty) {
+			args.push('-o', `${key}=force`);
+		} else {
+			args.push('-o', `${key}=${value}`);
+		}
 	}
 
 	// Port specification - only add if not default and not using SSH config
@@ -271,53 +275,53 @@ export async function buildSshCommand(
 		env: Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined,
 	});
 
-  // Wrap the command to execute via the user's login shell.
-  // $SHELL -ilc ensures the user's full PATH (including homebrew, nvm, etc.) is available.
-  // -i forces interactive mode (critical for .bashrc to not bail out)
-  // -l loads login profile for PATH
-  // -c executes the command
-  // Using $SHELL respects the user's configured shell (bash, zsh, etc.)
-  //
-  // WHY -i IS CRITICAL:
-  // On Ubuntu (and many Linux distros), .bashrc has a guard at the top:
-  //   case $- in *i*) ;; *) return;; esac
-  // By explicitly sourcing it, we bypass this guard.
-  //
-  // CRITICAL: When Node.js spawn() passes this to SSH without shell:true, SSH runs
-  // the command through the remote's default shell. The key is escaping:
-  // 1. Double quotes around the command are NOT escaped - they delimit the -c argument
-  // 2. $ signs inside the command MUST be escaped as \$ so they defer to the login shell
-  //    (shellEscapeForDoubleQuotes handles this)
-  // 3. Single quotes inside the command pass through unchanged
-  //
-  // Example transformation for spawn():
-  //   Input:  cd '/path' && MYVAR='value' claude --print
-  //   After escaping: cd '/path' && MYVAR='value' claude --print (no $ to escape here)
-  //   Wrapped: bash -lc "source ~/.bashrc 2>/dev/null; cd '/path' && MYVAR='value' claude --print"
-  //   SSH receives this as one argument, passes to remote shell
-  //   The login shell runs with full PATH from /etc/profile, ~/.bash_profile, AND ~/.bashrc
-  const escapedCommand = shellEscapeForDoubleQuotes(remoteCommand);
-  // Source login/profile files first so PATH modifications made in
-  // ~/.bash_profile or ~/.profile are available for non-interactive
-  // remote commands, then source ~/.bashrc to cover interactive
-  // additions that might also be present.
-  const wrappedCommand = `bash -lc "source ~/.bash_profile 2>/dev/null || source ~/.profile 2>/dev/null; source ~/.bashrc 2>/dev/null; ${escapedCommand}"`;
-  args.push(wrappedCommand);
+	// Wrap the command to execute via the user's login shell.
+	// $SHELL -ilc ensures the user's full PATH (including homebrew, nvm, etc.) is available.
+	// -i forces interactive mode (critical for .bashrc to not bail out)
+	// -l loads login profile for PATH
+	// -c executes the command
+	// Using $SHELL respects the user's configured shell (bash, zsh, etc.)
+	//
+	// WHY -i IS CRITICAL:
+	// On Ubuntu (and many Linux distros), .bashrc has a guard at the top:
+	//   case $- in *i*) ;; *) return;; esac
+	// By explicitly sourcing it, we bypass this guard.
+	//
+	// CRITICAL: When Node.js spawn() passes this to SSH without shell:true, SSH runs
+	// the command through the remote's default shell. The key is escaping:
+	// 1. Double quotes around the command are NOT escaped - they delimit the -c argument
+	// 2. $ signs inside the command MUST be escaped as \$ so they defer to the login shell
+	//    (shellEscapeForDoubleQuotes handles this)
+	// 3. Single quotes inside the command pass through unchanged
+	//
+	// Example transformation for spawn():
+	//   Input:  cd '/path' && MYVAR='value' claude --print
+	//   After escaping: cd '/path' && MYVAR='value' claude --print (no $ to escape here)
+	//   Wrapped: bash -lc "source ~/.bashrc 2>/dev/null; cd '/path' && MYVAR='value' claude --print"
+	//   SSH receives this as one argument, passes to remote shell
+	//   The login shell runs with full PATH from /etc/profile, ~/.bash_profile, AND ~/.bashrc
+	const escapedCommand = shellEscapeForDoubleQuotes(remoteCommand);
+	// Source login/profile files first so PATH modifications made in
+	// ~/.bash_profile or ~/.profile are available for non-interactive
+	// remote commands, then source ~/.bashrc to cover interactive
+	// additions that might also be present.
+	const wrappedCommand = `bash -lc "source ~/.bash_profile 2>/dev/null || source ~/.profile 2>/dev/null; source ~/.bashrc 2>/dev/null; ${escapedCommand}"`;
+	args.push(wrappedCommand);
 
 	// Debug logging to trace the exact command being built
 	logger.debug('Built SSH command', '[ssh-command-builder]', {
-    host: config.host,
-    username: config.username,
-    port: config.port,
-    useSshConfig: config.useSshConfig,
-    privateKeyPath: config.privateKeyPath ? '***configured***' : undefined,
+		host: config.host,
+		username: config.username,
+		port: config.port,
+		useSshConfig: config.useSshConfig,
+		privateKeyPath: config.privateKeyPath ? '***configured***' : undefined,
 		remoteCommand,
 		wrappedCommand,
 		sshPath,
-    	sshArgs: args,
+		sshArgs: args,
 		fullCommand: `${sshPath} ${args.join(' ')}`,
-    // Show the exact command string that will execute on the remote
-    remoteExecutionString: wrappedCommand,
+		// Show the exact command string that will execute on the remote
+		remoteExecutionString: wrappedCommand,
 	});
 
 	return {
