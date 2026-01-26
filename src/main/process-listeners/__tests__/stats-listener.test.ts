@@ -32,7 +32,7 @@ describe('Stats Listener', () => {
 
 		mockStatsDB = {
 			isReady: vi.fn(() => true),
-			insertQueryEvent: vi.fn(() => 1),
+			insertQueryEvent: vi.fn(() => 'event-id-123'),
 		} as unknown as StatsDB;
 
 		mockProcessManager = {
@@ -52,7 +52,7 @@ describe('Stats Listener', () => {
 		expect(mockProcessManager.on).toHaveBeenCalledWith('query-complete', expect.any(Function));
 	});
 
-	it('should record query event to stats database when ready', () => {
+	it('should record query event to stats database when ready', async () => {
 		setupStatsListener(mockProcessManager, {
 			safeSend: mockSafeSend,
 			getStatsDB: () => mockStatsDB,
@@ -73,17 +73,20 @@ describe('Stats Listener', () => {
 
 		handler?.(testSessionId, testQueryData);
 
-		expect(mockStatsDB.isReady).toHaveBeenCalled();
-		expect(mockStatsDB.insertQueryEvent).toHaveBeenCalledWith({
-			sessionId: testQueryData.sessionId,
-			agentType: testQueryData.agentType,
-			source: testQueryData.source,
-			startTime: testQueryData.startTime,
-			duration: testQueryData.duration,
-			projectPath: testQueryData.projectPath,
-			tabId: testQueryData.tabId,
+		// Wait for async processing
+		await vi.waitFor(() => {
+			expect(mockStatsDB.isReady).toHaveBeenCalled();
+			expect(mockStatsDB.insertQueryEvent).toHaveBeenCalledWith({
+				sessionId: testQueryData.sessionId,
+				agentType: testQueryData.agentType,
+				source: testQueryData.source,
+				startTime: testQueryData.startTime,
+				duration: testQueryData.duration,
+				projectPath: testQueryData.projectPath,
+				tabId: testQueryData.tabId,
+			});
+			expect(mockSafeSend).toHaveBeenCalledWith('stats:updated');
 		});
-		expect(mockSafeSend).toHaveBeenCalledWith('stats:updated');
 	});
 
 	it('should not record event when stats database is not ready', () => {
@@ -113,7 +116,7 @@ describe('Stats Listener', () => {
 		expect(mockSafeSend).not.toHaveBeenCalled();
 	});
 
-	it('should log error when recording fails', () => {
+	it('should log error when recording fails after retries', async () => {
 		vi.mocked(mockStatsDB.insertQueryEvent).mockImplementation(() => {
 			throw new Error('Database error');
 		});
@@ -137,16 +140,26 @@ describe('Stats Listener', () => {
 
 		handler?.('session-789', testQueryData);
 
-		expect(mockLogger.error).toHaveBeenCalledWith(
-			expect.stringContaining('Failed to record query event'),
-			'[Stats]',
-			expect.objectContaining({
-				sessionId: 'session-789',
-			})
+		// Wait for all retries to complete (100ms + 200ms + final attempt)
+		await vi.waitFor(
+			() => {
+				expect(mockLogger.error).toHaveBeenCalledWith(
+					expect.stringContaining('Failed to record query event after 3 attempts'),
+					'[Stats]',
+					expect.objectContaining({
+						sessionId: 'session-789',
+					})
+				);
+			},
+			{ timeout: 1000 }
 		);
+		// Should have tried 3 times
+		expect(mockStatsDB.insertQueryEvent).toHaveBeenCalledTimes(3);
+		// Should not have broadcasted update on failure
+		expect(mockSafeSend).not.toHaveBeenCalled();
 	});
 
-	it('should log debug info when recording succeeds', () => {
+	it('should log debug info when recording succeeds', async () => {
 		setupStatsListener(mockProcessManager, {
 			safeSend: mockSafeSend,
 			getStatsDB: () => mockStatsDB,
@@ -166,15 +179,61 @@ describe('Stats Listener', () => {
 
 		handler?.('session-abc', testQueryData);
 
-		expect(mockLogger.debug).toHaveBeenCalledWith(
-			expect.stringContaining('Recorded query event'),
-			'[Stats]',
-			expect.objectContaining({
-				sessionId: 'session-abc',
-				agentType: 'claude-code',
-				source: 'user',
-				duration: 3000,
+		// Wait for async processing
+		await vi.waitFor(() => {
+			expect(mockLogger.debug).toHaveBeenCalledWith(
+				expect.stringContaining('Recorded query event'),
+				'[Stats]',
+				expect.objectContaining({
+					sessionId: 'session-abc',
+					agentType: 'claude-code',
+					source: 'user',
+					duration: 3000,
+				})
+			);
+		});
+	});
+
+	it('should retry on transient failure and succeed', async () => {
+		// First call fails, second succeeds
+		vi.mocked(mockStatsDB.insertQueryEvent)
+			.mockImplementationOnce(() => {
+				throw new Error('Transient error');
 			})
+			.mockImplementationOnce(() => 'event-id-456');
+
+		setupStatsListener(mockProcessManager, {
+			safeSend: mockSafeSend,
+			getStatsDB: () => mockStatsDB,
+			logger: mockLogger,
+		});
+
+		const handler = eventHandlers.get('query-complete');
+		const testQueryData: QueryCompleteData = {
+			sessionId: 'session-retry',
+			agentType: 'claude-code',
+			source: 'user',
+			startTime: Date.now(),
+			duration: 1000,
+			projectPath: '/test/project',
+			tabId: 'tab-retry',
+		};
+
+		handler?.('session-retry', testQueryData);
+
+		// Wait for retry to complete
+		await vi.waitFor(
+			() => {
+				expect(mockStatsDB.insertQueryEvent).toHaveBeenCalledTimes(2);
+				expect(mockSafeSend).toHaveBeenCalledWith('stats:updated');
+			},
+			{ timeout: 500 }
+		);
+		// Should have logged warning for first failure
+		expect(mockLogger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Stats DB insert failed'),
+			'[Stats]',
+			expect.any(Object)
 		);
 	});
 });
