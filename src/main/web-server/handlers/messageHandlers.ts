@@ -420,6 +420,13 @@ export class WebSocketMessageHandler {
 		this.callbacks
 			.selectSession(sessionId, tabId)
 			.then((success) => {
+				if (success) {
+					// Subscribe client to this session's output so they receive session_output messages
+					client.subscribedSessionId = sessionId;
+					logger.debug(`Session ${sessionId} selected in desktop, client subscribed`, LOG_CONTEXT);
+				} else {
+					logger.warn(`Failed to select session ${sessionId} in desktop`, LOG_CONTEXT);
+				}
 				client.socket.send(
 					JSON.stringify({
 						type: 'select_session_result',
@@ -428,11 +435,6 @@ export class WebSocketMessageHandler {
 						timestamp: Date.now(),
 					})
 				);
-				if (success) {
-					logger.debug(`Session ${sessionId} selected in desktop`, LOG_CONTEXT);
-				} else {
-					logger.warn(`Failed to select session ${sessionId} in desktop`, LOG_CONTEXT);
-				}
 			})
 			.catch((error) => {
 				client.socket.send(

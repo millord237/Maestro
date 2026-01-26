@@ -82,19 +82,22 @@ vi.mock('lucide-react', () => {
 });
 
 // Mock window.matchMedia for components that use media queries
-Object.defineProperty(window, 'matchMedia', {
-	writable: true,
-	value: vi.fn().mockImplementation((query: string) => ({
-		matches: false,
-		media: query,
-		onchange: null,
-		addListener: vi.fn(),
-		removeListener: vi.fn(),
-		addEventListener: vi.fn(),
-		removeEventListener: vi.fn(),
-		dispatchEvent: vi.fn(),
-	})),
-});
+// Only mock if window exists (jsdom environment)
+if (typeof window !== 'undefined') {
+	Object.defineProperty(window, 'matchMedia', {
+		writable: true,
+		value: vi.fn().mockImplementation((query: string) => ({
+			matches: false,
+			media: query,
+			onchange: null,
+			addListener: vi.fn(),
+			removeListener: vi.fn(),
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn(),
+			dispatchEvent: vi.fn(),
+		})),
+	});
+}
 
 // Mock ResizeObserver using a proper class-like constructor
 // Simulates a 1000px width by default which ensures all responsive UI elements are visible
@@ -129,29 +132,32 @@ class MockResizeObserver {
 	unobserve = vi.fn();
 	disconnect = vi.fn();
 }
-global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+// Only set browser globals if window exists (jsdom environment)
+if (typeof window !== 'undefined') {
+	global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
-// Mock offsetWidth to return reasonable values for responsive breakpoint tests
-// This ensures components that check element dimensions work correctly in jsdom
-Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-	configurable: true,
-	get() {
-		return 1000; // Default to wide enough for all responsive features to show
-	},
-});
+	// Mock offsetWidth to return reasonable values for responsive breakpoint tests
+	// This ensures components that check element dimensions work correctly in jsdom
+	Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+		configurable: true,
+		get() {
+			return 1000; // Default to wide enough for all responsive features to show
+		},
+	});
 
-// Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-	observe: vi.fn(),
-	unobserve: vi.fn(),
-	disconnect: vi.fn(),
-}));
+	// Mock IntersectionObserver
+	global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+		observe: vi.fn(),
+		unobserve: vi.fn(),
+		disconnect: vi.fn(),
+	}));
 
-// Mock Element.prototype.scrollTo - needed for components that use scrollTo
-Element.prototype.scrollTo = vi.fn();
+	// Mock Element.prototype.scrollTo - needed for components that use scrollTo
+	Element.prototype.scrollTo = vi.fn();
 
-// Mock Element.prototype.scrollIntoView - needed for components that scroll elements into view
-Element.prototype.scrollIntoView = vi.fn();
+	// Mock Element.prototype.scrollIntoView - needed for components that scroll elements into view
+	Element.prototype.scrollIntoView = vi.fn();
+}
 
 // Mock window.maestro API (Electron IPC bridge)
 const mockMaestro = {
@@ -446,7 +452,10 @@ const mockMaestro = {
 	},
 };
 
-Object.defineProperty(window, 'maestro', {
-	writable: true,
-	value: mockMaestro,
-});
+// Only mock window.maestro if window exists (jsdom environment)
+if (typeof window !== 'undefined') {
+	Object.defineProperty(window, 'maestro', {
+		writable: true,
+		value: mockMaestro,
+	});
+}
