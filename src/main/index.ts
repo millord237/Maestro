@@ -47,6 +47,7 @@ import {
 	registerWebHandlers,
 	registerLeaderboardHandlers,
 	registerNotificationsHandlers,
+	registerSymphonyHandlers,
 	setupLoggerEventForwarding,
 	cleanupAllGroomingSessions,
 	getActiveGroomingSessionCount,
@@ -613,6 +614,12 @@ function setupIpcHandlers() {
 	registerLeaderboardHandlers({
 		app,
 		settingsStore: store,
+	});
+
+	// Register Symphony handlers for token donation / open source contributions
+	registerSymphonyHandlers({
+		app,
+		getMainWindow: () => mainWindow,
 	});
 }
 
