@@ -2715,15 +2715,16 @@ function MaestroConsoleInner() {
 			}
 
 			// Calculate context window usage percentage from CURRENT reported tokens.
-			// IMPORTANT: Claude Code reports cacheReadInputTokens as CUMULATIVE session totals,
-			// not per-request values. Including them causes context % to exceed 100% impossibly.
-			// For Claude: context = inputTokens + cacheCreationInputTokens (new content only)
+			// For Claude: context = inputTokens + cacheCreationInputTokens + cacheReadInputTokens
+			//   All tokens in the context window (cached tokens still occupy space)
 			// For Codex: context = inputTokens + outputTokens (combined limit)
 			const sessionForUsage = sessionsRef.current.find((s) => s.id === actualSessionId);
 			const agentToolType = sessionForUsage?.toolType;
 			const isClaudeUsage = agentToolType === 'claude-code' || agentToolType === 'claude';
 			const currentContextTokens = isClaudeUsage
-				? usageStats.inputTokens + usageStats.cacheCreationInputTokens
+				? usageStats.inputTokens +
+					usageStats.cacheCreationInputTokens +
+					usageStats.cacheReadInputTokens
 				: usageStats.inputTokens + usageStats.outputTokens;
 
 			// Calculate context percentage, falling back to agent-specific defaults if contextWindow not provided

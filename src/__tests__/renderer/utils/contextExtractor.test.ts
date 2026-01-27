@@ -650,8 +650,8 @@ describe('calculateTotalTokens', () => {
 
 		const total = calculateTotalTokens(contexts);
 
-		// input + cacheCreation for each context (cacheRead excluded - cumulative)
-		expect(total).toBe(450); // (100+25) + (300+25)
+		// input + cacheCreation + cacheRead for each context
+		expect(total).toBe(575); // (100+25+50) + (300+25+75)
 	});
 });
 
@@ -694,8 +694,8 @@ describe('getContextSummary', () => {
 
 		expect(summary.totalSources).toBe(2);
 		expect(summary.totalLogs).toBe(5);
-		// (100+25) + (200+25) = 350 (cacheRead excluded - cumulative)
-		expect(summary.estimatedTokens).toBe(350);
+		// (100+25+50) + (200+25+75) = 475 (cacheRead now included)
+		expect(summary.estimatedTokens).toBe(475);
 		expect(summary.byAgent['claude-code']).toBe(1);
 		expect(summary.byAgent['opencode']).toBe(1);
 	});

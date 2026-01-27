@@ -460,7 +460,7 @@ describe('HistoryDetailModal', () => {
 						usageStats: {
 							inputTokens: 5000,
 							outputTokens: 1000,
-							cacheReadInputTokens: 2000, // Excluded from calculation (cumulative)
+							cacheReadInputTokens: 2000, // Included in calculation (occupies context)
 							cacheCreationInputTokens: 5000,
 							contextWindow: 100000,
 							totalCostUsd: 0.1,
@@ -470,9 +470,9 @@ describe('HistoryDetailModal', () => {
 				/>
 			);
 
-			// Context = (inputTokens + cacheCreationInputTokens) / contextWindow (cacheRead excluded)
-			// (5000 + 5000) / 100000 = 10%
-			expect(screen.getByText('10%')).toBeInTheDocument();
+			// Context = (inputTokens + cacheCreationInputTokens + cacheReadInputTokens) / contextWindow
+			// (5000 + 5000 + 2000) / 100000 = 12%
+			expect(screen.getByText('12%')).toBeInTheDocument();
 		});
 
 		it('should display token counts', () => {

@@ -1955,8 +1955,8 @@ describe('MainPanel', () => {
 				<MainPanel {...defaultProps} activeSession={session} getContextColor={getContextColor} />
 			);
 
-			// Context usage should be 50000 / 200000 * 100 = 25% (cacheRead excluded - cumulative)
-			expect(getContextColor).toHaveBeenCalledWith(25, theme);
+			// Context usage should be (50000 + 25000) / 200000 * 100 = 37.5% -> 38%
+			expect(getContextColor).toHaveBeenCalledWith(38, theme);
 		});
 	});
 

@@ -31,13 +31,15 @@ const COMBINED_CONTEXT_AGENTS: Set<ToolType> = new Set(['codex']);
 /**
  * Calculate total context tokens based on agent-specific semantics.
  *
- * IMPORTANT: Claude Code reports CUMULATIVE session tokens, not per-request tokens.
- * The cacheReadInputTokens can exceed the context window because they accumulate
- * across all turns in the conversation. For context pressure display, we should
- * only count tokens that represent NEW context being added:
+ * For Claude models, context tokens include:
+ * - inputTokens: New uncached tokens sent to the model
+ * - cacheCreationInputTokens: Tokens being cached for the first time
+ * - cacheReadInputTokens: Tokens read from cache (still occupy context window)
  *
- * Claude models: Context = input + cacheCreation (excludes cacheRead - already cached)
- * OpenAI models: Context = input + output (combined limit)
+ * Note: Cached tokens still occupy space in the context window - they're just
+ * cheaper to process. ClawdBot uses this same formula: input + cacheRead + cacheWrite
+ *
+ * For OpenAI models (Codex), context = input + output (combined limit)
  *
  * @param stats - The usage statistics containing token counts
  * @param agentId - The agent identifier for agent-specific calculation
@@ -50,11 +52,12 @@ export function calculateContextTokens(
 	>,
 	agentId?: ToolType
 ): number {
-	// For Claude: inputTokens = uncached new tokens, cacheCreationInputTokens = newly cached tokens
-	// cacheReadInputTokens are EXCLUDED because they represent already-cached context
-	// that Claude Code reports cumulatively across the session, not per-request.
-	// Including them would cause context % to exceed 100% impossibly.
-	const baseTokens = stats.inputTokens + (stats.cacheCreationInputTokens || 0);
+	// For Claude: total context = input + cacheCreation + cacheRead
+	// All these tokens occupy the context window, regardless of caching
+	const baseTokens =
+		stats.inputTokens +
+		(stats.cacheCreationInputTokens || 0) +
+		(stats.cacheReadInputTokens || 0);
 
 	// OpenAI models have combined input+output context limits
 	if (agentId && COMBINED_CONTEXT_AGENTS.has(agentId)) {
@@ -69,15 +72,11 @@ export function calculateContextTokens(
  * Estimate context usage percentage when the agent doesn't provide it directly.
  * Uses agent-specific default context window sizes for accurate estimation.
  *
- * IMPORTANT: Context calculation varies by agent:
- * - Claude models: inputTokens + cacheCreationInputTokens
- *   (cacheRead excluded - cumulative, output excluded - separate limit)
+ * Context calculation varies by agent:
+ * - Claude models: inputTokens + cacheCreationInputTokens + cacheReadInputTokens
+ *   (all tokens in context, output has separate limit)
  * - OpenAI models (Codex): inputTokens + outputTokens
  *   (combined context window includes both input and output)
- *
- * Note: cacheReadInputTokens are NOT included because Claude Code reports them
- * as cumulative session totals, not per-request values. Including them would
- * cause context percentage to exceed 100% impossibly.
  *
  * @param stats - The usage statistics containing token counts
  * @param agentId - The agent identifier for agent-specific context window size
