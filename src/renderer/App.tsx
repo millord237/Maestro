@@ -2432,10 +2432,9 @@ function MaestroConsoleInner() {
 					let SYNOPSIS_PROMPT: string;
 					if (synopsisData.lastSynopsisTime) {
 						const timeAgo = formatRelativeTime(synopsisData.lastSynopsisTime);
-						SYNOPSIS_PROMPT = `Synopsize ONLY the work done since the last synopsis (${timeAgo}). Do not repeat previous work. 2-3 sentences max.`;
+						SYNOPSIS_PROMPT = `${autorunSynopsisPrompt}\n\nIMPORTANT: Only synopsize work done since the last synopsis (${timeAgo}). Do not repeat previous work.`;
 					} else {
-						SYNOPSIS_PROMPT =
-							'Synopsize our recent work in 2-3 sentences max since the last time we did a synopsis.';
+						SYNOPSIS_PROMPT = autorunSynopsisPrompt;
 					}
 					const startTime = Date.now();
 					const synopsisTime = Date.now(); // Capture time for updating lastSynopsisTime
