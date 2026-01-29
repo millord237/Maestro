@@ -1,9 +1,17 @@
 /**
- * Path Prober - Platform-specific binary detection
+ * Binary Path Detection Utilities
  *
- * Handles detection of agent binaries on Windows and Unix-like systems.
  * Packaged Electron apps don't inherit shell environment, so we need to
  * probe known installation paths directly.
+ *
+ * Detection Strategy:
+ * 1. Direct file system probing of known installation paths (fastest, most reliable)
+ * 2. Fall back to which/where command with expanded PATH
+ *
+ * This two-tier approach ensures we find binaries even when:
+ * - PATH is not inherited correctly
+ * - Binaries are in non-standard locations
+ * - Shell initialization files (.bashrc, .zshrc) aren't sourced
  */
 
 import * as os from 'os';
@@ -186,7 +194,8 @@ export async function checkCustomPath(customPath: string): Promise<BinaryDetecti
 		}
 
 		return { exists: false };
-	} catch {
+	} catch (error) {
+		logger.debug(`Error checking custom path: ${customPath}`, LOG_CONTEXT, { error });
 		return { exists: false };
 	}
 }
@@ -259,18 +268,31 @@ function getWindowsKnownPaths(binaryName: string): string[] {
 /**
  * On Windows, directly probe known installation paths for a binary.
  * This is more reliable than `where` command which may fail in packaged Electron apps.
- * Returns the first existing path found, preferring .exe over .cmd.
+ * Returns the first existing path found (in priority order), preferring .exe over .cmd.
+ *
+ * Uses parallel probing for performance on slow file systems.
  */
 export async function probeWindowsPaths(binaryName: string): Promise<string | null> {
 	const pathsToCheck = getWindowsKnownPaths(binaryName);
 
-	for (const probePath of pathsToCheck) {
-		try {
+	if (pathsToCheck.length === 0) {
+		return null;
+	}
+
+	// Check all paths in parallel for performance
+	const results = await Promise.allSettled(
+		pathsToCheck.map(async (probePath) => {
 			await fs.promises.access(probePath, fs.constants.F_OK);
-			logger.debug(`Direct probe found ${binaryName}`, LOG_CONTEXT, { path: probePath });
 			return probePath;
-		} catch {
-			// Path doesn't exist, continue to next
+		})
+	);
+
+	// Return the first successful result (maintains priority order from pathsToCheck)
+	for (let i = 0; i < results.length; i++) {
+		const result = results[i];
+		if (result.status === 'fulfilled') {
+			logger.debug(`Direct probe found ${binaryName}`, LOG_CONTEXT, { path: result.value });
+			return result.value;
 		}
 	}
 
@@ -356,19 +378,32 @@ function getUnixKnownPaths(binaryName: string): string[] {
  * On macOS/Linux, directly probe known installation paths for a binary.
  * This is necessary because packaged Electron apps don't inherit shell aliases,
  * and 'which' may fail to find binaries in non-standard locations.
- * Returns the first existing executable path found.
+ * Returns the first existing executable path found (in priority order).
+ *
+ * Uses parallel probing for performance on slow file systems.
  */
 export async function probeUnixPaths(binaryName: string): Promise<string | null> {
 	const pathsToCheck = getUnixKnownPaths(binaryName);
 
-	for (const probePath of pathsToCheck) {
-		try {
+	if (pathsToCheck.length === 0) {
+		return null;
+	}
+
+	// Check all paths in parallel for performance
+	const results = await Promise.allSettled(
+		pathsToCheck.map(async (probePath) => {
 			// Check both existence and executability
 			await fs.promises.access(probePath, fs.constants.F_OK | fs.constants.X_OK);
-			logger.debug(`Direct probe found ${binaryName}`, LOG_CONTEXT, { path: probePath });
 			return probePath;
-		} catch {
-			// Path doesn't exist or isn't executable, continue to next
+		})
+	);
+
+	// Return the first successful result (maintains priority order from pathsToCheck)
+	for (let i = 0; i < results.length; i++) {
+		const result = results[i];
+		if (result.status === 'fulfilled') {
+			logger.debug(`Direct probe found ${binaryName}`, LOG_CONTEXT, { path: result.value });
+			return result.value;
 		}
 	}
 

@@ -1215,6 +1215,81 @@ describe('agent-detector', () => {
 		});
 	});
 
+	describe('model cache TTL', () => {
+		it('should invalidate model cache after TTL expires', async () => {
+			vi.useFakeTimers();
+
+			// Setup: opencode is available
+			mockExecFileNoThrow.mockImplementation(async (cmd, args) => {
+				const binaryName = args[0];
+				if (binaryName === 'opencode') {
+					return { stdout: '/usr/bin/opencode\n', stderr: '', exitCode: 0 };
+				}
+				if (cmd === '/usr/bin/opencode' && args[0] === 'models') {
+					return {
+						stdout: 'initial-model\n',
+						stderr: '',
+						exitCode: 0,
+					};
+				}
+				return { stdout: '', stderr: 'not found', exitCode: 1 };
+			});
+
+			// Create detector with short TTL for testing (100ms)
+			const shortTtlDetector = new AgentDetector(100);
+			await shortTtlDetector.detectAgents();
+
+			// First call - should fetch
+			const models1 = await shortTtlDetector.discoverModels('opencode');
+			expect(models1).toEqual(['initial-model']);
+
+			// Clear mocks to track new calls
+			mockExecFileNoThrow.mockClear();
+
+			// Second call immediately - should use cache
+			const models2 = await shortTtlDetector.discoverModels('opencode');
+			expect(models2).toEqual(['initial-model']);
+			expect(mockExecFileNoThrow).not.toHaveBeenCalledWith(
+				'/usr/bin/opencode',
+				['models'],
+				undefined,
+				expect.any(Object)
+			);
+
+			// Advance time past TTL
+			vi.advanceTimersByTime(150);
+
+			// Setup new response for after cache expires
+			mockExecFileNoThrow.mockImplementation(async (cmd, args) => {
+				if (cmd === '/usr/bin/opencode' && args[0] === 'models') {
+					return {
+						stdout: 'new-model-after-ttl\n',
+						stderr: '',
+						exitCode: 0,
+					};
+				}
+				return { stdout: '', stderr: '', exitCode: 1 };
+			});
+
+			// Third call after TTL - should re-fetch
+			const models3 = await shortTtlDetector.discoverModels('opencode');
+			expect(models3).toEqual(['new-model-after-ttl']);
+			expect(mockExecFileNoThrow).toHaveBeenCalledWith(
+				'/usr/bin/opencode',
+				['models'],
+				undefined,
+				expect.any(Object)
+			);
+
+			vi.useRealTimers();
+		});
+
+		it('should accept custom cache TTL in constructor', () => {
+			const customTtlDetector = new AgentDetector(60000); // 1 minute
+			expect(customTtlDetector).toBeDefined();
+		});
+	});
+
 	describe('clearModelCache', () => {
 		beforeEach(async () => {
 			mockExecFileNoThrow.mockImplementation(async (cmd, args) => {

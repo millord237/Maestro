@@ -1,11 +1,16 @@
 /**
- * Agent Detector - Detects available AI agents on the system
+ * Agent Detection and Configuration Manager
  *
- * This module provides the main AgentDetector class that:
- * - Detects which agents are available on the system
- * - Manages custom paths for agents
+ * Responsibilities:
+ * - Detects installed agents via file system probing and PATH resolution
+ * - Manages agent configuration and capability metadata
  * - Caches detection results for performance
  * - Discovers available models for agents that support model selection
+ *
+ * Model Discovery:
+ * - Model lists are cached for 5 minutes (configurable) to balance freshness and performance
+ * - Each agent implements its own model discovery command
+ * - Cache can be manually cleared or bypassed with forceRefresh flag
  */
 
 import * as path from 'path';
@@ -19,14 +24,25 @@ const LOG_CONTEXT = 'AgentDetector';
 
 // ============ Agent Detector Class ============
 
+/** Default cache TTL: 5 minutes (model lists don't change frequently) */
+const DEFAULT_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export class AgentDetector {
 	private cachedAgents: AgentConfig[] | null = null;
 	private detectionInProgress: Promise<AgentConfig[]> | null = null;
 	private customPaths: Record<string, string> = {};
 	// Cache for model discovery results: agentId -> { models, timestamp }
 	private modelCache: Map<string, { models: string[]; timestamp: number }> = new Map();
-	// Cache TTL: 5 minutes (model lists don't change frequently)
-	private readonly MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+	// Configurable cache TTL (useful for testing or different environments)
+	private readonly modelCacheTtlMs: number;
+
+	/**
+	 * Create an AgentDetector instance
+	 * @param modelCacheTtlMs - Model cache TTL in milliseconds (default: 5 minutes)
+	 */
+	constructor(modelCacheTtlMs: number = DEFAULT_MODEL_CACHE_TTL_MS) {
+		this.modelCacheTtlMs = modelCacheTtlMs;
+	}
 
 	/**
 	 * Set custom paths for agents (from user configuration)
@@ -205,7 +221,7 @@ export class AgentDetector {
 		// Check cache unless force refresh
 		if (!forceRefresh) {
 			const cached = this.modelCache.get(agentId);
-			if (cached && Date.now() - cached.timestamp < this.MODEL_CACHE_TTL_MS) {
+			if (cached && Date.now() - cached.timestamp < this.modelCacheTtlMs) {
 				logger.debug(`Returning cached models for ${agentId}`, LOG_CONTEXT);
 				return cached.models;
 			}
@@ -223,42 +239,50 @@ export class AgentDetector {
 	/**
 	 * Run the agent-specific model discovery command.
 	 * Each agent may have a different way to list available models.
+	 *
+	 * This method catches all exceptions to ensure graceful degradation
+	 * when model discovery fails for any reason.
 	 */
 	private async runModelDiscovery(agentId: string, agent: AgentConfig): Promise<string[]> {
 		const env = getExpandedEnv();
 		const command = agent.path || agent.command;
 
-		// Agent-specific model discovery commands
-		switch (agentId) {
-			case 'opencode': {
-				// OpenCode: `opencode models` returns one model per line
-				const result = await execFileNoThrow(command, ['models'], undefined, env);
+		try {
+			// Agent-specific model discovery commands
+			switch (agentId) {
+				case 'opencode': {
+					// OpenCode: `opencode models` returns one model per line
+					const result = await execFileNoThrow(command, ['models'], undefined, env);
 
-				if (result.exitCode !== 0) {
-					logger.warn(
-						`Model discovery failed for ${agentId}: exit code ${result.exitCode}`,
-						LOG_CONTEXT,
-						{ stderr: result.stderr }
-					);
-					return [];
+					if (result.exitCode !== 0) {
+						logger.warn(
+							`Model discovery failed for ${agentId}: exit code ${result.exitCode}`,
+							LOG_CONTEXT,
+							{ stderr: result.stderr }
+						);
+						return [];
+					}
+
+					// Parse output: one model per line (e.g., "opencode/gpt-5-nano", "ollama/gpt-oss:latest")
+					const models = result.stdout
+						.split('\n')
+						.map((line) => line.trim())
+						.filter((line) => line.length > 0);
+
+					logger.info(`Discovered ${models.length} models for ${agentId}`, LOG_CONTEXT, {
+						models,
+					});
+					return models;
 				}
 
-				// Parse output: one model per line (e.g., "opencode/gpt-5-nano", "ollama/gpt-oss:latest")
-				const models = result.stdout
-					.split('\n')
-					.map((line) => line.trim())
-					.filter((line) => line.length > 0);
-
-				logger.info(`Discovered ${models.length} models for ${agentId}`, LOG_CONTEXT, {
-					models,
-				});
-				return models;
+				default:
+					// For agents without model discovery implemented, return empty array
+					logger.debug(`No model discovery implemented for ${agentId}`, LOG_CONTEXT);
+					return [];
 			}
-
-			default:
-				// For agents without model discovery implemented, return empty array
-				logger.debug(`No model discovery implemented for ${agentId}`, LOG_CONTEXT);
-				return [];
+		} catch (error) {
+			logger.error(`Model discovery threw exception for ${agentId}`, LOG_CONTEXT, { error });
+			return [];
 		}
 	}
 }

@@ -10,17 +10,60 @@ import type { AgentCapabilities } from './capabilities';
 // ============ Configuration Types ============
 
 /**
- * Configuration option types for agent-specific settings
+ * Base configuration option fields shared by all types
  */
-export interface AgentConfigOption {
+interface BaseConfigOption {
 	key: string; // Storage key
-	type: 'checkbox' | 'text' | 'number' | 'select';
 	label: string; // UI label
 	description: string; // Help text
-	default: any; // Default value
-	options?: string[]; // For select type
-	argBuilder?: (value: any) => string[]; // Converts config value to CLI args
 }
+
+/**
+ * Checkbox configuration option (boolean value)
+ */
+interface CheckboxConfigOption extends BaseConfigOption {
+	type: 'checkbox';
+	default: boolean;
+	argBuilder?: (value: boolean) => string[];
+}
+
+/**
+ * Text configuration option (string value)
+ */
+interface TextConfigOption extends BaseConfigOption {
+	type: 'text';
+	default: string;
+	argBuilder?: (value: string) => string[];
+}
+
+/**
+ * Number configuration option (numeric value)
+ */
+interface NumberConfigOption extends BaseConfigOption {
+	type: 'number';
+	default: number;
+	argBuilder?: (value: number) => string[];
+}
+
+/**
+ * Select configuration option (string value from predefined options)
+ */
+interface SelectConfigOption extends BaseConfigOption {
+	type: 'select';
+	default: string;
+	options: string[];
+	argBuilder?: (value: string) => string[];
+}
+
+/**
+ * Configuration option types for agent-specific settings.
+ * Uses discriminated union for full type safety.
+ */
+export type AgentConfigOption =
+	| CheckboxConfigOption
+	| TextConfigOption
+	| NumberConfigOption
+	| SelectConfigOption;
 
 /**
  * Full agent configuration including runtime detection state
