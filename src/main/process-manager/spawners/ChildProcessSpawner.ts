@@ -206,7 +206,7 @@ export class ChildProcessSpawner {
 				isWindows,
 				argsCount: spawnArgs.length,
 				promptArgLength: prompt ? spawnArgs[spawnArgs.length - 1]?.length : undefined,
-				fullCommandPreview: `${spawnCommand} ${spawnArgs.slice(0, 5).join(' ')}${spawnArgs.length > 5 ? ' ...' : ''}`,
+				fullCommandPreview: `${spawnCommand} ${spawnArgs.join(' ')}`,
 			});
 
 			const childProcess = spawn(spawnCommand, spawnArgs, {
