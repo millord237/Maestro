@@ -499,7 +499,7 @@ describe('agent-detector', () => {
 
 				expect(logger.warn).toHaveBeenCalledWith(
 					expect.stringContaining('not executable'),
-					'AgentDetector'
+					'PathProber'
 				);
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
