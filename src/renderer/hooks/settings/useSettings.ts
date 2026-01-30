@@ -173,10 +173,12 @@ export interface UseSettingsReturn {
 	setDefaultShowThinking: (value: ThinkingMode) => void;
 	leftSidebarWidth: number;
 	rightPanelWidth: number;
-	markdownEditMode: boolean;
+	markdownEditMode: boolean; // FilePreview: whether editing file content (vs viewing rendered)
+	chatRawTextMode: boolean; // TerminalOutput: whether to show raw text in AI responses (vs rendered markdown)
 	setLeftSidebarWidth: (value: number) => void;
 	setRightPanelWidth: (value: number) => void;
 	setMarkdownEditMode: (value: boolean) => void;
+	setChatRawTextMode: (value: boolean) => void;
 	showHiddenFiles: boolean;
 	setShowHiddenFiles: (value: boolean) => void;
 
@@ -370,7 +372,8 @@ export function useSettings(): UseSettingsReturn {
 	const [defaultShowThinking, setDefaultShowThinkingState] = useState<ThinkingMode>('off'); // Thinking toggle defaults to off
 	const [leftSidebarWidth, setLeftSidebarWidthState] = useState(256);
 	const [rightPanelWidth, setRightPanelWidthState] = useState(384);
-	const [markdownEditMode, setMarkdownEditModeState] = useState(false);
+	const [markdownEditMode, setMarkdownEditModeState] = useState(false); // FilePreview: edit file content
+	const [chatRawTextMode, setChatRawTextModeState] = useState(false); // TerminalOutput: show raw text in AI responses
 	const [showHiddenFiles, setShowHiddenFilesState] = useState(true); // Default: show hidden files
 
 	// Terminal Config
@@ -578,6 +581,11 @@ export function useSettings(): UseSettingsReturn {
 	const setMarkdownEditMode = useCallback((value: boolean) => {
 		setMarkdownEditModeState(value);
 		window.maestro.settings.set('markdownEditMode', value);
+	}, []);
+
+	const setChatRawTextMode = useCallback((value: boolean) => {
+		setChatRawTextModeState(value);
+		window.maestro.settings.set('chatRawTextMode', value);
 	}, []);
 
 	const setShowHiddenFiles = useCallback((value: boolean) => {
@@ -1368,6 +1376,9 @@ export function useSettings(): UseSettingsReturn {
 					setRightPanelWidthState(savedRightPanelWidth as number);
 				if (savedMarkdownEditMode !== undefined)
 					setMarkdownEditModeState(savedMarkdownEditMode as boolean);
+				const savedChatRawTextMode = allSettings['chatRawTextMode'];
+				if (savedChatRawTextMode !== undefined)
+					setChatRawTextModeState(savedChatRawTextMode as boolean);
 				if (savedShowHiddenFiles !== undefined)
 					setShowHiddenFilesState(savedShowHiddenFiles as boolean);
 				if (savedActiveThemeId !== undefined) setActiveThemeIdState(savedActiveThemeId as ThemeId);
@@ -1732,9 +1743,11 @@ export function useSettings(): UseSettingsReturn {
 			leftSidebarWidth,
 			rightPanelWidth,
 			markdownEditMode,
+			chatRawTextMode,
 			setLeftSidebarWidth,
 			setRightPanelWidth,
 			setMarkdownEditMode,
+			setChatRawTextMode,
 			showHiddenFiles,
 			setShowHiddenFiles,
 			terminalWidth,
@@ -1852,6 +1865,7 @@ export function useSettings(): UseSettingsReturn {
 			leftSidebarWidth,
 			rightPanelWidth,
 			markdownEditMode,
+			chatRawTextMode,
 			showHiddenFiles,
 			terminalWidth,
 			logLevel,

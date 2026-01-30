@@ -86,6 +86,7 @@ export function aggregateModelUsage(
 				modelStats.cacheCreationInputTokens || 0
 			);
 			// Use the highest context window from any model
+			// This ensures we track the maximum context limit across multi-model turns
 			if (modelStats.contextWindow && modelStats.contextWindow > contextWindow) {
 				contextWindow = modelStats.contextWindow;
 			}

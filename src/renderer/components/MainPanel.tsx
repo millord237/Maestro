@@ -99,7 +99,8 @@ interface MainPanelProps {
 	selectedAtMentionIndex?: number;
 	previewFile: { name: string; content: string; path: string } | null;
 	filePreviewLoading?: { name: string; path: string } | null;
-	markdownEditMode: boolean;
+	markdownEditMode: boolean; // FilePreview: whether editing file content
+	chatRawTextMode: boolean; // TerminalOutput: whether to show raw text in AI responses
 	shortcuts: Record<string, Shortcut>;
 	rightPanelOpen: boolean;
 	maxOutputLines: number;
@@ -150,6 +151,7 @@ interface MainPanelProps {
 	setSelectedAtMentionIndex?: (index: number) => void;
 	setPreviewFile: (file: { name: string; content: string; path: string } | null) => void;
 	setMarkdownEditMode: (mode: boolean) => void;
+	setChatRawTextMode: (mode: boolean) => void;
 	setAboutModalOpen: (open: boolean) => void;
 	setRightPanelOpen: (open: boolean) => void;
 	setGitLogOpen: (open: boolean) => void;
@@ -349,6 +351,7 @@ export const MainPanel = React.memo(
 			previewFile,
 			filePreviewLoading,
 			markdownEditMode,
+			chatRawTextMode,
 			shortcuts,
 			rightPanelOpen,
 			maxOutputLines,
@@ -376,6 +379,7 @@ export const MainPanel = React.memo(
 			setSelectedSlashCommandIndex,
 			setPreviewFile,
 			setMarkdownEditMode,
+			setChatRawTextMode,
 			setAboutModalOpen: _setAboutModalOpen,
 			setRightPanelOpen,
 			setGitLogOpen,
@@ -563,8 +567,26 @@ export const MainPanel = React.memo(
 		const activeTabContextUsage = useMemo(() => {
 			if (!activeTabContextWindow || activeTabContextWindow === 0) return 0;
 			if (activeTabContextTokens === 0) return 0;
-			return Math.min(Math.round((activeTabContextTokens / activeTabContextWindow) * 100), 100);
-		}, [activeTabContextTokens, activeTabContextWindow]);
+			const percentage = Math.min(Math.round((activeTabContextTokens / activeTabContextWindow) * 100), 100);
+
+			// DEBUG: Log MainPanel context display calculation
+			console.log('[MainPanel] Context display calculation', {
+				sessionId: activeSession?.id,
+				tabId: activeTab?.id,
+				usageStats: activeTab?.usageStats ? {
+					inputTokens: activeTab.usageStats.inputTokens,
+					outputTokens: activeTab.usageStats.outputTokens,
+					cacheReadInputTokens: activeTab.usageStats.cacheReadInputTokens,
+					cacheCreationInputTokens: activeTab.usageStats.cacheCreationInputTokens,
+					contextWindow: activeTab.usageStats.contextWindow,
+				} : null,
+				activeTabContextTokens,
+				activeTabContextWindow,
+				displayedPercentage: percentage,
+			});
+
+			return percentage;
+		}, [activeTabContextTokens, activeTabContextWindow, activeSession?.id, activeTab?.id, activeTab?.usageStats]);
 
 		// PERF: Track panel width for responsive widget hiding with threshold-based updates
 		// Only update state when width crosses a meaningful threshold (20px) to prevent
@@ -1608,8 +1630,8 @@ export const MainPanel = React.memo(
 													? activeTab?.scrollTop
 													: activeSession.terminalScrollTop
 											}
-											markdownEditMode={markdownEditMode}
-											setMarkdownEditMode={setMarkdownEditMode}
+											markdownEditMode={chatRawTextMode}
+											setMarkdownEditMode={setChatRawTextMode}
 											onReplayMessage={props.onReplayMessage}
 											fileTree={props.fileTree}
 											cwd={

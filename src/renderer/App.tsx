@@ -444,6 +444,8 @@ function MaestroConsoleInner() {
 		setRightPanelWidth,
 		markdownEditMode,
 		setMarkdownEditMode,
+		chatRawTextMode,
+		setChatRawTextMode,
 		showHiddenFiles,
 		setShowHiddenFiles,
 		terminalWidth,
@@ -2721,17 +2723,35 @@ function MaestroConsoleInner() {
 
 		// Handle usage statistics from AI responses (BATCHED for performance)
 		const unsubscribeUsage = window.maestro.process.onUsage((sessionId: string, usageStats) => {
-			// Parse sessionId to get actual session ID and tab ID (handles -ai-tabId and legacy -ai suffix)
+			// Parse sessionId to get actual session ID and tab ID
+			// Handles: -ai-tabId, legacy -ai suffix, -synopsis-timestamp, -batch-timestamp
 			let actualSessionId: string;
 			let tabId: string | null = null;
+			let baseSessionId: string; // For looking up the original session (handles synopsis/batch)
+
 			const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
+			const synopsisMatch = sessionId.match(/^(.+)-synopsis-\d+$/);
+			const batchMatch = sessionId.match(/^(.+)-batch-\d+$/);
+
 			if (aiTabMatch) {
 				actualSessionId = aiTabMatch[1];
 				tabId = aiTabMatch[2];
+				baseSessionId = actualSessionId;
 			} else if (sessionId.endsWith('-ai')) {
 				actualSessionId = sessionId.slice(0, -3);
+				baseSessionId = actualSessionId;
+			} else if (synopsisMatch) {
+				// Synopsis sessions: {sessionId}-synopsis-{timestamp}
+				// Don't update the session state, just track usage
+				actualSessionId = sessionId;
+				baseSessionId = synopsisMatch[1];
+			} else if (batchMatch) {
+				// Batch sessions: {sessionId}-batch-{timestamp}
+				actualSessionId = sessionId;
+				baseSessionId = batchMatch[1];
 			} else {
 				actualSessionId = sessionId;
+				baseSessionId = sessionId;
 			}
 
 			// Calculate context window usage percentage from CURRENT (per-turn) reported tokens.
@@ -2741,7 +2761,8 @@ function MaestroConsoleInner() {
 			// For Codex: context = inputTokens + outputTokens (combined limit)
 			//
 			// @see https://platform.claude.com/docs/en/build-with-claude/prompt-caching
-			const sessionForUsage = sessionsRef.current.find((s) => s.id === actualSessionId);
+			// Use baseSessionId for lookup to handle synopsis/batch sessions that inherit parent's agent type
+			const sessionForUsage = sessionsRef.current.find((s) => s.id === baseSessionId);
 			const agentToolType = sessionForUsage?.toolType;
 			const isClaudeUsage = agentToolType === 'claude-code' || agentToolType === 'claude';
 			const currentContextTokens = isClaudeUsage
@@ -2778,6 +2799,25 @@ function MaestroConsoleInner() {
 				const estimated = estimateContextUsage(usageStats, agentToolType);
 				contextPercentage = estimated ?? 0;
 			}
+
+			// DEBUG: Log context calculation details
+			console.log('[onUsage] Context calculation', {
+				sessionId: actualSessionId,
+				agentType: agentToolType,
+				raw: {
+					inputTokens: usageStats.inputTokens,
+					outputTokens: usageStats.outputTokens,
+					cacheReadInputTokens: usageStats.cacheReadInputTokens,
+					cacheCreationInputTokens: usageStats.cacheCreationInputTokens,
+					contextWindow: usageStats.contextWindow,
+				},
+				calculated: {
+					currentContextTokens,
+					effectiveContextWindow,
+					contextPercentage,
+					formula: isClaudeUsage ? 'input + cacheRead + cacheCreation' : 'input + output',
+				},
+			});
 
 			// Batch the usage stats update, context percentage, and cycle tokens
 			// The batched updater handles the accumulation logic internally
@@ -4829,6 +4869,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		spawnAgentWithPromptRef: _spawnAgentWithPromptRef,
 		showFlashNotification: _showFlashNotification,
 		showSuccessFlash,
+		cancelPendingSynopsis,
 	} = useAgentExecution({
 		activeSession,
 		sessionsRef,
@@ -9835,6 +9876,10 @@ You are taking over this conversation. Based on the context above, provide a bri
 				: `${activeSession.id}-terminal`;
 
 		try {
+			// Cancel any pending synopsis processes for this session
+			// This prevents synopsis from running after the user clicks Stop
+			await cancelPendingSynopsis(activeSession.id);
+
 			// Send interrupt signal (Ctrl+C)
 			await window.maestro.process.interrupt(targetSessionId);
 
@@ -11419,10 +11464,16 @@ You are taking over this conversation. Based on the context above, provide a bri
 		// Process the item
 		processQueuedItem(activeSessionId, nextItem);
 	}, [activeSession, activeSessionId, processQueuedItem]);
-	const handleQuickActionsToggleMarkdownEditMode = useCallback(
-		() => setMarkdownEditMode(!markdownEditMode),
-		[markdownEditMode]
-	);
+	const handleQuickActionsToggleMarkdownEditMode = useCallback(() => {
+		// Toggle the appropriate mode based on context:
+		// - If file preview is open: toggle file edit mode (markdownEditMode)
+		// - If no file preview: toggle chat raw text mode (chatRawTextMode)
+		if (previewFile) {
+			setMarkdownEditMode(!markdownEditMode);
+		} else {
+			setChatRawTextMode(!chatRawTextMode);
+		}
+	}, [previewFile, markdownEditMode, chatRawTextMode, setMarkdownEditMode, setChatRawTextMode]);
 	const handleQuickActionsStartTour = useCallback(() => {
 		setTourFromWizard(false);
 		setTourOpen(true);
@@ -11531,6 +11582,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		editingSessionId,
 		editingGroupId,
 		markdownEditMode,
+		chatRawTextMode,
 		defaultSaveToHistory,
 		defaultShowThinking,
 		setLeftSidebarOpen,
@@ -11591,6 +11643,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		stagedImages,
 		handleSetLightboxImage,
 		setMarkdownEditMode,
+		setChatRawTextMode,
 		toggleTabStar,
 		toggleTabUnread,
 		setPromptComposerOpen,
@@ -11984,6 +12037,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		previewFile,
 		filePreviewLoading,
 		markdownEditMode,
+		chatRawTextMode,
 		shortcuts,
 		rightPanelOpen,
 		maxOutputLines,
@@ -12080,6 +12134,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		setSelectedAtMentionIndex,
 		setPreviewFile,
 		setMarkdownEditMode,
+		setChatRawTextMode,
 		setAboutModalOpen,
 		setRightPanelOpen,
 		setGitLogOpen,
@@ -12624,7 +12679,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 					setPlaygroundOpen={setPlaygroundOpen}
 					onQuickActionsRefreshGitFileState={handleQuickActionsRefreshGitFileState}
 					onQuickActionsDebugReleaseQueuedItem={handleQuickActionsDebugReleaseQueuedItem}
-					markdownEditMode={markdownEditMode}
+					markdownEditMode={previewFile ? markdownEditMode : chatRawTextMode}
 					onQuickActionsToggleMarkdownEditMode={handleQuickActionsToggleMarkdownEditMode}
 					setUpdateCheckModalOpenForQuickActions={setUpdateCheckModalOpen}
 					openWizard={openWizardModal}

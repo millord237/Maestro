@@ -60,7 +60,8 @@ export interface UseMainPanelPropsDeps {
 	selectedSlashCommandIndex: number;
 	previewFile: { name: string; content: string; path: string } | null;
 	filePreviewLoading: { name: string; path: string } | null;
-	markdownEditMode: boolean;
+	markdownEditMode: boolean; // FilePreview: whether editing file content
+	chatRawTextMode: boolean; // TerminalOutput: whether to show raw text in AI responses
 	shortcuts: Record<string, Shortcut>;
 	rightPanelOpen: boolean;
 	maxOutputLines: number;
@@ -162,6 +163,7 @@ export interface UseMainPanelPropsDeps {
 	setSelectedAtMentionIndex: (index: number) => void;
 	setPreviewFile: (file: { name: string; content: string; path: string } | null) => void;
 	setMarkdownEditMode: (mode: boolean) => void;
+	setChatRawTextMode: (mode: boolean) => void;
 	setAboutModalOpen: (open: boolean) => void;
 	setRightPanelOpen: (open: boolean) => void;
 	setGitLogOpen: (open: boolean) => void;
@@ -311,6 +313,7 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 			previewFile: deps.previewFile,
 			filePreviewLoading: deps.filePreviewLoading,
 			markdownEditMode: deps.markdownEditMode,
+			chatRawTextMode: deps.chatRawTextMode,
 			shortcuts: deps.shortcuts,
 			rightPanelOpen: deps.rightPanelOpen,
 			maxOutputLines: deps.maxOutputLines,
@@ -356,6 +359,7 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 			setSelectedAtMentionIndex: deps.setSelectedAtMentionIndex,
 			setPreviewFile: deps.setPreviewFile,
 			setMarkdownEditMode: deps.setMarkdownEditMode,
+			setChatRawTextMode: deps.setChatRawTextMode,
 			setAboutModalOpen: deps.setAboutModalOpen,
 			setRightPanelOpen: deps.setRightPanelOpen,
 			setGitLogOpen: deps.setGitLogOpen,
@@ -515,6 +519,7 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 			deps.previewFile,
 			deps.filePreviewLoading,
 			deps.markdownEditMode,
+			deps.chatRawTextMode,
 			deps.shortcuts,
 			deps.rightPanelOpen,
 			deps.maxOutputLines,
@@ -587,6 +592,7 @@ export function useMainPanelProps(deps: UseMainPanelPropsDeps) {
 			deps.setSelectedAtMentionIndex,
 			deps.setPreviewFile,
 			deps.setMarkdownEditMode,
+			deps.setChatRawTextMode,
 			deps.setAboutModalOpen,
 			deps.setRightPanelOpen,
 			deps.setGitLogOpen,

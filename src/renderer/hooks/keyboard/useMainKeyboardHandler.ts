@@ -397,7 +397,8 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.activeBatchRunState?.isRunning && !ctx.activeBatchRunState?.worktreeActive;
 				if (!isInAutoRunPanel && !isInAutoRunDOM && !ctx.previewFile && !isAutoRunLocked) {
 					e.preventDefault();
-					ctx.setMarkdownEditMode(!ctx.markdownEditMode);
+					// Toggle chat raw text mode (not file preview edit mode)
+					ctx.setChatRawTextMode(!ctx.chatRawTextMode);
 					trackShortcut('toggleMarkdownMode');
 				}
 			} else if (ctx.isShortcut(e, 'toggleAutoRunExpanded')) {

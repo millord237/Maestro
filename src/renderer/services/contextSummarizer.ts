@@ -163,7 +163,14 @@ export class ContextSummarizationService {
 			const summarizedText = await window.maestro.context.groomContext(
 				request.projectRoot,
 				request.agentType,
-				prompt
+				prompt,
+				// Pass SSH and custom config for remote execution support
+				{
+					sshRemoteConfig: request.sshRemoteConfig,
+					customPath: request.customPath,
+					customArgs: request.customArgs,
+					customEnvVars: request.customEnvVars,
+				}
 			);
 			console.log('[ContextSummarizer] Received response, length:', summarizedText?.length || 0);
 
@@ -226,7 +233,14 @@ export class ContextSummarizationService {
 			const summary = await window.maestro.context.groomContext(
 				request.projectRoot,
 				request.agentType,
-				prompt
+				prompt,
+				// Pass SSH and custom config for remote execution support
+				{
+					sshRemoteConfig: request.sshRemoteConfig,
+					customPath: request.customPath,
+					customArgs: request.customArgs,
+					customEnvVars: request.customEnvVars,
+				}
 			);
 			chunkSummaries.push(summary);
 		}
@@ -259,7 +273,14 @@ export class ContextSummarizationService {
 			const consolidated = await window.maestro.context.groomContext(
 				request.projectRoot,
 				request.agentType,
-				consolidationPrompt
+				consolidationPrompt,
+				// Pass SSH and custom config for remote execution support
+				{
+					sshRemoteConfig: request.sshRemoteConfig,
+					customPath: request.customPath,
+					customArgs: request.customArgs,
+					customEnvVars: request.customEnvVars,
+				}
 			);
 
 			const newTokens = estimateTextTokenCount(consolidated);
