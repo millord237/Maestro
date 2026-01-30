@@ -103,7 +103,7 @@ const POLL_INTERVAL_SCALE_THRESHOLDS: { maxSessions: number; interval: number }[
 	{ maxSessions: Infinity, interval: 90000 }, // 13+: 90s
 ];
 
-function getScaledPollInterval(basePollInterval: number, gitSessionCount: number): number {
+export function getScaledPollInterval(basePollInterval: number, gitSessionCount: number): number {
 	// Only scale if using the default interval (user-configured intervals are respected)
 	if (basePollInterval !== DEFAULT_POLL_INTERVAL) return basePollInterval;
 
@@ -467,6 +467,11 @@ export function useGitStatusPolling(
 	// so the interval adapts to the current load level
 	const prevScaledIntervalRef = useRef(getScaledPollInterval(pollInterval, gitSessionCount));
 	useEffect(() => {
+		// Ensure ref reflects current count before startPolling reads it.
+		// (The render-phase assignment at line 330 already does this, but being
+		// explicit here makes the data-flow self-documenting.)
+		gitSessionCountRef.current = gitSessionCount;
+
 		const newScaledInterval = getScaledPollInterval(pollInterval, gitSessionCount);
 		if (newScaledInterval !== prevScaledIntervalRef.current) {
 			prevScaledIntervalRef.current = newScaledInterval;
