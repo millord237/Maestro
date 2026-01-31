@@ -454,6 +454,55 @@ describe('cliDetection.ts', () => {
 			expect(getCloudflaredPath()).toBe('C:\\Program Files\\Cloudflared\\cloudflared.exe');
 		});
 
+		it('should handle CRLF line endings from Windows where command', async () => {
+			Object.defineProperty(process, 'platform', { value: 'win32' });
+
+			// Windows 'where' command returns paths with CRLF line endings
+			mockedExecFileNoThrow.mockResolvedValue({
+				stdout: 'C:\\Windows\\System32\\OpenSSH\\ssh.exe\r\nC:\\Program Files\\Git\\usr\\bin\\ssh.exe\r\n',
+				stderr: '',
+				exitCode: 0,
+			});
+
+			clearCloudflaredCache();
+			await isCloudflaredInstalled();
+
+			// Should extract first path without trailing \r
+			const resultPath = getCloudflaredPath();
+			expect(resultPath).not.toContain('\r');
+			expect(resultPath).toBe('C:\\Windows\\System32\\OpenSSH\\ssh.exe');
+		});
+
+		it('should handle mixed LF and CRLF line endings', async () => {
+			mockedExecFileNoThrow.mockResolvedValue({
+				stdout: '/first/path/bin\r\n/second/path/bin\n/third/path/bin\r\n',
+				stderr: '',
+				exitCode: 0,
+			});
+
+			clearCloudflaredCache();
+			await isCloudflaredInstalled();
+
+			const resultPath = getCloudflaredPath();
+			expect(resultPath).not.toContain('\r');
+			expect(resultPath).toBe('/first/path/bin');
+		});
+
+		it('should handle path with only CRLF (no additional lines)', async () => {
+			Object.defineProperty(process, 'platform', { value: 'win32' });
+
+			mockedExecFileNoThrow.mockResolvedValue({
+				stdout: 'C:\\Single\\Path\\binary.exe\r\n',
+				stderr: '',
+				exitCode: 0,
+			});
+
+			clearCloudflaredCache();
+			await isCloudflaredInstalled();
+
+			expect(getCloudflaredPath()).toBe('C:\\Single\\Path\\binary.exe');
+		});
+
 		it('should handle path with special characters', async () => {
 			mockedExecFileNoThrow.mockResolvedValue({
 				stdout: '/home/user@domain/bin/cloudflared\n',
