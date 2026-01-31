@@ -14,6 +14,7 @@ import {
 	writeFileRemote,
 	existsRemote,
 	mkdirRemote,
+	deleteRemote,
 } from '../../utils/remote-fs';
 
 const LOG_CONTEXT = '[AutoRun]';
@@ -570,7 +571,7 @@ export function registerAutorunHandlers(
 		'autorun:deleteImage',
 		createIpcHandler(
 			handlerOpts('deleteImage'),
-			async (folderPath: string, relativePath: string) => {
+			async (folderPath: string, relativePath: string, sshRemoteId?: string) => {
 				// Sanitize relativePath to prevent directory traversal
 				const normalizedPath = path.normalize(relativePath);
 				if (
@@ -581,6 +582,29 @@ export function registerAutorunHandlers(
 					throw new Error('Invalid image path');
 				}
 
+				// SSH remote: dispatch to remote operations
+				if (sshRemoteId) {
+					const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+					if (!sshConfig) {
+						throw new Error(`SSH remote not found: ${sshRemoteId}`);
+					}
+
+					// Construct remote path (use forward slashes)
+					const remotePath = `${folderPath}/${normalizedPath}`;
+
+					logger.debug(`${LOG_CONTEXT} deleteImage via SSH: ${remotePath}`, LOG_CONTEXT);
+
+					// Delete the remote file
+					const result = await deleteRemote(remotePath, sshConfig, false);
+					if (!result.success) {
+						throw new Error(result.error || 'Failed to delete remote image file');
+					}
+
+					logger.info(`Deleted remote Auto Run image: ${relativePath}`, LOG_CONTEXT);
+					return {};
+				}
+
+				// Local: Build full path
 				const filePath = path.join(folderPath, normalizedPath);
 
 				// Validate the file is within the folder path (prevent traversal)
