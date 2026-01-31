@@ -98,20 +98,28 @@ export function createAutorunApi() {
 			return () => ipcRenderer.removeListener('autorun:fileChanged', wrappedHandler);
 		},
 
-		createBackup: (folderPath: string, filename: string) =>
-			ipcRenderer.invoke('autorun:createBackup', folderPath, filename),
+		createBackup: (folderPath: string, filename: string, sshRemoteId?: string) =>
+			ipcRenderer.invoke('autorun:createBackup', folderPath, filename, sshRemoteId),
 
-		restoreBackup: (folderPath: string, filename: string) =>
-			ipcRenderer.invoke('autorun:restoreBackup', folderPath, filename),
+		restoreBackup: (folderPath: string, filename: string, sshRemoteId?: string) =>
+			ipcRenderer.invoke('autorun:restoreBackup', folderPath, filename, sshRemoteId),
 
-		deleteBackups: (folderPath: string) => ipcRenderer.invoke('autorun:deleteBackups', folderPath),
+		deleteBackups: (folderPath: string, sshRemoteId?: string) =>
+			ipcRenderer.invoke('autorun:deleteBackups', folderPath, sshRemoteId),
 
 		createWorkingCopy: (
 			folderPath: string,
 			filename: string,
-			loopNumber: number
+			loopNumber: number,
+			sshRemoteId?: string
 		): Promise<{ workingCopyPath: string; originalPath: string }> =>
-			ipcRenderer.invoke('autorun:createWorkingCopy', folderPath, filename, loopNumber),
+			ipcRenderer.invoke(
+				'autorun:createWorkingCopy',
+				folderPath,
+				filename,
+				loopNumber,
+				sshRemoteId
+			),
 	};
 }
 
