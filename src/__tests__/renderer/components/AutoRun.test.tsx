@@ -3272,3 +3272,58 @@ describe('Expand Button Behavior', () => {
 		expect(expandButton.getAttribute('title')).toMatch(/\(.*\)/);
 	});
 });
+
+describe('Responsive Bottom Panel', () => {
+	// The default ResizeObserver mock in setup.ts returns 1000px width
+	// Since our compact threshold is 350px, the default mode is non-compact
+
+	it('shows Save button with text label in non-compact mode (width > 350px)', async () => {
+		const props = createDefaultProps({ content: 'Initial' });
+		renderWithProvider(<AutoRun {...props} />);
+
+		// Make content dirty to show Save/Revert buttons
+		const textarea = screen.getByRole('textbox');
+		fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+		// In non-compact mode, Save should show text label
+		const saveButton = screen.getByTitle('Save changes (⌘S)');
+		expect(saveButton).toBeInTheDocument();
+		expect(saveButton).toHaveTextContent('Save');
+	});
+
+	it('shows Revert button with text label in non-compact mode (width > 350px)', async () => {
+		const props = createDefaultProps({ content: 'Initial' });
+		renderWithProvider(<AutoRun {...props} />);
+
+		// Make content dirty to show Save/Revert buttons
+		const textarea = screen.getByRole('textbox');
+		fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+		// In non-compact mode, Revert should show text label
+		const revertButton = screen.getByTitle('Discard changes');
+		expect(revertButton).toBeInTheDocument();
+		expect(revertButton).toHaveTextContent('Revert');
+	});
+
+	it('shows "completed" word in task count in non-compact mode (width > 350px)', async () => {
+		const contentWithTasks = '# Tasks\n- [x] Done task\n- [ ] Pending task';
+		const props = createDefaultProps({ content: contentWithTasks });
+		renderWithProvider(<AutoRun {...props} />);
+
+		// Wait for the component to render with task counts
+		await waitFor(() => {
+			// In non-compact mode, the text should include "completed"
+			expect(screen.getByText(getByNormalizedText(/1 of 2 tasks completed/))).toBeInTheDocument();
+		});
+	});
+
+	it('bottom panel has ref for ResizeObserver to track width', async () => {
+		const contentWithTasks = '# Tasks\n- [x] Done task\n- [ ] Pending task';
+		const props = createDefaultProps({ content: contentWithTasks });
+		const { container } = renderWithProvider(<AutoRun {...props} />);
+
+		// Find the bottom panel (has flex-shrink-0, border-t, etc.)
+		const bottomPanel = container.querySelector('.flex-shrink-0.border-t');
+		expect(bottomPanel).toBeInTheDocument();
+	});
+});

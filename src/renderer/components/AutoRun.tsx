@@ -1,4 +1,4 @@
-import React, {
+import {
 	useState,
 	useRef,
 	useEffect,
@@ -35,6 +35,7 @@ import {
 	LayoutGrid,
 	CheckSquare,
 	Wand2,
+	Save,
 } from 'lucide-react';
 import { getEncoder, formatTokenCount } from '../utils/tokenCounter';
 import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
@@ -665,6 +666,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 	const matchElementsRef = useRef<HTMLElement[]>([]);
 	// Refresh animation state for empty state button
 	const [isRefreshingEmpty, setIsRefreshingEmpty] = useState(false);
+	// Compact mode for responsive bottom panel (icons only when narrow)
+	const [isCompact, setIsCompact] = useState(false);
+	const bottomPanelRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const previewRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -998,6 +1002,24 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 				clearTimeout(previewScrollDebounceRef.current);
 			}
 		};
+	}, []);
+
+	// ResizeObserver to detect when bottom panel is narrow (compact mode)
+	// Threshold: 350px - below this, use icons only for save/revert and hide "completed"
+	useEffect(() => {
+		if (!bottomPanelRef.current) return;
+
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				const width = entry.contentRect.width;
+				// Use compact mode when width is below 350px
+				setIsCompact(width < 350);
+			}
+		});
+
+		observer.observe(bottomPanelRef.current);
+
+		return () => observer.disconnect();
 	}, []);
 
 	// Handle refresh for empty state with animation
@@ -2061,6 +2083,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 					(isDirty && mode === 'edit' && !isLocked) ||
 					tokenCount !== null) && (
 					<div
+						ref={bottomPanelRef}
 						className="flex-shrink-0 px-3 py-1.5 text-xs border-t flex items-center justify-between"
 						style={{
 							backgroundColor: theme.colors.bgActivity,
@@ -2071,7 +2094,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 						{isDirty && mode === 'edit' && !isLocked ? (
 							<button
 								onClick={handleRevert}
-								className="px-2 py-0.5 rounded text-xs transition-colors hover:opacity-80"
+								className={`${isCompact ? 'p-1.5' : 'px-2 py-0.5'} rounded text-xs transition-colors hover:opacity-80 flex items-center gap-1`}
 								style={{
 									backgroundColor: 'transparent',
 									color: theme.colors.textDim,
@@ -2079,7 +2102,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 								}}
 								title="Discard changes"
 							>
-								Revert
+								{isCompact ? (
+									<RotateCcw className="w-3.5 h-3.5" />
+								) : (
+									'Revert'
+								)}
 							</button>
 						) : (
 							<div />
@@ -2111,7 +2138,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 										{taskCounts.completed}
 									</span>{' '}
 									of <span style={{ color: theme.colors.accent }}>{taskCounts.total}</span> task
-									{taskCounts.total !== 1 ? 's' : ''} completed
+									{taskCounts.total !== 1 ? 's' : ''}{!isCompact && ' completed'}
 								</span>
 							)}
 							{tokenCount !== null && (
@@ -2129,26 +2156,32 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 						{isDirty && mode === 'edit' && !isLocked ? (
 							<button
 								onClick={handleSave}
-								className="group relative px-2 py-0.5 rounded text-xs transition-colors hover:opacity-80"
+								className={`group relative ${isCompact ? 'p-1.5' : 'px-2 py-0.5'} rounded text-xs transition-colors hover:opacity-80 flex items-center gap-1`}
 								style={{
 									backgroundColor: theme.colors.accent,
 									color: theme.colors.accentForeground,
 									border: `1px solid ${theme.colors.accent}`,
 								}}
-								title="Save changes"
+								title="Save changes (⌘S)"
 							>
-								Save
-								{/* Keyboard shortcut overlay on hover */}
-								<span
-									className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-									style={{
-										backgroundColor: theme.colors.bgMain,
-										color: theme.colors.textDim,
-										border: `1px solid ${theme.colors.border}`,
-									}}
-								>
-									⌘S
-								</span>
+								{isCompact ? (
+									<Save className="w-3.5 h-3.5" />
+								) : (
+									'Save'
+								)}
+								{/* Keyboard shortcut overlay on hover - only show in non-compact mode */}
+								{!isCompact && (
+									<span
+										className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+										style={{
+											backgroundColor: theme.colors.bgMain,
+											color: theme.colors.textDim,
+											border: `1px solid ${theme.colors.border}`,
+										}}
+									>
+										⌘S
+									</span>
+								)}
 							</button>
 						) : (
 							<div />
