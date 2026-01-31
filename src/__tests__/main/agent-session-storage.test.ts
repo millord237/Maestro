@@ -414,3 +414,284 @@ describe('Storage Module Initialization', () => {
 		clearStorageRegistry();
 	});
 });
+
+describe('OpenCodeSessionStorage SSH Remote Support', () => {
+	// Mock SSH remote config for testing
+	const mockSshConfig = {
+		id: 'test-ssh',
+		name: 'Test SSH Server',
+		host: 'test-server.example.com',
+		port: 22,
+		username: 'testuser',
+		useSshConfig: false,
+		enabled: true,
+	};
+
+	// Mock project data for OpenCode
+	const mockProjectData = {
+		id: 'test-project-id',
+		worktree: '/home/testuser/project',
+		vcsDir: '/home/testuser/project/.git',
+		vcs: 'git',
+		time: {
+			created: 1700000000000,
+			updated: 1700001000000,
+		},
+	};
+
+	// Mock session data
+	const mockSessionData = {
+		id: 'ses_test123',
+		version: '1.0.0',
+		projectID: 'test-project-id',
+		directory: '/home/testuser/project',
+		title: 'Test Session',
+		time: {
+			created: 1700000000000,
+			updated: 1700001000000,
+		},
+		summary: {
+			additions: 10,
+			deletions: 5,
+			files: 3,
+		},
+	};
+
+	// Mock message data
+	const mockUserMessage = {
+		id: 'msg_user123',
+		sessionID: 'ses_test123',
+		role: 'user' as const,
+		time: { created: 1700000000000 },
+	};
+
+	const mockAssistantMessage = {
+		id: 'msg_assistant123',
+		sessionID: 'ses_test123',
+		role: 'assistant' as const,
+		time: { created: 1700000500000 },
+		tokens: {
+			input: 100,
+			output: 200,
+			cache: { read: 50, write: 25 },
+		},
+		cost: 0.005,
+	};
+
+	// Mock text parts
+	const mockUserPart = {
+		id: 'part_user123',
+		messageID: 'msg_user123',
+		type: 'text' as const,
+		text: 'Hello, can you help me?',
+	};
+
+	const mockAssistantPart = {
+		id: 'part_assistant123',
+		messageID: 'msg_assistant123',
+		type: 'text' as const,
+		text: 'Of course! I am happy to help.',
+	};
+
+	describe('getSessionPath with SSH config', () => {
+		it('should return remote message directory path when sshConfig is provided', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			const path = storage.getSessionPath('/home/testuser/project', 'ses_test123', mockSshConfig);
+
+			expect(path).toBe('~/.local/share/opencode/storage/message/ses_test123');
+		});
+
+		it('should return local path when sshConfig is not provided', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			const path = storage.getSessionPath('/home/testuser/project', 'ses_test123');
+
+			expect(path).toContain('opencode');
+			expect(path).toContain('storage');
+			expect(path).toContain('message');
+			expect(path).toContain('ses_test123');
+			expect(path).not.toContain('~'); // Local path should be absolute
+		});
+	});
+
+	describe('deleteMessagePair with SSH config', () => {
+		it('should return error for SSH remote sessions', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			const result = await storage.deleteMessagePair(
+				'/home/testuser/project',
+				'ses_test123',
+				'msg_user123',
+				undefined,
+				mockSshConfig
+			);
+
+			expect(result.success).toBe(false);
+			expect(result.error).toContain('Delete not supported for remote sessions');
+		});
+	});
+
+	describe('searchSessions with SSH config', () => {
+		it('should return empty results for empty search query with SSH config', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			const results = await storage.searchSessions('/home/testuser/project', '', 'all', mockSshConfig);
+			expect(results).toEqual([]);
+
+			const whitespaceResults = await storage.searchSessions(
+				'/home/testuser/project',
+				'   ',
+				'all',
+				mockSshConfig
+			);
+			expect(whitespaceResults).toEqual([]);
+		});
+	});
+
+	describe('Local operations still work without sshConfig', () => {
+		it('should use local file system when sshConfig is undefined', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// Without SSH config, should use local operations
+			// Since we don't have real OpenCode data, expect empty results
+			const sessions = await storage.listSessions('/test/nonexistent/project');
+			expect(sessions).toEqual([]);
+
+			const paginated = await storage.listSessionsPaginated('/test/nonexistent/project');
+			expect(paginated.sessions).toEqual([]);
+
+			const messages = await storage.readSessionMessages('/test/nonexistent/project', 'session-123');
+			expect(messages.messages).toEqual([]);
+
+			const search = await storage.searchSessions('/test/nonexistent/project', 'query', 'all');
+			expect(search).toEqual([]);
+		});
+
+		it('should use local file system when sshConfig is null', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// Passing undefined (not null, since the type is SshRemoteConfig | undefined)
+			const sessions = await storage.listSessions('/test/nonexistent/project', undefined);
+			expect(sessions).toEqual([]);
+		});
+	});
+
+	describe('SSH remote method signatures', () => {
+		it('should accept sshConfig parameter on all public methods', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// Verify that all public methods accept sshConfig parameter
+			// These should not throw type errors at compile time and should handle the parameter
+
+			// listSessions accepts sshConfig
+			const sessions = await storage.listSessions('/test/path', mockSshConfig);
+			expect(Array.isArray(sessions)).toBe(true);
+
+			// listSessionsPaginated accepts sshConfig
+			const paginated = await storage.listSessionsPaginated('/test/path', {}, mockSshConfig);
+			expect(paginated).toHaveProperty('sessions');
+			expect(paginated).toHaveProperty('hasMore');
+			expect(paginated).toHaveProperty('totalCount');
+
+			// readSessionMessages accepts sshConfig
+			const messages = await storage.readSessionMessages('/test/path', 'session-id', {}, mockSshConfig);
+			expect(messages).toHaveProperty('messages');
+			expect(messages).toHaveProperty('total');
+
+			// searchSessions accepts sshConfig
+			const search = await storage.searchSessions('/test/path', 'query', 'all', mockSshConfig);
+			expect(Array.isArray(search)).toBe(true);
+
+			// getSessionPath accepts sshConfig and returns remote path format
+			const sessionPath = storage.getSessionPath('/test/path', 'session-id', mockSshConfig);
+			expect(sessionPath).toContain('~/.local/share/opencode/storage');
+
+			// deleteMessagePair accepts sshConfig and returns error for remote
+			const deleteResult = await storage.deleteMessagePair(
+				'/test/path',
+				'session-id',
+				'message-id',
+				undefined,
+				mockSshConfig
+			);
+			expect(deleteResult.success).toBe(false);
+			expect(deleteResult.error).toContain('remote');
+		});
+	});
+
+	describe('Remote path construction', () => {
+		it('should construct correct remote paths for OpenCode storage', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// Test getSessionPath returns correct remote format
+			const messageDirPath = storage.getSessionPath('/project', 'ses_abc123', mockSshConfig);
+			expect(messageDirPath).toBe('~/.local/share/opencode/storage/message/ses_abc123');
+
+			// Verify the remote path uses POSIX format (forward slashes)
+			expect(messageDirPath).not.toContain('\\');
+
+			// Verify it uses ~ for home directory expansion on remote
+			expect(messageDirPath).toMatch(/^~\//);
+		});
+	});
+
+	describe('SSH config flow verification', () => {
+		it('should differentiate between SSH and local based on sshConfig presence', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// With sshConfig - returns remote-style path
+			const remotePath = storage.getSessionPath('/project', 'session-id', mockSshConfig);
+			expect(remotePath).toContain('~');
+
+			// Without sshConfig - returns local-style path
+			const localPath = storage.getSessionPath('/project', 'session-id');
+			expect(localPath).not.toContain('~');
+
+			// Verify local path is absolute
+			expect(localPath?.startsWith('/') || localPath?.match(/^[A-Z]:\\/)).toBeTruthy();
+		});
+
+		it('should verify SshRemoteConfig interface is properly accepted', async () => {
+			const { OpenCodeSessionStorage } = await import('../../main/storage/opencode-session-storage');
+			const storage = new OpenCodeSessionStorage();
+
+			// Full SshRemoteConfig object
+			const fullConfig = {
+				id: 'full-config-test',
+				name: 'Full Config Test',
+				host: 'remote.example.com',
+				port: 2222,
+				username: 'admin',
+				useSshConfig: true,
+				enabled: true,
+			};
+
+			// Should work with full config
+			const path = storage.getSessionPath('/project', 'session-id', fullConfig);
+			expect(path).toBe('~/.local/share/opencode/storage/message/session-id');
+
+			// Should work with minimal config
+			const minimalConfig = {
+				id: 'minimal',
+				name: 'Minimal',
+				host: 'host',
+				port: 22,
+				username: 'user',
+				useSshConfig: false,
+				enabled: true,
+			};
+			const pathMinimal = storage.getSessionPath('/project', 'session-id', minimalConfig);
+			expect(pathMinimal).toBe('~/.local/share/opencode/storage/message/session-id');
+		});
+	});
+});
