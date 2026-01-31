@@ -969,45 +969,92 @@ export function registerAutorunHandlers(
 	);
 
 	// Restore a document from its backup (for reset-on-completion)
+	// Supports SSH remote execution via optional sshRemoteId parameter
 	ipcMain.handle(
 		'autorun:restoreBackup',
-		createIpcHandler(handlerOpts('restoreBackup'), async (folderPath: string, filename: string) => {
-			// Reject obvious traversal attempts
-			if (filename.includes('..')) {
-				throw new Error('Invalid filename');
+		createIpcHandler(
+			handlerOpts('restoreBackup'),
+			async (folderPath: string, filename: string, sshRemoteId?: string) => {
+				// Reject obvious traversal attempts
+				if (filename.includes('..')) {
+					throw new Error('Invalid filename');
+				}
+
+				// Ensure filename has .md extension
+				const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+				const backupFilename = fullFilename.replace(/\.md$/, '.backup.md');
+
+				// SSH remote: dispatch to remote operations
+				if (sshRemoteId) {
+					const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+					if (!sshConfig) {
+						throw new Error(`SSH remote not found: ${sshRemoteId}`);
+					}
+
+					// Construct remote paths (use forward slashes)
+					const remoteTargetPath = `${folderPath}/${fullFilename}`;
+					const remoteBackupPath = `${folderPath}/${backupFilename}`;
+
+					logger.debug(
+						`${LOG_CONTEXT} restoreBackup via SSH: ${remoteBackupPath} -> ${remoteTargetPath}`,
+						LOG_CONTEXT
+					);
+
+					// Check if backup file exists by reading it
+					const readResult = await readFileRemote(remoteBackupPath, sshConfig);
+					if (!readResult.success || readResult.data === undefined) {
+						throw new Error('Backup file not found');
+					}
+
+					// Write backup content to original file
+					const writeResult = await writeFileRemote(remoteTargetPath, readResult.data, sshConfig);
+					if (!writeResult.success) {
+						throw new Error(writeResult.error || 'Failed to restore backup');
+					}
+
+					// Delete the backup file
+					const deleteResult = await deleteRemote(remoteBackupPath, sshConfig, false);
+					if (!deleteResult.success) {
+						// Log but don't fail - the restore was successful
+						logger.warn(
+							`${LOG_CONTEXT} Failed to delete remote backup file: ${deleteResult.error}`,
+							LOG_CONTEXT
+						);
+					}
+
+					logger.info(`Restored remote Auto Run backup: ${fullFilename}`, LOG_CONTEXT);
+					return {};
+				}
+
+				// Local: Construct paths
+				const targetPath = path.join(folderPath, fullFilename);
+				const backupPath = path.join(folderPath, backupFilename);
+
+				// Validate paths are within folder
+				if (
+					!validatePathWithinFolder(targetPath, folderPath) ||
+					!validatePathWithinFolder(backupPath, folderPath)
+				) {
+					throw new Error('Invalid file path');
+				}
+
+				// Check if backup file exists
+				try {
+					await fs.access(backupPath);
+				} catch {
+					throw new Error('Backup file not found');
+				}
+
+				// Copy backup back to original
+				await fs.copyFile(backupPath, targetPath);
+
+				// Delete the backup
+				await fs.unlink(backupPath);
+
+				logger.info(`Restored Auto Run backup: ${fullFilename}`, LOG_CONTEXT);
+				return {};
 			}
-
-			// Ensure filename has .md extension
-			const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
-			const backupFilename = fullFilename.replace(/\.md$/, '.backup.md');
-
-			const targetPath = path.join(folderPath, fullFilename);
-			const backupPath = path.join(folderPath, backupFilename);
-
-			// Validate paths are within folder
-			if (
-				!validatePathWithinFolder(targetPath, folderPath) ||
-				!validatePathWithinFolder(backupPath, folderPath)
-			) {
-				throw new Error('Invalid file path');
-			}
-
-			// Check if backup file exists
-			try {
-				await fs.access(backupPath);
-			} catch {
-				throw new Error('Backup file not found');
-			}
-
-			// Copy backup back to original
-			await fs.copyFile(backupPath, targetPath);
-
-			// Delete the backup
-			await fs.unlink(backupPath);
-
-			logger.info(`Restored Auto Run backup: ${fullFilename}`, LOG_CONTEXT);
-			return {};
-		})
+		)
 	);
 
 	// Create a working copy of a document for reset-on-completion loops
