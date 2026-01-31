@@ -919,7 +919,7 @@ export function DocumentGraphView({
 	);
 
 	/**
-	 * Open a markdown preview panel inside the graph view (Enter key).
+	 * Open a markdown preview panel inside the graph view.
 	 */
 	const handlePreviewFile = useCallback(
 		async (filePath: string) => {
@@ -1567,89 +1567,85 @@ export function DocumentGraphView({
 						/>
 					)}
 
-					{/* In-Graph Preview Panel */}
+					{/* Markdown Preview Panel */}
 					{(previewFile || previewLoading || previewError) && (
 						<div
-							className="absolute top-0 right-0 h-full overflow-hidden shadow-xl animate-in slide-in-from-right duration-200"
+							className="absolute top-4 right-4 bottom-4 rounded-lg shadow-2xl border flex flex-col z-50"
 							style={{
 								backgroundColor: theme.colors.bgActivity,
-								borderLeft: `1px solid ${theme.colors.border}`,
-								width: 'min(50%, 600px)',
-								zIndex: 25,
+								borderColor: theme.colors.border,
+								width: 'min(560px, 42vw)',
+								maxWidth: '90%',
 							}}
-							role="dialog"
-							aria-label="Document preview"
 						>
-							{/* Preview Header */}
+							<style>{generateProseStyles({ theme, scopeSelector: '.graph-preview' })}</style>
 							<div
-								className="sticky top-0 flex items-center justify-between px-4 py-3 border-b"
-								style={{
-									backgroundColor: theme.colors.bgActivity,
-									borderColor: theme.colors.border,
-								}}
+								className="px-4 py-3 border-b flex items-center justify-between gap-3"
+								style={{ borderColor: theme.colors.border }}
 							>
-								<div className="flex items-center gap-2 min-w-0 flex-1">
-									<h3
-										className="text-sm font-medium truncate"
-										style={{ color: theme.colors.textMain }}
-										title={previewFile?.relativePath}
-									>
-										{previewFile?.name || 'Loading...'}
-									</h3>
+								<div className="min-w-0">
+									<p className="text-sm font-semibold truncate" style={{ color: theme.colors.textMain }}>
+										{previewFile?.name || 'Loading preview...'}
+									</p>
+									<p className="text-xs truncate" style={{ color: theme.colors.textDim }}>
+										{previewFile?.relativePath || ''}
+									</p>
 								</div>
-								<button
-									onClick={handlePreviewClose}
-									className="p-1 rounded transition-colors flex-shrink-0"
-									style={{ color: theme.colors.textDim }}
-									onMouseEnter={(e) =>
-										(e.currentTarget.style.backgroundColor = `${theme.colors.accent}20`)
-									}
-									onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-									title="Close preview (Esc)"
-								>
-									<X className="w-4 h-4" />
-								</button>
+								<div className="flex items-center gap-2">
+									{previewFile && onDocumentOpen && (
+										<button
+											onClick={() => onDocumentOpen(previewFile.relativePath)}
+											className="px-2 py-1 rounded text-xs transition-colors"
+											style={{
+												backgroundColor: `${theme.colors.accent}20`,
+												color: theme.colors.accent,
+											}}
+											title="Open in file preview"
+										>
+											Open
+										</button>
+									)}
+									<button
+										onClick={handlePreviewClose}
+										className="p-1 rounded transition-colors"
+										style={{ color: theme.colors.textDim }}
+										title="Close preview (Esc)"
+									>
+										<X className="w-4 h-4" />
+									</button>
+								</div>
 							</div>
-
-							{/* Preview Content */}
 							<div
 								ref={previewContentRef}
-								className="h-full overflow-y-auto p-4 outline-none"
-								style={{ paddingBottom: 60 }}
 								tabIndex={0}
+								className="flex-1 overflow-auto px-4 py-3 graph-preview outline-none"
 							>
-								{previewLoading && (
-									<div className="flex items-center justify-center py-8">
-										<Loader2
-											className="w-6 h-6 animate-spin"
-											style={{ color: theme.colors.accent }}
-										/>
+								{previewLoading ? (
+									<div className="flex items-center gap-2 text-xs" style={{ color: theme.colors.textDim }}>
+										<Loader2 className="w-4 h-4 animate-spin" />
+										Loading preview...
 									</div>
-								)}
-								{previewError && (
-									<div
-										className="flex flex-col items-center justify-center py-8 text-center"
-										style={{ color: theme.colors.textDim }}
-									>
-										<AlertCircle className="w-8 h-8 mb-2 opacity-50" />
-										<p className="text-sm">{previewError}</p>
-									</div>
-								)}
-								{previewFile && !previewLoading && !previewError && (
-									<>
-										<style>{generateProseStyles({ theme })}</style>
-										<div className="prose prose-sm max-w-none">
-											<MarkdownRenderer
-												content={previewFile.content}
-												theme={theme}
-												onCopy={(text) => {
-													navigator.clipboard.writeText(text);
-												}}
-												projectRoot={rootPath}
-											/>
-										</div>
-									</>
-								)}
+								) : previewError ? (
+									<p className="text-xs" style={{ color: theme.colors.textDim }}>
+										{previewError}
+									</p>
+								) : previewFile ? (
+									<MarkdownRenderer
+										content={previewFile.content}
+										theme={theme}
+										onCopy={async (text: string) => {
+											try {
+												await navigator.clipboard.writeText(text);
+											} catch (err) {
+												console.error('Failed to copy to clipboard:', err);
+											}
+										}}
+										projectRoot={rootPath}
+										cwd={previewFile.relativePath.split('/').slice(0, -1).join('/')}
+										onFileClick={handlePreviewFile}
+										sshRemoteId={sshRemoteId}
+									/>
+								) : null}
 							</div>
 						</div>
 					)}

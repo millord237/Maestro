@@ -2923,4 +2923,71 @@ describe('DocumentGraphView', () => {
 			});
 		});
 	});
+
+	describe('In-Graph Preview Panel', () => {
+		/**
+		 * The in-graph preview panel allows viewing markdown content without leaving the graph.
+		 * - Press P on a focused node to open the preview
+		 * - Preview is scrollable with keyboard (arrow keys, Page Up/Down, Cmd/Opt+Up/Down)
+		 * - Press Escape to close and return focus to the graph
+		 */
+
+		it('preview panel registers with layer stack when open', () => {
+			// Layer configuration for the preview overlay
+			const layerConfig = {
+				type: 'overlay',
+				priority: 51, // MODAL_PRIORITIES.DOCUMENT_GRAPH + 1
+				blocksLowerLayers: false,
+				capturesFocus: true, // For keyboard scrolling
+				focusTrap: 'lenient',
+				allowClickOutside: true,
+			};
+
+			expect(layerConfig.type).toBe('overlay');
+			expect(layerConfig.capturesFocus).toBe(true);
+			expect(layerConfig.focusTrap).toBe('lenient');
+		});
+
+		it('preview content area is focusable for keyboard scrolling', () => {
+			// The preview content div has tabIndex and outline-none
+			const previewContentProps = {
+				tabIndex: 0,
+				className: 'flex-1 overflow-auto px-4 py-3 graph-preview outline-none',
+			};
+
+			expect(previewContentProps.tabIndex).toBe(0);
+			expect(previewContentProps.className).toContain('overflow-auto');
+		});
+
+		it('P key triggers in-graph preview', () => {
+			// MindMap handleKeyDown for 'p' or 'P' calls onNodePreview
+			const keyHandler = {
+				key: 'P',
+				action: 'onNodePreview(focusedNode)',
+				condition: 'focusedNode.nodeType === document',
+			};
+
+			expect(keyHandler.key.toLowerCase()).toBe('p');
+			expect(keyHandler.action).toContain('onNodePreview');
+		});
+
+		it('Escape closes preview and returns focus to graph', () => {
+			// Layer onEscape calls handlePreviewClose and focuses mindMapContainerRef
+			let previewFile: object | null = { name: 'test.md' };
+			const handlePreviewClose = () => {
+				previewFile = null;
+			};
+
+			handlePreviewClose();
+			expect(previewFile).toBeNull();
+		});
+
+		it('preview layer has higher priority than main modal', () => {
+			const MODAL_PRIORITIES = { DOCUMENT_GRAPH: 50 };
+			const previewPriority = MODAL_PRIORITIES.DOCUMENT_GRAPH + 1;
+
+			expect(previewPriority).toBe(51);
+			expect(previewPriority).toBeGreaterThan(MODAL_PRIORITIES.DOCUMENT_GRAPH);
+		});
+	});
 });

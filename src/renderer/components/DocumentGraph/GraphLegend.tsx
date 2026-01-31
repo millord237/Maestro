@@ -89,16 +89,20 @@ const KEYBOARD_SHORTCUTS: KeyboardShortcutItem[] = [
 		description: 'Preview document in-graph',
 	},
 	{
+		keys: 'P',
+		description: 'Preview in-graph',
+	},
+	{
 		keys: 'O',
-		description: 'Open file in editor',
+		description: 'Open in main preview',
+	},
+	{
+		keys: 'Esc',
+		description: 'Close preview / modal',
 	},
 	{
 		keys: '⌘F',
 		description: 'Focus search',
-	},
-	{
-		keys: 'Esc',
-		description: 'Close panel / modal',
 	},
 ];
 

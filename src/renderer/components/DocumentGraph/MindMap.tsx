@@ -94,7 +94,7 @@ export interface MindMapProps {
 	onNodeSelect: (node: MindMapNode | null) => void;
 	/** Callback when a node is double-clicked (recenter on document) */
 	onNodeDoubleClick: (node: MindMapNode) => void;
-	/** Callback when Enter is pressed on a document node (in-graph preview) */
+	/** Callback when a document node is previewed (Enter or P key) - in-graph preview */
 	onNodePreview?: (node: MindMapNode) => void;
 	/** Callback for context menu */
 	onNodeContextMenu: (node: MindMapNode, event: MouseEvent) => void;
@@ -1552,9 +1552,18 @@ export function MindMap({
 
 				case 'o':
 				case 'O':
-					// Open focused document in file preview
+					// Open focused document in main file preview
 					if (focusedNode.nodeType === 'document' && focusedNode.filePath) {
 						onOpenFile(focusedNode.filePath);
+					}
+					e.preventDefault();
+					break;
+
+				case 'p':
+				case 'P':
+					// Open in-graph preview for focused document node
+					if (focusedNode.nodeType === 'document' && onNodePreview) {
+						onNodePreview(focusedNode);
 					}
 					e.preventDefault();
 					break;

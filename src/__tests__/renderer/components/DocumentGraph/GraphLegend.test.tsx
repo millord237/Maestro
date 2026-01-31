@@ -161,11 +161,25 @@ describe('GraphLegend', () => {
 			expect(screen.getByText('Recenter on focused node')).toBeInTheDocument();
 		});
 
+		it('displays preview shortcut', () => {
+			render(<GraphLegend {...defaultProps} />);
+
+			expect(screen.getByText('P')).toBeInTheDocument();
+			expect(screen.getByText('Preview in-graph')).toBeInTheDocument();
+		});
+
 		it('displays open shortcut', () => {
 			render(<GraphLegend {...defaultProps} />);
 
 			expect(screen.getByText('O')).toBeInTheDocument();
-			expect(screen.getByText('Open file in preview')).toBeInTheDocument();
+			expect(screen.getByText('Open in main preview')).toBeInTheDocument();
+		});
+
+		it('displays escape shortcut', () => {
+			render(<GraphLegend {...defaultProps} />);
+
+			expect(screen.getByText('Esc')).toBeInTheDocument();
+			expect(screen.getByText('Close preview / modal')).toBeInTheDocument();
 		});
 
 		it('displays search shortcut', () => {
@@ -173,13 +187,6 @@ describe('GraphLegend', () => {
 
 			expect(screen.getByText('⌘F')).toBeInTheDocument();
 			expect(screen.getByText('Focus search')).toBeInTheDocument();
-		});
-
-		it('displays escape shortcut', () => {
-			render(<GraphLegend {...defaultProps} />);
-
-			expect(screen.getByText('Esc')).toBeInTheDocument();
-			expect(screen.getByText('Close panel / modal')).toBeInTheDocument();
 		});
 	});
 
