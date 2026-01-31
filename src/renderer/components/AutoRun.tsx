@@ -1920,7 +1920,13 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 
 			{/* Content Area - only shown when folder is selected */}
 			{folderPath && (
-				<div className="flex-1 min-h-0 overflow-y-auto">
+				<div
+					className="flex-1 min-h-0 overflow-y-auto mx-2 rounded-lg transition-colors"
+					style={{
+						backgroundColor: isDirty && !isLocked ? `${theme.colors.warning}08` : 'transparent',
+						border: isDirty && !isLocked ? `2px solid ${theme.colors.warning}40` : '2px solid transparent',
+					}}>
+
 					{/* Empty folder state - show when folder is configured but has no documents */}
 					{documentList.length === 0 && !isLoadingDocuments ? (
 						<div

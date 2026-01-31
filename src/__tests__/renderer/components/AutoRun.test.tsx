@@ -405,6 +405,83 @@ describe('AutoRun', () => {
 			// Save button shouldn't be visible without a folder
 			expect(screen.queryByText('Save')).not.toBeInTheDocument();
 		});
+
+		it('highlights content area with warning border and background when there are unsaved changes', async () => {
+			const props = createDefaultProps({ content: 'Initial content' });
+			const { container } = renderWithProvider(<AutoRun {...props} />);
+
+			// Find the content area container (has mx-2, rounded-lg, and flex-1)
+			const contentArea = container.querySelector(
+				'.flex-1.overflow-y-auto.mx-2.rounded-lg'
+			) as HTMLElement;
+			expect(contentArea).toBeInTheDocument();
+
+			// Initially should have transparent border (no unsaved changes)
+			// Check for 'transparent' in the border style
+			expect(contentArea.style.border).toContain('transparent');
+
+			// Make a change to trigger dirty state
+			const textarea = screen.getByRole('textbox');
+			fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+			// Now the content area should have a warning-colored border
+			// Browser converts hex+alpha (#ffaa0040) to rgba format
+			await waitFor(() => {
+				expect(contentArea.style.border).toContain('rgba(255, 170, 0');
+			});
+		});
+
+		it('removes highlighting when content is reverted', async () => {
+			const props = createDefaultProps({ content: 'Initial content' });
+			const { container } = renderWithProvider(<AutoRun {...props} />);
+
+			const contentArea = container.querySelector(
+				'.flex-1.overflow-y-auto.mx-2.rounded-lg'
+			) as HTMLElement;
+			const textarea = screen.getByRole('textbox');
+
+			// Make a change
+			fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+			// Should have warning border (rgba format after browser conversion)
+			await waitFor(() => {
+				expect(contentArea.style.border).toContain('rgba(255, 170, 0');
+			});
+
+			// Click Revert
+			fireEvent.click(screen.getByText('Revert'));
+
+			// Should be back to transparent border
+			await waitFor(() => {
+				expect(contentArea.style.border).toContain('transparent');
+			});
+		});
+
+		it('removes highlighting when content is saved', async () => {
+			const props = createDefaultProps({ content: 'Initial content' });
+			const { container } = renderWithProvider(<AutoRun {...props} />);
+
+			const contentArea = container.querySelector(
+				'.flex-1.overflow-y-auto.mx-2.rounded-lg'
+			) as HTMLElement;
+			const textarea = screen.getByRole('textbox');
+
+			// Make a change
+			fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+			// Should have warning border (rgba format after browser conversion)
+			await waitFor(() => {
+				expect(contentArea.style.border).toContain('rgba(255, 170, 0');
+			});
+
+			// Click Save
+			fireEvent.click(screen.getByText('Save'));
+
+			// Should be back to transparent border after save
+			await waitFor(() => {
+				expect(contentArea.style.border).toContain('transparent');
+			});
+		});
 	});
 
 	describe('Keyboard Shortcuts', () => {
