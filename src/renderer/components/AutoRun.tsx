@@ -136,6 +136,9 @@ interface AutoRunProps {
 
 	// Hide top controls (when rendered in expanded modal with controls in header)
 	hideTopControls?: boolean;
+
+	// Flash notification callback (for showing center-screen messages)
+	onShowFlash?: (message: string) => void;
 }
 
 export interface AutoRunHandle {
@@ -490,6 +493,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 		onLaunchWizard,
 		shortcuts,
 		hideTopControls = false,
+		onShowFlash,
 	},
 	ref
 ) {
@@ -715,6 +719,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 	const handleResetTasks = useCallback(async () => {
 		if (!folderPath || !selectedFile) return;
 
+		// Count how many completed tasks we're resetting
+		const completedRegex = /^[\s]*[-*]\s*\[x\]/gim;
+		const completedMatches = localContent.match(completedRegex) || [];
+		const resetCount = completedMatches.length;
+
 		// Push undo state before resetting
 		pushUndoState();
 
@@ -732,6 +741,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 				sshRemoteId
 			);
 			setSavedContent(resetContent);
+
+			// Show flash notification with the count of reset tasks
+			if (onShowFlash && resetCount > 0) {
+				onShowFlash(`${resetCount} task${resetCount !== 1 ? 's' : ''} reverted to incomplete`);
+			}
 		} catch (err) {
 			console.error('Failed to save after reset:', err);
 		}
@@ -744,6 +758,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 		pushUndoState,
 		lastUndoSnapshotRef,
 		sshRemoteId,
+		onShowFlash,
 	]);
 
 	// Image handling hook (attachments, paste, upload, lightbox)
@@ -2253,6 +2268,7 @@ export const AutoRun = memo(AutoRunInner, (prevProps, nextProps) => {
 		prevProps.onOpenSetup === nextProps.onOpenSetup &&
 		prevProps.onRefresh === nextProps.onRefresh &&
 		prevProps.onSelectDocument === nextProps.onSelectDocument &&
+		prevProps.onShowFlash === nextProps.onShowFlash &&
 		// UI control props
 		prevProps.hideTopControls === nextProps.hideTopControls &&
 		// External change detection

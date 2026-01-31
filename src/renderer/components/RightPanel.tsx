@@ -376,6 +376,7 @@ export const RightPanel = memo(
 			shortcuts,
 			onOpenMarketplace,
 			onLaunchWizard,
+			onShowFlash,
 		};
 
 		return (
