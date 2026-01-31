@@ -31,6 +31,7 @@ import {
 	AlertTriangle,
 	Share2,
 	GitGraph,
+	List,
 } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -245,6 +246,37 @@ const countMarkdownTasks = (content: string): { open: number; closed: number } =
 		open: openMatches?.length || 0,
 		closed: closedMatches?.length || 0,
 	};
+};
+
+// Interface for table of contents entries
+interface TocEntry {
+	level: number; // 1-6 for h1-h6
+	text: string;
+	slug: string;
+}
+
+// Extract headings from markdown content for table of contents
+const extractHeadings = (content: string): TocEntry[] => {
+	const headings: TocEntry[] = [];
+	const lines = content.split('\n');
+
+	for (const line of lines) {
+		// Match ATX-style headings (# H1, ## H2, etc.)
+		const match = line.match(/^(#{1,6})\s+(.+)$/);
+		if (match) {
+			const level = match[1].length;
+			const text = match[2].trim();
+			// Generate slug same way rehype-slug does (lowercase, replace spaces with hyphens, remove special chars)
+			const slug = text
+				.toLowerCase()
+				.replace(/[^\w\s-]/g, '')
+				.replace(/\s+/g, '-')
+				.replace(/^-+|-+$/g, '');
+			headings.push({ level, text, slug });
+		}
+	}
+
+	return headings;
 };
 
 // Helper to resolve image path relative to markdown file directory
@@ -518,6 +550,7 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
 	const [showCopyNotification, setShowCopyNotification] = useState(false);
 	const [showBackPopup, setShowBackPopup] = useState(false);
 	const [showForwardPopup, setShowForwardPopup] = useState(false);
+	const [showTocOverlay, setShowTocOverlay] = useState(false);
 	const backPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const forwardPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -599,6 +632,12 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
 		// Only return if there are any tasks
 		if (counts.open === 0 && counts.closed === 0) return null;
 		return counts;
+	}, [isMarkdown, file?.content]);
+
+	// Extract table of contents entries for markdown files
+	const tocEntries = useMemo(() => {
+		if (!isMarkdown || !file?.content) return [];
+		return extractHeadings(file.content);
 	}, [isMarkdown, file?.content]);
 
 	// Memoize file tree indices to avoid O(n) traversal on every render
@@ -875,11 +914,16 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
 	// Auto-focus on mount and when file changes so keyboard shortcuts work immediately
 	useEffect(() => {
 		containerRef.current?.focus();
+		// Close TOC overlay when file changes
+		setShowTocOverlay(false);
 	}, [file?.path]); // Run on mount and when navigating to a different file
 
 	// Helper to handle escape key - shows confirmation modal if there are unsaved changes
 	const handleEscapeRequest = useCallback(() => {
-		if (searchOpen) {
+		if (showTocOverlay) {
+			setShowTocOverlay(false);
+			containerRef.current?.focus();
+		} else if (searchOpen) {
 			setSearchOpen(false);
 			setSearchQuery('');
 			// Refocus container so keyboard navigation (arrow keys) still works
@@ -890,7 +934,7 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
 		} else {
 			onClose();
 		}
-	}, [searchOpen, hasChanges, onClose]);
+	}, [showTocOverlay, searchOpen, hasChanges, onClose]);
 
 	// Register layer on mount - only register once, use updateLayerHandler for handler changes
 	// Note: handleEscapeRequest is intentionally NOT in the dependency array to prevent
@@ -1992,6 +2036,99 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
 							{displayContent}
 						</SyntaxHighlighter>
 					</div>
+				)}
+
+				{/* Table of Contents Floating Button and Overlay - Only for markdown in preview mode */}
+				{isMarkdown && !markdownEditMode && tocEntries.length > 0 && (
+					<>
+						{/* Floating TOC Button */}
+						<button
+							onClick={() => setShowTocOverlay(!showTocOverlay)}
+							className="absolute bottom-4 left-4 p-2.5 rounded-full shadow-lg transition-all duration-200 hover:scale-105 z-10"
+							style={{
+								backgroundColor: showTocOverlay ? theme.colors.accent : theme.colors.bgSidebar,
+								color: showTocOverlay ? theme.colors.accentForeground : theme.colors.textMain,
+								border: `1px solid ${theme.colors.border}`,
+							}}
+							title="Table of Contents"
+						>
+							<List className="w-5 h-5" />
+						</button>
+
+						{/* TOC Overlay */}
+						{showTocOverlay && (
+							<div
+								className="absolute bottom-16 left-4 rounded-lg shadow-xl overflow-hidden z-20 animate-in fade-in slide-in-from-bottom-2 duration-200"
+								style={{
+									backgroundColor: theme.colors.bgSidebar,
+									border: `1px solid ${theme.colors.border}`,
+									maxHeight: '70%',
+									minWidth: '200px',
+									maxWidth: '350px',
+								}}
+							>
+								{/* TOC Header */}
+								<div
+									className="px-3 py-2 border-b flex items-center justify-between"
+									style={{ borderColor: theme.colors.border }}
+								>
+									<span
+										className="text-xs font-medium uppercase tracking-wide"
+										style={{ color: theme.colors.textDim }}
+									>
+										Contents
+									</span>
+									<span
+										className="text-[10px]"
+										style={{ color: theme.colors.textDim }}
+									>
+										{tocEntries.length} headings
+									</span>
+								</div>
+								{/* TOC Entries */}
+								<div className="overflow-y-auto p-1" style={{ maxHeight: 'calc(70vh - 40px)' }}>
+									{tocEntries.map((entry, index) => {
+										// Get color based on heading level (match the prose styles)
+										const levelColors: Record<number, string> = {
+											1: theme.colors.accent,
+											2: theme.colors.success,
+											3: theme.colors.warning,
+											4: theme.colors.textMain,
+											5: theme.colors.textMain,
+											6: theme.colors.textDim,
+										};
+										const headingColor = levelColors[entry.level] || theme.colors.textMain;
+
+										return (
+											<button
+												key={`${entry.slug}-${index}`}
+												onClick={() => {
+													// Find and scroll to the heading
+													const targetElement = markdownContainerRef.current?.querySelector(
+														`#${CSS.escape(entry.slug)}`
+													);
+													if (targetElement) {
+														targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+													}
+													setShowTocOverlay(false);
+												}}
+												className="w-full px-2 py-1.5 text-left text-sm rounded hover:bg-white/10 transition-colors truncate flex items-center gap-1"
+												style={{
+													color: headingColor,
+													paddingLeft: `${(entry.level - 1) * 12 + 8}px`,
+													opacity: entry.level > 3 ? 0.85 : 1,
+													fontSize: entry.level === 1 ? '0.875rem' : entry.level === 2 ? '0.8125rem' : '0.75rem',
+												}}
+												title={entry.text}
+											>
+												<span className="truncate">{entry.text}</span>
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						)}
+					</>
 				)}
 			</div>
 

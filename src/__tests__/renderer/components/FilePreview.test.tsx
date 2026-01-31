@@ -22,6 +22,7 @@ vi.mock('lucide-react', () => ({
 	AlertTriangle: () => <span data-testid="alert-icon">AlertTriangle</span>,
 	Share2: () => <span data-testid="share-icon">Share2</span>,
 	GitGraph: () => <span data-testid="gitgraph-icon">GitGraph</span>,
+	List: () => <span data-testid="list-icon">List</span>,
 }));
 
 // Mock react-markdown
@@ -384,6 +385,103 @@ describe('FilePreview', () => {
 			// (it may have been called from previous tests, but not with this content)
 			// The token count state should remain null for large files
 			expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+		});
+	});
+
+	describe('table of contents', () => {
+		it('shows TOC button for markdown files with headings in preview mode', () => {
+			const markdownWithHeadings = '# Heading 1\n## Heading 2\n### Heading 3\nContent here';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'doc.md', content: markdownWithHeadings, path: '/test/doc.md' }}
+					markdownEditMode={false}
+				/>
+			);
+
+			expect(screen.getByTitle('Table of Contents')).toBeInTheDocument();
+			expect(screen.getByTestId('list-icon')).toBeInTheDocument();
+		});
+
+		it('does not show TOC button for markdown without headings', () => {
+			const markdownNoHeadings = 'This is just plain text.\nNo headings here.';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'doc.md', content: markdownNoHeadings, path: '/test/doc.md' }}
+					markdownEditMode={false}
+				/>
+			);
+
+			expect(screen.queryByTitle('Table of Contents')).not.toBeInTheDocument();
+		});
+
+		it('does not show TOC button in edit mode', () => {
+			const markdownWithHeadings = '# Heading 1\n## Heading 2';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'doc.md', content: markdownWithHeadings, path: '/test/doc.md' }}
+					markdownEditMode={true}
+				/>
+			);
+
+			expect(screen.queryByTitle('Table of Contents')).not.toBeInTheDocument();
+		});
+
+		it('does not show TOC button for non-markdown files', () => {
+			const jsonContent = '{"title": "Not markdown"}';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'config.json', content: jsonContent, path: '/test/config.json' }}
+				/>
+			);
+
+			expect(screen.queryByTitle('Table of Contents')).not.toBeInTheDocument();
+		});
+
+		it('opens TOC overlay when button is clicked', () => {
+			const markdownWithHeadings = '# Heading 1\n## Heading 2\n### Heading 3';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'doc.md', content: markdownWithHeadings, path: '/test/doc.md' }}
+					markdownEditMode={false}
+				/>
+			);
+
+			const tocButton = screen.getByTitle('Table of Contents');
+			fireEvent.click(tocButton);
+
+			// TOC overlay should be visible with heading entries
+			expect(screen.getByText('Contents')).toBeInTheDocument();
+			expect(screen.getByText('3 headings')).toBeInTheDocument();
+			expect(screen.getByText('Heading 1')).toBeInTheDocument();
+			expect(screen.getByText('Heading 2')).toBeInTheDocument();
+			expect(screen.getByText('Heading 3')).toBeInTheDocument();
+		});
+
+		it('closes TOC overlay when clicking a heading entry', () => {
+			const markdownWithHeadings = '# Heading 1\n## Heading 2';
+			render(
+				<FilePreview
+					{...defaultProps}
+					file={{ name: 'doc.md', content: markdownWithHeadings, path: '/test/doc.md' }}
+					markdownEditMode={false}
+				/>
+			);
+
+			// Open TOC
+			const tocButton = screen.getByTitle('Table of Contents');
+			fireEvent.click(tocButton);
+
+			// Click a heading entry
+			const headingEntry = screen.getByText('Heading 1');
+			fireEvent.click(headingEntry);
+
+			// TOC overlay should close
+			expect(screen.queryByText('Contents')).not.toBeInTheDocument();
 		});
 	});
 });
