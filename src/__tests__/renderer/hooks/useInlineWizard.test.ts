@@ -72,6 +72,13 @@ Object.defineProperty(window, 'maestro', {
 				path: '/usr/local/bin/claude-code',
 			}),
 		},
+		autorun: {
+			listDocs: vi.fn().mockResolvedValue({ success: true, files: [] }),
+			readDoc: vi.fn().mockResolvedValue({ success: true, content: '' }),
+			watchFolder: vi.fn().mockResolvedValue({ success: true }),
+			unwatchFolder: vi.fn().mockResolvedValue({ success: true }),
+			onFileChanged: vi.fn(() => vi.fn()),
+		},
 	},
 	writable: true,
 });
