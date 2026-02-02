@@ -1238,7 +1238,7 @@ interface MaestroAPI {
 		speak: (
 			text: string,
 			command?: string
-		) => Promise<{ success: boolean; notificationId?: number; ttsId?: number; error?: string }>;
+		) => Promise<{ success: boolean; notificationId?: number; error?: string }>;
 		stopSpeak: (notificationId: number) => Promise<{ success: boolean; error?: string }>;
 		onCommandCompleted: (handler: (notificationId: number) => void) => () => void;
 		/** @deprecated Use onCommandCompleted instead */

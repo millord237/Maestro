@@ -460,9 +460,3 @@ export function getNotificationMaxQueueSize(): number {
 	return NOTIFICATION_MAX_QUEUE_SIZE;
 }
 
-// Legacy aliases for backward compatibility with existing tests
-export const getTtsQueueLength = getNotificationQueueLength;
-export const getActiveTtsCount = getActiveNotificationCount;
-export const clearTtsQueue = clearNotificationQueue;
-export const resetTtsState = resetNotificationState;
-export const getTtsMaxQueueSize = getNotificationMaxQueueSize;

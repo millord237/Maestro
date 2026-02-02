@@ -1541,8 +1541,8 @@ describe('SettingsModal', () => {
 
 	describe('Custom notification Stop button', () => {
 		it('should show Stop button when Command Chain is running and handle click', async () => {
-			// Mock speak to return a ttsId
-			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, ttsId: 123 });
+			// Mock speak to return a notificationId
+			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, notificationId: 123 });
 			vi.mocked(window.maestro.notification.stopSpeak).mockResolvedValue({ success: true });
 
 			render(<SettingsModal {...createDefaultProps({ initialTab: 'notifications' })} />);
@@ -1572,7 +1572,7 @@ describe('SettingsModal', () => {
 		});
 
 		it('should handle stopSpeak error gracefully', async () => {
-			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, ttsId: 456 });
+			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, notificationId: 456 });
 			vi.mocked(window.maestro.notification.stopSpeak).mockRejectedValue(new Error('Stop failed'));
 
 			const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -1624,7 +1624,7 @@ describe('SettingsModal', () => {
 		});
 
 		it('should auto-clear Command Chain state after timeout', async () => {
-			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, ttsId: 789 });
+			vi.mocked(window.maestro.notification.speak).mockResolvedValue({ success: true, notificationId: 789 });
 
 			render(<SettingsModal {...createDefaultProps({ initialTab: 'notifications' })} />);
 

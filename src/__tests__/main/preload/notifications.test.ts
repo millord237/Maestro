@@ -58,36 +58,36 @@ describe('Notification Preload API', () => {
 	 */
 	describe('speak - custom notification command (NO WHITELIST)', () => {
 		it('should invoke notification:speak with text and default command', async () => {
-			mockInvoke.mockResolvedValue({ success: true, ttsId: 123 });
+			mockInvoke.mockResolvedValue({ success: true, notificationId: 123 });
 
 			const result = await api.speak('Hello world');
 
 			expect(mockInvoke).toHaveBeenCalledWith('notification:speak', 'Hello world', undefined);
-			expect(result).toEqual({ success: true, ttsId: 123 });
+			expect(result).toEqual({ success: true, notificationId: 123 });
 		});
 
 		it('should accept ANY command - no whitelist restriction', async () => {
-			mockInvoke.mockResolvedValue({ success: true, ttsId: 456 });
+			mockInvoke.mockResolvedValue({ success: true, notificationId: 456 });
 
 			// Any command works - not just whitelisted TTS tools
 			const result = await api.speak('Hello', 'my-custom-tool');
 
 			expect(mockInvoke).toHaveBeenCalledWith('notification:speak', 'Hello', 'my-custom-tool');
-			expect(result.ttsId).toBe(456);
+			expect(result.notificationId).toBe(456);
 		});
 
 		it('should accept complex command chains with pipes (shell pipeline)', async () => {
-			mockInvoke.mockResolvedValue({ success: true, ttsId: 789 });
+			mockInvoke.mockResolvedValue({ success: true, notificationId: 789 });
 
 			const complexCommand = 'tee ~/log.txt | say';
 			const result = await api.speak('Test message', complexCommand);
 
 			expect(mockInvoke).toHaveBeenCalledWith('notification:speak', 'Test message', complexCommand);
-			expect(result.ttsId).toBe(789);
+			expect(result.notificationId).toBe(789);
 		});
 
 		it('should accept ANY absolute path with ANY arguments', async () => {
-			mockInvoke.mockResolvedValue({ success: true, ttsId: 111 });
+			mockInvoke.mockResolvedValue({ success: true, notificationId: 111 });
 
 			// Full paths to custom binaries are allowed
 			const fullPathCommand =
@@ -99,7 +99,7 @@ describe('Notification Preload API', () => {
 		});
 
 		it('should accept non-TTS commands like curl, tee, cat, etc.', async () => {
-			mockInvoke.mockResolvedValue({ success: true, ttsId: 222 });
+			mockInvoke.mockResolvedValue({ success: true, notificationId: 222 });
 
 			// Non-TTS commands are equally valid
 			const curlCommand = 'curl -X POST -d @- https://webhook.example.com';

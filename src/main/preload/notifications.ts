@@ -23,8 +23,6 @@ export interface NotificationShowResponse {
 export interface NotificationCommandResponse {
 	success: boolean;
 	notificationId?: number;
-	/** @deprecated Use notificationId instead */
-	ttsId?: number;
 	error?: string;
 }
 

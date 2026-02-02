@@ -137,8 +137,8 @@ export function NotificationsPanel({
 											audioFeedbackCommand
 										);
 										console.log('[Notification] Speak result:', result);
-										if (result.success && result.ttsId) {
-											setTestNotificationId(result.ttsId);
+										if (result.success && result.notificationId) {
+											setTestNotificationId(result.notificationId);
 											setTestStatus('success');
 											// Auto-clear after the message should be done (about 5 seconds for this phrase)
 											setTimeout(() => setTestNotificationId(null), 8000);
