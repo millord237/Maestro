@@ -141,7 +141,6 @@ import type {
 	ToolType,
 	SessionState,
 	RightPanelTab,
-	FocusArea,
 	LogEntry,
 	Session,
 	AITab,
@@ -6135,23 +6134,23 @@ You are taking over this conversation. Based on the context above, provide a bri
 		sendMessage: sendInlineWizardMessage,
 		// State for syncing to session.wizardState
 		isWizardActive: inlineWizardActive,
-		isWaiting: inlineWizardIsWaiting,
-		wizardMode: inlineWizardMode,
-		wizardGoal: inlineWizardGoal,
-		confidence: inlineWizardConfidence,
-		ready: inlineWizardReady,
-		conversationHistory: inlineWizardConversationHistory,
-		error: inlineWizardError,
-		isGeneratingDocs: inlineWizardIsGeneratingDocs,
-		generatedDocuments: inlineWizardGeneratedDocuments,
-		streamingContent: inlineWizardStreamingContent,
-		generationProgress: inlineWizardGenerationProgress,
-		state: inlineWizardState,
+		isWaiting: _inlineWizardIsWaiting,
+		wizardMode: _inlineWizardMode,
+		wizardGoal: _inlineWizardGoal,
+		confidence: _inlineWizardConfidence,
+		ready: _inlineWizardReady,
+		conversationHistory: _inlineWizardConversationHistory,
+		error: _inlineWizardError,
+		isGeneratingDocs: _inlineWizardIsGeneratingDocs,
+		generatedDocuments: _inlineWizardGeneratedDocuments,
+		streamingContent: _inlineWizardStreamingContent,
+		generationProgress: _inlineWizardGenerationProgress,
+		state: _inlineWizardState,
 		wizardTabId: inlineWizardTabId,
-		agentSessionId: inlineWizardAgentSessionId,
+		agentSessionId: _inlineWizardAgentSessionId,
 		// Per-tab wizard state accessors
 		getStateForTab: getInlineWizardStateForTab,
-		isWizardActiveForTab: isInlineWizardActiveForTab,
+		isWizardActiveForTab: _isInlineWizardActiveForTab,
 	} = useInlineWizardContext();
 
 	// Wrapper for sendInlineWizardMessage that adds thinking content callback
@@ -6856,7 +6855,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 	}, [activeSession, activeSession?.activeTabId, inlineWizardActive, inlineWizardTabId]);
 
 	// Input processing hook - handles sending messages and commands
-	const { processInput, processInputRef: hookProcessInputRef } = useInputProcessing({
+	const { processInput, processInputRef: _hookProcessInputRef } = useInputProcessing({
 		activeSession,
 		activeSessionId,
 		setSessions,

@@ -10,7 +10,6 @@
  */
 
 import { useMemo } from 'react';
-import type { MainPanelHandle } from '../../components/MainPanel';
 import type {
 	Session,
 	Theme,

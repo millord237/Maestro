@@ -755,14 +755,15 @@ export async function generateInlineDocuments(
 				let dataListenerCleanup: (() => void) | undefined;
 				let exitListenerCleanup: (() => void) | undefined;
 				let fileWatcherCleanup: (() => void) | undefined;
-				let lastActivityTime = Date.now();
+				// Track last activity for potential future timeout logic
+				let _lastActivityTime = Date.now();
 
 				/**
 				 * Reset the inactivity timeout - called on any activity
 				 */
 				const resetTimeout = () => {
 					clearTimeout(timeoutId);
-					lastActivityTime = Date.now();
+					_lastActivityTime = Date.now();
 
 					timeoutId = setTimeout(() => {
 						console.error('[InlineWizardDocGen] TIMEOUT fired! Session:', sessionId);

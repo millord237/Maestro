@@ -199,7 +199,7 @@ const Tab = memo(function Tab({
 	shortcutHint,
 	registerRef,
 	hasDraft,
-	onCloseAllTabs,
+	onCloseAllTabs: _onCloseAllTabs,
 	onCloseOtherTabs,
 	onCloseTabsLeft,
 	onCloseTabsRight,
@@ -1106,7 +1106,7 @@ function TabBarInner({
 	);
 
 	const handleTabCloseOther = useCallback(
-		(tabId: string) => {
+		(_tabId: string) => {
 			// Close all tabs except the one with this tabId
 			onCloseOtherTabs?.();
 		},
@@ -1114,7 +1114,7 @@ function TabBarInner({
 	);
 
 	const handleTabCloseLeft = useCallback(
-		(tabId: string) => {
+		(_tabId: string) => {
 			// Close all tabs to the left of this tabId
 			onCloseTabsLeft?.();
 		},
@@ -1122,7 +1122,7 @@ function TabBarInner({
 	);
 
 	const handleTabCloseRight = useCallback(
-		(tabId: string) => {
+		(_tabId: string) => {
 			// Close all tabs to the right of this tabId
 			onCloseTabsRight?.();
 		},

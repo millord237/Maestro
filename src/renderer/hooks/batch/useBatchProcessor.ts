@@ -321,7 +321,7 @@ export function useBatchProcessor({
 	}, []);
 
 	// Use extracted debounce hook for batch state updates (replaces manual debounce logic)
-	const { scheduleUpdate: scheduleDebouncedUpdate, flushUpdate: flushDebouncedUpdate } =
+	const { scheduleUpdate: _scheduleDebouncedUpdate, flushUpdate: flushDebouncedUpdate } =
 		useSessionDebounce<Record<string, BatchRunState>>({
 			delayMs: BATCH_STATE_DEBOUNCE_MS,
 			onUpdate: useCallback(
@@ -507,7 +507,7 @@ export function useBatchProcessor({
 		(
 			sessionId: string,
 			updater: (prev: Record<string, BatchRunState>) => Record<string, BatchRunState>,
-			immediate: boolean = false
+			_immediate: boolean = false
 		) => {
 			// DEBUG: Bypass debouncing entirely to test if that's the issue
 			// Apply update directly without debouncing

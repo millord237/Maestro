@@ -1713,15 +1713,15 @@ function SessionListInner(props: SessionListProps) {
 	}, [sessionFilter, sessions, worktreeChildrenByParentId]);
 
 	// Destructure for backwards compatibility with existing code
-	const filteredSessions = sessionCategories.filtered;
+	const _filteredSessions = sessionCategories.filtered;
 	const bookmarkedSessions = sessionCategories.bookmarked;
-	const bookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
+	const _bookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
 	const sortedBookmarkedSessions = sessionCategories.sortedBookmarked;
 	const sortedBookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
-	const groupedSessionsById = sessionCategories.groupedMap;
+	const _groupedSessionsById = sessionCategories.groupedMap;
 	const sortedGroupSessionsById = sessionCategories.sortedGrouped;
 	const ungroupedSessions = sessionCategories.ungrouped;
-	const ungroupedParentSessions = sessionCategories.sortedUngroupedParent;
+	const _ungroupedParentSessions = sessionCategories.sortedUngroupedParent;
 	const sortedUngroupedSessions = sessionCategories.sortedUngrouped;
 	const sortedUngroupedParentSessions = sessionCategories.sortedUngroupedParent;
 	const sortedFilteredSessions = sessionCategories.sortedFiltered;

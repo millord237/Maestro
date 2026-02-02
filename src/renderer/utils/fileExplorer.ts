@@ -132,7 +132,7 @@ export interface SshContext {
 export function matchGlobPattern(pattern: string, name: string): boolean {
 	// Convert glob pattern to regex
 	// Escape special regex chars except * and ?
-	let regexStr = pattern
+	const regexStr = pattern
 		.replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special chars
 		.replace(/\*/g, '.*') // * matches any chars
 		.replace(/\?/g, '.'); // ? matches single char

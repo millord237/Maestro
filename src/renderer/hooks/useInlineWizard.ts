@@ -13,8 +13,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { logger } from '../utils/logger';
 import { parseWizardIntent } from '../services/wizardIntentParser';
 import {
-	hasExistingAutoRunDocs,
-	getExistingAutoRunDocs,
 	getAutoRunFolderPath,
 	type ExistingDocument,
 } from '../utils/existingDocsDetector';

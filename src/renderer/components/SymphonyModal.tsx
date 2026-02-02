@@ -43,7 +43,6 @@ import type { Theme } from '../types';
 import type {
 	RegisteredRepository,
 	SymphonyIssue,
-	SymphonyCategory,
 	ActiveContribution,
 	CompletedContribution,
 	ContributionStatus,

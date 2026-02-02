@@ -99,7 +99,7 @@ export function AgentCreationDialog({
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
 
   // Get currently selected agent object
-  const selectedAgentObj = agents.find(a => a.id === selectedAgent);
+  const _selectedAgentObj = agents.find(a => a.id === selectedAgent);
 
   // Filter function: only agents that support batch mode (required for Symphony)
   const symphonyAgentFilter = useCallback((agent: AgentConfig) => {
